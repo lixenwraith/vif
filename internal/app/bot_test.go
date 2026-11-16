@@ -354,7 +354,8 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 }
 
 // TestASeatHoldsWithItsWorld: a hold reaches a bot as the crossing it is, so the bot
-// stands at the tick its holder stops at, and the holder's resume starts it again.
+// stands at the tick its holder stops at, or past it where the crossing came late,
+// and the holder's resume starts it again.
 func TestASeatHoldsWithItsWorld(t *testing.T) {
 	// Not parallel: paced runs against wall-clock deadlines.
 	until := func(what string, done func() bool) {
@@ -384,13 +385,13 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 
 	pause("on")
 	until("both to hold", func() bool { return held(holder) && held(b) })
-	at := holder.Position().Tick
+	at, seat := holder.Position().Tick, b.Position().Tick
 	time.Sleep(4 * parameter.GameUpdateInterval) // [wall] ticks a hold must not take
-	if holder.Position().Tick != at || b.Position().Tick != at {
-		t.Fatalf("held at tick %d, the holder stands at %d and its bot at %d", at, holder.Position().Tick, b.Position().Tick)
+	if holder.Position().Tick != at || b.Position().Tick != seat || seat < at {
+		t.Fatalf("held at ticks %d and %d, the holder stands at %d and its bot at %d", at, seat, holder.Position().Tick, b.Position().Tick)
 	}
 	pause("off")
-	until("the bot to run on", func() bool { return !held(b) && b.Position().Tick > at })
+	until("the bot to run on", func() bool { return !held(b) && b.Position().Tick > seat })
 }
 
 // TestTheRosterCardsNameABotAndItsHolder: each instance's roster cards name every

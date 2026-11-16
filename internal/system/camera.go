@@ -6,12 +6,11 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// CameraSystem updates camera position to follow cursor with dead zone
+// CameraSystem keeps the view on the cursor it looks from, inside the camera edge
 type CameraSystem struct {
 	world *engine.World
 }
 
-// NewCameraSystem creates camera following system
 func NewCameraSystem(world *engine.World) engine.System {
 	s := &CameraSystem{
 		world: world,
@@ -34,7 +33,6 @@ func (s *CameraSystem) Priority() int {
 // Update keeps a viewer on a cursor somebody plays; a player's camera moves by events
 func (s *CameraSystem) Update() { s.world.KeepView() }
 
-// EventTypes returns events this system handles
 func (s *CameraSystem) EventTypes() []event.EventType {
 	return []event.EventType{event.EventCursorMoved, event.EventCursorLocalChanged}
 }

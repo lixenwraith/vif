@@ -611,7 +611,7 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 	// Raised before the redial starts, since its dial loop reads it at once, and
 	// lowered again for a run that will not redial.
 	u.walkFrom, u.redialing, u.published = time.Time{}, u.direct, false
-	u.following = u.fixed && !u.direct && u.relay != 0 && redials
+	u.following = follows
 	u.reportsFor = u.term
 	maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < u.term })
 	held, local, fixed, direct, following := u.contested, u.local, u.fixed, u.direct, u.following
@@ -1014,10 +1014,9 @@ func (u *Authority) restartRun(tick uint64) {
 
 // trySucceed takes a term when this instance's turn on the list has come and no
 // record reached it first. Candidate k takes the term k past the lost one's once
-// k-1 turns of a window each passed, so no two hosts' records share a term and an
-// earlier candidate's record wins wherever it arrives in time. Its turn passes
-// without a baseline to author from, or with its player no longer letting the
-// session move here (Instance.TakesOver).
+// k-1 turns of a window each passed, so no two records share a term and an earlier
+// candidate's wins wherever it arrives in time. Its turn passes with no baseline to
+// author from, or once its player lets no session move here (Instance.TakesOver).
 func (u *Authority) trySucceed(now time.Time) {
 	roster := u.currentRoster()
 	u.mu.Lock()

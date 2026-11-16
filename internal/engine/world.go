@@ -1222,13 +1222,16 @@ func (w *World) Follow(slot uint8, step int) (uint8, bool) {
 }
 
 // KeepView keeps a viewer looking from a cursor somebody plays: the one it follows,
-// or the next slot on once that one left or its player went away.
+// or the next slot on once that one left or its player went away. A Wraith is left
+// only for one played, or with nobody playing each tick would leave it for the next.
 // Caller MUST hold updateMutex.
 func (w *World) KeepView() {
-	if slot := w.Resources.Player.ViewSlot(); w.watches.Load() && !w.played(slot) {
-		if next := w.nextView(slot, 1); next != slot {
-			w.Follow(next, 0)
-		}
+	slot := w.Resources.Player.ViewSlot()
+	if !w.watches.Load() || w.played(slot) {
+		return
+	}
+	if next := w.nextView(slot, 1); next != slot && (w.played(next) || w.Resources.Player.Slot(slot) == 0) {
+		w.Follow(next, 0)
 	}
 }
 

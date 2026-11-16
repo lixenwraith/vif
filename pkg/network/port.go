@@ -110,9 +110,8 @@ func (p *SocketPort) Close() error {
 // Serve opens this port to joiners on ln, which it then owns: a session that held
 // only this process's own streams takes dials from here, and a participant that
 // already listens takes them at a second door. A door opened where nobody could dial
-// starts the link's history over, as nobody has dialled it: it waits for its first
-// joiner as a fresh host's does, whatever streams the port held before. A stream
-// that links as the door opens is counted, before the history starts over or after.
+// starts the link's history over: it waits for its first joiner as a fresh host's
+// does, whatever streams the port held, a stream linking meanwhile counted (whileEmpty).
 func (p *SocketPort) Serve(ln net.Listener) error {
 	if p.IsRunning() && p.unreachable() {
 		p.transport.peers.whileEmpty(func() { p.ever.Store(false) })

@@ -328,10 +328,8 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 // findFirstNonWhitespaceInBounds returns leftmost non-whitespace position in bounds
 func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := range ctx.World.Resources.Config.MapWidth {
-			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
-				return x, y
-			}
+		if x := rowStart(ctx, y, -1); x >= 0 {
+			return x, y
 		}
 	}
 	return 0, bounds.MinY

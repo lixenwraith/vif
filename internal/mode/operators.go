@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // changeHistorySize bounds the changes undo_change takes back
@@ -231,14 +230,12 @@ func (r *Router) put(x, y, count int, before bool) {
 		ox, dx = x-1-right, -dx
 	}
 	var cells []event.GlyphCell
-	taken := make(map[vmath.Point]bool)
 	far := 0 // where the last copy that laid a glyph starts
 	for i := range count {
 		laid := len(cells)
-		for _, c := range reg.cells {
+		for _, c := range reg.cells { // a copy is a register's width or height from the last, so none overlap
 			c.X, c.Y = ox+c.X+i*dx, oy+c.Y+i*dy
-			if at := (vmath.Point{X: c.X, Y: c.Y}); !taken[at] && r.ctx.World.Positions.TakesGlyph(c.X, c.Y) {
-				taken[at] = true
+			if r.ctx.World.Positions.TakesGlyph(c.X, c.Y) {
 				cells = append(cells, c)
 			}
 		}

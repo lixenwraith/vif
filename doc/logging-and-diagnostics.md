@@ -1291,7 +1291,7 @@ logging-enabled native build.
 
 A `vif_headless` build keeps logging, journals and `-replay -headless`
 verification; only presentation goes, so a bare `-replay` there fails with
-`journal presentation is unavailable in a vif_headless build`.
+`journal presentation unavailable in this build`.
 
 ## 16. Diagnostic playbooks
 

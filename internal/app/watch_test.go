@@ -638,6 +638,7 @@ func TestASpectatorLooksFromAPlayerWhoPlays(t *testing.T) {
 // TestSpectatingReplacesARunOnceItsDialIsTaken: :spectate dials while the run plays
 // on and replaces it only once the session took the dial, with a viewer looking from
 // the slot named that brings no bots and keeps no journal; a refusal leaves the game.
+// Spectating again after a lost feed, it looks from the slot it had come to follow.
 func TestSpectatingReplacesARunOnceItsDialIsTaken(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: fixtureSeed, Width: 120, Height: 40,
@@ -667,5 +668,8 @@ func TestSpectatingReplacesARunOnceItsDialIsTaken(t *testing.T) {
 	next, _ := line.restarted(req)
 	if m := next.Membership; !m.Watch || m.Follow != 1 || m.JoinAddress != host.HostAddr() || len(m.Bots) != 0 || next.Journal {
 		t.Fatalf("the run that spectates is %+v, journal %t; want a viewer at slot 1 with no bots or journal", m, next.Journal)
+	}
+	if again, _ := next.restarted(&restartRequest{Rejoin: true, Follow: 3}); !again.Membership.Watch || again.Membership.Follow != 3 {
+		t.Fatalf("the run that spectates again is %+v; want a viewer at slot 3", again.Membership)
 	}
 }

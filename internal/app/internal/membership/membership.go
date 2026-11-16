@@ -241,7 +241,7 @@ type RestartAsk struct {
 	Press bool
 
 	// Watch says Join names a session the next run only watches, looking from the
-	// slot Follow names first.
+	// slot Follow names first, as a viewer's Rejoin does.
 	Watch  bool
 	Follow uint8
 }

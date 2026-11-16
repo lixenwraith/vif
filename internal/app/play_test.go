@@ -366,13 +366,15 @@ func settle(t *testing.T, p *player) {
 
 // TestAReplayStepsBackOneTickAPressFromItsRing: each step back presents the tick
 // before the one shown. The last ring of steps restores without replaying, and one
-// further back replays from the ladder and refills the ring as it goes.
+// further back replays from the ladder and refills the ring as it goes. The copy
+// presented lists the console its viewer left.
 func TestAReplayStepsBackOneTickAPressFromItsRing(t *testing.T) {
 	t.Parallel()
 	p := replayPlayer(t, botJournalSet(t), nil)
 	const shown = parameter.ReplayCheckpointSteps + 40
 	playSteps(p, shown)
 	settle(t, p)
+	p.a.ctx.SetStatusMessage("the viewer's line", parameter.StatusNotice)
 	for i := 1; i <= 2*parameter.ReplayRing+2; i++ {
 		p.control(',')
 		settle(t, p)
@@ -382,6 +384,10 @@ func TestAReplayStepsBackOneTickAPressFromItsRing(t *testing.T) {
 	}
 	if p.rw.every == 0 || len(p.rw.trail) != shown+1 {
 		t.Fatalf("stepping back dropped the checkpoints (every %d) or rewrote the run (%d steps)", p.rw.every, len(p.rw.trail)-1)
+	}
+	lines, _ := p.a.ctx.ConsoleLines(nil)
+	if !slices.ContainsFunc(lines, func(l engine.ConsoleLine) bool { return l.Text == "the viewer's line" }) {
+		t.Fatalf("the copy presented lists %d console lines, none the viewer left", len(lines))
 	}
 }
 

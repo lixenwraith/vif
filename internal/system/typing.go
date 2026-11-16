@@ -429,9 +429,9 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	}
 }
 
-// handleReplaceRequest retypes the drawn glyph of each cell the text names. A replace
-// edits as a delete does, reaching what it would, so it scores nothing: no reward,
-// heat or streak, and no error on a cell it cannot reach.
+// handleReplaceRequest retypes the drawn glyph of each cell the text names, where a
+// delete takes every player glyph of its cells. It edits as a delete does, so it
+// scores nothing: no reward, heat or streak, and no error on a cell it cannot reach.
 func (s *TypingSystem) handleReplaceRequest(payload *event.GlyphReplaceRequestPayload) {
 	x := payload.X
 	for _, r := range payload.Text {

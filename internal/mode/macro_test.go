@@ -10,7 +10,8 @@ import (
 
 // Playback waits in Command and Overlay mode, so a recording that kept the `:`,
 // the command's characters and its confirm stalled at the open command line and
-// played the rest in Normal mode once it was left. Escape in Normal opens the menu.
+// played the rest in Normal mode once it was left. Escape in Normal opens the menu,
+// which one recorded leaving a mode, played where playback stands in none, does not.
 func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -36,6 +37,9 @@ func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	got := r.macro.buffers['a']
 	if len(got) != 2 || got[0].Type != input.IntentMotion || got[1].Type != input.IntentMotion {
 		t.Fatalf("register a holds %+v, want the two motions alone", got)
+	}
+	if r.Handle(&input.Intent{Type: input.IntentEscape, MacroPlayback: true}); ctx.GetMode() != 0 {
+		t.Fatalf("a played Escape left Normal for mode %v", ctx.GetMode())
 	}
 }
 

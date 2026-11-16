@@ -62,3 +62,34 @@ func TestASupersededCursorIsDrivenByNobody(t *testing.T) {
 		t.Fatal("the wait ended, the run does not drive the cursor in its place")
 	}
 }
+
+// TestAViewerLeavesAWraithOnlyForOneWhoPlays: with nobody playing, a viewer stays on
+// the Wraith it follows rather than hop to the next each tick; a cursor somebody
+// plays takes its view, and so does any cursor once its own slot is empty.
+func TestAViewerLeavesAWraithOnlyForOneWhoPlays(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	w.Watch()
+	var cursors [3]core.Entity
+	for slot := range cursors {
+		cursors[slot] = w.CreateEntity(core.DomainShared)
+		w.Resources.Player.Bind(uint8(slot), cursors[slot])
+		w.Components.Wraith.SetComponent(cursors[slot], component.WraithComponent{X: -1, Y: -1})
+	}
+	w.Follow(0, 0)
+	kept := func(want uint8, when string) {
+		t.Helper()
+		for range 3 {
+			w.KeepView()
+			if got := w.Resources.Player.ViewSlot(); got != want {
+				t.Fatalf("%s the viewer looks from slot %d, want %d", when, got, want)
+			}
+		}
+	}
+	kept(0, "among three Wraiths")
+	w.Components.Wraith.RemoveEntity(cursors[2])
+	kept(2, "with slot 2 played")
+	w.Components.Wraith.SetComponent(cursors[2], component.WraithComponent{X: -1, Y: -1})
+	w.Resources.Player.Unbind(2)
+	kept(0, "with its slot emptied and Wraiths left")
+}

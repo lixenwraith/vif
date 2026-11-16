@@ -557,7 +557,8 @@ func (a *App) joinAnew(err error) (*restartRequest, error) {
 		return nil, err
 	}
 	a.log.Info("session", "msg", "joining the session's new game", "join", link.Shown(a.cfg.Membership.JoinAddress))
-	return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Membership.Bots}, nil
+	return &restartRequest{RestartAsk: membership.RestartAsk{Rejoin: true, Follow: a.cfg.Membership.Follow},
+		provided: a.cfg.Resources.Provided, Bots: a.cfg.Membership.Bots}, nil
 }
 
 // joinPressed reports whether ev is the press that seats a waiting join: one that
