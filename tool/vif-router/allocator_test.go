@@ -26,6 +26,7 @@ type fakeKube struct {
 	services   []service
 	pods       []pod
 	slices     []endpointSlice
+	quotas     []resourceQuota
 	jobObjects []map[string]any
 	svcObjects []map[string]any
 
@@ -57,6 +58,12 @@ func (f *fakeKube) listEndpointSlices(context.Context, string) ([]endpointSlice,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]endpointSlice(nil), f.slices...), nil
+}
+
+func (f *fakeKube) listQuotas(context.Context) ([]resourceQuota, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]resourceQuota(nil), f.quotas...), nil
 }
 
 func (f *fakeKube) createJob(_ context.Context, object map[string]any) (job, error) {
@@ -420,11 +427,11 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	controller.newID = func() (string, error) { return "chosen", nil }
 
 	created, err := controller.createSession(context.Background(),
-		sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Scenario: "td", Size: "160x48"})
+		sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Scenario: "td", Size: "120x40"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Scenario != "td" || created.Size != "160x48" {
+	if created.Scenario != "td" || created.Size != "120x40" {
 		t.Fatalf("the session reports scenario %q size %q, want what it asked for", created.Scenario, created.Size)
 	}
 	if len(kube.jobObjects) != 1 {
@@ -435,7 +442,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{`"-players","2","-bot","1"`, `"-lv","debug"`,
-		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`, `"-size","160x48"`} {
+		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`, `"-size","120x40"`} {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("the Job does not carry %s: %s", want, encoded)
 		}
@@ -466,6 +473,47 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
 			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)
 		}
+	}
+}
+
+// TestTheFleetSeatsItsOwnBotsOnAMapTheySizeUpTo: a bot is a world of its own, whose
+// cost was measured on a 120x40 screen, so a request for the session's own bots is
+// refused on a larger screen or a scenario fixing a larger map, and one for none
+// is not.
+func TestTheFleetSeatsItsOwnBotsOnAMapTheySizeUpTo(t *testing.T) {
+	cfg := testAllocatorConfig(t)
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
+	if err := os.WriteFile(filepath.Join(cfg.WadDir, "scenario", "td", "scenario.toml"),
+		[]byte("[map]\nfixed = \"500x250\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for request, refused := range map[sessionRequest]bool{
+		{Bots: 1}: false, {Bots: 1, Size: "120x40"}: false, {Bots: 1, Size: "121x40"}: true,
+		{Bots: 1, Scenario: "td"}: true, {Scenario: "td"}: false, {Size: "200x60"}: false,
+	} {
+		if _, err := controller.resolve(request); errors.Is(err, errRequestRefused) != refused {
+			t.Errorf("resolve(%+v) returned %v; want refused %t", request, err, refused)
+		}
+	}
+}
+
+// TestACreateTheQuotaHasNoRoomForIsRefusedAsFleetFull: a session whose envelope the
+// namespace's quota cannot hold beside what it counts used is refused before any
+// Job is made, since the API server would take the Job and never run its pod.
+func TestACreateTheQuotaHasNoRoomForIsRefusedAsFleetFull(t *testing.T) {
+	var quota resourceQuota
+	quota.Status.Hard = map[string]string{"requests.cpu": "1", "requests.memory": "960Mi", "limits.cpu": "5", "limits.memory": "4800Mi"}
+	quota.Status.Used = map[string]string{"requests.cpu": "900m", "requests.memory": "864Mi", "limits.cpu": "4500m", "limits.memory": "4320Mi"}
+	kube := &fakeKube{quotas: []resourceQuota{quota}}
+	controller := newAllocator(kube, fakeHealth{state: sessionHealth{Live: true, Ready: true, Capacity: 4}}, testAllocatorConfig(t))
+	if _, err := controller.createSession(context.Background(), sessionRequest{Bots: 1}); !errors.Is(err, errFleetFull) {
+		t.Fatalf("a session of one bot past the quota returned %v; want the fleet full", err)
+	}
+	if len(kube.jobObjects) != 0 {
+		t.Fatalf("made %d Jobs the quota would not run", len(kube.jobObjects))
+	}
+	if _, err := controller.createSession(context.Background(), sessionRequest{}); err != nil {
+		t.Fatalf("the session the quota has room for: %v", err)
 	}
 }
 

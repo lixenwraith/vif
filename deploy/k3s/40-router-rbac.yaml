@@ -1,14 +1,7 @@
-# What the website's router is allowed to do.
-#
-# The router is tool/vif-router: the component the website calls when a
-# player asks for a game. These are exactly the verbs it needs to create, observe
-# and remove a session, in one namespace, and nothing else.
-#
-# Read it as a limit rather than a grant. A router with this Role cannot read a
-# Secret, cannot exec into a session, cannot touch another namespace, and cannot
-# create a workload shape other than the one the quota and Pod Security admission
-# already constrain. If the router is compromised, the worst it can do is churn
-# ten sessions.
+# What the website's router (tool/vif-router) may do: the verbs it needs to create,
+# observe and remove a session, in one namespace. Read it as a limit: no Secret, no
+# exec into a session, no other namespace, and no workload shape but the one the
+# quota and Pod Security admission constrain. Compromised, it can churn ten sessions.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -44,6 +37,11 @@ rules:
   # The Service is ready only when discovery publishes a ready endpoint.
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
+    verbs: ["list"]
+  # What the namespace's quota has left, so a session it has no room for is
+  # refused as the fleet full, where its Job would be taken and never run.
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
     verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

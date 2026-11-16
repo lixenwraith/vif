@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -381,6 +383,17 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 		}
 		workload.Size = req.Size
 	}
+	// A bot is a world of its own, sized as its session's map: the scenario's own,
+	// else the screen asked for, else the bots' 120x40.
+	size := cmp.Or(limits.FixedMaps[workload.Scenario], workload.Size)
+	if m := sizePattern.FindStringSubmatch(size); workload.Bots > 0 && m != nil {
+		w, _ := strconv.Atoi(m[1])
+		h, _ := strconv.Atoi(m[2])
+		if w*h > botMapCells {
+			return workloadConfig{}, fmt.Errorf("%w: bots must be 0 for a map of %s; a session seats its own on %d cells at most",
+				errRequestRefused, size, botMapCells)
+		}
+	}
 	return workload, nil
 }
 
@@ -425,6 +438,11 @@ func (a *allocator) createTransaction(ctx context.Context, workload workloadConf
 	if fleetSize(jobs) >= a.cfg.SessionsMax {
 		return createdObjects{}, errFleetFull
 	}
+	if fits, err := a.fits(ctx, workload.envelope()); err != nil {
+		return createdObjects{}, fmt.Errorf("list ResourceQuotas: %w", err)
+	} else if !fits {
+		return createdObjects{}, errFleetFull
+	}
 
 	var createdJob job
 	var id string
@@ -464,6 +482,43 @@ func (a *allocator) createTransaction(ctx context.Context, workload workloadConf
 	}
 	created.service = createdService
 	return created, nil
+}
+
+// fits reports whether the namespace's quotas have room for one more session of
+// this envelope beside what the API server counts used. Past them it would take
+// the Job and make no pod, which a create would wait out to its timeout.
+func (a *allocator) fits(ctx context.Context, e envelope) (bool, error) {
+	quotas, err := a.kube.listQuotas(ctx)
+	if err != nil {
+		return false, err
+	}
+	const mi = 1000 << 20 // a MiB, in thousandths of a byte
+	needs := map[string]int64{
+		"requests.cpu": int64(e.cpuRequest), "limits.cpu": int64(e.cpuLimit),
+		"requests.memory": int64(e.memoryRequest) * mi, "limits.memory": int64(e.memoryLimit) * mi,
+	}
+	for _, q := range quotas {
+		for name, need := range needs {
+			hard, bounded := quantity(q.Status.Hard[name])
+			if used, _ := quantity(q.Status.Used[name]); bounded && used+need > hard {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+// quantity reads a Kubernetes quantity in thousandths of its unit: a number, then
+// m, a decimal suffix (k, M, G, T) or a binary one (Ki, Mi, Gi, Ti).
+func quantity(s string) (int64, bool) {
+	digits := strings.LastIndexAny(s, "0123456789.") + 1
+	scale, known := map[string]float64{"": 1e3, "m": 1, "k": 1e6, "M": 1e9, "G": 1e12, "T": 1e15,
+		"Ki": 1e3 * (1 << 10), "Mi": 1e3 * (1 << 20), "Gi": 1e3 * (1 << 30), "Ti": 1e3 * (1 << 40)}[s[digits:]]
+	n, err := strconv.ParseFloat(s[:digits], 64)
+	if err != nil || !known || n < 0 {
+		return 0, false
+	}
+	return int64(math.Round(n * scale)), true
 }
 
 // fleetSize counts the Jobs as the quota does, finished ones included until their

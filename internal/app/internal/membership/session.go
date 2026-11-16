@@ -743,10 +743,12 @@ func (m *Membership) departingLocked() (departing []uint32) {
 }
 
 // returnPlace is a place a dial took back with its key, until its arrival
-// crosses: the entry as it waited, and what its player brings back.
+// crosses: the entry as it waited, what its player brings back, and the relay the
+// dial came through, zero at a door of this run's own.
 type returnPlace struct {
 	entry  network.RosterEntry
 	record *event.CursorRecord
+	via    link.PeerID
 }
 
 // staleLink refuses a dial whose key holds a place still linked: whoever proves the
@@ -1071,10 +1073,7 @@ func (m *Membership) keyedLocked(keys []string, holder link.PeerID, departing []
 				m.returning = make(map[link.PeerID]returnPlace)
 			}
 			p.Away, m.sessionRoster[i].Away = true, true
-			m.returning[p.ID] = returnPlace{entry: p}
-			if holder != 0 {
-				m.sessionRoster[i].Holder = holder
-			}
+			m.returning[p.ID] = returnPlace{entry: p, via: holder}
 			return m.sessionRoster[i], nil
 		}
 	}

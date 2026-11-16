@@ -65,12 +65,14 @@ it does not move an in-memory session into an unrelated pod.
 What stands between this deployment and one a stranger can install is in
 [todo](todo.md#fleet): rehearsing the install on bare Arch Linux and Ubuntu, a
 full-roster measurement for the resource values, the failures a cluster has not
-yet been put through, and promoting verified images to the node. Until
-[Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, the
-deployment keeps a session's own bots closed (`VIF_ROUTER_BOTS_MAX=0`), and the
-lobby has no standing session to show: a session is spectated through the router
-(§9), and [the bot's game the site always runs](todo.md#keep-a-standing-session-for-the-lobby)
-waits on those bots. Each address creates one session per first-join window and
+yet been put through, and promoting verified images to the node. A session takes
+the bots its players bring, which run on their machines
+([Bots](bots.md#pause-speed-and-session-lifetime)); its own, which the node runs,
+stay closed on this deployment (`VIF_ROUTER_BOTS_MAX=0`) until their cost is read
+there ([Measure a full roster](todo.md#measure-a-full-roster)). The lobby has no
+standing session to show: a session is spectated through the router (§9), and
+[the bot's game the site always runs](todo.md#keep-a-standing-session-for-the-lobby)
+is made by hand meanwhile. Each address creates one session per first-join window and
 joins or spectates six times a minute, loose for a player whose link drops and
 comes back; one NAT is one address.
 
@@ -205,7 +207,7 @@ What the manifest asks for:
 | memory request / limit | 96 / 480 MiB | td's 500×250 map peaks at about 200–215 MiB with one guest (`vif -serve`, measured locally), plus headroom for a staging world after an authority change; `main` at 120×40 holds about 33 MiB. |
 | `GOMEMLIMIT` | 448 MiB | 32 MiB under the limit, an earlier collection target, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
-| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 672 MiB. |
+| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request and limit | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 672 MiB, under its one core. A seat is a world of its own, so a request for bots is refused on a map past that screen's 4,800 cells, a scenario's fixed one or the screen asked for (`botMapCells`). |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
 
 What one session actually cost, measured on the node with one guest on `wad`
@@ -225,7 +227,10 @@ rather than filling it in two and a half hours. Do not scale the CPU and memory
 figures from here; [Measure a full roster](todo.md#measure-a-full-roster)
 measures a four-player world, which is the shape the manifest's values are for. The
 quota totals in `10-quota.yaml` are ten times the game container without bots; the
-config-check init container counts only against its own peak.
+config-check init container counts only against its own peak. A session with bots
+takes more than a tenth, three of three bots filling the CPU, so the router reads
+what the quota counts used and refuses the create it has no room for as `fleet_full`
+(`allocator.fits`), where the API server would take the Job and never run its pod.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
@@ -278,7 +283,8 @@ What a cluster has not yet been put through is
 - **Ninety seconds, twice.** The first-guest window and the empty grace are the same
   number and different bounds; the second doubles as the reconnect window.
 - **Ten sessions, enforced by quota as well as by the router.** A ceiling only the
-  router believes is one a router bug removes.
+  router believes is one a router bug removes. The quota's compute totals are the
+  API server's to count: the router reads them and adds no sum of its own.
 - **A Job per session.** The process is meant to exit; a Deployment would restart it
   into a session nobody is in.
 - **One address for every session, and no route around the router.** The front

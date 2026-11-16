@@ -587,11 +587,12 @@ and on the status bar; Up still recalls it whole. The console keeps the last
 `:leave` carry them to the next run, and nothing writes them to disk.
 
 Viewer keys are not entries in this command table or the keymap. A replay, and a
-watched script or bot, reserve `SPACE . , + - h j k l 0 q` for viewer pause, step,
-step back, speed, pan/reset, and quit (in a live session only pan and quit); those
-keys never become simulation intents. `:`, the menu keys and the help key open the
-command line, the menu and help over it. [Runtime and concurrency](runtime.md)
-describes playback.
+watched script or bot, reserve `p . , + - h j k l 0 q` for viewer pause, step,
+step back, speed, pan/reset, and quit; those keys never reach the game as play. In
+a live session only pan and quit are left, and a watched bot's `p`, which asks as
+`:pause` does: its run hosting, every participant stops. `:`, the menu keys and the
+help key open the command line, the menu and help over it.
+[Runtime and concurrency](runtime.md) describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
 refuses a disable that a system declares required, naming the dependents.

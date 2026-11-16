@@ -536,8 +536,11 @@ wait off (`-nw`, `[play] wait = false`). Nothing stands in for the waiting playe
 the map; its cursor appears with its arrival.
 
 The session is a tree rooted at the authority: the shipped CLI builds a star, a
-guest seating bots or relaying people (`-relay`) adds a level, and in a migrate
-session every participant also holds a peer link to the first candidate (§5.3). Every
+guest seating bots or relaying people (`-relay`) adds a level, as a run behind it
+does again, to `NetworkRelayHopLimit` levels, and in a migrate
+session every participant also holds a peer link to the first candidate (§5.3). So
+the authority sees links, each a run with a cursor and any mix of bots and people
+behind it, and seats each cursor alike, whatever drives it and however far it is. Every
 link is up, down or beside. A participant's **up** link is the authority if it
 holds one, else the relay it joined through (`NetworkResource.Relay`) or adopted;
 its **down** links are those that send it raw artifacts or were served a join
@@ -551,9 +554,14 @@ tick, hashes, and chunks across relays.
 
 A relayed join — a guest's own bot on an in-process stream (`seatLink`), or a
 person at the guest's `-relay` address — is served by the guest as a coordinator
-would: it asks the authority on its own link to allocate the identity and, once
+would: it asks the authority to allocate the identity and, once
 the joiner installed the world the guest last proved, to cross its arrival with
-what the joiner reported (`MsgRelayJoin`); a guest that took the session over asks
+what the joiner reported (`MsgRelayJoin`). It asks on its link to the authority,
+or, holding none, on its up link: each relay on the way passes the question on,
+adding the link it came up on, and the answer comes back down those links
+(`RelayJoin.Path`, `Membership.passRelayJoinLocked`); the authority reads the first
+of them as the relay that asked, and refuses one naming a participant it holds a
+link to. A guest that took the session over asks
 nobody, its door admitting as the host's does into the term it holds. A bot declares its holder and dials no
 peer links, since it shares its holder's fate; its holder's departure takes its
 bot group at the same crossing, to wait with it or to go with it. A person declares no holder: it keeps its slot when
@@ -578,6 +586,16 @@ answers:
 | Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it, but for a relay's fork from a host-policy session, whose `-relay` door goes on for the people it relayed (§5.5). In a **migrate** session a participant whose player turned Take over as host on binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, and asks for it by itself, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. A player who did not ask, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every host-policy session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
+
+**A relay authors nothing and still answers for what is behind it.** The term
+holder is the session's one authority, named to every participant, and it moves
+only where both ends asked. A relay holds a narrower reach nobody is told of, since
+nobody else is under it: it runs the join of whoever comes in behind it, passes
+their artifacts up, serves their repairs from what it proved, and, cut off from its
+own way up in a session pinned to its host, goes on as the host of that subtree
+alone, each run in it coming back through the door it joined at (§5.5). That it
+does so without its player choosing to, where taking a session over is a choice, is
+open ([todo](todo.md#review-what-a-relay-hosts-once-its-host-is-gone)).
 
 A successor is usually on another machine and cannot bind its predecessor's
 address, so a successor that authors must already be reachable at an address of its
@@ -1072,15 +1090,18 @@ A person's fork leaves the same way. `converge.Instance.Forked` hands the run th
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
 `Membership.LeaveSession`). A session pinned to its host has no next host, and nobody
 in it signed up to come back to this run, so its fork keeps its bots' places, as
-`:leave` does, and the people's it relayed, and the rest go at once. Those people came
-in at its `-relay` door and lose their path with it, and its notice that the host went
-holds them (§5.1, step 2): the fork keeps the place of each person linked to it at a
-door it serves, with their bots', but not the relay it came in through, nor a place
-the host's roster named its bot that it never seated, and moves the door, at its
-address, onto the session it opens before the old port closes
-(`Membership.relayedLocked`, `Membership.reopenRelayDoor`; a door published through
-the router stays published). Each redials that door as its link drops, retried while
-the session left still closes, and takes its own place back, and the status bar says
+`:leave` does, and those of everyone behind it, and the rest go at once. Those people
+came in at its `-relay` door, or at the door of one who did, and lose their path with
+it, and its notice that the host went holds them (§5.1, step 2): the fork keeps the
+place of each person linked to it at a door it serves and of each whose artifacts it
+passed on for a relay behind it (`NetworkSystem.Relays`), with their bots', but not
+the relay it came in through, nor a place the host's roster named its bot that it
+never seated, and moves the door, at its address, onto the session it opens before
+the old port closes (`Membership.relayedLocked`, `Membership.reopenRelayDoor`; a door
+published through the router stays published). Each redials the door it came in at
+as its link drops, retried while the session left still closes or the run behind
+that door is itself on its way back (`Membership.redialDoor`), and takes its own
+place back, one behind another's door through that one's run, and the status bar says
 "Host connection lost; playing on in your relay's session", the relay's "playing on
 with the players you relay", or why the door could not be bound again, when it keeps
 nobody. Nobody else comes in: the door takes back a person's place alone, a bot coming

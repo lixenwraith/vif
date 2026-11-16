@@ -69,7 +69,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		0: {`{"name":"GOMEMLIMIT","value":"448MiB"}`,
 			`"resources":{"limits":{"cpu":"500m","memory":"480Mi"},"requests":{"cpu":"100m","memory":"96Mi"}}`},
 		3: {`{"name":"GOMEMLIMIT","value":"544MiB"}`,
-			`"resources":{"limits":{"cpu":"500m","memory":"576Mi"},"requests":{"cpu":"292m","memory":"192Mi"}}`},
+			`"resources":{"limits":{"cpu":"692m","memory":"576Mi"},"requests":{"cpu":"292m","memory":"192Mi"}}`},
 	} {
 		cfg.Bots = bots
 		encoded, err := json.Marshal(buildJob("abc123", cfg))

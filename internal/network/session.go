@@ -181,12 +181,10 @@ const (
 )
 
 // RelayJoin is a relay's request. Nonce pairs it with its answer; Leaf names the
-// participant once Assign has. RelayReady carries what the participant reported,
-// its identity checked against the offer as a coordinator checks a dial's reply;
-// Assign carries the keys the dial proved over Challenge, the nonce RelayNonce was
-// answered with, so the coordinator checks the proofs itself and the relay can take
-// nobody's place; Door is where the relay admits people, completed from its
-// connection as a port is.
+// participant once Assign has. RelayReady carries what the participant reported;
+// Assign carries the keys the dial proved over Challenge, which RelayNonce was
+// answered with, so the coordinator checks the proofs and the relay can take
+// nobody's place; Door is where the relay admits people.
 type RelayJoin struct {
 	Step      RelayStep    `json:"step"`
 	Nonce     uint32       `json:"nonce"`
@@ -196,14 +194,19 @@ type RelayJoin struct {
 	Challenge string       `json:"challenge,omitempty"`
 	Report    JoinerReport `json:"report,omitzero"`
 	Door      string       `json:"door,omitempty"`
+	// Path is the links a request came up on where its relay holds none to the
+	// coordinator: the asking relay, then each relay that passed it on.
+	Path []link.PeerID `json:"path,omitempty"`
 }
 
 // RelayAdmit answers one RelayJoin: the offer Assign allocated, the challenge
-// RelayNonce asked for, or why not.
+// RelayNonce asked for, or why not. Path is the request's, which the answer goes
+// back down, its last link first.
 type RelayAdmit struct {
-	Nonce     uint32       `json:"nonce"`
-	Offer     SessionOffer `json:"offer,omitzero"`
-	Challenge string       `json:"challenge,omitempty"`
+	Nonce     uint32        `json:"nonce"`
+	Offer     SessionOffer  `json:"offer,omitzero"`
+	Challenge string        `json:"challenge,omitempty"`
+	Path      []link.PeerID `json:"path,omitempty"`
 	refusalField
 }
 

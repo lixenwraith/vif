@@ -296,7 +296,7 @@ func (m *Membership) dropPlayerLocked(entity core.Entity) error {
 	return nil
 }
 
-func (c Control) RequestSession(site string, players int, scenario string) error {
+func (c Control) RequestSession(site string, players, bots int, scenario string) error {
 	e, err := link.ParseEndpoint(site)
 	if err != nil {
 		return err
@@ -307,7 +307,10 @@ func (c Control) RequestSession(site string, players int, scenario string) error
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
 	}
-	return c.m.joinSessionLocked(site, players, scenario, nil)
+	if bots < 0 || bots >= parameter.MaxPlayers {
+		return fmt.Errorf("bots must be 0..%d, beside at least one player", parameter.MaxPlayers-1)
+	}
+	return c.m.joinSessionLocked(site, players, bots, scenario, nil)
 }
 
 func (c Control) AddBot(graph string) error {
@@ -430,7 +433,7 @@ func (m *Membership) receiveSessionRestart(from uint32, addr string) {
 // by its session may join another, and so may one whose session is its own bots',
 // which the next run seats in the new one. Caller MUST hold updateMutex.
 func (m *Membership) joinLocked(target string) error {
-	return m.joinSessionLocked(target, 0, "", nil)
+	return m.joinSessionLocked(target, 0, 0, "", nil)
 }
 
 // spectateLocked is joinLocked for a session this run only watches, looking from
@@ -440,7 +443,7 @@ func (m *Membership) spectateLocked(target string, slot uint8) error {
 	if e, err := link.ParseEndpoint(target); err == nil && e.Scheme == link.SchemeSite {
 		return errors.New("a site makes sessions to join; spectate one by its own link")
 	}
-	return m.joinSessionLocked(target, 0, "", &slot)
+	return m.joinSessionLocked(target, 0, 0, "", &slot)
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
@@ -521,7 +524,7 @@ func (m *Membership) joinErrorLocked() error {
 // joinSessionLocked dials target off the lock, a site's new session where it names
 // one, and replaces this run with one in that session: playing in it, or only
 // watching it from the slot watch names. Caller MUST hold updateMutex.
-func (m *Membership) joinSessionLocked(target string, players int, scenario string, watch *uint8) error {
+func (m *Membership) joinSessionLocked(target string, players, bots int, scenario string, watch *uint8) error {
 	if err := m.joinErrorLocked(); err != nil {
 		return err
 	}
@@ -562,7 +565,7 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
 			var fingerprint string
-			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
+			if door, fingerprint, err = network.RequestSession(site.Addr, players, bots, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
 				m.ctx.SetStatusMessage(doing+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = entering(next, door); err == nil {
 					err = base.ValidateWith(next)
@@ -1050,11 +1053,11 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 	return old, len(relayed), nil
 }
 
-// relayedLocked is each person linked to this run as it forks from a pinned session
-// at a -relay door it serves: no guest of such a session binds a port for others to
-// link to (openDial), so such a person joined at that door, and goes on back through
-// it (reopenRelayDoor). Its bots, the relay it joined through and the authority it
-// lost are none of them. Caller MUST hold updateMutex.
+// relayedLocked is each person behind this run as it forks from a pinned session at
+// a -relay door it serves: one linked to it, which joined at that door and goes on
+// back through it (reopenRelayDoor), and one behind such a person's own door, which
+// comes back through that. Its bots, the relay it joined through and the authority
+// it lost are none of them. Caller MUST hold updateMutex.
 func (m *Membership) relayedLocked(port engine.NetworkPort, roster []network.RosterEntry, local link.PeerID) map[link.PeerID]bool {
 	p, ok := port.(interface{ Peers() []uint32 })
 	m.tunnelMu.Lock()
@@ -1066,7 +1069,14 @@ func (m *Membership) relayedLocked(port engine.NetworkPort, roster []network.Ros
 	linked, lost := p.Peers(), m.authorityID()
 	relayed := make(map[link.PeerID]bool)
 	for _, e := range roster {
-		if e.ID != local && e.ID != lost && e.ID != m.joinedThrough && e.Holder == 0 && slices.Contains(linked, uint32(e.ID)) {
+		if e.ID == local || e.ID == lost || e.ID == m.joinedThrough || e.Holder != 0 {
+			continue
+		}
+		behind := slices.Contains(linked, uint32(e.ID))
+		if !behind {
+			m.linksLocked(func(l relayLinks) { behind = l.Relays(uint32(e.ID)) })
+		}
+		if behind {
 			relayed[e.ID] = true
 		}
 	}

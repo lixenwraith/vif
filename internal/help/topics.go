@@ -263,9 +263,9 @@ var topics = []topicDef{
 		},
 	},
 	{
-		Key: "replay", Title: "REPLAY (-replay, -script -watch)",
+		Key: "replay", Title: "REPLAY (-replay, -script -watch, -bot -watch)",
 		Entries: []entryDef{
-			{Keys: "Space", Desc: "Pause or resume playback; at the end, play again from the start"},
+			{Keys: "p", Desc: "Pause or resume playback; at the end, play again from the start. A watched bot in a session asks as :pause does"},
 			{Keys: ".", Desc: "Pause and advance one tick"},
 			{Keys: ",", Desc: "Pause and step back one tick, each shown as '.' shows; recent ticks are ready at once, older ones wait on a replay from the start"},
 			{Keys: "+  -", Desc: "Faster and slower playback"},

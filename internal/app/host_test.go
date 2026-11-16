@@ -37,8 +37,8 @@ import (
 
 func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
 	type request struct {
-		Players  int
-		Scenario string
+		Players, Bots int
+		Scenario      string
 	}
 	received, release := make(chan request, 1), make(chan struct{})
 	var once sync.Once
@@ -66,14 +66,19 @@ func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
 	a.World().RunSafe(func() {
 		ctl := a.ctx.SessionCtl
 		for _, n := range []int{-1, parameter.MaxPlayers + 1} {
-			if err := ctl.RequestSession(site.URL, n, "tower"); err == nil {
+			if err := ctl.RequestSession(site.URL, n, 0, "tower"); err == nil {
 				t.Errorf("accepted players=%d", n)
 			}
 		}
-		if err := ctl.RequestSession("127.0.0.1:4242", 2, "tower"); err == nil {
+		for _, n := range []int{-1, parameter.MaxPlayers} {
+			if err := ctl.RequestSession(site.URL, 3, n, "tower"); err == nil {
+				t.Errorf("accepted bots=%d", n)
+			}
+		}
+		if err := ctl.RequestSession("127.0.0.1:4242", 2, 0, "tower"); err == nil {
 			t.Error("accepted a non-site allocator target")
 		}
-		if err := ctl.RequestSession(site.URL, 3, "tower"); err != nil {
+		if err := ctl.RequestSession(site.URL, 3, 2, "tower"); err != nil {
 			t.Fatal(err)
 		}
 		if ctl.HostError() == nil || ctl.JoinError() == nil {
@@ -85,13 +90,13 @@ func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
 		if err := ctl.BeginHosting("127.0.0.1:0", ""); err == nil {
 			t.Error("hosted during a pending join")
 		}
-		if err := ctl.RequestSession(site.URL, 3, "tower"); err == nil {
+		if err := ctl.RequestSession(site.URL, 3, 2, "tower"); err == nil {
 			t.Error("started two allocator requests")
 		}
 	})
 	select {
 	case req := <-received:
-		if req.Players != 3 || req.Scenario != "tower" {
+		if req.Players != 3 || req.Bots != 2 || req.Scenario != "tower" {
 			t.Fatalf("allocator received %+v", req)
 		}
 	case <-time.After(2 * time.Second):

@@ -108,6 +108,7 @@ Asserted (print PASS/FAIL; `all` runs them)
   bundle            the release wad archive extracts to a working config root
   scenario          :n <name> rebuilds the run on another scenario and back
   follow            a host changes scenario and its guest rebuilds with it
+  tree              a host's loss leaves every run behind a relay in its session
   fleet             the session template and the router render one workload
   deploy            the wad installer's refusal, the manifests and a mounted scenario
   all               every asserted check above
@@ -355,10 +356,10 @@ follow)
 	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
 	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
 	GK=$(keyfile "sleep 24" "printf ':q\\r'" "sleep 2")
-	pty_bg "$HK" "$BIN -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
+	pty_bg "$HK" "$BIN -nw -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
 	HOST_PTY=$PTY_PID
 	sleep 2
-	pty_bg "$GK" "$BIN -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
+	pty_bg "$GK" "$BIN -nw -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
 	wait "$HOST_PTY" 2>/dev/null || true
 	wait "$PTY_PID" 2>/dev/null || true
 	grep -qh '"msg":"session restarting"' "$GL"/*.jsonl 2>/dev/null \
@@ -382,6 +383,50 @@ follow)
 	pass "the host changed scenario and its guest rebuilt and rejoined on it"
 	;;
 
+tree)
+	# A relay with a relay behind it, and a player with a bot behind that, lose their
+	# host: the first relay goes on with everyone behind it. Three real terminals,
+	# since each run behind it restarts into its session, and a state root each, since
+	# a place is kept by the key a run's own root holds.
+	need_bin
+	pty_ok || { echo "SKIP tree: no usable script(1) for a pty" >&2; exit 0; }
+	D=$(mktemp -d); R1=$((PORT + 11)); R2=$((PORT + 12))
+	run() { echo "env XDG_STATE_HOME=$D/$1 XDG_CONFIG_HOME=$D/$1 $BIN -nw -mute -l=$D/$1/log -lv info -ls app+session"; }
+	"$BIN" -serve "$HOST:$PORT" -size 120x40 -players 8 >/dev/null 2>&1 &
+	LOAD_PIDS=$!
+	# The run furthest from the host quits first, so none loses its relay to a quit
+	K1=$(keyfile "sleep 27" "printf ':q\\r'" "sleep 2")
+	K2=$(keyfile "sleep 21" "printf ':q\\r'" "sleep 2")
+	K3=$(keyfile "sleep 14" "printf ':q\\r'" "sleep 2")
+	sleep 2
+	pty_bg "$K1" "$(run relay) -join $HOST:$PORT -relay $HOST:$R1"
+	FIRST=$PTY_PID
+	sleep 4
+	pty_bg "$K2" "$(run middle) -join $HOST:$R1 -relay $HOST:$R2"
+	SECOND=$PTY_PID
+	sleep 5
+	pty_bg "$K3" "$(run deep) -join $HOST:$R2 -bot 1"
+	sleep 7
+	[ "$(grep -hc '"msg":"bot seated"' "$D"/deep/log/*.jsonl 2>/dev/null)" = 1 ] \
+		|| fail "the player two relays from the host seated no bot: $D/deep/log"
+	kill -9 "$LOAD_PIDS" 2>/dev/null || true
+	wait "$FIRST" 2>/dev/null || true
+	wait "$SECOND" 2>/dev/null || true
+	wait "$PTY_PID" 2>/dev/null || true
+	grep -qh '"msg":"relay door kept for the players this run relayed"' "$D"/relay/log/*.jsonl 2>/dev/null \
+		|| fail "the relay did not go on with the players behind it: $D/relay/log"
+	for behind in middle deep; do
+		grep -qh '"msg":"the redial admitted this run back"' "$D/$behind"/log/*.jsonl 2>/dev/null \
+			|| fail "the $behind run did not come back into its relay's session: $D/$behind/log"
+		! grep -qh '"msg":"session left"' "$D/$behind"/log/*.jsonl 2>/dev/null \
+			|| fail "the $behind run went on alone: $D/$behind/log"
+	done
+	[ "$(grep -hc '"msg":"bot seated"' "$D"/deep/log/*.jsonl 2>/dev/null)" = 2 ] \
+		|| fail "the deep player's bot did not take its place back: $D/deep/log"
+	rm -rf "$D" "$K1" "$K2" "$K3"
+	pass "a host's loss left a relay, the relay behind it and that one's player and bot in one session"
+	;;
+
 fleet)
 	# The template a person renders by hand and the one the router renders have
 	# to be the same workload, or "the router is broken" and "the workload is
@@ -395,7 +440,7 @@ fleet)
 		'"-name"' '"-config-dir"' '"-s"' '"td"' '"debug"' \
 		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \
 		'name: vif-session-env' \
-		'cpu: 292m$' 'memory: 192Mi$' 'memory: 576Mi$' 'value: "544MiB"'
+		'cpu: 292m$' 'cpu: 692m$' 'memory: 192Mi$' 'memory: 576Mi$' 'value: "544MiB"'
 	do
 		printf '%s' "$rendered" | grep -q -- "$want" \
 			|| fail "the rendered template is missing $want"
@@ -474,7 +519,7 @@ deploy)
 	;;
 
 all)
-	for s in bundle scenario follow fleet deploy; do
+	for s in bundle scenario follow tree fleet deploy; do
 		note "$s"
 		"$0" "$s"
 	done

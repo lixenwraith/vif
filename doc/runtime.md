@@ -118,7 +118,7 @@ simulation is unchanged — the same manual clock, the same script geometry, the
 same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
 session: step is instance-local, the rate is the host's, and a session stops only by
-its host's hold (§8).
+its host's hold (§8), which a watched bot's `p` asks for as `:pause` does.
 
 ### 1.2 The dedicated host
 
@@ -527,7 +527,7 @@ which keeps only quit, the audio toggle, `:` and the config menu.
 
 | Control | Playback action |
 |---|---|
-| `SPACE` | Pause/resume; at the end, play again from the start. |
+| `p` | Pause/resume; at the end, play again from the start. |
 | `.` | Pause and advance one tick. |
 | `,` | Pause and step back one tick. |
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
@@ -679,7 +679,7 @@ A seat (`internal/app/internal/membership/seat.go`) is that driver on another
 headless instance in the holder's process, on its own goroutine and paced against
 the authority like any guest. It joins on an in-process stream (`seatLink`) its
 holder serves with the handshake it holds when the seat dials: a still-guest's
-relays the join on its own link, an authority's admits it as any joiner. A run in no
+relays the join up its way to the authority, an authority's admits it as any joiner. A run in no
 session first opens one with no listener (`openSessionLocked`), which `:host` later
 serves a listener on (`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
@@ -960,8 +960,8 @@ reports a hit and refuses setting one.
 These controls are operator pacing under `ModePlay`. Replay records and
 reinjects their events, but its manual clock advances only under
 `ReplayDriver`; viewer `+`/`-` controls presentation pacing instead.
-Speed changes, tick stepping and run-until controls are refused in a live network
-session for the same per-instance-clock reason as an own pause.
+Tick stepping and run-until controls are refused in a live network session for
+the same per-instance-clock reason as an own pause; its rate is its host's to set.
 
 ## 10. Reset and operator state
 
