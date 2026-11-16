@@ -202,11 +202,18 @@ An install classifies queued and later-arriving frames as follows:
 | Ordinary frame, any source | `frame.Seq <= Header.Crossings.Seq(source)` |
 | Ordinary frame whose source the header does not name | never — nothing is claimed about it |
 | Barrier-bound frame, any source | `frame.ApplyTick <= Header.Tick` |
+| A hold, a rate or a reset | never — no capture holds one |
 
 The sequence rule is the whole rule for ordinary frames — the tick never decides
-one — and the tick rule is the whole rule for barrier-bound ones: they apply at one
+one — and the tick rule is the rule for barrier-bound ones: they apply at one
 agreed tick on every instance including their producer, so the tick is exact for
-them and nothing else is needed.
+them. An install's tick is the receiver's own once its capture is projected (§3.3),
+so a frame that reached a guest past its apply tick can stand at or under that tick
+in no world. The next correction brings its effect, except for what no capture
+holds: the hold and the rate, which are the clock's (§3.6), and the reset, which
+ends the run every capture of it was read in. Each of the three therefore still
+applies (`NetworkSystem.snapshotContainsLocked`): a reset dropped there would leave
+its guest in a run its host has left, refusing all that follows.
 
 This closes the guest-action pattern — a correction undoes the player's own
 keystroke, and the next one puts it back a cadence later — because a frame the

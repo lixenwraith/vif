@@ -190,9 +190,9 @@ Libraries · Branches.
 ## Sessions
 
 - A crossing whose effect no capture carries, as the hold and the rate are the
-  clock's (`TimeControl`), is no part of a world installed at or past its tick: it
-  joins `snapshotContainsLocked`'s clock cases, or a guest a correction carries to
-  that tick loses it for good.
+  clock's (`TimeControl`) and a reset ends the run its captures are read in, is no
+  part of a world installed at or past its tick: it joins `snapshotContainsLocked`'s
+  first cases, or a guest a correction carries to that tick loses it for good.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
@@ -426,16 +426,27 @@ Libraries · Branches.
   there takes about 16.5 s, a 15 s socket wait running out. Before calling one a
   regression, run it alone in fresh processes, alternating main's binary and the
   branch's under the same load: eight processes of one test on four CPUs, three
-  runs each, failed a quarter of the processes where a quiet run never did.
+  runs each, failed a quarter of the processes where a quiet run never did. A flake
+  that appears after a merge can be older: one quiet process at `-test.count=40`
+  read 2 failures on the commit before and 7 after, a merge that only moved timing.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
   session ... retry in a moment"), the harness's host ticking every 10 ms faster
   than the loaded joiner closes the gap, a refusal a production seat retries.
+- The race run reports two accesses only with no lock between them, and a lock both
+  goroutines take in between hides the pair. One load does not show is forced in a
+  worktree copy: sleep so the read lands while the writer holds its own lock, ahead
+  of its write, as a leave's config write met a mid-run gate's offer.
 - `internal/app` tests start no log sink, so a socket test that times out says
   nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
   copy, build its race binary there and run it under the same load, keeping the
-  branch clean.
+  branch clean. Probe after the wait has run out: a dump ahead of the racing step
+  moves it, and hid a failure seen one run in ten.
+- A guest left in the run before its host's, its link up and the floor's alert its
+  status, lost the reset's crossing, the one thing that moves a run: print what the
+  barrier does with the reset's epoch (`scheduleCrossings`, `dispatch`,
+  `AdoptSnapshot`).
 - A socket test's dump whose status reads "" where the test set one saw a new game
   come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
   the resets since the run began. Which of two runs applies a new game first races
@@ -453,6 +464,9 @@ Libraries · Branches.
   reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
   Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
   correction loop, between ticks.
+- A handshake's goroutine reads an offer's fields under `sessionMu` alone
+  (`offerLocked`), so what one names changes under `sessionMu`, the world lock held
+  or not, as `leaveSessionLocked` clears the session's name and ceiling.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
