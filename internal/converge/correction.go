@@ -1261,6 +1261,8 @@ func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	if err != nil {
 		return err
 	}
+	// A hold this world carried the clock to lands before its proof is kept under it.
+	c.drainTransport()
 	c.installedMu.Lock()
 	c.lastInstalled = cap.Header.Tick
 	c.offerProvedLocked(cap)

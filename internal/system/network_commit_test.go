@@ -971,6 +971,41 @@ func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
 	}
 }
 
+// TestAnInstallLeavesTheClockItPassesToApply: no capture carries the hold or the
+// rate, so a world installed at or past one still scheduled leaves it to apply. A
+// hold goes only once its host has produced past it, which is that hold's end.
+func TestAnInstallLeavesTheClockItPassesToApply(t *testing.T) {
+	t.Parallel()
+	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
+	epoch := func(produced uint64, frames ...event.ScheduledWireFrame) {
+		t.Helper()
+		body, err := event.EncodeWireBatch(event.WireBatch{Source: 1, ProducedTick: produced, Committed: true, Frames: frames})
+		if err != nil {
+			t.Fatal(err)
+		}
+		guest.scheduleCrossings(1, body)
+	}
+	clock := func(et event.EventType, seq uint64) event.ScheduledWireFrame {
+		return event.ScheduledWireFrame{ApplyTick: 101, Frame: event.WireFrame{Event: et, Domain: core.DomainShared, Seq: seq}}
+	}
+	scheduled := func() (out []event.EventType) {
+		for _, a := range guest.scheduled {
+			out = append(out, a.frame.Event)
+		}
+		return out
+	}
+	epoch(100, clock(event.EventGameHold, 1), clock(event.EventGameSpeed, 2), clock(event.EventSwarmSpawnRequest, 3))
+	guest.AdoptSnapshot(101, 1, nil)
+	if got, want := scheduled(), []event.EventType{event.EventGameHold, event.EventGameSpeed}; !slices.Equal(got, want) {
+		t.Fatalf("a world installed at the held tick leaves %v scheduled, want %v", got, want)
+	}
+	epoch(102)
+	guest.AdoptSnapshot(102, 1, nil)
+	if got, want := scheduled(), []event.EventType{event.EventGameSpeed}; !slices.Equal(got, want) {
+		t.Fatalf("a world installed past a hold its host ran on from leaves %v scheduled, want %v", got, want)
+	}
+}
+
 // TestATransitionOrARestartFromAGuestIsRefused: a Shared FSM moves on what the
 // authority's machine took and a Wraith's wait is the authority's to start over, so
 // either crossed by any other participant applies nowhere.

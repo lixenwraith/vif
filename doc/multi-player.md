@@ -408,7 +408,14 @@ other (`TimeControl.SetHeld`). A guest's `:pause` is refused, and a second one
 before the first lands asks nothing more. A held participant still drains its
 links and answers the link probe off the tick, so a hold times nobody out, and the
 host sends the held tick's round once, whatever its schedule said
-(`Corrections.publishRound`), so every link proves the held world.
+(`Corrections.publishRound`), so every link proves the held world. That round
+carries no clock, so an install leaves a hold or a rate scheduled at or before its
+tick to apply (`NetworkSystem.snapshotContainsLocked`). A hold whose tick a guest
+has reached lands between two ticks, settled at once (`landLateHold`): one whose
+crossing came late where it found the guest, one the held round carried the guest
+to at the held tick, each before that round's proof is kept. A guest that ran
+further stands that far past its host and resumes on the host's first epoch past
+its own tick. A hold its host has produced past has ended, and goes.
 
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own

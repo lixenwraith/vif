@@ -350,13 +350,15 @@ Libraries · Branches.
   do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
   `settleCorrections` before `alignTicks` and `assertSharedParity`, and close no
   host publication while a hold's end or a new game is still to land.
-- Hold only a session whose guests are in step. One more than `NetworkHoldTicks`
-  behind, as a holder still seating its bot is, is carried past the hold and plays
-  on unheld ([todo](todo.md#hold-a-guest-its-correction-carries-past-the-hold)):
-  wait for the seat and the cursors on the guest first, and for the hold on the
-  host alone, since under `-race` the guest of a host ticked in the background
-  falls that far behind about every other run. A replay test levels its guest with
-  its host before it plays, or an install that carries it forward leaves the
+- A seat stands a tick ahead of its holder nine samples in ten from its join on
+  ([todo](todo.md#land-a-joining-seat-inside-its-pace-band)), so its holder's
+  crossings reach it late under load. A hold lands where the seat stands
+  ([Multiplayer §3.6](multi-player.md#36-holding-a-session)), its holder's tick
+  unless it ran a whole tick further: a socket test asserts each stands still, the
+  guest at or past its host's tick. A mesh test makes a crossing late by ticking
+  the guest before the host flushes it
+  (`TestAHoldComeLateLandsWhereItsGuestStands`). A replay test levels its guest
+  with its host before it plays, or an install that carries it forward leaves the
   replay's `predicted` depth behind the run's.
 - `EventQueue.Consume` returns the queue's own slice, which the next `Consume`
   overwrites: a test dispatching handlers that push clones it first. A unit
@@ -403,10 +405,11 @@ Libraries · Branches.
   not load. A capture a few bytes larger or smaller reshapes every publication over
   a thin link: bisect, then print the host's `LinkMetric` and `Cadence()` each tick.
 - A few `internal/app` tests over real sockets have failed on main alone, rarely and
-  more under `-race` or load: a relay-join hold and a mid-session journal test. A
-  failure there takes about 16.5 s, a 15 s socket wait running out. Before calling
-  one a regression, run it alone in fresh processes, alternating main's binary and
-  the branch's under the same load.
+  more under `-race` or load, a mid-session journal test among them. A failure
+  there takes about 16.5 s, a 15 s socket wait running out. Before calling one a
+  regression, run it alone in fresh processes, alternating main's binary and the
+  branch's under the same load: eight processes of one test on four CPUs, three
+  runs each, failed a quarter of the processes where a quiet run never did.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
