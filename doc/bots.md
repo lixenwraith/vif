@@ -122,9 +122,11 @@ identify cursors for this session only, and a dropped player's slot may be reuse
   until a termination signal, which sends them away at once; in the fleet, also
   until the session Job's one-hour deadline. A guest's bots count only while the
   guest is in the session.
-- The fleet router takes a `bots` count, closed by default (`bots_max` 0); see
-  [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
-  request form asks for bots yet.
+- A site's session takes the bots its players bring, as any session does:
+  `-join <link> -bot N`, `:bot add`. Its own, which the site runs, are the Bots
+  field of the menu's Request a session; a site offers as many as it chooses, and
+  lixen.com none yet ([The session fleet](kubernetes-fleet.md)). `-join <site>`
+  asks for none: `-bot` there seats yours.
 
 ## Writing a graph
 
@@ -358,7 +360,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 ## Not built yet
 
-- [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
 - [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)

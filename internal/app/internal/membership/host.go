@@ -296,7 +296,7 @@ func (m *Membership) dropPlayerLocked(entity core.Entity) error {
 	return nil
 }
 
-func (c Control) RequestSession(site string, players int, scenario string) error {
+func (c Control) RequestSession(site string, players, bots int, scenario string) error {
 	e, err := link.ParseEndpoint(site)
 	if err != nil {
 		return err
@@ -307,7 +307,10 @@ func (c Control) RequestSession(site string, players int, scenario string) error
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
 	}
-	return c.m.joinSessionLocked(site, players, scenario, nil)
+	if bots < 0 || bots >= parameter.MaxPlayers {
+		return fmt.Errorf("bots must be 0..%d, beside at least one player", parameter.MaxPlayers-1)
+	}
+	return c.m.joinSessionLocked(site, players, bots, scenario, nil)
 }
 
 func (c Control) AddBot(graph string) error {
@@ -430,7 +433,7 @@ func (m *Membership) receiveSessionRestart(from uint32, addr string) {
 // by its session may join another, and so may one whose session is its own bots',
 // which the next run seats in the new one. Caller MUST hold updateMutex.
 func (m *Membership) joinLocked(target string) error {
-	return m.joinSessionLocked(target, 0, "", nil)
+	return m.joinSessionLocked(target, 0, 0, "", nil)
 }
 
 // spectateLocked is joinLocked for a session this run only watches, looking from
@@ -440,7 +443,7 @@ func (m *Membership) spectateLocked(target string, slot uint8) error {
 	if e, err := link.ParseEndpoint(target); err == nil && e.Scheme == link.SchemeSite {
 		return errors.New("a site makes sessions to join; spectate one by its own link")
 	}
-	return m.joinSessionLocked(target, 0, "", &slot)
+	return m.joinSessionLocked(target, 0, 0, "", &slot)
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
@@ -521,7 +524,7 @@ func (m *Membership) joinErrorLocked() error {
 // joinSessionLocked dials target off the lock, a site's new session where it names
 // one, and replaces this run with one in that session: playing in it, or only
 // watching it from the slot watch names. Caller MUST hold updateMutex.
-func (m *Membership) joinSessionLocked(target string, players int, scenario string, watch *uint8) error {
+func (m *Membership) joinSessionLocked(target string, players, bots int, scenario string, watch *uint8) error {
 	if err := m.joinErrorLocked(); err != nil {
 		return err
 	}
@@ -562,7 +565,7 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
 			var fingerprint string
-			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
+			if door, fingerprint, err = network.RequestSession(site.Addr, players, bots, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
 				m.ctx.SetStatusMessage(doing+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = entering(next, door); err == nil {
 					err = base.ValidateWith(next)

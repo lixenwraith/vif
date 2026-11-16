@@ -90,8 +90,8 @@ func (s *menuSession) Spectate(target string, slot uint8) error {
 	s.calls = append(s.calls, fmt.Sprintf("spectate %s %d", target, slot))
 	return nil
 }
-func (s *menuSession) RequestSession(site string, players int, scenario string) error {
-	s.calls = append(s.calls, fmt.Sprintf("request %s %d %s", site, players, scenario))
+func (s *menuSession) RequestSession(site string, players, bots int, scenario string) error {
+	s.calls = append(s.calls, fmt.Sprintf("request %s %d %d %s", site, players, bots, scenario))
 	return nil
 }
 func (s *menuSession) AddBot(spec string) error {
@@ -435,7 +435,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		{"multiplayer", "multiplayer/#Session/host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
 		{"multiplayer", "multiplayer/#Session/join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
 		{"multiplayer", "multiplayer/#Session/spectate", []string{"vif://example.test:4242/run"}, "spectate vif://example.test:4242/run 0"},
-		{"multiplayer", "multiplayer/#Session/request", []string{"https://example.test", "3", "tower"}, "request https://example.test 3 tower"},
+		{"multiplayer", "multiplayer/#Session/request", []string{"https://example.test", "3", "1", "tower"}, "request https://example.test 3 1 tower"},
 	} {
 		r.handleConfigMenu()
 		showConfigMenu(ctx, tt.page)

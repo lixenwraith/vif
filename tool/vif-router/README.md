@@ -6,7 +6,9 @@ schedules, isolates, limits, terminates and garbage-collects every session. The
 allocator only performs the fixed transaction that Kubernetes has no anonymous
 endpoint for:
 
-1. count the fleet's Jobs as the quota does and refuse past `-sessions-max`;
+1. count the fleet's Jobs as the quota does and refuse past `-sessions-max`, or
+   where the namespace's quota has no room left for the session's requests and
+   limits, which a session's own bots grow;
 2. create one non-retryable Job, whose pod answers to the session's identifier;
 3. read its UID and create the owner-referenced ClusterIP Service, which nothing
    dials: its EndpointSlice is how the pod's readiness is read;
@@ -52,7 +54,8 @@ atomically without restarting the router. See
 An error is `{"error":{"code":"…","message":"…"}}`. A create can also answer
 `413 request_too_large` for a body over 1 KiB, `415 content_type` for one not sent
 as `application/json`, `503 fleet_full` with `Retry-After: 10` when the fleet holds
-`-sessions-max` sessions, `504 session_not_ready` or `408 request_canceled` (the
+`-sessions-max` sessions or its quota has no room for this one, `504
+session_not_ready` or `408 request_canceled` (the
 session was removed either way), and `502 kubernetes_error`.
 
 One session row has this shape:
@@ -152,7 +155,8 @@ is also refused bots that leave no seat for a person: at most `players - 1`. The
 bots occupy the session as people do, so one nobody else joins plays on until a
 drain or the Job's one-hour `activeDeadlineSeconds` ends it.
 `-bots-max` is at most 6, the most whose pod envelope fits the namespace's
-`LimitRange`.
+`LimitRange`. Each bot is a world of its own, measured on a 120x40 screen, so bots
+are refused on a larger map: a scenario's fixed one, or a `size` past 4,800 cells.
 
 `id` is the session's stable public identifier and the name its pod answers to.
 `join_target` and `ws_url` are opaque strings this router produces: `join_target`

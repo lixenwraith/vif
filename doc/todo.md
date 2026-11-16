@@ -192,33 +192,6 @@ refinement needs from the code:
 
 ## Bots
 
-### Open fleet sessions to bots
-
-- Priority: P2
-- Affected files: the Hugo site's `vif-lobby.js`, `pkg/network/endpoint.go`,
-  `internal/mode/config_form.go`, `tool/vif-router`, `deploy/guest/vif-router.env`,
-  `deploy/k3s/10-quota.yaml`
-- Guide: [Session fleet](kubernetes-fleet.md) §6
-
-The router takes `bots`, but `bots_max` stays 0 until these hold; the lobby's
-[standing session](#keep-a-standing-session-for-the-lobby) waits on them too:
-- The site's `vif-lobby.js` sends `bots` and reads `bots_max`; the native client
-  (`network.RequestSession`, the menu's request form) sends `bots`.
-- The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
-  accept fewer sessions. A create the quota cannot hold waits 75 s for a pod that
-  never schedules and answers 504 `session_not_ready`; sum the live sessions'
-  requests against the quota and refuse it as `fleet_full` instead.
-- The CPU limit stays 500m while each bot adds 64m of request, and six bots with
-  one person use about 0.5 core: grow the limit with bots (the `LimitRange` allows
-  1 CPU), or bound `bots_max` by CPU as well as memory.
-- td: refuse bots on ceiling-sized maps by map cells, or leave td off the offered
-  scenarios, until the map-limit trim below lands.
-- K=3 measured on the node with `./script/test.sh load` or the deploy guide,
-  replacing the sandbox figures (2 sessions of 2 bots for 30 s: about 190–200 ms
-  of CPU a second and 90–95 MiB peak per host, no evictions).
-- Digest mismatches watched as networked bot load grows; that run counted 0–5 per
-  host.
-
 ### Expose a bot difficulty knob
 
 - Priority: P3
@@ -309,7 +282,9 @@ What remains:
   size are expected to want thousands, an estimate: live play shows the early
   climb and the offline trainer fills the file.
 - **Sessions** wait: any participant's defeat resets every round, and a session
-  refuses a speed change.
+  runs at its host's rate, a dedicated host's at 1x. The first is a session of one
+  bot on the fleet
+  ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)).
 - **After `cave`**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
@@ -734,7 +709,8 @@ number from [Measure a full roster](#measure-a-full-roster).
 
 - Priority: P1
 - Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/10-quota.yaml`,
-  `tool/vif-router/manifest.go`
+  `tool/vif-router/manifest.go`, `deploy/guest/vif-router.env`, the Hugo site's
+  `vif-lobby.js`
 - Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
 
 Drive nine sessions with headless joiners for the fleet-level readings (CPU,
@@ -747,6 +723,18 @@ sustained tick slip or growing correction magnitude, the deadline ending each
 session. The socket readings (`TestNetcodeReadingsOverSockets`) cannot seat
 sixteen td guests inside their join wait, so the td-16 column of netcode design
 §3.1 has not been re-read since phase 1 and is this measurement's to take.
+
+A session's own bots are read here before a request may ask for them
+(`VIF_ROUTER_BOTS_MAX`, 0 until then):
+- K=3 with `./script/test.sh load` or the deploy guide, replacing the sandbox
+  figures the per-bot envelope stands on (2 sessions of 2 bots for 30 s: about
+  190–200 ms of CPU a second and 90–95 MiB peak per host, no evictions), with the
+  digest mismatches that run counted, 0–5 per host, watched as the load grows.
+- A seat's cost on a map past the 4,800 cells bots are held to (`botMapCells`),
+  which keeps them off td.
+- The quota: its 1000m of CPU fills at three sessions of three bots, and the
+  router refuses the next as `fleet_full`. Raise it, or accept the fewer sessions.
+- Then the site's `vif-lobby.js` sends `bots` and reads `bots_max`.
 
 ### Apply the fleet log retention on the node
 
@@ -799,34 +787,50 @@ the volume already carries whatever the installer puts there.
 
 ### Keep a standing session for the lobby
 
-- Priority: P2, after [Open fleet sessions to bots](#open-fleet-sessions-to-bots)
-- Affected files: `tool/vif-router` (`allocator.go`, `config.go`),
-  `internal/lifecycle`, `deploy/guest/vif-router.env`,
-  `deploy/k3s/30-session.yaml`, the Hugo site's `vif-lobby.js`
+- Priority: P2, with [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
+- Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
+  `tool/vif-router` (`allocator.go`, `config.go`, `manifest.go`), `internal/bot`,
+  `internal/lifecycle`, `deploy/guest/vif-router.env`, the Hugo site's
+  `vif-lobby.js`
 - Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
   [Multiplayer §5.8](multi-player.md#58-watching-a-session)
 
-The site's lobby is to show one game always: a bot's, which a visitor spectates
-through the router at a copy's cost each (fleet §9). Spectating stands; the
-session does not. What it needs:
+The site's lobby is to show one game always, and the game is a bot learning `cave`
+(Lixen, 2026-11-16): one pod, made by a script, seats one bot whose learner evolves
+its genes round after round, saves them outside the pod and goes on from them in
+the next, while visitors spectate it through the router at a copy's cost each
+(fleet §9). One session then shows the learner, the game, spectating and bots.
 
-- A session of bots alone that starts: the router's own create with `bots` set
-  and no person, which waits on fleet bots; a lobby that starts on its bots'
-  quorum, or on none
-  ([Run a scenario with no players](#run-a-scenario-with-no-players)); and a
-  lifetime no first join opens and no vacancy ends (`lifecycle.Policy`).
-- Its keeper: a router setting naming the scenario and the bots, which creates
-  the session at start and again whenever it is gone, at the session Job's
-  deadline too, charged to no address's budget and counted in the quota. A
-  spectator of the one that went is told it ended and starts a local game
-  (`Membership.feedEnded`): a name the router answers for whichever stands, or
-  a feed's end that names its successor, keeps a page watching.
-- Its cost while nobody looks: a bot's game runs a pod around the clock. The
-  router knows a session with no spectator past its linger (`audiences`), and a
-  pod its idle hub (`FeedHub.Idle`), so a game of bots alone can hold until a
-  watch dial resumes it.
-- Whether a visitor may also take a seat in it, which makes it an ordinary
-  session with a bot until it empties, or only watches.
+What stands: a dedicated host's session that its own bots alone occupy starts and
+plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
+./deploy/k3s/session.sh create <id>` makes that pod beside the router, whatever
+`bots_max` offers a visitor. What it needs:
+
+- **The learner on a seat.** It is planned for a solo run's driver; here the bot
+  is the seat of a host nobody plays, in a session of one, at a dedicated host's
+  one rate, 1x: 300 to 500 rounds an hour by that item's reading.
+- **Its graph in the pod.** The pod's `-bot` names a count, which plays `default`:
+  the learner's is named there (`N:graph`), embedded or served from the node's
+  volume, which carries `scenario` and `image` alone (`wadCategories`).
+- **A store outside the pod.** The population is saved where a setting is, and a
+  session pod has a read-only root and two claims, its log and the wad: a third,
+  writable, at the root the learner saves under. One writer at a time, since two
+  pods of one population would each lose the other's rounds.
+- **A lifetime.** The Job's hour ends it, bots or not, which costs a learner the
+  round in flight. Its keeper is a router setting naming the scenario and the
+  bots, which makes the session at start and again whenever it is gone, charged to
+  no address's budget and counted in the quota; a timer running the script until
+  then. A spectator of the one that went is told it ended and starts a local game
+  (`Membership.feedEnded`): a name the router answers for whichever stands, or a
+  feed's end that names its successor, keeps a page watching.
+- **Its cost while nobody looks**: a pod around the clock. The router knows a
+  session with no spectator past its linger (`audiences`), and a pod its idle hub
+  (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
+  wants the rounds nobody watches, so decide which it is.
+- Whether a visitor may also take a seat in it, whose defeat then resets the
+  learner's round, or only watches: a roster its bots fill is still shown to a
+  spectator, and the script and the router both keep a seat free
+  (`bots` ≤ `players` − 1).
 - The lobby showing it first, with Watch as what its row offers
   ([Watch a session as a spectator](#watch-a-session-as-a-spectator)).
 

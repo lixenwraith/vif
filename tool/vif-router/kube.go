@@ -25,6 +25,7 @@ type kubeAPI interface {
 	listServices(context.Context) ([]service, error)
 	listPods(context.Context, string) ([]pod, error)
 	listEndpointSlices(context.Context, string) ([]endpointSlice, error)
+	listQuotas(context.Context) ([]resourceQuota, error)
 	createJob(context.Context, map[string]any) (job, error)
 	createService(context.Context, map[string]any) (service, error)
 	deleteJob(context.Context, string) error
@@ -134,6 +135,12 @@ func (c *kubeClient) listEndpointSlices(ctx context.Context, labelSelector strin
 	}
 	var list kubeList[endpointSlice]
 	err := c.doJSON(ctx, http.MethodGet, c.discoveryPath("endpointslices"), query, nil, &list)
+	return list.Items, err
+}
+
+func (c *kubeClient) listQuotas(ctx context.Context) ([]resourceQuota, error) {
+	var list kubeList[resourceQuota]
+	err := c.doJSON(ctx, http.MethodGet, c.corePath("resourcequotas"), nil, nil, &list)
 	return list.Items, err
 }
 

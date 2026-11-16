@@ -7,12 +7,27 @@ import "strconv"
 const (
 	botMemoryMi = 32
 	botCPUMilli = 64
-	// A session's memory limit before bots: td's 500x250 map peaks near 215 MiB
-	// with one guest. GOMEMLIMIT sits 32 MiB under it.
-	sessionMemoryMi = 480
-	// The most bots whose limit fits the LimitRange's 672Mi container ceiling.
+	// botMapCells is the map that cost was measured on, a screen of 120x40: a seat
+	// is a world of its own, so its cost grows with the map.
+	botMapCells = 120 * 40
+	// A session before bots, in millicores and MiB: td's 500x250 map peaks near
+	// 215 MiB with one guest. GOMEMLIMIT sits 32 MiB under the memory limit.
+	sessionCPURequest, sessionCPULimit      = 100, 500
+	sessionMemoryRequestMi, sessionMemoryMi = 96, 480
+	// The most bots whose limits fit the LimitRange's 672Mi and one core.
 	sessionBotsMax = (672 - sessionMemoryMi) / botMemoryMi
 )
+
+// envelope is what a session's container asks of the node and may take of it, in
+// millicores and MiB, which the namespace's quota counts.
+type envelope struct{ cpuRequest, cpuLimit, memoryRequest, memoryLimit int }
+
+func (cfg workloadConfig) envelope() envelope {
+	return envelope{
+		sessionCPURequest + botCPUMilli*cfg.Bots, sessionCPULimit + botCPUMilli*cfg.Bots,
+		sessionMemoryRequestMi + botMemoryMi*cfg.Bots, sessionMemoryMi + botMemoryMi*cfg.Bots,
+	}
+}
 
 type workloadConfig struct {
 	Namespace string
@@ -78,7 +93,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 	if cfg.TicketKey != "" {
 		args = append(args, "-admit", "ticket:"+cfg.TicketKey)
 	}
-	perBot := func(base, step int) string { return strconv.Itoa(base + step*cfg.Bots) }
+	needs := cfg.envelope()
 	containerSecurity := map[string]any{
 		"allowPrivilegeEscalation": false,
 		"privileged":               false,
@@ -162,7 +177,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							},
 							// After envFrom, so the fleet's own envelope wins.
 							"env": []any{
-								map[string]any{"name": "GOMEMLIMIT", "value": perBot(sessionMemoryMi-32, botMemoryMi) + "MiB"},
+								map[string]any{"name": "GOMEMLIMIT", "value": strconv.Itoa(needs.memoryLimit-32) + "MiB"},
 							},
 							"securityContext": containerSecurity,
 							"volumeMounts": append([]any{
@@ -173,8 +188,9 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							}, wadMounts()...),
 							"resources": map[string]any{
 								"requests": map[string]string{
-									"cpu": perBot(100, botCPUMilli) + "m", "memory": perBot(96, botMemoryMi) + "Mi"},
-								"limits": map[string]string{"cpu": "500m", "memory": perBot(sessionMemoryMi, botMemoryMi) + "Mi"},
+									"cpu": strconv.Itoa(needs.cpuRequest) + "m", "memory": strconv.Itoa(needs.memoryRequest) + "Mi"},
+								"limits": map[string]string{
+									"cpu": strconv.Itoa(needs.cpuLimit) + "m", "memory": strconv.Itoa(needs.memoryLimit) + "Mi"},
 							},
 							"startupProbe": map[string]any{
 								"httpGet":          map[string]any{"path": "/health", "port": "probe"},

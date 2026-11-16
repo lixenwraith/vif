@@ -269,8 +269,8 @@ func TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds(t *testing.T) {
 		t.Errorf("the session row's description is %q", got)
 	}
 	request := s.node("multiplayer/#Session/request")
-	if request.Kind != "form" || len(request.Fields) != 3 || request.Fields[0].Input != "uri" || request.Fields[1].Input != "number" ||
-		request.Fields[2].Input != "text" || request.Fields[0].Value != "https://lixen.com" || request.Fields[0].Help == "" {
+	if request.Kind != "form" || len(request.Fields) != 4 || request.Fields[0].Input != "uri" || request.Fields[1].Input != "number" ||
+		request.Fields[2].Input != "number" || request.Fields[3].Input != "text" || request.Fields[0].Value != "https://lixen.com" || request.Fields[0].Help == "" {
 		t.Errorf("the request form is %+v", request)
 	}
 	if sound := s.node("settings/#Sound"); sound.Kind != "group" || sound.Label != "Sound" || len(sound.Nodes) != 3 {

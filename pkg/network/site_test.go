@@ -8,7 +8,7 @@ func TestASessionRequestShowsTheSignInOverHTTPSAlone(t *testing.T) {
 	for site, want := range map[string]string{
 		"https://example.test": "Bearer tok", "HTTPS://example.test:8443": "Bearer tok", "http://example.test": "",
 	} {
-		req, err := siteRequest(site, 2, "td", "tok")
+		req, err := siteRequest(site, 2, 0, "td", "tok")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -19,7 +19,7 @@ func TestASessionRequestShowsTheSignInOverHTTPSAlone(t *testing.T) {
 			t.Errorf("%s: %s %s", site, req.URL, req.Header.Get("Content-Type"))
 		}
 	}
-	if req, _ := siteRequest("https://example.test", 0, "", ""); req.Header.Get("Authorization") != "" {
+	if req, _ := siteRequest("https://example.test", 0, 0, "", ""); req.Header.Get("Authorization") != "" {
 		t.Error("no sign-in sent a header")
 	}
 }

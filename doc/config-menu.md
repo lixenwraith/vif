@@ -141,8 +141,10 @@ them. See [Multiplayer §5.8](multi-player.md#58-watching-a-session).
 
 **Request a session** asks a vif-router site for a session and joins it: **Site**
 (default `https://lixen.com`), **Players** (total slots including you; `0` the
-server default) and **Scenario** (the server's name; blank its default, local files
-are not uploaded). It sends `POST /vif/api/sessions`; the server controls
+server default), **Bots** (the session's own, which the server runs and counts
+among its players; `0` none, and a server may offer none, while your own bots join
+with you either way) and **Scenario** (the server's name; blank its default, local
+files are not uploaded). It sends `POST /vif/api/sessions`; the server controls
 capacity, scenarios, quotas and availability, and refusals appear in the status
 bar with the current game kept. It asks for no bots of the session's own: add
 yours under Bots once joined.
