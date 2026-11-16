@@ -1013,6 +1013,12 @@ missile = { damage = 9 }            # Families: tracer, shield, lightning, explo
 color = { r = 255, g = 120, b = 0 }  # The beams' colour
 fill_ms = 300                       # Each beam's head running in; hold_ms and recede_ms likewise
 
+[prototype.mount]                   # A weapon each instance carries: EventMountRequest's keys but host (optional)
+weapon = "turret"                   # Required: rod, launcher, disruptor, turret, emitter or gun
+interval_ms = 3000                  # Between discharges; its weapon's cooldown when left out
+spread_ms = 600                     # Each instance's own interval is drawn this far either side
+energy = 300                        # What a hit costs a shield, heat a bare cursor
+
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
 flags = ["Enraged"]                 # Held while the state runs
@@ -1048,6 +1054,9 @@ target = "Roam"
   glyphs unless the prototype names `none`, `flash` or `fadeout`; a lifetime's end
   fades the body out and a cancel leaves nothing
   ([ECS §7](ecs-and-events.md#death-effects)).
+- The mount: each spawn asks the mount system for it on its own header
+  ([Combat §3](combat.md#3-drivers)), so a program copied into another scenario
+  comes armed, and with `spread_ms` no two instances fire in step.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.

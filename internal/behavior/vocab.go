@@ -16,6 +16,7 @@ import (
 type Vocabulary[C any] struct {
 	verbs     map[string]verb[C]
 	flags     map[string]uint64
+	fittings  map[string]func(names *dialect.Names, raw any) (func(C), error)
 	integrate func(C)
 	entered   func(C)
 	names     func(component.Declared) *dialect.Names
@@ -34,7 +35,18 @@ type verb[C any] struct {
 }
 
 func NewVocabulary[C any]() *Vocabulary[C] {
-	return &Vocabulary[C]{verbs: make(map[string]verb[C]), flags: make(map[string]uint64)}
+	return &Vocabulary[C]{
+		verbs:    make(map[string]verb[C]),
+		flags:    make(map[string]uint64),
+		fittings: make(map[string]func(*dialect.Names, any) (func(C), error)),
+	}
+}
+
+// Fitting registers a [prototype] table of the host's own, what a body carries
+// beside what a program's file declares of it, as a mount: build reads the table
+// once at load, as names spell its enums, into what each spawn applies
+func (v *Vocabulary[C]) Fitting(key string, build func(names *dialect.Names, raw any) (func(C), error)) {
+	v.fittings[key] = build
 }
 
 // Predicate registers a read-only guard whose guard_args decode strictly into A

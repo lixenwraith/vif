@@ -562,8 +562,11 @@ The registry is generic, `behavior.Vocabulary[C]`, and its generic methods
 register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
-`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`) and
-`Flag(name, bit)`, with the host's `Integrate` and `Entered` hooks. `Entries`
+`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`),
+`Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
+own, built once into what each spawn applies before its machine starts, as the
+game's `mount` pushes its `EventMountRequest`), with the host's `Integrate` and
+`Entered` hooks. `Entries`
 lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
 `BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
 per instance:
@@ -647,7 +650,9 @@ smaller part of it.
   `[prototype.physics]` replacing its value), soft-collision mass, the drop table
   its kills roll (the scenario's or a code species',
   [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
-  entrance (§4.4), its look and the pattern period.
+  entrance (§4.4), its look and the pattern period. A mount of its own
+  (`[prototype.mount]`) is no part of the prototype's data: its spawn asks the mount
+  system for it (§6.2).
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;

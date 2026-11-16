@@ -266,12 +266,6 @@ given here with the form that retires it; the redesign is written on them.
   map's legend naming a program
   ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
   rows of characters laid at an origin, drawn in the editor as walls are.
-- **A mount of the body's own.** A warden is armed by a region that catches
-  `EventSpeciesCreated`, captures the entity and emits `EventMountRequest`, its
-  interval picked by a counter so volleys drift apart; the program copied into
-  another scenario comes unarmed unless that region comes too. A
-  `[prototype.mount]` the spawn applies, its interval spread drawn for each host
-  as a shot's is, retires the region, the capture and the `pick`.
 - **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
   strobe and the reset are five states armada copies as six other scenarios do,
   the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).

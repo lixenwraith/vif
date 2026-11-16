@@ -972,6 +972,7 @@ var codecMountRequestPayload = structCodec{size: unsafe.Sizeof(MountRequestPaylo
 	{off: unsafe.Offsetof(MountRequestPayload{}.Host), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.IntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.SpreadMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Range), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Muzzle), kind: kindFloat},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Lane), kind: kindInt, size: unsafe.Sizeof(int(0))},

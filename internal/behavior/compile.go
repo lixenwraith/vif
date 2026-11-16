@@ -22,6 +22,7 @@ type Set[C any] struct {
 	protos   []component.BehaviorPrototype
 	graphs   []*machine.Graph[component.BehaviorState, C]
 	initials []component.BehaviorState
+	fits     []func(C)
 	loot     component.LootSet
 }
 
@@ -39,6 +40,10 @@ func (s *Set[C]) Graph(i int) *machine.Graph[component.BehaviorState, C] { retur
 
 // Initial is the state a spawn of program i starts in
 func (s *Set[C]) Initial(i int) component.BehaviorState { return s.initials[i] }
+
+// Fit is what a spawn of program i applies to its instance before it starts, its
+// prototype's fittings; nil when it has none
+func (s *Set[C]) Fit(i int) func(C) { return s.fits[i] }
 
 // Loot is the loot kinds and drop tables the scenario declares
 func (s *Set[C]) Loot() *component.LootSet { return &s.loot }
@@ -71,11 +76,13 @@ func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, loot m
 			continue
 		}
 		c := compiler[C]{v: v, program: name, payloads: payloads, loot: &set.loot}
-		proto, graph, initial := c.build(programs[name], component.SpeciesDataFirst+component.SpeciesType(i))
+		raw, fit := c.fittings(programs[name])
+		proto, graph, initial := c.build(raw, component.SpeciesDataFirst+component.SpeciesType(i))
 		errs = append(errs, c.errs...)
 		set.protos = append(set.protos, proto)
 		set.graphs = append(set.graphs, graph)
 		set.initials = append(set.initials, initial)
+		set.fits = append(set.fits, fit)
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
@@ -107,6 +114,30 @@ func (c *compiler[C]) fail(where string, err error) {
 		err = fmt.Errorf("%s: %w", where, err)
 	}
 	c.errs = append(c.errs, fmt.Errorf("program '%s': %w", c.program, err))
+}
+
+// fittings builds the [prototype] tables the host registered, in key order, and
+// returns the program without them, for the strict decode, and what a spawn applies
+func (c *compiler[C]) fittings(raw map[string]any) (map[string]any, func(C)) {
+	proto, _ := raw["prototype"].(map[string]any)
+	var fs []func(C)
+	for _, key := range slices.Sorted(maps.Keys(c.v.fittings)) {
+		table, ok := proto[key]
+		if !ok {
+			continue
+		}
+		f, err := c.v.fittings[key](c.payloads, table)
+		if err != nil {
+			c.fail("prototype: "+key, err)
+		}
+		fs = append(fs, f)
+		if len(fs) == 1 { // the document is its caller's, so a copy loses the key
+			raw, proto = maps.Clone(raw), maps.Clone(proto)
+			raw["prototype"] = proto
+		}
+		delete(proto, key)
+	}
+	return raw, sequence(fs)
 }
 
 func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (proto component.BehaviorPrototype, graph *machine.Graph[component.BehaviorState, C], initial component.BehaviorState) {

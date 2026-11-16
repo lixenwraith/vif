@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -831,5 +832,55 @@ func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
 	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
 		t.Fatalf("a payload naming no species compiled: %v", err)
+	}
+}
+
+// TestASpawnMountsItsPrototypesWeapon: [prototype.mount] is the mount request each
+// spawn makes for its own header, and each host's interval is drawn inside its spread
+func TestASpawnMountsItsPrototypesWeapon(t *testing.T) {
+	const mount = "[prototype.mount]\nweapon = \"turret\"\ninterval_ms = 3000\nspread_ms = 600\nrange = 1000\nenergy = 300\n\n"
+	armed := func(mount string) string {
+		return strings.Replace(wardenProgram, "[states.Roam]", mount+"[states.Roam]", 1)
+	}
+	ctx, s, _ := newProgramWorld(t, armed(mount), wardenX+4, wardenY)
+	w := ctx.World
+	mounts := ready(NewMountSystem(w)).(*MountSystem)
+	intervals := map[time.Duration]bool{}
+	for i := range 4 {
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+			Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 10 + 12*i, Y: 25}})
+		var host core.Entity
+		for _, ev := range slices.Clone(w.Resources.Event.Queue.Consume()) {
+			if p, ok := ev.Payload.(*event.MountRequestPayload); ok {
+				host = p.Host
+				mounts.HandleEvent(ev)
+			}
+		}
+		m, ok := w.Components.Mount.GetComponent(host)
+		if !ok || !w.Components.Behavior.HasEntity(host) || m.Weapon != component.WeaponTurret || m.Damage.EnergyDrain != 300 {
+			t.Fatalf("spawn %d mounted %+v on %d, want its header's turret", i, m, host)
+		}
+		if m.Interval < 2400*time.Millisecond || m.Interval > 3600*time.Millisecond {
+			t.Fatalf("spawn %d fires every %v, want within 600 ms of 3 s", i, m.Interval)
+		}
+		intervals[m.Interval] = true
+	}
+	if len(intervals) < 3 {
+		t.Fatalf("four hosts drew %d intervals, want each its own", len(intervals))
+	}
+
+	for table, want := range map[string]string{
+		"[prototype.mount]\nweapon = \"turret\"\nhost = 3\n\n":                           "host is the body",
+		"[prototype.mount]\nrange = 10\n\n":                                              "weapon is required",
+		"[prototype.mount]\nweapon = \"cannon\"\n\n":                                     `weapon: "cannon" is not one of`,
+		"[prototype.mount]\nweapon = \"turret\"\ninterval_ms = 500\nspread_ms = 500\n\n": "spread_ms 500 is not under its interval",
+	} {
+		doc, err := toml.NewParser([]byte(armed(table))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q compiled: %v, want %q", table, err, want)
+		}
 	}
 }

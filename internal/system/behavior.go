@@ -399,9 +399,13 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	// Sampled once placed, so a spawn that found no room costs no evaluation
 	genes, evalID := s.world.Resources.Genetics.Sample(uint8(p.Species))
 
-	// The machine starts once every component a verb may read is in place
+	// The machine starts once every component a verb may read is in place, the body
+	// fitted with what its prototype carries
 	b, _ := s.world.Components.Behavior.GetPtr(header)
 	s.fill(header, b, 0)
+	if fit := s.set.Fit(i); fit != nil {
+		fit(&s.ctx)
+	}
 	s.set.Graph(i).Start(&b.Machine, &s.ctx, s.set.Initial(i), 0)
 
 	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
@@ -986,6 +990,30 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		c.kinetic.VelX, c.kinetic.VelY = 0, 0
 		c.frozen = true
 	}))
+
+	// A mount of the body's own: an EventMountRequest less its host, which each spawn
+	// asks the mount system for
+	v.Fitting("mount", func(names *dialect.Names, raw any) (func(*behaviorCtx), error) {
+		switch table, _ := raw.(map[string]any); {
+		case table["host"] != nil:
+			return nil, errors.New("host is the body it is mounted on")
+		case table["weapon"] == nil:
+			return nil, errors.New("weapon is required")
+		}
+		payload, err := event.AuthoredPayload(names, event.EventMountRequest, raw)
+		if err != nil {
+			return nil, err
+		}
+		mount := payload.(*event.MountRequestPayload)
+		if fault := mountFault(mount); fault != "" {
+			return nil, errors.New(fault)
+		}
+		return func(c *behaviorCtx) {
+			own := *mount
+			own.Host = c.entity
+			c.sys.world.PushEvent(event.EventMountRequest, &own)
+		}, nil
+	})
 
 	v.Flag("Enraged", behaviorEnraged)
 	v.Flag("Shielded", behaviorShielded)
