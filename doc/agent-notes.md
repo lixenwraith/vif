@@ -120,6 +120,11 @@ Libraries · Branches.
   a variable, a heredoc that only edits the Makefile's install recipe included:
   edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
   `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
+- A probe of a dependency's API against the checkout's files runs from a module of
+  its own outside the tree: its `go.mod` takes this module's `go` line, a lower
+  one asking for a toolchain nothing serves, and its `go.sum` a copy of this
+  one's, and `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module
+  cache with no network.
 
 ## Events and ticks
 

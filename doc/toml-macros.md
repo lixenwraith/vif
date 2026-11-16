@@ -237,5 +237,5 @@ as `[[frames]]`. `wad/scenario/base/recall` is one document that defines its own
 ## 8. Next consumer
 
 - **Map and scenario editor.** Blocks are macros and placed blocks are
-  invocations; the parameter metadata the editor still needs is in
-  [TODO](todo.md#build-the-map-and-scenario-editor).
+  invocations; what a block's form needs, and the little of it that is the
+  library's, is in [TODO](todo.md#read-a-blocks-form-from-its-macro).
