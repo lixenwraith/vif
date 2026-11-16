@@ -199,6 +199,11 @@ Libraries · Branches.
   held by a world that never had it, and forgets a retained one the next older
   capture needs. The staging world's barrier outlives an install: one that put its
   own retained artifacts back on its schedule doubled them at every projection.
+- A crossing names entities by its producer's numbers. An instance that applied
+  an arrival late allocated its cursor after what the others allocated first, so
+  until a correction one number is a gold member there and a cursor here: a handler
+  that destroys what a crossed number names checks the entity is what was meant
+  (`CompositeSystem.destroyMember`), or a guest's typed letter ends a cursor.
 - Only the authority ends a run, and its epochs name the run it is in: a guest
   follows that (`leaveRun`), since what ends a run on it, a crossed reset or a
   transition whose entry emits one, can be lost, refused or left behind a hold. Two
@@ -454,6 +459,12 @@ Libraries · Branches.
   copy, build its race binary there and run it under the same load, keeping the
   branch clean. Probe after the wait has run out: a dump ahead of the racing step
   moves it, and hid a failure seen one run in ten.
+- Eight race processes of one socket test starve its host to 11 to 18 ticks a
+  second, under the game's 20, so a gate's 5 s and a test's 15 s end before a
+  convergence floor of 60 ticks does: a join three relays deep then fails by load
+  alone (`TestARunBehindARelaySeatsItsBotsAndRelaysForOthers`, 1 of 80). A probe
+  in `World.removeEntity` printing the stack when the entity is a cursor names
+  whatever ended one without a despawn.
 - A mesh link loses exactly the frames that arrive while its `LossEvery` is 1
   (`MeshPort.SetShape`): a test loses one epoch by setting it round the host tick
   that flushes it (`TestAGuestFollowsItsHostIntoTheNextGame`).

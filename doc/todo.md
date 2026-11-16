@@ -1317,6 +1317,13 @@ mount) never crosses. What would close it: a row for the direct request on its
 owner, and on both requests an emitter that is zero or the owner; a refusal test
 for each beside the `network.artifacts_refused` ones.
 
+A crossing's target is an entity number too, its producer's: an instance that
+applied an arrival late allocates the cursor after what the others allocated
+first, and holds both under other numbers until a correction. A typed member's
+end checks what it names (`CompositeSystem.destroyMember`), after a host destroyed
+a Wraith's cursor under a gold member's number; a hit's `TargetEntity` and
+`HitEntity` are not checked against what their producer meant.
+
 ### Publish a player's session at the router
 
 - Priority: P3

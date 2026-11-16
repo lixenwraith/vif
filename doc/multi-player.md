@@ -86,7 +86,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Host loss | The session's policy, its host's to choose and `host` unless it asked for `migrate`. `host`: nobody takes the session, and every survivor continues alone once its redial ends. `migrate` (`-authority migrate`, `:host <doors> migrate`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about half a second behind, and predicts and corrects nothing (§5.8). |
-| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and the fleet's front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`); the direct combat request and either combat request's emitter are not yet among them ([todo](todo.md#refuse-a-combat-crossing-that-acts-as-another-cursor-or-emitter)). |
+| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and the fleet's front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`); the direct combat request and either combat request's emitter are not yet among them ([todo](todo.md#refuse-a-combat-crossing-that-acts-as-another-cursor-or-emitter)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -217,21 +217,6 @@ capture holds is never judged held (`snapshotContainsLocked`): the hold and the
 rate, which are the clock's (§3.6), and the reset, which ends the run every capture
 of it was read in.
 
-A batch names its run and one naming another is refused, so a run has to end on
-every instance. The reset applies at one agreed tick, and a guest it reaches late
-is still in the old run as its host's first epochs of the next arrive: they and
-their syncs are kept for the guest's own reset and taken as it lands (`otherRun`,
-`takeAhead`), as the host keeps those of a guest that ran a tick ahead. Only the
-authority ends a run, by its reset or a transition its machine took into one, and
-all it sent of a run precedes its first epoch of the next. A guest still in the old
-run a tick after that epoch, its clock past the authority's last epoch of it, has
-lost what would have ended it (a refused epoch, a relay that left, a transition its
-own machine refused), which nothing sends again: it ends the run itself
-(`leaveRun`), applying nothing more of it, and the new game's first correction
-brings what its roster missed. A held guest takes that epoch as its resume: a new
-game its host starts from a hold sends a guest standing a tick past that hold no
-later epoch of the old one.
-
 This closes the guest-action pattern — a correction undoes the player's own
 keystroke, and the next one puts it back a cadence later — because a frame the
 capture never saw is kept even when its receive deadline is long past. The
@@ -257,6 +242,21 @@ Two deliberate asymmetries in how the fences are computed:
   refused for a full queue and will never see, making that producer replay a growing
   suffix at every correction for the rest of the session. The bounded, self-healing
   failure is the one worth having.
+
+A batch names its run and one naming another is refused, so a run has to end on
+every instance. The reset applies at one agreed tick, and a guest it reaches late
+is still in the old run as its host's first epochs of the next arrive: they and
+their syncs are kept for the guest's own reset, `NetworkCommitLateTicks` at most,
+and taken as it lands (`otherRun`, `takeAhead`), as the host keeps those of a guest
+that ran a tick ahead. Only the authority ends a run, by its reset or a transition
+its machine took into one, and all it sent of a run precedes its first epoch of the
+next. A guest still in the old run a tick after that epoch, its clock past the
+authority's last epoch of it, has lost what would have ended it (a refused epoch, a
+relay that left, a transition its own machine refused), which nothing sends again:
+it ends the run itself (`leaveRun`), applying nothing more of it, and the new
+game's first correction brings what its roster missed. A held guest takes that
+epoch as its resume: a new game its host starts from a hold sends a guest standing
+a tick past that hold no later epoch of the old one.
 
 ### 3.3 Projection
 
