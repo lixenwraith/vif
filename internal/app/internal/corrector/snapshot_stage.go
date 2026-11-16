@@ -142,13 +142,9 @@ func (s *StagedInstall) Commit() error {
 		writing := time.Now() // [wall] telemetry only
 		projectDur = writing.Sub(projecting)
 
-		// The authority's identity and fences, at the live tick: what the barrier
-		// prunes by is what the host applied, and the projection has moved the
-		// world to where this instance stands. The two worlds are compared and
-		// written in place; a journal takes the delta that write recorded.
-		hdr := header
-		hdr.Tick = tick
-		s.difference, written, err = live.WriteStagedLocked(sg, hdr, journal != nil)
+		// The two worlds are compared and written in place, at the tick the
+		// projection reached; a journal takes the delta that write recorded.
+		s.difference, written, err = live.WriteStagedLocked(sg, header, tick, journal != nil)
 		if err == nil {
 			barrier = live.run.BarrierLocked()
 		}
@@ -250,10 +246,10 @@ type StagedWrite struct {
 
 // WriteStagedLocked is WriteSharedLocked for the world that stands in the staging
 // world: the stores are compared and written in place, with no capture of either,
-// and everything beside them is read light. header is the capture's at the live
-// tick; record asks for the delta a journal writes. Caller MUST hold updateMutex;
-// the staging world's lock is taken here.
-func (c *Corrector) WriteStagedLocked(staging *Corrector, header snapshot.CaptureHeader, record bool) (diff engine.WorldDifference, w StagedWrite, err error) {
+// and everything beside them is read light. header is the capture's own and tick
+// where its projection stands; record asks for the delta a journal writes. Caller
+// MUST hold updateMutex; the staging world's lock is taken here.
+func (c *Corrector) WriteStagedLocked(staging *Corrector, header snapshot.CaptureHeader, tick uint64, record bool) (diff engine.WorldDifference, w StagedWrite, err error) {
 	if w.before, err = c.CaptureLightLocked(); err != nil {
 		return diff, w, err
 	}
@@ -261,7 +257,11 @@ func (c *Corrector) WriteStagedLocked(staging *Corrector, header snapshot.Captur
 	if err != nil {
 		return diff, w, err
 	}
-	w.written.Header = header
+	// The world is written, and its clock set, at the live tick. The barrier takes
+	// the capture's own: what the authority's world held is no later than it read it.
+	at := header
+	at.Tick = tick
+	w.written.Header = at
 
 	// Dry run first: a carrier that rejects its record must do so before the stores
 	// are touched. Only the live carrier can refuse because of state the live world
@@ -288,13 +288,13 @@ func (c *Corrector) WriteStagedLocked(staging *Corrector, header snapshot.Captur
 	// A world equal to the staging one on the compared surface and in every other
 	// part takes clock and barrier alone, as a hash-only answer does.
 	if diff.Entries == 0 && snapshot.HoldsBesideWorld(w.before, w.written) {
-		c.adoptClockLocked(header)
+		c.adoptClockLocked(at)
 		c.adoptSnapshotBarrierLocked(header)
 		return diff, w, nil
 	}
 	staging.world.RunSafe(r.Finish)
 	c.world.RebindCursorRoster(local)
-	c.adoptClockLocked(header)
+	c.adoptClockLocked(at)
 
 	if unknown := c.world.Resources.Rand.LoadStreams(core.DomainShared, w.written.Streams); len(unknown) > 0 {
 		return diff, w, fmt.Errorf("capture names RNG streams this build does not issue: %v", unknown)
@@ -307,8 +307,8 @@ func (c *Corrector) WriteStagedLocked(staging *Corrector, header snapshot.Captur
 	if e := c.scheduler.ImportFSM(w.written.FSM, true); e != nil {
 		return diff, w, e
 	}
-	// The barrier is rebased with the world. Tick classifies barrier-bound
-	// artifacts; each source's fence classifies its ordinary stream.
+	// The barrier is rebased with the world. The capture's tick classifies
+	// barrier-bound artifacts; each source's fence classifies its ordinary stream.
 	c.adoptSnapshotBarrierLocked(header)
 	// Last, so a carrier that publishes on load does not overwrite the captured
 	// surface with a value derived from this instance's own history.

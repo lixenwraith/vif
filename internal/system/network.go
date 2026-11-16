@@ -139,14 +139,13 @@ type NetworkSystem struct {
 	// because a drop is a frame this instance could not read and these are frames it
 	// read and refused: past a reset's last epochs, a non-zero pair names a peer
 	// whose ticks or whose volume are not those of a participant.
-	statRefusedTick    *atomic.Int64
-	statScheduleFull   *atomic.Int64
-	statAgreedRestored *atomic.Int64
-	statJoinLag        *atomic.Int64
-	statLag            *atomic.Int64
-	statStale          *atomic.Bool
-	statCorrections    *atomic.Int64
-	statForged         *atomic.Int64
+	statRefusedTick  *atomic.Int64
+	statScheduleFull *atomic.Int64
+	statJoinLag      *atomic.Int64
+	statLag          *atomic.Int64
+	statStale        *atomic.Bool
+	statCorrections  *atomic.Int64
+	statForged       *atomic.Int64
 
 	// The authority's commit: crossings that reached it late (and the part of those
 	// too late to apply), and on a guest, raw epochs refused for lacking a commit.
@@ -455,7 +454,6 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statScheduleFull = s.intStat(reg, "network.artifacts_schedule_full")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
 	s.statSuperseded = s.intStat(reg, "network.artifacts_authority_superseded")
-	s.statAgreedRestored = s.intStat(reg, "network.artifacts_restored")
 	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
 	s.statLag = s.intStat(reg, "network.lag_ticks")
 	s.statStale = s.boolStat(reg, "network.stale")
@@ -1326,7 +1324,7 @@ func (s *NetworkSystem) RetainedAfter(tick uint64, fences link.CrossingFences) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, a := range s.applied {
-		if s.retainedContainedLocked(a, tick, fences) {
+		if held, _ := capturedBy(a, tick, fences); held {
 			continue
 		}
 		frames = append(frames, event.ScheduledWireFrame{Frame: a.frame, ApplyTick: a.applyTick})
@@ -1375,14 +1373,18 @@ func (s *NetworkSystem) PendingStates(tick uint64) []event.WireBatch {
 	return out
 }
 
-// retainedContainedLocked is snapshotContainsLocked against a capture being
-// projected rather than the one last installed. Caller MUST hold mu.
-func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences link.CrossingFences) bool {
-	if !barrierBound(a.frame.Event) {
-		fence := fences.Seq(link.PeerID(a.source))
-		return fence != 0 && a.frame.Seq <= fence
+// capturedBy reports whether a capture read at tick with these fences holds a: a
+// barrier-bound artifact by its apply tick, which is exact, any other by its
+// source's fence. A source the capture names no fence for is kept: a duplicate is
+// repaired by the next correction, a discarded action is not. bySequence reports a
+// fence decided.
+func capturedBy(a barrierArtifact, tick uint64, fences link.CrossingFences) (held, bySequence bool) {
+	if barrierBound(a.frame.Event) {
+		return a.applyTick <= tick, false
 	}
-	return a.applyTick <= tick
+	fence := fences.Seq(link.PeerID(a.source))
+	held = fence != 0 && a.frame.Seq <= fence
+	return held, held
 }
 
 // ScheduleReplay puts artifacts another instance retained on this barrier's
@@ -1472,16 +1474,17 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	return active
 }
 
-// AdoptSnapshot rebases scheduled state onto an installed world. The production
-// epoch never rewinds, because peers key duplicates by it: a rewound source holds
-// new crossings for its next unsent epoch. Barrier-bound artifacts use the tick
-// floor and ordinary ones source fences, for late arrivals too. Caller holds
-// updateMutex.
-func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link.CrossingFences) {
-	defer s.settleArrival() // once the barrier stands at the installed tick
+// AdoptSnapshot rebases the barrier onto an installed world. captured is the tick
+// its capture was read at, which a projection may have carried the world past: what
+// that capture holds is judged by it and the fences alone (capturedBy), for late
+// arrivals too, and all else stays to apply. The production epoch never rewinds,
+// since peers key duplicates by it. Caller holds updateMutex.
+func (s *NetworkSystem) AdoptSnapshot(captured uint64, authority uint32, fences link.CrossingFences) {
+	defer s.settleArrival() // once the barrier stands on the installed capture
+	at := s.localTick()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.snapshotFloor = tick
+	s.snapshotFloor = captured
 	s.snapshotAuthority = authority
 	s.snapshotFences = fences
 	localFence := fences.Seq(link.PeerID(s.localSource))
@@ -1544,32 +1547,19 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 		s.suffixBytes += rec.bytes
 	}
 	s.suffix = pruned
-	// Retention keeps what the installed world lacks. A barrier-bound artifact it
-	// predates goes back on the schedule, since its consumed copy is the only one;
-	// a peer's ordinary frame is kept for the next projection to re-apply.
-	restored, retained := 0, s.applied[:0]
-	for _, a := range s.applied {
-		if s.retainedContainedLocked(a, tick, fences) {
-			continue
-		}
-		retained = append(retained, a)
-		if barrierBound(a.frame.Event) {
-			restored++
-			s.scheduled = append(s.scheduled, a)
-			s.scheduledBytes += frameBytes(a.frame)
-		}
-	}
-	s.applied = retained
-	if restored > 0 {
-		s.statAgreedRestored.Add(int64(restored))
-	}
+	// Retention keeps what the capture lacks, which every projection of a capture
+	// read before it applies again: the world this one wrote holds it already.
+	s.applied = slices.DeleteFunc(s.applied, func(a barrierArtifact) bool {
+		in, _ := capturedBy(a, captured, fences)
+		return in
+	})
 	// Production epochs are source-local replay keys, not captured world state.
 	// Moving this high-water mark backwards makes the receiver discard a genuinely
 	// new batch as a duplicate. A forward install can skip empty unsent epochs, but
 	// an epoch holding a pending crossing must retain its original key and deadline;
 	// flushCrossings closes it once, then catches the high-water mark up to the world.
 	if len(s.crossings) == 0 {
-		s.productionEpoch = max(s.productionEpoch, tick+1)
+		s.productionEpoch = max(s.productionEpoch, at+1)
 	}
 	s.localSource = s.world.Session().Participant
 	if r := s.world.Resources.Network; r != nil {
@@ -1583,34 +1573,25 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 	}
 	if dropped > 0 || pendingDropped > 0 {
 		s.world.Log().Debug("converge", "msg", "snapshot pruned crossings",
-			"tick", tick, "authority", authority, "local_fence", localFence,
+			"captured", captured, "tick", at, "authority", authority, "local_fence", localFence,
 			"fences", len(fences), "scheduled", dropped, "sequence_superseded", superseded,
 			"pending_local", pendingDropped)
 	}
 }
 
-// snapshotContainsLocked uses source fences for ordinary crossings and the tick
-// floor for barrier-bound ones, whose apply tick is exact. A source the capture
-// names no fence for is kept: a duplicate is repaired by the next correction, a
-// discarded action is not. bySequence reports a fence decided. Caller holds mu.
+// snapshotContainsLocked is capturedBy against the capture last installed, for
+// what is scheduled or arrives. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
 	switch a.frame.Event {
 	// No capture holds the clock, nor the reset that ends the run it was read in: a
-	// rate or a reset the floor passed still applies, and a hold lands (landLateHold)
-	// unless it has ended.
+	// rate or a reset still applies, and a hold lands (landLateHold) unless it has
+	// ended.
 	case event.EventGameSpeed, event.EventGameResetRequest:
 		return false, false
 	case event.EventGameHold:
 		return a.applyTick <= s.snapshotFloor && s.holdEndedLocked(a), false
 	}
-	if barrierBound(a.frame.Event) {
-		return a.applyTick <= s.snapshotFloor, false
-	}
-	// A source with no fence is unrepresented: the tick would misjudge it as the
-	// fence exists not to.
-	fence := s.snapshotFences.Seq(link.PeerID(a.source))
-	contained = fence != 0 && a.frame.Seq <= fence
-	return contained, contained
+	return capturedBy(a, s.snapshotFloor, s.snapshotFences)
 }
 
 // holdEndedLocked reports a hold its host has produced past, which only that hold's

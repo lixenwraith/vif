@@ -395,9 +395,9 @@ func (c *Corrector) adoptClockLocked(h snapshot.CaptureHeader) {
 		h.TickInterval)
 }
 
-// adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
-// the tick boundary for barrier-bound artifacts and each source's applied crossing
-// fence. Caller MUST hold updateMutex.
+// adoptSnapshotBarrierLocked tells the crossing barrier which capture its world now
+// holds: the tick it was read at, the boundary for barrier-bound artifacts, and each
+// source's applied crossing fence. Caller MUST hold updateMutex.
 func (c *Corrector) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range c.world.Systems() {
 		if b, ok := sys.(interface {
