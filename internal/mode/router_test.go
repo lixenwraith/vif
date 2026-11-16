@@ -450,9 +450,10 @@ func TestAnActionNamingInsertEntersItOnceItActs(t *testing.T) {
 }
 
 // TestEveryDeleteFillsTheRegisterAndAPutLaysItOutward: y fills the register and
-// deletes nothing, and each delete fills it too. A put lays a span right of the
-// cursor, or for P left of it, and rows below or above, a count that many, passing
-// over a held cell; the cursor goes to its far end, so a repeat goes on from there.
+// deletes nothing, and each delete fills it too, Insert's own keys aside. A put lays
+// a span right of the cursor, or for P left of it, and rows below or above, a count
+// that many, passing over a held cell; the cursor goes to its far end, so a repeat
+// goes on from there.
 func TestEveryDeleteFillsTheRegisterAndAPutLaysItOutward(t *testing.T) {
 	for _, c := range []struct {
 		text       string
@@ -466,6 +467,7 @@ func TestEveryDeleteFillsTheRegisterAndAPutLaysItOutward(t *testing.T) {
 		{"ab cd", 0, "ywwp", "ab cdb", [2]int{5, 0}},
 		{"ab", 0, "yy2p", "ab\nab\nab", [2]int{0, 2}},
 		{"\n\nab", 0, "jjddkP", "ab", [2]int{0, 0}},
+		{"ab cd", 0, "yyi \x1bp", " b cd\nab cd", [2]int{0, 1}},
 	} {
 		ctx, keys := lineWorld(t, c.text, c.x)
 		keys(c.keys)
@@ -609,8 +611,8 @@ func TestXTakesTheCellsLeftAndTildeFlipsCaseOnward(t *testing.T) {
 }
 
 // TestDotTypesItsInsertTextOverWhatStandsThere: '.' makes its change again, types
-// what Insert typed after it over the glyphs standing there now, and returns to
-// Normal.
+// what Insert typed after it over the glyphs standing there now, a Space among it
+// as the skip it was, and returns to Normal.
 func TestDotTypesItsInsertTextOverWhatStandsThere(t *testing.T) {
 	ctx, keys := lineWorld(t, "abab ab", 3)
 	if keys("Iab\x1b"); screen(ctx) != "  ab ab" {
@@ -618,5 +620,42 @@ func TestDotTypesItsInsertTextOverWhatStandsThere(t *testing.T) {
 	}
 	if keys("."); screen(ctx) != "     ab" || !ctx.IsNormalMode() {
 		t.Fatalf("'.' left %q in Normal %v, want the next ab typed away, in Normal", screen(ctx), ctx.IsNormalMode())
+	}
+	ctx, keys = lineWorld(t, "a b a b", 0)
+	if keys("ia b\x1bw."); screen(ctx) != "" {
+		t.Fatalf("'.' after a text with a Space left %q, want both pairs typed away", screen(ctx))
+	}
+}
+
+// TestAnOperatorOverHOrLTakesTheCellsItSteps: h and l end short of the cell they
+// reach, so dl is x, dh is X, cl is s and a count takes that many.
+func TestAnOperatorOverHOrLTakesTheCellsItSteps(t *testing.T) {
+	for _, c := range []struct {
+		keys, want string
+		insert     bool
+	}{
+		{"dl", "ab d", false}, {"dh", "a cd", false}, {"d2l", "ab", false}, {"cl", "ab d", true}, {"yl$p", "abcdc", false},
+	} {
+		ctx, keys := lineWorld(t, "abcd", 2)
+		if keys(c.keys); screen(ctx) != c.want || ctx.IsInsertMode() != c.insert {
+			t.Errorf("%q on the c of abcd left %q, insert %v; want %q, %v", c.keys, screen(ctx), ctx.IsInsertMode(), c.want, c.insert)
+		}
+	}
+}
+
+// TestDeletingToTheRowsEndNeverReachesBack: D, C and an operator's $ take from the
+// cursor to the row's end, and past its last glyph nothing, where $ alone steps
+// back to that glyph.
+func TestDeletingToTheRowsEndNeverReachesBack(t *testing.T) {
+	for _, c := range []struct {
+		x          int
+		keys, want string
+	}{
+		{1, "D", "a"}, {1, "d$", "a"}, {5, "D", "abc"}, {5, "C", "abc"}, {5, "d$", "abc"}, {5, "y$$p", "abc"},
+	} {
+		ctx, keys := lineWorld(t, "abc", c.x)
+		if keys(c.keys); screen(ctx) != c.want {
+			t.Errorf("%q from column %d of %q left %q, want %q", c.keys, c.x, "abc", screen(ctx), c.want)
+		}
 	}
 }

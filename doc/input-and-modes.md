@@ -202,9 +202,13 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   motion found, so `cfz` with no `z` on the row stays in Normal; `C` is `D`, then
   Insert. An operator's own key doubled acts on the row: `dd`, `cc`, `yy`. `cw`
   ends at its word's last glyph, as vim's does, where `dw` takes the gap after it
-  and on a row's last word nothing. `s` is `cl` and `S` is `cc`.
-- **Append, insert and open.** `A` moves to the row's last glyph and `I` to its
-  first, as `^` does, and each enters Insert, staying put on a row with none. vim's
+  and on a row's last word nothing. `h` and `l` end short of the cell they reach,
+  so `dl` is `x`, `dh` is `X` and `s` is `cl`; `S` is `cc`. `D`, `C` and an
+  operator's `$` take from the cursor to the row's end, and past its last glyph
+  nothing.
+- **Append, insert and open.** `A` moves to the row's last glyph, staying put on a
+  row with none, and `I` to its first, as `^` does, the first column there; each
+  enters Insert. vim's
   `a`, a step right then Insert, is `mode_append`, and its `o` and `O` are
   `mode_open_below` and `mode_open_above`: the row below or above at its first
   glyph, the cursor's column on a row with none, then Insert, which types what
@@ -261,6 +265,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 | `F1` | Open or close help, from any mode; over another overlay it takes that one's place. |
 | `` ` `` | Open or close the console (§9) in Normal and Visual, and over another overlay in its place; Insert, Search and Command type it. |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
+| `p` in Normal | Start or end a pause, the hold `:pause` is (§2). |
 | `Esc` | Cancel pending input; in Normal with none, open the [configuration menu](config-menu.md); elsewhere return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
@@ -617,7 +622,7 @@ of each where it documents several (`h/j/k/l`). The accepted TOML sections, a ru
 section's keys one rune, `space`, `backslash` or `zero`, a special one's a terminal
 key name (`ctrl_g`, `f10`, `page_up`...):
 
-- Rune: `[normal]`, Normal and Visual; `[operator]`, the motions after `d` and `c`;
+- Rune: `[normal]`, Normal and Visual; `[operator]`, the motions after `d`, `c` and `y`;
   `[prefix_g]`, the key after `g`; `[overlay]`, an overlay's.
 - Special: `[normal_keys]`, Normal and Visual; `[overlay_keys]`, an overlay's;
   `[text_keys]`, Insert, Search and Command navigation and editing, and the
@@ -692,7 +697,7 @@ When adding interaction behavior:
 |---|---|
 | Intent/parser types | `internal/input/intent.go`, `state.go`, `machine.go`; enum strings in `strings_gen.go` (`go generate ./internal/manifest`) |
 | Bindings and overrides | `internal/input/keytable.go`, `actionnames.go`, `keyconfig.go`, `binding.go` |
-| Mode routing | `internal/mode/router.go`, `actions.go`, `motions*.go`, `operators.go` |
+| Mode routing | `internal/mode/router.go`, `motions*.go`, `operators.go` |
 | Search | `internal/mode/search.go` |
 | Commands | `internal/mode/commands.go` |
 | Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go` |

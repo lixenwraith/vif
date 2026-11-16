@@ -21,7 +21,7 @@ const (
 	StateIdle               InputState = iota // Default state, awaiting initial key
 	StateCount                                // Accumulating numeric prefix (1-9 start, 0 continues)
 	StateCharWait                             // After f/F/t/T, awaiting target character
-	StateOperatorWait                         // After operator (d), awaiting motion or second operator
+	StateOperatorWait                         // After an operator (d, c, y), awaiting its motion or its own key again
 	StateOperatorCharWait                     // After operator + f/F/t/T, awaiting target character
 	StatePrefixG                              // After 'g' prefix, awaiting second key (g/G/l/h/k/j)
 	StateOperatorPrefixG                      // After operator + 'g', awaiting motion (e.g., dgg)

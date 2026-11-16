@@ -45,7 +45,7 @@ type KeyTable struct {
 	// Normal mode rune bindings
 	NormalRunes map[rune]KeyEntry
 
-	// Motions valid after operator (d)
+	// Motions valid after an operator (d, c, y)
 	OperatorMotions map[rune]KeyEntry
 
 	// Keys after g prefix

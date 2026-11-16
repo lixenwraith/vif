@@ -79,10 +79,9 @@ type Router struct {
 	cleared *atomic.Int64
 
 	// Input state (find/search repeat)
-	lastSearch      searchQuery // What n and N repeat
-	lastFindChar    rune        // Target character for f/F/t/T
-	lastFindForward bool        // true for f/t, false for F/T
-	lastFindType    rune        // Motion type: 'f', 'F', 't', or 'T'
+	lastSearch   searchQuery    // What n and N repeat
+	lastFind     input.MotionOp // The f, F, t or T that ; and , repeat
+	lastFindChar rune           // Its target character
 
 	// Command history ring buffer
 	cmdHistory    [cmdHistorySize]string
@@ -280,6 +279,9 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentQuit:
 		return false
 	case input.IntentEscape:
+		if intent.MacroPlayback && r.ctx.IsNormalMode() {
+			return true // recorded leaving a mode: where playback stands in none, it opens no menu
+		}
 		return r.handleEscape()
 	case input.IntentToggleAudioCycle:
 		return r.handleToggleAudioCycle()
@@ -499,16 +501,38 @@ func (r *Router) applyOperator(intent *input.Intent, result MotionResult) {
 	}
 }
 
-// rememberFind stores the find ';' and ',' repeat, which a mark jump is not. Both
-// the plain and the operator char-motion handler need it and neither owns it.
+// reverseFind pairs each find with the one ',' makes of it; its keys are the char
+// motions ';' and ',' repeat, which a mark jump is not
+var reverseFind = map[input.MotionOp]input.MotionOp{
+	input.MotionFindForward: input.MotionFindBack, input.MotionFindBack: input.MotionFindForward,
+	input.MotionTillForward: input.MotionTillBack, input.MotionTillBack: input.MotionTillForward,
+}
+
+// rememberFind stores the find ';' and ',' repeat. Both the plain and the operator
+// char-motion handler need it and neither owns it.
 func (r *Router) rememberFind(intent *input.Intent, result MotionResult) {
-	if !result.Valid || motionOpToRune(intent.Motion) == 0 {
-		return
+	if _, find := reverseFind[intent.Motion]; result.Valid && find {
+		r.lastFind, r.lastFindChar = intent.Motion, intent.Char
 	}
-	r.lastFindChar = intent.Char
-	r.lastFindType = motionOpToRune(intent.Motion)
-	r.lastFindForward = intent.Motion == input.MotionFindForward ||
-		intent.Motion == input.MotionTillForward
+}
+
+// repeatFind makes the last find again from the cursor, or its reverse
+func (r *Router) repeatFind(reverse bool) {
+	op := r.lastFind
+	if reverse {
+		op = reverseFind[op]
+	}
+	if pos, ok := r.ctx.World.LocalCursor(); ok && op != input.MotionNone {
+		OpMove(r.ctx, r.charLUT[op](r.ctx, pos.X, pos.Y, 1, r.lastFindChar))
+	}
+}
+
+// rowEnd is the range D, C and an operator's $ take: from the cursor to its row's
+// end, never back to a glyph the cursor has passed, where $ alone steps
+func rowEnd(ctx *engine.GameContext, x, y int) MotionResult {
+	result := MotionLineEnd(ctx, x, y, 1)
+	result.EndX = max(result.EndX, x)
+	return result
 }
 
 // charCells is the inclusive character range from (x,y) to (endX,y).
@@ -609,8 +633,11 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
 		// vim's cw ends at its word's last glyph, where dw runs on to the next word
 		big := intent.Motion == input.MotionWORDForward
-		if intent.ModeTarget == input.ModeTargetInsert && (big || intent.Motion == input.MotionWordForward) {
+		switch {
+		case intent.ModeTarget == input.ModeTargetInsert && (big || intent.Motion == input.MotionWordForward):
 			result = MotionChangeWord(r.ctx, pos.X, pos.Y, intent.Count, big)
+		case intent.Motion == input.MotionLineEnd:
+			result = rowEnd(r.ctx, pos.X, pos.Y)
 		}
 		r.applyOperator(intent, result)
 	}
@@ -691,7 +718,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 
 	case input.SpecialDeleteToEnd:
 		// D = d$, and C enters Insert after
-		r.applyRange(MotionLineEnd(r.ctx, pos.X, pos.Y, 1))
+		r.applyRange(rowEnd(r.ctx, pos.X, pos.Y))
 
 	case input.SpecialDeleteLine:
 		r.applyRange(r.lineRange(pos.Y, intent.Count)) // S = cc
@@ -740,10 +767,10 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 		}
 
 	case input.SpecialRepeatFind:
-		r.executeRepeatFind(false)
+		r.repeatFind(false)
 
 	case input.SpecialRepeatFindRev:
-		r.executeRepeatFind(true)
+		r.repeatFind(true)
 	}
 	return r.handleModeSwitch(intent)
 }
@@ -1203,9 +1230,11 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 	return true
 }
 
+// Insert's Delete, Space and Backspace take one cell and, as typing does, leave the
+// register and the change history alone (erase).
 func (r *Router) handleInsertDeleteCurrent() bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		r.applyRange(charCells(pos.X, pos.Y, pos.X))
+		r.erase([]event.GlyphCell{{X: pos.X, Y: pos.Y}})
 	}
 	return true
 }
@@ -1215,7 +1244,7 @@ func (r *Router) handleInsertDeleteForward() bool {
 	if !ok {
 		return true
 	}
-	r.applyRange(charCells(pos.X, pos.Y, pos.X))
+	r.erase([]event.GlyphCell{{X: pos.X, Y: pos.Y}})
 	OpMove(r.ctx, MotionRight(r.ctx, pos.X, pos.Y, 1))
 	return true
 }
@@ -1225,7 +1254,7 @@ func (r *Router) handleInsertDeleteBack() bool {
 	if !ok || pos.X == 0 {
 		return true
 	}
-	r.applyRange(charCells(pos.X-1, pos.Y, pos.X-1))
+	r.erase([]event.GlyphCell{{X: pos.X - 1, Y: pos.Y}})
 	OpMove(r.ctx, MotionLeft(r.ctx, pos.X, pos.Y, 1))
 	return true
 }
@@ -1825,69 +1854,4 @@ func isMouseIntent(t input.IntentType) bool {
 		return true
 	}
 	return false
-}
-
-// motionOpToRune converts MotionOp to the canonical rune for tracking
-func motionOpToRune(op input.MotionOp) rune {
-	switch op {
-	case input.MotionLeft:
-		return 'h'
-	case input.MotionRight:
-		return 'l'
-	case input.MotionUp:
-		return 'k'
-	case input.MotionDown:
-		return 'j'
-	case input.MotionWordForward:
-		return 'w'
-	case input.MotionWORDForward:
-		return 'W'
-	case input.MotionWordBack:
-		return 'b'
-	case input.MotionWORDBack:
-		return 'B'
-	case input.MotionWordEnd:
-		return 'e'
-	case input.MotionWORDEnd:
-		return 'E'
-	case input.MotionLineStart:
-		return '0'
-	case input.MotionLineEnd:
-		return '$'
-	case input.MotionFirstNonWS:
-		return '^'
-	case input.MotionScreenVerticalMid:
-		return 'M'
-	case input.MotionScreenHorizontalMid:
-		return 'm'
-	case input.MotionHalfPageLeft:
-		return 'H'
-	case input.MotionHalfPageRight:
-		return 'L'
-	case input.MotionHalfPageDown:
-		return 'J'
-	case input.MotionHalfPageUp:
-		return 'K'
-	case input.MotionScreenTop:
-		return 'g'
-	case input.MotionScreenBottom:
-		return 'G'
-	case input.MotionParaBack:
-		return '{'
-	case input.MotionParaForward:
-		return '}'
-	case input.MotionMatchBracket:
-		return '%'
-	case input.MotionOrigin:
-		return 'o'
-	case input.MotionFindForward:
-		return 'f'
-	case input.MotionFindBack:
-		return 'F'
-	case input.MotionTillForward:
-		return 't'
-	case input.MotionTillBack:
-		return 'T'
-	}
-	return 0
 }

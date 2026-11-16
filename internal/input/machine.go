@@ -154,8 +154,11 @@ func (m *Machine) Next() *Intent {
 	}
 	intent := m.pending[0]
 	m.pending = m.pending[1:]
-	if intent.Type == IntentTextChar {
+	switch intent.Type {
+	case IntentTextChar:
 		m.typed = append(m.typed, intent.Char)
+	case IntentInsertDeleteForward:
+		m.typed = append(m.typed, ' ')
 	}
 	return &intent
 }
@@ -526,7 +529,11 @@ func (m *Machine) repeatChange() *Intent {
 	m.Reset()
 	if intent.ModeTarget == ModeTargetInsert {
 		for _, r := range m.lastText {
-			m.pending = append(m.pending, Intent{Type: IntentTextChar, Char: r})
+			owed := Intent{Type: IntentTextChar, Char: r}
+			if r == ' ' {
+				owed = Intent{Type: IntentInsertDeleteForward}
+			}
+			m.pending = append(m.pending, owed)
 		}
 		m.pending = append(m.pending, Intent{Type: IntentModeSwitch, ModeTarget: ModeTargetNormal})
 	}
@@ -536,7 +543,7 @@ func (m *Machine) repeatChange() *Intent {
 func (m *Machine) processOperatorWait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
-	// CountEntities after operator
+	// A count typed after the operator
 	if key >= '1' && key <= '9' {
 		m.accumulateCount2(key)
 		return nil
@@ -546,7 +553,7 @@ func (m *Machine) processOperatorWait(key rune) *Intent {
 		return nil
 	}
 
-	// The operator's own key again acts on whole lines: dd, cc
+	// The operator's own key again acts on whole lines: dd, cc, yy
 	if key == m.opKey {
 		return m.completeOperator(IntentOperatorLine, MotionNone, 0)
 	}
@@ -660,7 +667,7 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 func (m *Machine) processMacroRecordAwait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
-	// q@ -> stop all macros (new: accessible from record-await too)
+	// q@ stops every macro
 	if key == '@' {
 		cmd := m.captureCommand()
 		m.Reset()
@@ -780,14 +787,14 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 		return nil
 	}
 
-	// Space deletes character and moves right
-	if ev.Rune == ' ' {
-		return &Intent{Type: IntentInsertDeleteForward}
-	}
-
-	// Printable character, kept as the text of the change that entered Insert
+	// Kept as the text of the change that entered Insert. Space deletes the glyph
+	// under the cursor and moves right: no glyph is a space, so one in that text
+	// stands for the key
 	if len(m.typed) <= insertTextMax {
 		m.typed = append(m.typed, ev.Rune)
+	}
+	if ev.Rune == ' ' {
+		return &Intent{Type: IntentInsertDeleteForward}
 	}
 	return &Intent{
 		Type: IntentTextChar,
