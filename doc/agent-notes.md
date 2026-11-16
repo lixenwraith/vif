@@ -434,6 +434,10 @@ Libraries · Branches.
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
   session ... retry in a moment"), the harness's host ticking every 10 ms faster
   than the loaded joiner closes the gap, a refusal a production seat retries.
+- The race run reports two accesses only with no lock between them, and a lock both
+  goroutines take in between hides the pair. One load does not show is forced in a
+  worktree copy: sleep so the read lands while the writer holds its own lock, ahead
+  of its write, as a leave's config write met a mid-run gate's offer.
 - `internal/app` tests start no log sink, so a socket test that times out says
   nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
   copy, build its race binary there and run it under the same load, keeping the
@@ -460,6 +464,9 @@ Libraries · Branches.
   reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
   Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
   correction loop, between ticks.
+- A handshake's goroutine reads an offer's fields under `sessionMu` alone
+  (`offerLocked`), so what one names changes under `sessionMu`, the world lock held
+  or not, as `leaveSessionLocked` clears the session's name and ceiling.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and

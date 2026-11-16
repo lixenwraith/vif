@@ -1009,15 +1009,20 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 	}
 	// Nothing names the session left: not the address a restart would go back to,
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
-	// The -relay door alone answers to that name, for the people it kept.
+	// The -relay door alone answers to that name, for the people it kept. A gate in
+	// flight reads its offer under the session lock alone, so they change under it.
 	cfg, wire := *m.cfg, *m.wiring
+	m.sessionMu.Lock()
 	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = "", "", "", 0
+	m.sessionMu.Unlock()
 	// The place the run left keeps its record as it stands, for a return to that
 	// session; the one it opens issues its own.
 	prior := m.place.Swap(nil)
 	if err := m.openSessionLocked(kept); err != nil {
 		m.place.Store(prior)
+		m.sessionMu.Lock()
 		*m.cfg, *m.wiring = cfg, wire
+		m.sessionMu.Unlock()
 		for _, c := range carried {
 			m.places.forget(c)
 		}
