@@ -8,7 +8,7 @@ require (
 	github.com/lixenwraith/audio v0.27.2
 	github.com/lixenwraith/auth v0.5.2
 	github.com/lixenwraith/color v0.1.5
-	github.com/lixenwraith/genetic v0.1.0
+	github.com/lixenwraith/genetic v0.2.0
 	github.com/lixenwraith/log v0.1.13
 	github.com/lixenwraith/terminal v0.6.7
 	github.com/lixenwraith/toml v0.9.2

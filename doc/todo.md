@@ -246,7 +246,6 @@ stops its seats at one tick, and its spectators' runs on the same one
 
 - Priority: P2
 - Affected files: `internal/bot`, `cmd/vif`, `internal/paths`
-- Prerequisite: [Give `genetic` what a live network learner needs](#give-genetic-what-a-live-network-learner-needs)
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs),
   [AI §3](ai-physics-and-evolution.md#3-genetic-library)
 
@@ -307,9 +306,15 @@ What remains:
   (8, 16, 28, 44), and a crush is a defeat. Decide whether a graph declares its
   rows or the table gains them.
 - **The learner**: a `StreamingEngine` with one evaluation in flight, a candidate's
-  score the mean of three rounds, children mostly one parent's with mutation.
+  score one round or the mean of three, every third evaluation a `Reevaluate` and
+  repeats merged (`SetMerge`, `MeanScore`); children mostly one parent's by
+  `BlockCombiner`, a block a hidden unit or an output; the step under
+  `SetSchedule`, its floor the step to settle at. It fields the best member a
+  second outcome has confirmed (`Candidate.Count`), not `Best`.
 - **The store**: one file for each graph and scenario, saved by the rule a setting
-  is, so a browser keeps it; a population of another layout digest starts over.
+  is, so a browser keeps it. Its `Tag` (`persistence.PopulationDTO`) is the layout
+  digest, and a population of another starts over. The file holds each member's
+  count and not the schedule's step: decide whether the step starts over each run.
 - **The switch**: a `[bot]` key, so `-bot`, `:bot add` and the menu share it.
 - **The pace**: weak bots' rounds last 7 to 11 s, so a run at speed 1 scores 300 to
   500 an hour and `-speed 8` eight times that, a solo bot's alone. Networks this
@@ -321,34 +326,29 @@ What remains:
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
   against an eye population that is itself evolving.
+- **If the archive stalls** in `cave` at this size: an evolution strategy with a
+  step per gene, an engine of its own in `lixenwraith/genetic`. Measure first.
 
-### Give `genetic` what a live network learner needs
+What `lixenwraith/genetic` measured on a stand-in, a 148-weight network of this
+shape on a noisy scrolling game, twelve seeds a row and 12,000 rounds each, read
+as the fielded member's mean over held-out rounds
+([its notes](https://github.com/lixenwraith/genetic/blob/main/doc/agent-notes.md)):
 
-- Priority: P2
-- Affected files: `lixenwraith/genetic` (`streaming.go`, `streaming_state.go`,
-  `operator.go`, `persistence/dto.go`), `go.mod`
-- Guide: [AI §3](ai-physics-and-evolution.md#3-genetic-library)
+```
+no repeats, one round an evaluation            3070
+no repeats, the mean of three                  3360
+every third a Reevaluate, merged, one round    3545
+the same on the mean of three                  3570
+separable CMA-ES on the mean of three          3290
+```
 
-The module already seeds (`BeginEvaluation`, `Inject`), continues exactly
-(`Checkpoint`) and is deterministic. What a noisy, 150-gene, one-at-a-time learner
-lacks:
-
-- **A schedule on the streaming engine.** `SetSchedule` and `AdaptiveStrength` are
-  the batch `Engine`'s; a `StreamingEngine` keeps the rate and strength it was
-  built with, and weights need a step that shrinks as the archive settles.
-- **Repeat outcomes merged.** `SetEqual` holds a genotype at its latest score, right
-  for a moving objective; a noisy fixed one wants a running mean and its count, by
-  a hook over the old score, the new and the count. With it, a call handing out the
-  archive member due a re-flight, which `examples/lander` writes by hand.
-  `StreamingState` changes, so its version and vif's capture version move.
-- **Crossover by block.** `UniformCombiner` and `NPointCombiner` split a hidden
-  unit's weights between parents; a combiner over caller-named blocks keeps a
-  unit whole.
-- **A layout tag in a saved population.** `PopulationDTO` holds a version, a
-  generation and candidates, so a file cannot say which network it fits; a caller's
-  tag and, once outcomes merge, each candidate's count.
-- **Only if the archive stalls** at this size: an evolution strategy with a step
-  per gene, as an engine of its own. Measure first.
+- One round an evaluation, merged, ends level with the mean of three and sees
+  three times the candidates in an hour.
+- A step of 0.1 of a weight's range left one seed in twelve at the hand-written
+  genome for 4,000 evaluations; 0.02 to 0.05 left none.
+- `AdaptiveStrength` falls to its `lo` within a few hundred noisy evaluations, so
+  `lo` is the step it runs at: 0.02 ended level with the best fixed step and 0.005
+  stalled.
 
 ### Train bot graphs offline
 

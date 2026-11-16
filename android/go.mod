@@ -13,7 +13,7 @@ require (
 	github.com/lixenwraith/audio v0.27.2 // indirect
 	github.com/lixenwraith/auth v0.5.2 // indirect
 	github.com/lixenwraith/color v0.1.5 // indirect
-	github.com/lixenwraith/genetic v0.1.0 // indirect
+	github.com/lixenwraith/genetic v0.2.0 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
 	github.com/lixenwraith/toml v0.9.2 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
