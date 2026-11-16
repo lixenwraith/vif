@@ -356,10 +356,10 @@ follow)
 	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
 	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
 	GK=$(keyfile "sleep 24" "printf ':q\\r'" "sleep 2")
-	pty_bg "$HK" "$BIN -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
+	pty_bg "$HK" "$BIN -nw -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
 	HOST_PTY=$PTY_PID
 	sleep 2
-	pty_bg "$GK" "$BIN -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
+	pty_bg "$GK" "$BIN -nw -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
 	wait "$HOST_PTY" 2>/dev/null || true
 	wait "$PTY_PID" 2>/dev/null || true
 	grep -qh '"msg":"session restarting"' "$GL"/*.jsonl 2>/dev/null \
