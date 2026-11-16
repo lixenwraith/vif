@@ -746,6 +746,67 @@ func TestABatchFromAnotherRunIsRefused(t *testing.T) {
 	}
 }
 
+// TestAGuestFollowsItsAuthorityIntoTheNextRun: the next run's first epochs can reach
+// a guest before its own reset lands, and wait for it. Where the reset never comes,
+// the guest ends its run a tick after the first of them and once its clock is past
+// the authority's last epoch of the run, then takes what waited. Nothing waits past
+// the commit bound, and an authority ends no run on a guest's word.
+func TestAGuestFollowsItsAuthorityIntoTheNextRun(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		last, ended uint64 // the authority's last epoch of the run, and the tick the guest ends it at
+	}{
+		{"its clock at the authority's", 100, 102},
+		{"its clock past the authority's", 98, 102},
+		{"its clock behind the authority's", 103, 105},
+	} {
+		port := &linkedPort{peers: []uint32{1}}
+		guest := sessionSystem(t, 2, 100, port)
+		queue := guest.world.Resources.Event.Queue
+		guest.scheduleCrossings(1, inRun(t, rawBatch(t, 1, tc.last), 0))
+		guest.scheduleCrossings(1, inRun(t, rawBatch(t, 1, 1, 2), 1))
+		if got := scheduledCount(guest); got != 0 || len(guest.ahead) != 1 {
+			t.Fatalf("%s: the next run's epoch left %d scheduled and %d kept, want it kept alone", tc.name, got, len(guest.ahead))
+		}
+		for next := uint64(101); next <= tc.ended; next++ {
+			guest.Receive(next)
+			resets := 0
+			for _, ev := range queue.Consume() {
+				if ev.Type == event.EventGameResetRequest && ev.Origin == event.OriginNetwork {
+					resets++
+				}
+			}
+			if want := next == tc.ended; (resets == 1) != want || resets > 1 {
+				t.Fatalf("%s: %d reset(s) at tick %d, want the run ended at %d alone", tc.name, resets, next, tc.ended)
+			}
+		}
+		queue.NextRun()
+		guest.world.Resources.Game.State.SetGameTicks(0)
+		guest.Init()
+		guest.drain(port)
+		guest.mu.Lock()
+		got := append([]barrierArtifact(nil), guest.scheduled...)
+		guest.mu.Unlock()
+		if len(got) != 1 || got[0].applyTick != 2 || len(guest.ahead) != 0 {
+			t.Fatalf("%s: the new run scheduled %+v with %d still kept, want the kept crossing at tick 2", tc.name, got, len(guest.ahead))
+		}
+	}
+	// An authority keeps what a guest a tick ahead sent of the next run, for no
+	// longer than a reset of its own would still commit any of it.
+	authority := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	authority.scheduleCrossings(2, inRun(t, rawBatch(t, 2, 1, 4), 1))
+	for next := uint64(101); next <= 101+parameter.NetworkCommitLateTicks; next++ {
+		if kept, want := len(authority.ahead), 1; kept != want {
+			t.Fatalf("the authority kept %d of a guest's next run by tick %d, want %d", kept, next, want)
+		}
+		authority.Receive(next)
+	}
+	if kept, reset := len(authority.ahead), len(authority.world.Resources.Event.Queue.Consume()); kept != 0 || reset != 0 {
+		t.Fatalf("past the commit bound the authority keeps %d of a guest's next run and pushed %d event(s), want neither", kept, reset)
+	}
+}
+
 // TestAnInstallThatHoldsAnOwnCrossingClosesItsFence: a capture installed past the
 // tick an own crossing was stamped for holds it, the authority having committed it
 // late. The pruned copy never dispatches, so the install closes its place in the
@@ -1016,14 +1077,15 @@ func TestAnInstallLeavesWhatNoCaptureHoldsToApply(t *testing.T) {
 	}
 }
 
-// TestATransitionOrARestartFromAGuestIsRefused: a Shared FSM moves on what the
-// authority's machine took and a Wraith's wait is the authority's to start over, so
-// either crossed by any other participant applies nowhere.
-func TestATransitionOrARestartFromAGuestIsRefused(t *testing.T) {
+// TestATransitionARestartOrAResetFromAGuestIsRefused: a Shared FSM moves on what the
+// authority's machine took, a Wraith's wait is the authority's to start over and a
+// game the authority's to end, so any crossed by another participant applies nowhere.
+func TestATransitionARestartOrAResetFromAGuestIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, forged := range []event.GameEvent{
 		{Type: event.EventFSMTransition, Payload: &event.FSMTransitionPayload{Region: "storm", Owner: 3}},
 		{Type: event.EventWraithWaitRestart},
+		{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}},
 	} {
 		s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
 		forged.Domain = core.DomainPlayer

@@ -79,12 +79,23 @@ type NetworkSystem struct {
 	// they will not arrive again; relay reordering is repaired by correction.
 	appliedPeerSeq [participantSlots]uint64
 
-	// snapshotFloor and snapshotFences describe the last installed world.
+	// snapshotFloor and snapshotFences are the tick and fences the last installed
+	// capture was read at, which a projection may have carried the world past.
 	// Barrier-bound membership uses ApplyTick; ordinary crossings use source
 	// sequence because the authority may have applied them late.
 	snapshotFloor     uint64
 	snapshotAuthority uint32
 	snapshotFences    link.CrossingFences
+
+	// ahead is the epochs and syncs of the run after this one that came before this
+	// instance's own reset, kept for aheadRun in the order they came, from tick
+	// aheadSince. aheadAt is the tick the authority's first one came at, zero with
+	// none: its word that this run has ended, whatever became of the reset (leaveRun).
+	ahead      []aheadMessage
+	aheadBytes int
+	aheadRun   uint64
+	aheadSince uint64
+	aheadAt    uint64
 
 	buf [parameter.NetworkDrainWindow]link.Inbound // per-tick drain window
 
@@ -394,6 +405,13 @@ type lostChange struct {
 	arrived, marked, crossed bool
 }
 
+// aheadMessage is one epoch or sync of the next run, as its link carried it.
+type aheadMessage struct {
+	from uint32
+	kind link.MessageType
+	body []byte
+}
+
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
 // and the epoch its source produced it in.
 type barrierArtifact struct {
@@ -487,6 +505,7 @@ func (s *NetworkSystem) Init() {
 	s.lastSync = [parameter.MaxPlayers]uint64{}
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
 	s.keepLost()
+	s.aheadAt = 0 // the run before's: what waited for this one is taken at its first drain
 	s.expiring = [participantSlots]bool{}
 	if s.restart == restartCrossed {
 		s.restart = restartDue // cleared with the barrier it stood on: the new game's to cross
@@ -920,6 +939,7 @@ func (s *NetworkSystem) LeaveSession() {
 	s.enabled = true
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
 	s.lost = [participantSlots]lostChange{}
+	s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	local := s.localSource
@@ -1685,9 +1705,89 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 		s.release(p)
 	}
 	s.follow(p, nextTick)
-	s.applyDue(nextTick)
+	if !s.leaveRun(nextTick) {
+		s.applyDue(nextTick)
+	}
 	s.publishBarrierTelemetry(nextTick, p)
 	return s.barrierActive.Load()
+}
+
+// otherRun takes a batch of another run than this instance's and reports whether
+// it did. A reset applies at one agreed tick, so the next run's first epochs can
+// come before a late reset has landed: one of the next run is kept for it, within
+// the schedule's bounds, and any other refused, as what a guest sent a round trip
+// before the reset reaches its authority after.
+func (s *NetworkSystem) otherRun(from uint32, kind link.MessageType, body []byte, batch event.WireBatch) bool {
+	run := s.localRun()
+	switch {
+	case batch.Run == run:
+		return false
+	case batch.Run != run+1 || len(s.ahead) >= parameter.NetworkScheduledMax ||
+		s.aheadBytes+len(body) > parameter.NetworkScheduledBytes:
+		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
+		return true
+	}
+	if len(s.ahead) == 0 {
+		s.aheadSince = s.localTick()
+	}
+	s.ahead = append(s.ahead, aheadMessage{from: from, kind: kind, body: slices.Clone(body)})
+	s.aheadBytes, s.aheadRun = s.aheadBytes+len(body), batch.Run
+	// The authority's own batch says its run has ended this one and is under way:
+	// a held instance goes on from it, as from any epoch its host produced past it
+	if authority := s.authorityParticipant(); batch.Source == authority && s.participantID() != authority {
+		if s.aheadAt == 0 {
+			s.aheadAt = max(1, s.localTick())
+		}
+		if r := s.world.Resources.Network; r != nil && r.OnAuthorityAhead != nil {
+			r.OnAuthorityAhead()
+		}
+	}
+	return true
+}
+
+// takeAhead admits what was kept for the run this instance has now entered.
+func (s *NetworkSystem) takeAhead() {
+	if len(s.ahead) == 0 || s.localRun() < s.aheadRun {
+		return
+	}
+	kept := s.ahead
+	s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
+	for _, m := range kept {
+		s.dispatchMessage(m.from, &link.Message{Type: m.kind, Payload: m.body})
+	}
+}
+
+// leaveRun ends a run its authority has left and reports whether it did. Only the
+// authority ends one, and all it sent of this run came before its first batch of
+// the next: a tick past that batch and past this run's last epoch, whatever would
+// have ended the run here is lost, so it ends now, applying nothing more. The new
+// game takes what was kept, and its first correction what this one missed.
+func (s *NetworkSystem) leaveRun(nextTick uint64) bool {
+	if len(s.ahead) != 0 && nextTick > s.aheadSince+parameter.NetworkCommitLateTicks {
+		// A reset this long after would commit none of what waited for it
+		s.statRefusedTick.Add(int64(len(s.ahead)))
+		s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
+	}
+	if !s.enabled || s.aheadAt == 0 || nextTick <= s.aheadAt+1 {
+		return false
+	}
+	var last uint64
+	if authority := s.authorityParticipant(); int(authority) < len(s.epochs) {
+		s.mu.Lock()
+		last = s.epochs[authority].newest()
+		s.mu.Unlock()
+	}
+	if nextTick <= last+1 {
+		return false
+	}
+	s.aheadAt = 0
+	s.world.Log().Warn("session", "msg", "run ended on its authority's next", "tick", nextTick,
+		"authority_last", last, "kept", len(s.ahead))
+	s.world.Resources.Event.Queue.PushReady(event.GameEvent{
+		Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{},
+		Origin: event.OriginNetwork, Domain: core.DomainPlayer,
+	})
+	return true
 }
 
 // follow closes nextTick's intake for an audience: all the authority committed
@@ -1959,6 +2059,7 @@ func (s *NetworkSystem) DrainOffTick() (settle bool) {
 // drainWith is one poll of the endpoint, whichever door it came through, and
 // returns how many notifications it took.
 func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound) int) int {
+	s.takeAhead()
 	n := poll(s.buf[:])
 	for i := range n {
 		if !s.enabled {
@@ -2494,8 +2595,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
 		return
 	}
-	if batch.Run != s.localRun() {
-		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
+	if s.otherRun(from, network.MsgEvent, body, batch) {
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
@@ -3202,14 +3302,14 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 }
 
 // Only the authority may author roster changes, which create or destroy shared
-// identities, and a hold or a rate, which stop or pace everyone: the one that sent
-// the frame, or the one it applies under — a dropped guest sees the link close before
-// its dismissal's tick and takes the term itself. Nobody acts as another
+// identities, a reset, a hold or a rate, which end, stop or pace everyone's game: the
+// one that sent the frame, or the one it applies under — a dropped guest sees the link
+// close before its dismissal's tick and takes the term itself. Nobody acts as another
 // participant's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
-		event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
+		event.EventGameResetRequest, event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	}
 	actor, ok := crossingActors[et]
@@ -3423,8 +3523,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		s.statDrop.Add(1)
 		return
 	}
-	if batch.Run != s.localRun() {
-		s.statRefusedTick.Add(1)
+	if s.otherRun(from, network.MsgStateSync, body, batch) {
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
