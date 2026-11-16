@@ -337,6 +337,16 @@ func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingA
 	return 0, bounds.MinY
 }
 
+// rowStart is the column of row y's first glyph, or fallback on a row with none
+func rowStart(ctx *engine.GameContext, y, fallback int) int {
+	for x := range ctx.World.Resources.Config.MapWidth {
+		if getCharAt(ctx, x, y) != 0 {
+			return x
+		}
+	}
+	return fallback
+}
+
 // === Bounds Scanning Primitives ===
 
 // isWordStartAt returns true if position (x,y) is the start of a word

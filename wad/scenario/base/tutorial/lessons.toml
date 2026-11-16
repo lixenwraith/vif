@@ -1,4 +1,4 @@
-# The tutor's corpus: code to move through and type once the lessons are done,
+# The tutorial's corpus: code to move through and type once the lessons are done,
 # laid in blocks so % finds a bracket's pair across rows.
 schema = 1
 

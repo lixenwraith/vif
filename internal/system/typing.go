@@ -247,12 +247,11 @@ func (s *TypingSystem) emitTypingError(cursor core.Entity) {
 	}
 }
 
-// moveCursorRight requests the post-typing advance; CursorSystem applies and announces it.
-//
-// The advance leaves from the cell the typist is on, which for this instance's own
-// cursor is the D-18 prediction: a run typed faster than the playout lead advances
-// once per keystroke, where reading the shared store advanced it once in total and
-// scored every keystroke after the first against a glyph already consumed.
+// moveCursorRight requests the post-typing advance, which CursorSystem applies and
+// announces. It leaves from the cell the typist is on, the D-18 prediction for this
+// instance's own cursor: a run typed faster than the playout lead advances once a
+// keystroke, where reading the shared store advanced it once in total and scored each
+// later keystroke against a glyph already consumed.
 func (s *TypingSystem) moveCursorRight(cursor core.Entity) {
 	config := s.world.Resources.Config
 
@@ -404,14 +403,6 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 // handleDeleteRequest destroys glyphs whose position falls inside the requested range
 // Store-driven: Glyph+Position are authoritative, the spatial grid is not consulted
 func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
-	lineRange := payload.RangeType == event.DeleteRangeLine
-
-	startX, startY := payload.StartX, payload.StartY
-	endX, endY := payload.EndX, payload.EndY
-	if startY > endY || (startY == endY && startX > endX) {
-		startX, startY, endX, endY = endX, endY, startX, startY
-	}
-
 	s.deleteBuf = s.deleteBuf[:0]
 
 	s.world.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
@@ -419,21 +410,9 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		if e.Domain() != core.DomainPlayer {
 			return true
 		}
-		pos, ok := s.world.Positions.GetPosition(e)
-		if !ok {
-			return true // orphan glyph: no position, not a positional target
-		}
-		if pos.Y < startY || pos.Y > endY {
+		// An orphan glyph has no position and is no positional target
+		if pos, ok := s.world.Positions.GetPosition(e); !ok || !payload.Covers(pos.X, pos.Y) {
 			return true
-		}
-		// Char ranges clamp X on the first and last rows only
-		if !lineRange {
-			if pos.Y == startY && pos.X < startX {
-				return true
-			}
-			if pos.Y == endY && pos.X > endX {
-				return true
-			}
 		}
 		if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 			if prot.Mask&component.ProtectFromDelete != 0 {
@@ -450,21 +429,18 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	}
 }
 
-// handleReplaceRequest retypes the drawn glyph of each cell in the span. A replace
+// handleReplaceRequest retypes the drawn glyph of each cell the text names. A replace
 // edits as a delete does, reaching what it would, so it scores nothing: no reward,
 // heat or streak, and no error on a cell it cannot reach.
 func (s *TypingSystem) handleReplaceRequest(payload *event.GlyphReplaceRequestPayload) {
-	for x := payload.StartX; x <= payload.EndX; x++ {
-		e, ok := s.world.Positions.TopGlyphAt(x, payload.Y)
-		if !ok || e.Domain() != core.DomainPlayer {
-			continue
+	x := payload.X
+	for _, r := range payload.Text {
+		if e, ok := s.world.Positions.EditableGlyphAt(x, payload.Y); ok && component.GlyphRune(r) {
+			if glyph, ok := s.world.Components.Glyph.GetPtr(e); ok {
+				glyph.Rune = r
+			}
 		}
-		if prot, ok := s.world.Components.Protection.GetComponent(e); ok && prot.Mask&component.ProtectFromDelete != 0 {
-			continue
-		}
-		if glyph, ok := s.world.Components.Glyph.GetPtr(e); ok {
-			glyph.Rune = payload.Char
-		}
+		x++
 	}
 }
 

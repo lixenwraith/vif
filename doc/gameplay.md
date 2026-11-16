@@ -55,7 +55,7 @@ template applied to every admitted cursor, not only slot zero.
 | Boost | Timed reward from correct typing or credited kills that protects ordinary energy penalties and accelerates heat gain. |
 | Shield | Elliptical defensive/collection area active whenever energy is nonzero. |
 | Weapon | Charge counts, orbiting indicators, and independent cooldowns per weapon kind; see [Combat and weapons](combat.md). |
-| Ping | Crosshair, and the bounds Visual mode moves within while the shield is active. |
+| Ping | Crosshair, and the bounds Visual mode moves within and edits while the shield is active. |
 | Combat | Player ownership/type and hit-point metadata used by the combat matrix. |
 
 Cursor entities cannot be destroyed through ordinary gameplay because their
@@ -103,13 +103,26 @@ universal heat/boost reward but omit normal color energy conversion; the FSM
 owns the completion reward.
 
 Delete operators are spatial actions, not simulated keystrokes. Characterwise
-ranges clamp X on their first and last rows; linewise ranges cover every glyph
-on selected rows. Glyphs with `ProtectFromDelete` survive. Deletion gathers
-targets before publishing a batched death request, avoiding mutation during
-store iteration. `r` reaches what `x` with its count would and retypes each
-glyph there as its character (`EventGlyphReplaceRequest`); being an edit, not
-typing, it scores nothing: no reward, heat or streak, and no error where it
-reaches no glyph.
+ranges clamp X on their first and last rows, linewise ranges cover every glyph
+on selected rows, and a block, Visual's bounds, the columns between its ends on
+each (`DeleteRequestPayload.Covers`). Glyphs with `ProtectFromDelete` survive.
+Deletion gathers targets before publishing a batched death request, avoiding
+mutation during store iteration.
+
+The other edits score nothing either: no reward, heat or streak, and no error
+where they reach no glyph. Each reaches the glyph drawn in a cell when it is the
+player's and unprotected (`Position.EditableGlyphAt`).
+
+- **Retype.** `r` and `~` retype a row's glyphs as the text a request names
+  (`EventGlyphReplaceRequest`), a space leaving its cell as it is.
+- **Yank and put.** A yank reads each glyph's rune, colour and level, and a put
+  lays them as they were (`EventGlyphPutRequest`) in each cell that holds no
+  typeable glyph, wall or rock. A put glyph is an ordinary one: typing it scores
+  as its colour and level do, so a put can copy text worth energy; no default
+  key puts ([Input §3](input-and-modes.md#3-normal-mode-grammar)).
+- **Undo.** A change taken back is the same requests the other way: a delete
+  undone is a put of what it took, a put undone a delete of what it laid, a
+  retype undone a retype.
 
 ## 4. Glyph production and decay
 
@@ -242,7 +255,7 @@ aspect makes of it (ten and five on a terminal), not a rectangular grid range. I
 
 - turns hostile hits and contacts into energy drain instead of heat loss;
 - collects nuggets (loot is collected within two cells of its owner instead);
-- supplies the bounds shown in Visual mode;
+- supplies the bounds Visual mode shows, moves by and edits;
 - drains 1% of current energy every second as passive drain.
 
 Because passive drain converges to zero, keeping a shield active is never free.
@@ -585,25 +598,26 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
    also retains its objective-failure and victory conditions.
 
-`wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `recall` is a memory game, `dummy` is a weapon range, `tutor` teaches
-the motions a lesson at a time, `cave` is a side-scroller whose raiders are
-species its own behavior programs define, and `armada` is a fixed shooter whose
-ranks are three more. Each entry has a short `description` for
-scenario listings.
+`wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an
+authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
+`tutorial` teaches the game's vi-style typing and editing a lesson at a time,
+`cave` is a side-scroller whose raiders are species its own behavior programs
+define, and `armada` is a fixed shooter whose ranks are three more. Each entry has
+a short `description` for scenario listings.
 
-`tutor` runs with combat off: the cursor has no gun, so Enter, Space and
+`tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
 lesson lays its heading in the small splash face, three or four lines that explain
 and a practice line or block, stands the cursor on it, prompts on the status bar
-and waits for the result, the cursor on a cell, a delete or the lines typed; `s`
-skips a lesson and `S` goes back one. The lessons are `h j k l`, `w b e`, `0 ^ $`,
-`f t ; ,`, counts, `x` then `dd`, `i` and typing, `%`, `/ n N`, `gg G`, then the
-keys vif reads its own way (`a p o O u m y`), each answered on a press in the
-small face and on the status bar, and `s` opens free practice on the scenario's
-own corpus: code laid in blocks, so `%` finds a bracket's pair across rows
-([Tutor](tutor.md)). Its `[keymap]` makes `a` vi's append and `p`
-nothing for the run ([Input §10](input-and-modes.md#10-keymap-override-files)).
+and waits for the result, the cursor on a cell, an edit or a glyph typed; `s`
+skips a lesson and `S` goes back one. Its twenty-two lessons run from `h j k l`
+through the motions, counts, deletes, Insert and its entries, changes, retypes,
+`.`, the register, change undo, searches and marks to Visual, whose lesson alone
+raises the shield, and end on what a game makes of the keys its `[keymap]` gave
+back to vi: `a`, `p`, `P`, `o`, `O`, `u`, Ctrl-R and `m`
+([Input §10](input-and-modes.md#10-keymap-override-files)). `s` then opens free
+practice on the scenario's own corpus: code laid in blocks, so `%` finds a
+bracket's pair across rows ([Tutorial](tutorial.md)).
 
 `recall` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its

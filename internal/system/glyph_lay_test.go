@@ -77,6 +77,40 @@ func TestAGlyphClearTakesARectangleOrTheMap(t *testing.T) {
 	}
 }
 
+// A put lays each cell's glyph with the rune, colour and level it names, and passes
+// over a cell a glyph holds, an earlier cell of the same put included, a cell off
+// the map and a rune no glyph holds.
+func TestAPutLaysEachGlyphAsYankedAndPassesOverAHeldCell(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
+	glyphs.placeLineAt(&event.GlyphLinePayload{Text: "x", X: 3, Y: 10})
+	glyphs.HandleEvent(event.GameEvent{Type: event.EventGlyphPutRequest, Payload: &event.GlyphPutPayload{Cells: []event.GlyphCell{
+		{X: 2, Y: 10, Rune: 'a', Type: component.GlyphBlue, Level: component.GlyphBright},
+		{X: 3, Y: 10, Rune: 'b', Type: component.GlyphBlue, Level: component.GlyphBright},
+		{X: 4, Y: 10, Rune: 'c', Type: component.GlyphRed, Level: component.GlyphDark},
+		{X: 4, Y: 10, Rune: 'd', Type: component.GlyphRed, Level: component.GlyphDark},
+		{X: 40, Y: 10, Rune: 'e'},
+		{X: 5, Y: 10, Rune: ' '},
+	}}})
+	at := func(x int) component.GlyphComponent {
+		e, _ := w.Positions.TopGlyphAt(x, 10)
+		g, _ := w.Components.Glyph.GetComponent(e)
+		return g
+	}
+	if got, want := at(2), (component.GlyphComponent{Rune: 'a', Type: component.GlyphBlue, Level: component.GlyphBright}); got != want {
+		t.Errorf("the free cell holds %+v, want %+v", got, want)
+	}
+	if got, want := at(4), (component.GlyphComponent{Rune: 'c', Type: component.GlyphRed, Level: component.GlyphDark}); got != want {
+		t.Errorf("the cell named twice holds %+v, want the first, %+v", got, want)
+	}
+	if got := at(3).Rune; got != 'x' {
+		t.Errorf("the held cell reads %q, want the glyph that held it", got)
+	}
+	if n := w.Components.Glyph.CountEntities(); n != 3 {
+		t.Errorf("%d glyphs stand, want the one laid before and the put's two", n)
+	}
+}
+
 // A viewer's world is its session's Shared world alone: where a player's lays a
 // corpus line, takes the line a scenario lays and spawns a nugget, it holds none.
 func TestAViewersWorldLaysNoFieldOfItsOwn(t *testing.T) {

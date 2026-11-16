@@ -415,6 +415,27 @@ func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
 	return p.topGlyph(x, y) == e
 }
 
+// EditableGlyphAt returns the glyph an edit acts on at (x, y), a replace, a yank or
+// an undo: the one drawn there, when it is the player's and no protection keeps a
+// delete off it
+func (p *Position) EditableGlyphAt(x, y int) (core.Entity, bool) {
+	e, ok := p.TopGlyphAt(x, y)
+	if !ok || e.Domain() != core.DomainPlayer {
+		return 0, false
+	}
+	if prot, _ := p.world.Components.Protection.GetComponent(e); prot.Mask&component.ProtectFromDelete != 0 {
+		return 0, false
+	}
+	return e, true
+}
+
+// TakesGlyph reports a cell a put lays a glyph in: on the map, clear of the rock and
+// walls that keep text out, and holding no glyph typing acts on
+func (p *Position) TakesGlyph(x, y int) bool {
+	_, held := p.TopGlyphAt(x, y)
+	return !held && !p.IsBlocked(component.PositionComponent{X: x, Y: y}, component.WallBlockSpawn)
+}
+
 // IsTypeable reports whether e is a glyph typing can act on: one not placed as
 // scenery
 func (p *Position) IsTypeable(e core.Entity) bool {

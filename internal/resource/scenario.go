@@ -61,7 +61,7 @@ type Scenario struct {
 	// lines together, on consecutive rows from one column, where a slot holds them
 	ContentBlocks bool
 	// Keys is [keymap], the play keys the scenario binds for its run over the
-	// player's keymap, as the tutor binds a to vim's append; nil when it binds none
+	// player's keymap, as the tutorial binds a to vim's append; nil when it binds none
 	Keys *input.KeyTable
 
 	entry   string
