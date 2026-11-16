@@ -398,6 +398,34 @@ func TestAKilledShellBurstsFromItsOutline(t *testing.T) {
 	}
 }
 
+// TestAMemberDestroyedEndsOnlyItsHeadersMember: a typed member's end crosses naming
+// its producer's entities, and an instance that applied an arrival late holds them
+// under other numbers. What the event names that is no member of that header here,
+// a cursor or another body's cell, stands.
+func TestAMemberDestroyedEndsOnlyItsHeadersMember(t *testing.T) {
+	t.Parallel()
+	w, s := compositeWorld()
+	header := standBody(w, component.BehaviorGold, vmath.Footprint{Width: 2, Height: 1})
+	other := standBody(w, component.BehaviorGold, vmath.Footprint{Width: 1, Height: 1})
+	h, _ := w.Components.Header.GetComponent(header)
+	o, _ := w.Components.Header.GetComponent(other)
+	cursor := w.CreateEntity(core.DomainShared)
+	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 1, PeerID: 2})
+	destroyed := func(member core.Entity) {
+		s.HandleEvent(event.GameEvent{Type: event.EventCompositeMemberDestroyed,
+			Payload: &event.CompositeMemberDestroyedPayload{HeaderEntity: header, MemberEntity: member}})
+	}
+	destroyed(cursor)
+	destroyed(o.MemberEntries[0].Entity)
+	if !w.Components.Cursor.HasEntity(cursor) || !w.Components.Member.HasEntity(o.MemberEntries[0].Entity) {
+		t.Fatal("a member's end naming a cursor and another header's member destroyed one of them")
+	}
+	destroyed(h.MemberEntries[0].Entity)
+	if w.Components.Member.HasEntity(h.MemberEntries[0].Entity) || !w.Components.Member.HasEntity(h.MemberEntries[1].Entity) {
+		t.Fatal("a member's end did not end that member alone")
+	}
+}
+
 // endsAsked steps the system a tick and returns the composite ends it asked for and
 // the kills it published
 func endsAsked(w *engine.World, s engine.System) (ends []event.CompositeDestroyRequestPayload, kills int) {
