@@ -1565,6 +1565,27 @@ What to look at:
   read in code alone. A holder is the joiner's own word at the host
   (`noteJoinerReport`), so a place a direct guest of the host claimed was a relayed
   person's bot is kept too, and that person's own `-relay` door could seat it.
+- `:host <addr> migrate` on the kept session moves a policy its people already hold
+  as pinned: `beginHostingLocked` guards only a successor asking to pin, so the
+  people who came back at `returnAcceptor` give up at this host's loss while its
+  newcomers walk the list. Refuse a word other than the session's, as there.
+- A relayed join whose relay loses its uplink before the join crosses in may leave
+  its roster entry on the host (`relayRelease` drops `tellAuthority`'s false), read
+  in code alone: that key would then be refused through that relay as a stale link.
+
+### Derive a door's passphrase off the world lock
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`beginHostingLocked`,
+  `changeScenarioLocked`), `internal/network/admission.go` (`NewPassphraseDoor`)
+- Guide: [Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)
+
+`:host <addr> passphrase` derives the door's verifier, Argon2id over 64 MiB, under
+the world lock and `sessionMu`, where an account command runs its KDF in a
+goroutine: the ticks it takes are dropped for every participant. It is no one-line
+move, since `openSessionLocked` closes the door it finds. What would close it: read
+`engine.ticks_dropped` across the command first, then open the session, derive off
+the lock and serve the listeners under it again.
 
 ### Widen how a guest offers to take a session over
 

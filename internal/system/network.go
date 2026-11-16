@@ -709,6 +709,7 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 	same := s.delayTicks == ticks
 	s.delayTicks = ticks
 	s.mu.Unlock()
+	s.leadPushed = 0 // dispatched: a session opened at the default again is read anew
 	if r := s.world.Resources.Network; r != nil {
 		same = r.BarrierDelayTicks == ticks
 		r.BarrierDelayTicks = ticks

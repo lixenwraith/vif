@@ -454,9 +454,10 @@ func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 }
 
 // TestAnAuthorityStampsItsOneTickFromItsFirstReading: nothing commits the
-// authority's crossings late, so it holds no reading: alone, with a peer, or on
-// taking the term with a guest's readings in its window, it pushes its one tick
-// at once. A guest alone, with no path to read, keeps the lead it has.
+// authority's crossings late, so it holds no reading: alone, with a peer, on
+// taking the term with a guest's readings in its window, or in the session it
+// leaves into, opened at the default again, it pushes its one tick at once. A
+// guest alone, with no path to read, keeps the lead it has.
 func TestAnAuthorityStampsItsOneTickFromItsFirstReading(t *testing.T) {
 	t.Parallel()
 	alone, linked := &linkedPort{}, &linkedPort{peers: []uint32{2}}
@@ -481,6 +482,13 @@ func TestAnAuthorityStampsItsOneTickFromItsFirstReading(t *testing.T) {
 	successor.world.Resources.Network.Authority.Store(3)
 	if got := pushed(successor, linked); !slices.Equal(got, one) {
 		t.Fatalf("a guest taking the term with a 9 in its window pushed the leads %v, want %v", got, one)
+	}
+	left := sessionSystem(t, 1, 100, alone)
+	pushed(left, alone)
+	left.adoptDelay(parameter.NetworkBarrierMinDelayTicks)
+	left.world.Resources.Network.BarrierDelayTicks = parameter.NetworkBarrierDelayTicks
+	if got := pushed(left, alone); !slices.Equal(got, one) {
+		t.Fatalf("an authority whose lead went back to the default pushed the leads %v, want %v", got, one)
 	}
 	if got := pushed(sessionSystem(t, 3, 100, alone), alone); len(got) != 0 {
 		t.Fatalf("a guest alone pushed the leads %v, want none", got)
