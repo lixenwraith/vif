@@ -135,6 +135,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventKrakenSpawnRequest:              func() any { return new(KrakenSpawnRequestPayload) },
 	EventBehaviorSpawnRequest:            func() any { return new(BehaviorSpawnRequestPayload) },
 	EventBehaviorCancelRequest:           func() any { return new(BehaviorCancelRequestPayload) },
+	EventBehaviorSignalRequest:           func() any { return new(BehaviorSignalRequestPayload) },
 	EventWindStart:                       func() any { return new(WindStartPayload) },
 	EventDriftStart:                      func() any { return new(DriftStartPayload) },
 	EventDriftCancel:                     func() any { return new(DriftCancelPayload) },
@@ -309,6 +310,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventKrakenSpawnRequest:              &codecKrakenSpawnRequestPayload,
 	EventBehaviorSpawnRequest:            &codecBehaviorSpawnRequestPayload,
 	EventBehaviorCancelRequest:           &codecBehaviorCancelRequestPayload,
+	EventBehaviorSignalRequest:           &codecBehaviorSignalRequestPayload,
 	EventWindStart:                       &codecWindStartPayload,
 	EventDriftStart:                      &codecDriftStartPayload,
 	EventDriftCancel:                     &codecDriftCancelPayload,
@@ -1522,6 +1524,16 @@ func (p *BehaviorCancelRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecBehaviorCancelRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorCancelRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(BehaviorCancelRequestPayload{}.Program), kind: kindString},
+}}
+
+func (p *BehaviorSignalRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBehaviorSignalRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBehaviorSignalRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorSignalRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Program), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Signal), kind: kindUint, size: unsafe.Sizeof(component.BehaviorSignal(0))},
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *WindStartPayload) codec() (*structCodec, unsafe.Pointer) {

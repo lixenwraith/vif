@@ -803,9 +803,10 @@ func parseEventPayload(ctx *engine.GameContext, et event.EventType, raw string) 
 	if err != nil {
 		return nil, fmt.Errorf("payload: %w", err)
 	}
-	declared := component.Declared{Loot: ctx.World.Resources.Loot.Names()}
+	declared := component.Declared{Loot: ctx.World.Resources.Loot.Names(), Signals: make(map[string][]string)}
 	for _, p := range ctx.World.Resources.Behaviors {
 		declared.Programs = append(declared.Programs, p.Name)
+		declared.Signals[p.Name] = p.Signals
 	}
 	return event.AuthoredPayload(event.PayloadNames(declared), et, parsed["_p"])
 }

@@ -230,8 +230,9 @@ A host is the species system that steps a graph. Its contract:
   advanced by movement ticks). Lifetimes and one-shot deadlines stay in
   `TimerComponent` slots ([ECS and events §7](ecs-and-events.md#timers)).
 - **Observer.** Bound when the graph is built, so a host feeds status counters
-  without the runtime importing `status`. Nothing reads `Graph.Flags` or
-  `Graph.States` yet ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
+  without the runtime importing `status`. `Graph.States` and `Graph.Name` key a
+  data species' per-state rows (§6.4); nothing reads `Graph.Flags` yet
+  ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
 - **Footprint effects.** A host that clears the cells under a footprint names the
   effect each victim leaves, a `component.DeathEffect`
   ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
@@ -574,6 +575,15 @@ per instance:
 - Predicates read the instance and the world: `TargetDistance`, `LineOfSight`,
   `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `AtEdge`, `Chance`, `Param` (the
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
+- Three read what the scenario decides, each Shared state every instance holds
+  alike, since each steps its own copy of a program: `Status`, a row of the
+  compared surface (`snapshot.SharedKey`, checked at load); `Var`, a variable of
+  the scenario machine, which the scheduler lends through
+  `Resources.Scenario` so no system reaches the machine; and `Signalled`, a bit of
+  `BehaviorComponent.Signals`. The last is the compiler's own, added by
+  `Vocabulary.Signals`: it numbers a program's declared `signals`, has the edge
+  that reads one lower it as it commits, and keeps for each state the signals its
+  edges take (`Set.Hears`).
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
   (`FindFreeAreaInside` over the footprint). A verb's `to` (`aim`) reads the live
@@ -686,7 +696,11 @@ smaller part of it.
   composite.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge, inset}` (bus,
   and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
-  cancel; an empty program cancels every data species). A program no entry
+  cancel; an empty program cancels every data species) and
+  `EventBehaviorSignalRequest{program, signal, count}` (shared: it raises the
+  signal on `count` of the instances whose state takes it, ranked by a draw from
+  the tick and each entity, so the choice is the same in any store order, D-8; a
+  payload's `signal` resolves at load among its `program`'s, `event.PayloadNames`). A program no entry
   defines fails the authored payload's load (`event.Programmed`); one arriving
   otherwise is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
   immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
@@ -694,7 +708,8 @@ smaller part of it.
   (`BehaviorSpawnRequestPayload.Cell`). A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
-- **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and the
+- **Telemetry.** `behavior.*`, and per program `behavior.<program>.count`, a
+  `behavior.<program>.state.<State>` for each of its states and the
   lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
   `kills.<program>` in `NewMetaSystem`, all before `Freeze`
   ([telemetry](telemetry-reference.md)). A spawn or an entrance counts at once
@@ -719,7 +734,7 @@ smaller part of it.
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, post, `Shielded`, `TeleportLine`,
+  instance, pattern frame and accumulator, stored target, post, raised signals, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask

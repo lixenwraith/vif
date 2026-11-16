@@ -14,6 +14,10 @@ import (
 // states take their values in sorted-name order
 type BehaviorState uint8
 
+// BehaviorSignal names a program's signal in a payload: 0 none, else its place in
+// the program's signals from 1
+type BehaviorSignal uint8
+
 // BehaviorComponent is one data species instance: which program steps it and
 // where it stands in it. Composite structure lives in HeaderComponent.
 type BehaviorComponent struct {
@@ -25,6 +29,8 @@ type BehaviorComponent struct {
 
 	TargetX, TargetY int // the cell StoreTarget kept, which a charge or teleport goes to
 	PostX, PostY     int // the cell its header spawned on, which `to = "post"` aims at
+
+	Signals uint8 // the signals raised on it, a bit each in its program's order, until an edge takes one
 
 	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
 	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell
@@ -38,6 +44,7 @@ type BehaviorComponent struct {
 type BehaviorPrototype struct {
 	Name    string      // the program's name, which keys its status rows
 	Species SpeciesType // SpeciesDataFirst plus the program's index
+	Signals []string    // the signals it declares, signal n the bit n of an instance's
 
 	Footprint vmath.Footprint // its body around the phantom head
 

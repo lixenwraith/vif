@@ -6,4 +6,5 @@ package component
 type Declared struct {
 	Programs []string
 	Loot     []string
+	Signals  map[string][]string // each program's signals, in the order it declares them
 }

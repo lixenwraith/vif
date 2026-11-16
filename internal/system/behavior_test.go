@@ -884,3 +884,132 @@ func TestASpawnMountsItsPrototypesWeapon(t *testing.T) {
 		}
 	}
 }
+
+// TestAProgramReadsWhatItsScenarioDecides: a Status guard reads a row every instance
+// holds alike, a Var guard a variable of the scenario machine's, and each state's
+// row counts the instances standing in it
+func TestAProgramReadsWhatItsScenarioDecides(t *testing.T) {
+	program := wardenHead("Hold") + `
+[states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", target = "Dive", guard = "And", guard_args = { guards = [
+    { name = "Status", args = { key = "behavior.warden.count", op = "lte", value = 2 } },
+    { name = "Var", args = { name = "wave", op = "gte", value = 3 } },
+] } }]
+
+[states.Dive]
+on_update = [{ action = "Freeze" }]
+`
+	ctx, s, _ := newProgramWorld(t, program, wardenX+30, wardenY)
+	w := ctx.World
+	wave := int64(0)
+	w.Resources.Scenario.Bind(func(name string) int64 {
+		if name != "wave" {
+			t.Errorf("the guard read variable %q", name)
+		}
+		return wave
+	})
+	spawn := func(x int) {
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+			Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: x, Y: 25}})
+	}
+	spawn(10)
+	spawn(30)
+	reg := w.Resources.Status.Ints
+	standing := func() [2]int64 {
+		stepBehaviors(w, s)
+		return [2]int64{reg.Get("behavior.warden.state.Dive").Load(), reg.Get("behavior.warden.state.Hold").Load()}
+	}
+	wave = 3
+	if got := standing(); got != [2]int64{0, 3} {
+		t.Fatalf("three wardens at wave 3 stand %v in Dive and Hold, want all holding past a count of 2", got)
+	}
+	for _, header := range w.Components.Behavior.Entities()[:1] {
+		w.Components.Behavior.RemoveEntity(header)
+	}
+	wave = 2
+	if got := standing(); got != [2]int64{0, 2} {
+		t.Fatalf("two wardens at wave 2 stand %v, want both holding under wave 3", got)
+	}
+	wave = 3
+	if got := standing(); got != [2]int64{2, 0} {
+		t.Fatalf("two wardens at wave 3 stand %v, want both diving", got)
+	}
+
+	local := strings.Replace(program, "behavior.warden.count", "kills.warden", 1)
+	doc, err := toml.NewParser([]byte(local)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), `key "kills.warden" is one instance's own`) {
+		t.Fatalf("a guard on a row instances do not share compiled: %v", err)
+	}
+}
+
+// TestASignalIsRaisedOnAsManyAsItCountsOfThoseItsEdgeTakes: a request raises its
+// signal on count of the instances whose state takes it, the same ones whatever
+// order the store holds them in, and a payload names program and signal at load
+func TestASignalIsRaisedOnAsManyAsItCountsOfThoseItsEdgeTakes(t *testing.T) {
+	program := strings.Replace(wardenHead("Hold"), `initial = "Hold"`, "initial = \"Hold\"\nsignals = [\"dive\"]", 1) + `
+[states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", guard = "Signalled", guard_args = { name = "dive" }, target = "Dive" }]
+
+[states.Dive]
+duration_ms = 400
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Hold" }]
+`
+	const dive component.BehaviorState = 0
+	diving := func(reorder bool) []core.Entity {
+		ctx, s, _ := newProgramWorld(t, program, wardenX+30, wardenY)
+		w := ctx.World
+		for i := range 5 {
+			s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+				Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 8 + 12*i, Y: 25}})
+		}
+		w.Resources.Event.Queue.Consume()
+		headers := slices.Clone(w.Components.Behavior.Entities())
+		slices.Sort(headers)
+		if reorder { // another store order, as an instance a correction rebuilt may hold
+			for _, header := range headers[1:4] {
+				b, _ := w.Components.Behavior.GetComponent(header)
+				w.Components.Behavior.RemoveEntity(header)
+				w.Components.Behavior.SetComponent(header, b)
+			}
+		}
+		busy, _ := w.Components.Behavior.GetPtr(headers[0])
+		busy.Machine.State, busy.Machine.Duration = dive, time.Hour
+
+		names := event.PayloadNames(s.set.Declared())
+		payload, err := event.AuthoredPayload(names, event.EventBehaviorSignalRequest,
+			map[string]any{"program": "warden", "signal": "dive", "count": int64(2)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSignalRequest, Payload: payload})
+		if busy.Signals != 0 {
+			t.Fatal("a warden already diving, whose state takes no dive, was signalled")
+		}
+		stepBehaviors(w, s)
+		var out []core.Entity
+		for _, header := range headers[1:] {
+			if b, _ := w.Components.Behavior.GetComponent(header); b.Machine.State == dive {
+				if b.Signals != 0 {
+					t.Fatalf("warden %d dived still holding its signal", header)
+				}
+				out = append(out, header)
+			}
+		}
+		for _, bad := range []map[string]any{{"program": "warden", "signal": "retreat"}, {"program": "swarm", "signal": "dive"}} {
+			if _, err := event.AuthoredPayload(names, event.EventBehaviorSignalRequest, bad); err == nil {
+				t.Fatalf("a request for %v decoded", bad)
+			}
+		}
+		return out
+	}
+	first, second := diving(false), diving(true)
+	if len(first) != 2 || !slices.Equal(first, second) {
+		t.Fatalf("a signal for two of five holding wardens sent %v, and %v in another store order, want the same two", first, second)
+	}
+}

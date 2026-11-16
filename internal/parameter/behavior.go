@@ -15,6 +15,10 @@ const (
 	// BehaviorFootprintMax bounds a data species' width and height in cells
 	BehaviorFootprintMax = 8
 
+	// BehaviorSignalsMax is how many signals a program may declare, a bit each of
+	// the word its instances keep those raised on them in
+	BehaviorSignalsMax = 8
+
 	// A data species' physics, which its program's [prototype.physics] keys replace
 	// one by one: the swarm's chase, mid between the drain's crawl and the snake's
 	// dart, with no arrival steering. BehaviorSpeed is the cruise speed its homing

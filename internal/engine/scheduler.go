@@ -211,8 +211,10 @@ func NewScheduler(
 	s.resetTelemetry()
 
 	// The FSM is scheduler-owned, so region control arrives as an event rather
-	// than as an API pair reaching through App
+	// than as an API pair reaching through App, and a system reads its variables
+	// through the world's resource
 	s.eventRouter.Register(s)
+	world.Resources.Scenario.Bind(s.fsm.GetVar)
 
 	return s, updateDone, resetChan
 }

@@ -25,6 +25,7 @@ import (
 // with the machine's additions, and the species' prototype
 type programDoc struct {
 	Initial   string               `toml:"initial"`
+	Signals   []string             `toml:"signals"`
 	Suspend   *guardDoc            `toml:"suspend"`
 	Prototype *prototypeDoc        `toml:"prototype"`
 	States    map[string]*stateDoc `toml:"states"`
@@ -171,15 +172,20 @@ var combatRows = []component.CombatEntityType{component.CombatEntitySwarm, compo
 // reservedNames share kills.* with the species counters
 var reservedNames = []string{"total", "uncredited"}
 
-// checkName holds a program name to what its status keys and kill counter need
-func checkName(name string) error {
+// wellNamed holds a name to [a-z][a-z0-9_]* of at most BehaviorNameMax bytes
+func wellNamed(name string) bool {
 	ok := len(name) > 0 && len(name) <= parameter.BehaviorNameMax && name[0] >= 'a' && name[0] <= 'z'
 	for i := 1; ok && i < len(name); i++ {
 		c := name[i]
 		ok = c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_'
 	}
+	return ok
+}
+
+// checkName holds a program name to what its status keys and kill counter need
+func checkName(name string) error {
 	switch {
-	case !ok:
+	case !wellNamed(name):
 		return fmt.Errorf("program name %.32q is not [a-z][a-z0-9_]* of at most %d bytes", name, parameter.BehaviorNameMax)
 	case slices.Contains(component.SpeciesNames[:], name):
 		return fmt.Errorf("program name %q is a code species", name)

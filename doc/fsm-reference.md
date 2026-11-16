@@ -958,7 +958,12 @@ no program of the scenario fails the load where it is authored, and one arriving
 otherwise raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
-it names none. `wad/scenario/base/cave` is the worked example: its raider types,
+it names none. `EventBehaviorSignalRequest { program, signal, count }` raises one
+of the program's `signals` on `count` of its instances, or with no count on all:
+those whose state has an edge guarded by `Signalled` on it and that do not hold it
+yet, drawn alike on every instance, so a region sends a salvo of the size it
+chose where each instance would roll for itself; a request naming no program, or
+a signal that program does not declare, fails the load. `wad/scenario/base/cave` is the worked example: its raider types,
 materializing in, fly one attack cycle, a chase, a lock, then a charge or a
 teleport, as thirty-two programs over one macro (`RaiderStates` in its
 `macros.toml`). Each program file is one invocation of its rank's macro
@@ -970,6 +975,7 @@ on_update[0]: unknown sustained action 'Freez'`).
 
 ```toml
 initial = "Roam"                    # State a spawn starts in
+signals = ["dive"]                  # What EventBehaviorSignalRequest may raise on an instance, at most 8 (optional)
 suspend = { guard = "Stunned" }     # While it holds: no clock, tick, move or strike (optional)
 
 [prototype]
@@ -1093,6 +1099,14 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   candidate, and `{ mean_ms }` a rate, each step rolling its share of that mean
   wait, so a `Tick` edge fires as often at any tick and finer than a percent),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
+- Guards on what the scenario decides: `Status { key, op, value }` (a status row,
+  as a region's `StatusIntCompare` reads one, a bool row as 1 or 0: on
+  `behavior.count` the last ships dive hardest; every instance steps a program for
+  itself, so a row one instance alone holds, a `player.` or `kills.` one, fails
+  the load), `Var { name, op, value }` (a variable of the scenario's machine, so a
+  candidate guarded on `wave` picks a faster dive) and `Signalled { name }` (one
+  of the program's `signals` is raised on the instance; the edge that commits on
+  it lowers it, and until one does it stays raised).
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
   `FindLanding { to }` (the nearest place the footprint fits around that cell;
   probed at its post ahead of `StoreTarget`, it sends a charge or a teleport back
@@ -1131,7 +1145,9 @@ The target is the cursor nearest the header, read from the Shared positions with
 the lower roster slot taking a tie, so every instance of a session aims alike. Hit
 points, lifetime, contact strikes, gold breaking and the composite's integrity
 work as for every composite species; a program does not script them. An instance
-ends by a kill, its `lifetime_ms`, a cancel or its own `Leave`.
+ends by a kill, its `lifetime_ms`, a cancel or its own `Leave`. A region reads how
+many stand in each state from `behavior.<name>.state.<State>`, as it reads
+`behavior.<name>.count`.
 
 ## Loot
 

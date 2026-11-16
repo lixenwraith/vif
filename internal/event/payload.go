@@ -1195,6 +1195,15 @@ func (p *BehaviorCancelRequestPayload) NamedProgram() (string, bool) {
 	return p.Program, p.Program != ""
 }
 
+// BehaviorSignalRequestPayload raises Signal, one its program declares, on Count of
+// the program's instances that an edge out of their state takes it on and that do not
+// hold it yet, every one of them for a Count of 0
+type BehaviorSignalRequestPayload struct {
+	Program component.SpeciesType    `toml:"program"`
+	Signal  component.BehaviorSignal `toml:"signal"`
+	Count   int                      `toml:"count"`
+}
+
 // --- Environment ---
 
 // WindStartPayload configures a global gameplay wind. Direction is the direction

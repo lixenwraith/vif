@@ -215,40 +215,6 @@ To settle with the design:
 [Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
 follow the redesign.
 
-### Let a program read what its scenario decides
-
-- Priority: P2
-- Affected files: `internal/system/behavior.go` (`BehaviorVocabulary`),
-  `internal/component/behavior.go`, `internal/engine` (the scheduler, a derived
-  resource), `internal/event/payload.go`
-- Guide: [Behavior machines §6.2](machine-design.md#62-vocabulary),
-  [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
-
-A program's guards read its instance and the world and nothing of its scenario: no
-status row, no scenario variable, and its edges fire on `Timeout`, `Tick` and
-`AfterTick` alone. So armada's ships roll for themselves (`Chance`): dives thin
-out as the armada does, nothing caps how many fly at once, and a later wave dives
-no faster, the damage multiplier being the only ramp. Any scenario whose species
-should answer its stage meets the same wall. In the order they cost:
-
-- **A guard on a status row**, `Status { key, op, value }`, as a region's
-  `StatusIntCompare`: on `behavior.count` the last ships dive hardest.
-- **A guard on a scenario variable**, `Var { name, op, value }`. No system
-  reaches the machine, so the scheduler publishes its variables as a derived
-  resource. A candidate's `duration_ms` already overrides its state's, so a guard
-  on `wave` picks a faster dive with no new timing key.
-- **A count of a program's instances by state**,
-  `behavior.<program>.state.<State>`, bound with the lifecycle rows before
-  `Freeze`, so a region reads how many dive.
-- **A signal**, `EventBehaviorSignalRequest { program, signal, count }`, Shared:
-  it raises a bit on `count` of the program's instances, chosen alike on every
-  instance, which a `Signalled { name }` guard reads and its entry clears. The
-  region sends a salvo of the size it chose and the ships stop rolling.
-
-Each reads or writes Shared state alike on every instance: a variable is the
-machine's and captured with it (D-19), a status row is one a region may read
-already, and the bit joins `BehaviorComponent` and its capture (`snapshot.Schema`).
-
 ### Rework what armada's first version worked around
 
 - Priority: P2
@@ -2389,8 +2355,9 @@ each with the smallest change that would answer it:
 
 `Graph.States` lists a graph's states and `Graph.Flags` a state's flags, for an
 overlay that labels each instance of a species with its state and progress, as
-`:graph` draws a route graph. Nothing reads either, and only tests read
-`Graph.Name`: build the overlay, or delete the two reads until one is wanted.
+`:graph` draws a route graph. A data species' per-state rows read `States` and
+`Name` (`behavior.<program>.state.<State>`); nothing reads `Flags`: build the
+overlay, or delete that read until one is wanted.
 
 ### Push a data species with the wind
 

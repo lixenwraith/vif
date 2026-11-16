@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -45,6 +47,7 @@ type BehaviorSystem struct {
 	programs            []behaviorTelemetry // by program index
 	motion              bounceTelemetry
 	sweep               cellSweep
+	hearing             []core.Entity // the instances a signal request may raise its signal on
 
 	toggle
 }
@@ -52,7 +55,9 @@ type BehaviorSystem struct {
 // behaviorTelemetry is one program's rows, keyed behavior.<program>
 type behaviorTelemetry struct {
 	count     *atomic.Int64
-	left      *atomic.Int64 // instances its own Leave ended, no kill
+	left      *atomic.Int64   // instances its own Leave ended, no kill
+	states    []*atomic.Int64 // by state, instances standing in it: behavior.<program>.state.<State>
+	standing  []int64         // this tick's count toward states
 	lifecycle lifecycleTelemetry
 }
 
@@ -77,12 +82,18 @@ func NewBehaviorSystem(world *engine.World, set *BehaviorSet) engine.System {
 	s.statProtectedPlayer = reg.Ints.Get("behavior.protected_player_rejects")
 	s.statUnknown = reg.Ints.Get("behavior.unknown_program_rejects")
 	s.motion = newBounceTelemetry(reg, "behavior")
-	for _, name := range set.Names() {
-		s.programs = append(s.programs, behaviorTelemetry{
+	for i, name := range set.Names() {
+		t := behaviorTelemetry{
 			count:     reg.Ints.Get("behavior." + name + ".count"),
 			left:      reg.Ints.Get("behavior." + name + ".left"),
 			lifecycle: newLifecycleTelemetry(reg, "behavior."+name),
-		})
+		}
+		graph := set.Graph(i)
+		for _, state := range graph.States() {
+			t.states = append(t.states, reg.Ints.Get("behavior."+name+".state."+graph.Name(state)))
+		}
+		t.standing = make([]int64, len(t.states))
+		s.programs = append(s.programs, t)
 	}
 	return s
 }
@@ -97,6 +108,9 @@ func (s *BehaviorSystem) Init() {
 	for i := range s.programs {
 		s.programs[i].count.Store(0)
 		s.programs[i].left.Store(0)
+		for _, state := range s.programs[i].states {
+			state.Store(0)
+		}
 		s.programs[i].lifecycle.Reset()
 	}
 	s.motion.Reset()
@@ -111,6 +125,7 @@ func (s *BehaviorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBehaviorSpawnRequest,
 		event.EventBehaviorCancelRequest,
+		event.EventBehaviorSignalRequest,
 		event.EventSpeciesLandRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -164,6 +179,11 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 			s.cancel(payload.Program)
 		}
 
+	case *event.BehaviorSignalRequestPayload:
+		if s.enabled {
+			s.signal(payload)
+		}
+
 	case *event.CompositeIntegrityBreachPayload:
 		// OOB or another mechanic destroyed members
 		if s.enabled && payload.Behavior == component.BehaviorData {
@@ -183,6 +203,9 @@ func (s *BehaviorSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	var counts [parameter.BehaviorProgramsMax]int64
 	total := int64(0)
+	for i := range s.programs {
+		clear(s.programs[i].standing)
+	}
 
 	// An entrance in flight is an instance arriving, so a cap the count is read
 	// against holds it as it holds one flying
@@ -254,11 +277,17 @@ func (s *BehaviorSystem) Update() {
 			strikeContacts(s.world, header, c.proto.Contact, true)
 		}
 		counts[b.Program]++
+		if standing := s.programs[b.Program].standing; int(b.Machine.State) < len(standing) {
+			standing[b.Machine.State]++
+		}
 		total++
 	}
 
 	for i := range s.programs {
 		s.programs[i].count.Store(counts[i])
+		for state, cell := range s.programs[i].states {
+			cell.Store(s.programs[i].standing[state])
+		}
 	}
 	s.statCount.Store(total)
 	s.statActive.Store(total > 0)
@@ -479,6 +508,39 @@ func (s *BehaviorSystem) cancel(program string) {
 	}
 }
 
+// signal raises a signal on the instances of its program that an edge out of their
+// state takes it on and that do not hold it yet: count of them, or all for a count
+// of 0. Which is a draw from the tick and each entity, so every instance, whatever
+// order its store holds them in, raises it on the same ones (D-8).
+func (s *BehaviorSystem) signal(p *event.BehaviorSignalRequestPayload) {
+	i, ok := s.programOf(p.Program)
+	if !ok || p.Signal == 0 || int(p.Signal) > len(s.set.Signals(i)) {
+		s.statUnknown.Add(1)
+		return
+	}
+	bit := uint8(1) << (p.Signal - 1)
+	s.hearing = s.hearing[:0]
+	for _, header := range s.world.Components.Behavior.Entities() {
+		b, ok := s.world.Components.Behavior.GetPtr(header)
+		if ok && int(b.Program) == i && b.Signals&bit == 0 && s.set.Hears(i, b.Machine.State)&bit != 0 {
+			s.hearing = append(s.hearing, header)
+		}
+	}
+	if p.Count > 0 && p.Count < len(s.hearing) {
+		tick := s.world.Resources.Game.State.GetGameTicks()
+		draw := func(e core.Entity) uint64 { return vmath.MixChain(s.chanceRoot, tick, uint64(e), uint64(bit)) }
+		slices.SortFunc(s.hearing, func(a, b core.Entity) int {
+			return cmp.Or(cmp.Compare(draw(a), draw(b)), cmp.Compare(a, b))
+		})
+		s.hearing = s.hearing[:p.Count]
+	}
+	for _, header := range s.hearing {
+		if b, ok := s.world.Components.Behavior.GetPtr(header); ok {
+			b.Signals |= bit
+		}
+	}
+}
+
 // terminate ends an instance: its state's exit, then the composite, leaving effect
 // of its body
 func (s *BehaviorSystem) terminate(header core.Entity, effect component.DeathEffect) {
@@ -647,6 +709,16 @@ type (
 	edgeArgs struct {
 		Edge string `toml:"edge"`
 	}
+	statusArgs struct {
+		Key   string     `toml:"key"`
+		Op    dialect.Op `toml:"op"`
+		Value int64      `toml:"value"`
+	}
+	varArgs struct {
+		Name  string     `toml:"name"`
+		Op    dialect.Op `toml:"op"`
+		Value int64      `toml:"value"`
+	}
 	leaveArgs struct {
 		Effect string `toml:"effect"`
 	}
@@ -759,6 +831,39 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 				body.Y <= 0, body.Y+body.Height >= config.MapHeight}[edge]
 		}, nil
 	})
+	// What its scenario decides: a status row every instance holds alike, as a
+	// region's guard reads one, a bool row as 1 or 0, and a variable of the machine's
+	v.Predicate("Status", func(a *statusArgs) (func(*behaviorCtx) bool, error) {
+		switch {
+		case a.Key == "":
+			return nil, errors.New("requires 'key'")
+		case !snapshot.SharedKey(a.Key):
+			return nil, fmt.Errorf("key %q is one instance's own, and every instance steps a program alike", a.Key)
+		}
+		return func(c *behaviorCtx) bool {
+			reg := c.sys.world.Resources.Status
+			switch {
+			case reg.Ints.Has(a.Key):
+				return a.Op.Holds(reg.Ints.Get(a.Key).Load(), a.Value)
+			case reg.Bools.Has(a.Key):
+				row := int64(0)
+				if reg.Bools.Get(a.Key).Load() {
+					row = 1
+				}
+				return a.Op.Holds(row, a.Value)
+			}
+			return false
+		}, nil
+	})
+	v.Predicate("Var", func(a *varArgs) (func(*behaviorCtx) bool, error) {
+		if a.Name == "" {
+			return nil, errors.New("requires 'name'")
+		}
+		return func(c *behaviorCtx) bool {
+			return a.Op.Holds(c.sys.world.Resources.Scenario.Var(a.Name), a.Value)
+		}, nil
+	})
+	v.Signals(func(c *behaviorCtx) *uint8 { return &c.behavior.Signals })
 	v.Predicate("Param", func(a *paramArgs) (func(*behaviorCtx) bool, error) {
 		if a.Index < 0 {
 			return nil, fmt.Errorf("index %d is negative", a.Index)

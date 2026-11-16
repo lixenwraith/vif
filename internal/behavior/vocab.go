@@ -17,6 +17,7 @@ type Vocabulary[C any] struct {
 	verbs     map[string]verb[C]
 	flags     map[string]uint64
 	fittings  map[string]func(names *dialect.Names, raw any) (func(C), error)
+	signals   func(C) *uint8
 	integrate func(C)
 	entered   func(C)
 	names     func(component.Declared) *dialect.Names
@@ -91,6 +92,19 @@ func (v *Vocabulary[C]) Sustained[A any](name string, build func(*A) (func(C), e
 	v.add(name, verb[C]{kind: dialect.KindSustained, keys: payloadKey[A](), args: dialect.Fields[A](), apply: payload(build)})
 }
 
+// Signals sets where an instance keeps the signals raised on it, which adds the
+// guard Signalled { name }: it passes while the program's signal of that name is
+// raised, and the edge that commits on it lowers the signal
+func (v *Vocabulary[C]) Signals(word func(C) *uint8) { v.signals = word }
+
+// signalArgs names the signal a Signalled guard reads
+type signalArgs struct {
+	Name string `toml:"name"`
+}
+
+// signalled is the guard a vocabulary with signals adds
+const signalled = "Signalled"
+
 // Emit registers an effect that reads its table's event beside its payload, as
 // the scenario dialect's EmitEvent does; build checks both, decoding the payload
 // as names, its set's, spell its enum fields
@@ -126,6 +140,9 @@ func (v *Vocabulary[C]) Entries() []dialect.Entry {
 	}
 	for name := range v.flags {
 		out = append(out, dialect.Entry{Name: name, Kind: dialect.KindFlag})
+	}
+	if v.signals != nil {
+		out = append(out, dialect.Entry{Name: signalled, Kind: dialect.KindGuard, Args: dialect.Fields[signalArgs]()})
 	}
 	dialect.Sort(out)
 	return out
