@@ -228,10 +228,6 @@ The first version plays on what the machine had, and where that was too little t
 scenario works around it. Each workaround is a gap any authored scenario meets,
 given here with the form that retires it; the redesign is written on them.
 
-- **A rank in one request.** `Rank` spends three actions a ship, 84 a wave. A
-  map's legend naming a program
-  ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
-  rows of characters laid at an origin, drawn in the editor as walls are.
 - **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
   strobe and the reset are five states armada copies as six other scenarios do,
   the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).
@@ -473,35 +469,33 @@ expanding each written element alone, which asks nothing of the macro library.
 ### Lay a painted map a scenario carries
 
 - Priority: P1
-- Affected files: `internal/resource/scenario.go` (`entryKeys`),
-  `internal/fsm/file_loader.go` (`includeBehaviors`), `internal/system/wall.go`,
-  `internal/pattern`, `internal/event/payload.go`
-- Guide: [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline),
-  [FSM reference: Root Config](fsm-reference.md#root-config-scenariotoml)
+- Affected files: `internal/behavior/maps.go`, `internal/component/declared.go`
+  (`MapLayout`), `internal/system/wall.go`, `internal/pattern`,
+  `internal/resource/scenario.go` (the bounds)
+- Guide: [FSM reference: Maps](fsm-reference.md#maps),
+  [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline)
 
-A wall event takes its cells one by one, or lays a maze, a cave or an `.aimg` from
-the `image/` category, which the digest leaves out and a joiner is not sent. A map
-drawn by hand has no form a scenario carries. The form, tiles first and
-[images after](#carry-an-image-in-the-scenario):
+A scenario carries maps: `[maps]` in its entry, each inline or a file of its own,
+read, bounded, digested and sent as a program is and compiled once a run; `rows`
+of one width over a `legend`; and `EventMapLayRequest { map, x, y }`, which a
+request naming no map of the scenario fails the load on. A legend lays a
+program's spawn and nothing else, so a formation is drawn and a level is not. A
+wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg`
+from the `image/` category, which the digest leaves out and a joiner is not sent.
+What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
 
-- **`[maps]` in the entry**, beside `[behaviors]`: each map inline or a file of
-  the scenario, so it is read, bounded, digested and sent as a program is, and
-  compiled once a run.
-- **Rows over a legend.** `rows` are strings of one width, a character a cell;
-  `legend` gives a character its tile, a wall's glyph, colours, box style and
-  block mask named once, and a space is open map. A 500 by 250 map is 125 KB of
+- **A tile.** A legend entry that is a wall: its glyph, colours, box style and
+  block mask named once. `MapLayout` gains its cells beside `Spawns`, and the wall
+  system lays them on the lay request as it lays a pattern, as one composite or as
+  loose walls, a batch a block mask and box style. A 500 by 250 map is 125 KB of
   rows, half a file's bound.
-- **Laid by name**, `EventMapLayRequest { map, x, y }`, through the wall system
-  as a pattern is, as one composite or as loose walls; a request naming no map of
-  the scenario fails the load where it is written, as a program's does.
 - **Its own size.** A map is as large as its rows, and the scenario holds the map
   to it (`[map] fixed`, its level setup). A layout that stretches with the
   terminal is not this item's.
+- **A loot, and a named cell** a payload takes, the marker the editor drags, each
+  a kind of legend entry its own system lays.
 
-Next on the same legend, each a kind of entry: a program's spawn, which makes a
-rank a few rows ([Armada](#rework-what-armadas-first-version-worked-around)); a
-loot; and a named cell a payload takes, the marker the editor drags. Laying a
-large map costs what td's maze does at a reset, tens of milliseconds
+Laying a large map costs what td's maze does at a reset, tens of milliseconds
 ([Engine](#trim-what-a-tick-spends-outside-the-position-index)).
 
 ### Write a scenario back as `vif.toml` is written

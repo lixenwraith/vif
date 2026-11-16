@@ -91,8 +91,9 @@ expands against the entry's macros before regions merge ([TOML macros](toml-macr
 Circular includes and duplicate state names are errors, and a path outside the
 entry's directory is rejected. The entry's `[behaviors]` files are scenario files
 in the same way, each a behavior program compiled once per run
-([FSM reference](fsm-reference.md#behavior-programs)), and its `[loot]` and `[drops]`
-compile with them ([FSM reference: Loot](fsm-reference.md#loot)).
+([FSM reference](fsm-reference.md#behavior-programs)), and its `[loot]`, `[drops]`
+and `[maps]` compile with them ([FSM reference: Loot](fsm-reference.md#loot),
+[Maps](fsm-reference.md#maps)).
 
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
 plus its behavior programs and loot, keymap, audio overrides, content and every bot graph

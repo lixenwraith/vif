@@ -15,6 +15,11 @@ const (
 	// BehaviorFootprintMax bounds a data species' width and height in cells
 	BehaviorFootprintMax = 8
 
+	// MapsMax is how many maps a scenario may declare, and MapSpawnsMax how many
+	// instances one may lay, a formation and not a population
+	MapsMax      = 32
+	MapSpawnsMax = 256
+
 	// BehaviorSignalsMax is how many signals a program may declare, a bit each of
 	// the word its instances keep those raised on them in
 	BehaviorSignalsMax = 8

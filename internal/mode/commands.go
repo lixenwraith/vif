@@ -808,6 +808,9 @@ func parseEventPayload(ctx *engine.GameContext, et event.EventType, raw string) 
 		declared.Programs = append(declared.Programs, p.Name)
 		declared.Signals[p.Name] = p.Signals
 	}
+	for _, m := range ctx.World.Resources.Maps {
+		declared.Maps = append(declared.Maps, m.Name)
+	}
 	return event.AuthoredPayload(event.PayloadNames(declared), et, parsed["_p"])
 }
 

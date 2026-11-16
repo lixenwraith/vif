@@ -126,6 +126,7 @@ func (s *BehaviorSystem) EventTypes() []event.EventType {
 		event.EventBehaviorSpawnRequest,
 		event.EventBehaviorCancelRequest,
 		event.EventBehaviorSignalRequest,
+		event.EventMapLayRequest,
 		event.EventSpeciesLandRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -152,16 +153,23 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 	switch payload := ev.Payload.(type) {
 	case *event.BehaviorSpawnRequestPayload:
 		i, ok := s.set.Lookup(payload.Program)
-		x, y := payload.Cell(s.world.Positions.Width, s.world.Positions.Height)
-		switch {
-		case !ok:
+		if !ok {
 			s.statUnknown.Add(1)
-		case !s.enabled:
-			s.programs[i].lifecycle.spawnFailures.Add(1)
-		case s.set.Prototypes()[i].Entrance == component.EntranceMaterialize:
-			s.enter(i, x, y)
-		default:
-			s.spawn(i, x, y)
+			return
+		}
+		x, y := payload.Cell(s.world.Positions.Width, s.world.Positions.Height)
+		s.request(i, x, y)
+
+	case *event.MapLayRequestPayload:
+		// Each instance its legend names stands as its own request would stand it, in
+		// the map's row order, which numbers them alike on every instance
+		layouts := s.set.Maps()
+		if payload.Map == 0 || int(payload.Map) > len(layouts) {
+			s.statUnknown.Add(1)
+			return
+		}
+		for _, sp := range layouts[payload.Map-1].Spawns {
+			s.request(int(sp.Program), payload.X+sp.X, payload.Y+sp.Y)
 		}
 
 	case *event.SpeciesLandRequestPayload:
@@ -291,6 +299,19 @@ func (s *BehaviorSystem) Update() {
 	}
 	s.statCount.Store(total)
 	s.statActive.Store(total > 0)
+}
+
+// request stands program i with its header at the cell, at once or through its
+// entrance, as a spawn request asks
+func (s *BehaviorSystem) request(i, x, y int) {
+	switch {
+	case !s.enabled:
+		s.programs[i].lifecycle.spawnFailures.Add(1)
+	case s.set.Prototypes()[i].Entrance == component.EntranceMaterialize:
+		s.enter(i, x, y)
+	default:
+		s.spawn(i, x, y)
+	}
 }
 
 // fill points the context at one instance, false when it lacks a component every

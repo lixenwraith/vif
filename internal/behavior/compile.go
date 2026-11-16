@@ -26,6 +26,7 @@ type Set[C any] struct {
 	signals  [][]string // each program's signals, a bit each in declared order
 	hears    [][]uint8  // by program and state, the signals an edge out of it takes
 	loot     component.LootSet
+	maps     []component.MapLayout
 }
 
 func (s *Set[C]) Len() int { return len(s.names) }
@@ -61,10 +62,16 @@ func (s *Set[C]) Hears(i int, state component.BehaviorState) uint8 {
 // Loot is the loot kinds and drop tables the scenario declares
 func (s *Set[C]) Loot() *component.LootSet { return &s.loot }
 
+// Maps is the maps the scenario declares, in sorted-name order
+func (s *Set[C]) Maps() []component.MapLayout { return s.maps }
+
 // Declared is what the scenario adds to the code's names: its programs with their
 // signals, and its kinds
 func (s *Set[C]) Declared() component.Declared {
 	d := component.Declared{Programs: s.names, Loot: s.loot.Names(), Signals: make(map[string][]string)}
+	for _, m := range s.maps {
+		d.Maps = append(d.Maps, m.Name)
+	}
 	for i, name := range s.names {
 		if len(s.signals[i]) > 0 {
 			d.Signals[name] = s.signals[i]
@@ -73,19 +80,21 @@ func (s *Set[C]) Declared() component.Declared {
 	return d
 }
 
-// Compile builds the loot a scenario's entry declares, its [loot] and [drops] as
-// loot holds them, any other key unread, so the resolved entry itself serves; then
-// every program against v, each a machine graph whose states take IDs in
-// sorted-name order. Every fault is reported, each naming its program or loot and
-// place; no programs is an empty set.
-func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, loot map[string]any) (*Set[C], error) {
+// Compile builds the loot and the maps a scenario's entry declares, its [loot],
+// [drops] and [maps] as entry holds them, any other key unread, so the resolved
+// entry itself serves; then every program against v, each a machine graph whose
+// states take IDs in sorted-name order. Every fault is reported, each naming its
+// program, loot or map and place; no programs is an empty set.
+func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, entry map[string]any) (*Set[C], error) {
 	names := slices.Sorted(maps.Keys(programs))
 	if len(names) > parameter.BehaviorProgramsMax {
 		return nil, fmt.Errorf("%d behavior programs, at most %d", len(names), parameter.BehaviorProgramsMax)
 	}
 	set := &Set[C]{names: names}
 	var errs []error
-	set.loot, errs = compileLoot(loot, names)
+	set.loot, errs = compileLoot(entry, names)
+	layouts, faults := compileMaps(entry, names)
+	set.maps, errs = layouts, append(errs, faults...)
 	// A payload may name any program's signal, so each is read ahead of the compile
 	for _, name := range names {
 		var signals []string

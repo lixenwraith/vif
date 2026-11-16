@@ -1013,3 +1013,46 @@ transitions = [{ trigger = "Timeout", target = "Hold" }]
 		t.Fatalf("a signal for two of five holding wardens sent %v, and %v in another store order, want the same two", first, second)
 	}
 }
+
+// TestALaidMapStandsItsFormationFromItsCell: a lay request names a map of the
+// scenario's at load, and each instance its legend names stands where its row and
+// column put it from the request's cell
+func TestALaidMapStandsItsFormationFromItsCell(t *testing.T) {
+	doc, err := toml.NewParser([]byte(wardenProgram)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := toml.NewParser([]byte("[maps.rank]\nlegend = { w = { program = \"warden\" } }\nrows = [\"w      w\", \"        \", \"    w   \"]\n")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+	w.Resources.Behaviors, w.Resources.Maps = set.Prototypes(), set.Maps()
+	w.Resources.Target = &engine.TargetResource{}
+	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+
+	names := event.PayloadNames(set.Declared())
+	payload, err := event.AuthoredPayload(names, event.EventMapLayRequest, map[string]any{"map": "rank", "x": int64(20), "y": int64(10)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.HandleEvent(event.GameEvent{Type: event.EventMapLayRequest, Payload: payload})
+	var stood []component.PositionComponent
+	for _, header := range w.Components.Behavior.Entities() {
+		pos, _ := w.Positions.GetPosition(header)
+		stood = append(stood, pos)
+	}
+	want := []component.PositionComponent{{X: 20, Y: 10}, {X: 27, Y: 10}, {X: 24, Y: 12}}
+	if !slices.Equal(stood, want) {
+		t.Fatalf("the rank stands at %v, want %v", stood, want)
+	}
+	if _, err := event.AuthoredPayload(names, event.EventMapLayRequest, map[string]any{"map": "wave"}); err == nil ||
+		!strings.Contains(err.Error(), `map: "wave" is not one of rank`) {
+		t.Fatalf("a request for a map the scenario lacks decoded: %v", err)
+	}
+}

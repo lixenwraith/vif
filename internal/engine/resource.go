@@ -61,6 +61,9 @@ type Resource struct {
 	// the zero value declares none, every kill rolling the code's tables
 	Loot component.LootSet
 
+	// The maps this scenario declares, set with Behaviors, in sorted-name order
+	Maps []component.MapLayout
+
 	// Transient visual effects
 	Transient *TransientResource
 

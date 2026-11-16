@@ -616,14 +616,15 @@ system's scaffold (§6.4), not in the vocabulary.
 
 - **Programs are scenario files.** The entry lists them
   (`[behaviors] scarab = { file = "behavior/strata/scarab.toml" }`) or holds one inline.
-  `includeBehaviors` (`internal/fsm/file_loader.go`) reads, parses and expands each
+  `includeTables` (`internal/fsm/file_loader.go`) reads, parses and expands each
   file against the entry's macros through `readExpanded`, the step region files
   share, records it in `visited` and replaces the `{ file }` table; anything else
   under `behaviors` fails naming it. `ScenarioFiles` therefore lists programs, so
   `resource.ReadScenario` carries, digests and transfers them with no mechanism of
   their own. `validScenarioName` admits the subdirectory, `resource.entryKeys`
-  admits `behaviors`, `loot` and `drops`, `Scenario.Behaviors()` returns the
-  programs by name and `Scenario.Loot()` the entry's loot kinds and drop tables.
+  admits `behaviors`, `loot`, `drops` and `maps`, `Scenario.Behaviors()` returns the
+  programs by name and `Scenario.Loot()` the entry's loot kinds, drop tables and
+  maps, a map's file read as a program's is ([FSM reference: Maps](fsm-reference.md#maps)).
   `Machine.LoadScenarioFromMap` takes no part: a top-level key is its embedder's.
 - **Compiled once per run.** `App.readScenario` compiles the programs and the
   loot (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
@@ -640,8 +641,8 @@ system's scaffold (§6.4), not in the vocabulary.
   compile, then the machine load, so an unknown name or a bad argument fails
   validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
-  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok` and `drops ok`
-  the same way.
+  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok`, `drops ok` and
+  `maps ok` the same way.
 
 ### 6.4 Beyond the machine
 

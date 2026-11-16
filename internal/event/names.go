@@ -16,12 +16,16 @@ import (
 // own table. A species field takes a scenario's behavior programs too, which hold
 // SpeciesDataFirst onward in sorted-name order, a materialize style field their
 // styles, SpawnTypeDataFirst onward alike, a loot kind field its kinds, LootCount
-// onward alike, and a signal field the signals of the program named beside it.
+// onward alike, a signal field the signals of the program named beside it, and a
+// map field its maps.
 func PayloadNames(d component.Declared) *dialect.Names {
-	if len(d.Programs) == 0 && len(d.Loot) == 0 {
+	if len(d.Programs) == 0 && len(d.Loot) == 0 && len(d.Maps) == 0 {
 		return codeNames()
 	}
 	names := codeNames().Clone()
+	if len(d.Maps) > 0 {
+		names.Enum[component.MapID](slices.Concat([]string{""}, slices.Sorted(slices.Values(d.Maps)))...)
+	}
 	if len(d.Programs) > 0 {
 		programs := slices.Sorted(slices.Values(d.Programs))
 		names.Enum[component.SpeciesType](slices.Concat(component.SpeciesNames[:], programs)...)
@@ -93,6 +97,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Variant[component.SubType](component.SpeciesEye, component.EyeTypeNames[:]...).
 		Variant[component.SubType](component.SpeciesTower, component.TowerTypeNames[:]...).
 		Variant[component.BehaviorSignal](component.SpeciesNone).
+		Enum[component.MapID]().
 		Enum[component.LootType](lootNames()...).
 		Enum[component.EyeType](component.EyeTypeNames[:]...).
 		Enum[component.TowerType](component.TowerTypeNames[:]...).

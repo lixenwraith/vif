@@ -1204,6 +1204,14 @@ type BehaviorSignalRequestPayload struct {
 	Count   int                      `toml:"count"`
 }
 
+// MapLayRequestPayload lays one of the scenario's maps, its top left at the cell:
+// what its legend names stands there as its own request would stand it
+type MapLayRequestPayload struct {
+	Map component.MapID `toml:"map"`
+	X   int             `toml:"x"`
+	Y   int             `toml:"y"`
+}
+
 // --- Environment ---
 
 // WindStartPayload configures a global gameplay wind. Direction is the direction

@@ -23,7 +23,7 @@ graph is written in this dialect with its own actions and guards
 The embedded main campaign is the only shipped source of `main`; `-s main`
 falls back to it. A scenario named `main` in a root is an optional user override.
 
-Region `file`, `macro_files` and behavior program `file` references resolve
+Region `file`, `macro_files`, behavior program and map `file` references resolve
 relative to the entry config's directory and cannot climb out of it. A region file
 holds only `[states]`, and a state defined twice across files fails the load. A
 scenario is at most 64 `.toml` files, 256 KiB each and 1 MiB in all. A joiner
@@ -93,6 +93,9 @@ scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's
 
 [loot.upgrade]                      # A loot kind of the scenario's own, its keys in Loot
 [drops.raider]                      # A drop table kills roll, its keys in Loot
+
+[maps]
+rank = { file = "rank.toml" }       # A map the scenario lays by name, inline or its own file (Maps)
 
 [keymap.normal]                     # Play keys over the player's keymap for the run; also
 a = "mode_append"                   # [keymap.operator], [keymap.prefix_g]; no system action
@@ -1196,3 +1199,33 @@ tiers = [                           # Rolled in order, at most 8, each dropping 
 - `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
   later tier that is not unique when this tier skips all its loot; a roll that
   misses adds none.
+
+## Maps
+
+A map is a layout drawn in characters that the scenario lays by name. The entry's
+`[maps]` table lists at most 32, each inline or in a file of its own, which is
+read, expanded, carried, digested and sent to a joiner as a program's is. A name
+is `[a-z][a-z0-9_]*` of at most 24 bytes.
+
+```toml
+[maps.wave]
+legend = { W = { program = "warden" }, d = { program = "dart" } }
+rows = [
+    "  W     W  ",                  # One width, a character a cell; a space is open map
+    "d  d   d  d",
+]
+```
+
+- `legend`: what each character lays. `{ program = "dart" }` is an instance of that
+  behavior program with its header on the cell, at most 256 a map; a character no
+  entry names, or an entry naming no program of the scenario, fails the load.
+- `EventMapLayRequest { map, x, y }` lays it with its top left at the cell, which
+  an `origin` counts from an edge or the centre: each instance stands as its own
+  `EventBehaviorSpawnRequest` would stand it, at once or through its entrance, in
+  row order. A request naming no map of the scenario fails the load where it is
+  written.
+
+`-check` prints `maps ok: <n> (<names>)`, each fault naming its map and place
+(`map 'wave': rows[1] is 10 cells wide, and the first 11`). A legend lays programs
+alone for now: wall tiles, loot and named cells are
+[to come](todo.md#lay-a-painted-map-a-scenario-carries).
