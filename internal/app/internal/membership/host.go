@@ -1050,11 +1050,11 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 	return old, len(relayed), nil
 }
 
-// relayedLocked is each person linked to this run as it forks from a pinned session
-// at a -relay door it serves: no guest of such a session binds a port for others to
-// link to (openDial), so such a person joined at that door, and goes on back through
-// it (reopenRelayDoor). Its bots, the relay it joined through and the authority it
-// lost are none of them. Caller MUST hold updateMutex.
+// relayedLocked is each person behind this run as it forks from a pinned session at
+// a -relay door it serves: one linked to it, which joined at that door and goes on
+// back through it (reopenRelayDoor), and one behind such a person's own door, which
+// comes back through that. Its bots, the relay it joined through and the authority
+// it lost are none of them. Caller MUST hold updateMutex.
 func (m *Membership) relayedLocked(port engine.NetworkPort, roster []network.RosterEntry, local link.PeerID) map[link.PeerID]bool {
 	p, ok := port.(interface{ Peers() []uint32 })
 	m.tunnelMu.Lock()
@@ -1066,7 +1066,14 @@ func (m *Membership) relayedLocked(port engine.NetworkPort, roster []network.Ros
 	linked, lost := p.Peers(), m.authorityID()
 	relayed := make(map[link.PeerID]bool)
 	for _, e := range roster {
-		if e.ID != local && e.ID != lost && e.ID != m.joinedThrough && e.Holder == 0 && slices.Contains(linked, uint32(e.ID)) {
+		if e.ID == local || e.ID == lost || e.ID == m.joinedThrough || e.Holder != 0 {
+			continue
+		}
+		behind := slices.Contains(linked, uint32(e.ID))
+		if !behind {
+			m.linksLocked(func(l relayLinks) { behind = l.Relays(uint32(e.ID)) })
+		}
+		if behind {
 			relayed[e.ID] = true
 		}
 	}

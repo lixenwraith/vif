@@ -1501,7 +1501,9 @@ relays alone. The scope: list what each role can do that the admission did not g
 it, decide which of it needs a check (the authority confirming a relay's admission,
 a successor's record carrying no more than the roster lets it, the verifier's reach),
 which needs a limit, and which is accepted as the price of play without a server; then
-plug the holes found, one PR each.
+plug the holes found, one PR each. A relay names the relay behind it that asked for a
+join (`RelayJoin.Path`), which the authority holds only to naming nobody it has a
+link to: a relay can ask as any participant behind another.
 
 ### Review what a relay hosts once its host is gone
 
@@ -1509,8 +1511,9 @@ plug the holes found, one PR each.
 - Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
   `leaveSessionLocked`, `relayedLocked`, `sessionRoleLocked`),
   `internal/app/internal/membership/relay.go` (`reopenRelayDoor`, `returnAcceptor`,
-  `relaySeatingLocked`), `internal/converge/authority.go` (`beginSuccession`,
-  `driveWalk`, `endFollow`, `followGone`)
+  `relaySeatingLocked`), `internal/app/internal/membership/converge.go` (`redialDoor`),
+  `internal/converge/authority.go` (`beginSuccession`, `driveWalk`, `endFollow`,
+  `followGone`)
 - Guide: [Multi-player §5.1](multi-player.md#51-succession),
   [§5.5](multi-player.md#55-leaving-a-session),
   [§5.6](multi-player.md#56-relay-doors-and-the-router); Tighten what a relay and a
@@ -1520,18 +1523,33 @@ The concern, Lixen's: a relay in a session pinned to its host, which never chose
 be a candidate to host the whole game, now goes on hosting one for the people it
 relays once that host is gone. That is fine in general, since running `-relay` already
 shared its resources, and what passes through it, with those people, in a limited
-scope; but it needs a second look that the boundaries hold.
+scope; but it needs a second look that the boundaries hold. And the words no longer
+fit what is built (2026-11-16): a relay acts as the authority of what is behind it,
+its bots, the people it relays and theirs, without advertising it to anyone, where a
+take-over is advertised to every participant and asked for at both ends.
 
-What the fork does: it keeps the places of the people linked to it at its door as it
-forks and their bots', and nobody else's (`relayedLocked`); its `-relay` door, at the
+What to decide first, as one definition in place of the cases: every run is the
+authority of what is behind it and follows what is ahead of it, a fork is that
+authority taking effect when the way up is lost, and a take-over is a run becoming
+the authority of runs that are not behind it, which alone needs an address shared
+and a player's word. One rule would then say whose place a run keeps, whose door
+takes whom back and what a session advertises, where today the roles (`sessionRoles`:
+host, successor, kept, seats, left), `relaySeatingLocked`, `relayedLocked` and
+`leaveSessionLocked`'s `keepAll` each answer part of it.
+
+What the fork does: it keeps the places of everyone behind it as it forks, the people
+linked to it at its door and those behind a door of theirs, with their bots', and
+nobody else's (`relayedLocked`, `NetworkSystem.Relays`); its `-relay` door, at the
 address they joined at, goes on into the session it opens and takes back a key that
 holds a person's place there, under the left session's name and with no passphrase,
 refusing any other (`returnAcceptor`); nobody new is seated through those people
 either, by a bot of theirs or a door of their own, and no spectator is shown the
 session, until its player runs `:host` (`relaySeatingLocked`, `watchParticipant`);
-each person waits on its relay up to `NetworkFollowWindow`, frozen, before it forks
-alone; and while it holds their places the session's role refuses `:join` and takes
-`:leave` and `:host`.
+each person waits on its relay up to `NetworkFollowWindow`, frozen, then dials the
+door it joined at for one succession window, again while the run behind that door is
+itself on its way back, before it forks alone; and while it holds their places the
+session's role refuses `:join` and takes `:leave` and `:host`. `./script/test.sh tree`
+runs it over three terminals.
 
 What to look at:
 - Whether a relay hosts its people only once it is asked to, by a switch of its own as
@@ -1542,17 +1560,15 @@ What to look at:
   trusts a returning player's record with.
 - The fork issues no passes (Issue a pass in a session opened past its first term).
 - Gaps seen while building it, none worse than before, when each person forked alone at
-  once: a person behind a relay of its own (a relay chain) is not linked to the fork, so
-  its place goes and its relay's dial for it is refused as a newcomer's; a person whose
-  link to the relay blipped as it forked is not kept; a host that stalled rather than
-  went takes its relay back, and the person redials that relay's new run, whose host
-  may still hold the person's place as linked; and a door the router publishes is
-  covered by no test.
-- A person behind a relay seats no bot in the session at all: its bot's join through
-  the relay stays "joining" (`tellAuthority`), so keeping a relayed person's bots is
-  read in code alone. A holder is the joiner's own word at the host
-  (`noteJoinerReport`), so a place a direct guest of the host claimed was a relayed
-  person's bot is kept too, and that person's own `-relay` door could seat it.
+  once: a person whose link to the relay blipped as it forked is not kept, nor one
+  behind a door of theirs that passed nothing on within the epoch window; a relay
+  that takes longer than a succession window to come back to its own relay leaves
+  those behind it to fork alone; a host that stalled rather than went takes its
+  relay back, and the person redials that relay's new run, whose host may still hold
+  the person's place as linked; and a door the router publishes is covered by no test.
+- A holder is the joiner's own word at the host (`noteJoinerReport`), so a place a
+  direct guest of the host claimed was a relayed person's bot is kept too, and that
+  person's own `-relay` door could seat it.
 - `:host <addr> migrate` on the kept session moves a policy its people already hold
   as pinned: `beginHostingLocked` guards only a successor asking to pin, so the
   people who came back at `returnAcceptor` give up at this host's loss while its

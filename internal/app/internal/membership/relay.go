@@ -22,8 +22,8 @@ import (
 // relayDesk is a guest's half of admitting participants through its own link: its
 // bots, which share its fate, and people who cannot reach the host, who borrow its
 // uplink. The guest serves a world it proved the authority's; the coordinator still
-// allocates and crosses the arrival, asked on the guest's link one question at a
-// time.
+// allocates and crosses the arrival, asked up the guest's path to it one question
+// at a time.
 type relayDesk struct {
 	turn sync.Mutex // held for one whole round trip
 
@@ -425,8 +425,8 @@ func (m *Membership) sendRelayedGate(port *link.SocketPort, offer network.Sessio
 	return nil
 }
 
-// askAuthority makes one round trip to the authority on this run's link to it. A run
-// with no such link is mid-succession, which the joiner retries past.
+// askAuthority makes one round trip to the authority up this run's path to it. A run
+// with no path is mid-succession, which the joiner retries past.
 func (m *Membership) askAuthority(req network.RelayJoin) (network.RelayAdmit, error) {
 	d := &m.relay
 	d.turn.Lock()
@@ -464,18 +464,40 @@ func (m *Membership) askAuthority(req network.RelayJoin) (network.RelayAdmit, er
 	return ans, nil
 }
 
-// tellAuthority sends one step to the authority without waiting for an answer.
-func (m *Membership) tellAuthority(req network.RelayJoin) bool {
-	port, err := m.socketPort()
-	if err != nil {
+// tellAuthority sends one step toward the authority without waiting for an answer:
+// on this run's link to it, else on the relay's it follows, which passes it on.
+func (m *Membership) tellAuthority(req network.RelayJoin) (sent bool) {
+	m.world.RunSafe(func() { sent = m.tellAuthorityLocked(req) })
+	return sent
+}
+
+// tellAuthorityLocked is tellAuthority for a caller that holds the world lock.
+// Caller MUST hold updateMutex.
+func (m *Membership) tellAuthorityLocked(req network.RelayJoin) bool {
+	return m.sendDeskLocked(m.upLinkLocked(), network.MsgRelayJoin, req)
+}
+
+// upLinkLocked is the link this run reaches its authority on, zero for no path.
+// Caller MUST hold updateMutex.
+func (m *Membership) upLinkLocked() (up link.PeerID) {
+	m.linksLocked(func(l relayLinks) { up = link.PeerID(l.Up()) })
+	return up
+}
+
+// sendDeskLocked sends one relayed-admission frame on the link to a participant.
+// Caller MUST hold updateMutex.
+func (m *Membership) sendDeskLocked(to link.PeerID, kind link.MessageType, frame any) bool {
+	port := m.sessionTransportLocked()
+	if port == nil || to == 0 {
 		return false
 	}
-	body, err := json.Marshal(req)
-	return err == nil && port.Send(uint32(m.authorityID()), uint8(network.MsgRelayJoin), body)
+	body, err := json.Marshal(frame)
+	return err == nil && port.Send(uint32(to), uint8(kind), body)
 }
 
 // onRelayJoin takes one relayed-admission frame off the tick: a holder's question
-// when this run is the coordinator, the coordinator's answer when it holds bots.
+// when this run is the coordinator, the coordinator's answer when it holds bots,
+// and either on its way past a relay between the two.
 // Caller MUST hold updateMutex.
 func (m *Membership) onRelayJoin(kind uint8, from uint32, body []byte) {
 	switch link.MessageType(kind) {
@@ -486,11 +508,21 @@ func (m *Membership) onRelayJoin(kind uint8, from uint32, body []byte) {
 	}
 }
 
-// receiveRelayAdmit wakes the round trip an answer belongs to. An identity assigned
-// to a join that stopped waiting goes back to the authority.
+// receiveRelayAdmit wakes the round trip an answer belongs to, or sends one for a
+// relay behind this run down the link its question came up on. An identity
+// assigned to a join that stopped waiting, or that no link leads to any more, goes
+// back to the authority. Caller MUST hold updateMutex.
 func (m *Membership) receiveRelayAdmit(from link.PeerID, body []byte) {
 	var ans network.RelayAdmit
-	if json.Unmarshal(body, &ans) != nil || from != m.authorityID() {
+	if json.Unmarshal(body, &ans) != nil || from != m.authorityID() && from != m.upLinkLocked() {
+		return
+	}
+	if n := len(ans.Path); n > 0 {
+		down := ans
+		down.Path = ans.Path[:n-1]
+		if !m.sendDeskLocked(ans.Path[n-1], network.MsgRelayAdmit, down) && ans.Offer.Assigned != 0 {
+			m.tellAuthorityLocked(network.RelayJoin{Step: network.RelayAbandon, Leaf: ans.Offer.Assigned, Path: ans.Path})
+		}
 		return
 	}
 	d := &m.relay
@@ -502,36 +534,68 @@ func (m *Membership) receiveRelayAdmit(from link.PeerID, body []byte) {
 	}
 	d.mu.Unlock()
 	if !waiting && ans.Offer.Assigned != 0 {
-		m.tellAuthority(network.RelayJoin{Step: network.RelayAbandon, Leaf: ans.Offer.Assigned})
+		m.tellAuthorityLocked(network.RelayJoin{Step: network.RelayAbandon, Leaf: ans.Offer.Assigned})
 	}
 }
 
-// decideRelayJoinLocked answers one step a holder asks on its own link. Caller MUST
-// hold updateMutex.
-func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
-	var req network.RelayJoin
-	if err := json.Unmarshal(body, &req); err != nil {
-		m.log.Warn("session", "msg", "relayed join step unreadable", "relay", relay, "error", err.Error())
+// passRelayJoinLocked sends a step asked on a link behind this run on toward the
+// authority, that link added to its path so the answer finds its way back. With no
+// path up, or from a link this run does not carry, a step that waits is refused as
+// mid-handoff, which its joiner retries past. Caller MUST hold updateMutex.
+func (m *Membership) passRelayJoinLocked(from link.PeerID, req network.RelayJoin) {
+	carried := false
+	m.linksLocked(func(l relayLinks) { carried = l.Carries(uint32(from)) })
+	if up := m.upLinkLocked(); carried && up != from && len(req.Path) < parameter.NetworkRelayHopLimit {
+		pass := req
+		pass.Path = append(slices.Clone(req.Path), from)
+		if m.sendDeskLocked(up, network.MsgRelayJoin, pass) {
+			return
+		}
+	}
+	if req.Step == network.RelayAbandon || req.Step == network.RelayDoor {
 		return
 	}
-	coordinator := m.world.IsSessionCoordinator()
+	ans := network.RelayAdmit{Nonce: req.Nonce, Path: req.Path}
+	ans.Refuse(errSessionHandoff)
+	m.sendDeskLocked(from, network.MsgRelayAdmit, ans)
+}
+
+// decideRelayJoinLocked answers one step a holder asks: on its own link, or up the
+// relays its path names, the first of them the holder. A run that does not
+// coordinate passes it on. Caller MUST hold updateMutex.
+func (m *Membership) decideRelayJoinLocked(from link.PeerID, body []byte) {
+	var req network.RelayJoin
+	if err := json.Unmarshal(body, &req); err != nil {
+		m.log.Warn("session", "msg", "relayed join step unreadable", "relay", from, "error", err.Error())
+		return
+	}
+	if !m.world.IsSessionCoordinator() {
+		m.passRelayJoinLocked(from, req)
+		return
+	}
+	relay := from
+	if len(req.Path) > 0 {
+		relay = req.Path[0]
+	}
+	// A participant this run holds a link to asks on it: no relay speaks for one
+	spoken := relay != from && m.linkedLocked(relay)
 	switch req.Step {
 	case network.RelayAbandon:
-		if coordinator {
+		if !spoken {
 			m.abandonRelayedLocked(relay, req.Leaf)
 		}
 		return
 	case network.RelayDoor:
-		if coordinator {
+		if !spoken {
 			m.reach.NoteDoor(relay, req.Door)
 		}
 		return
 	}
-	ans := network.RelayAdmit{Nonce: req.Nonce}
+	ans := network.RelayAdmit{Nonce: req.Nonce, Path: req.Path}
 	var err error
 	switch {
-	case !coordinator:
-		err = errSessionHandoff
+	case spoken:
+		err = errors.New("a participant asks on its own link, and no relay for it")
 	case req.Step == network.RelayNonce:
 		ans.Challenge = m.issueRelayNonce(relay)
 	case req.Step == network.RelayAssign && !m.lateJoins.Load():
@@ -554,10 +618,14 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 	if err != nil {
 		ans.Refuse(err)
 	}
-	out, _ := json.Marshal(ans) // plain data cannot fail to encode
-	if r := m.world.Resources.Network; r != nil && r.Port != nil {
-		r.Port.Send(uint32(relay), uint8(network.MsgRelayAdmit), out)
-	}
+	m.sendDeskLocked(from, network.MsgRelayAdmit, ans)
+}
+
+// linkedLocked reports a participant on a link of this run's own.
+// Caller MUST hold updateMutex.
+func (m *Membership) linkedLocked(id link.PeerID) bool {
+	p, ok := m.sessionTransportLocked().(interface{ Peers() []uint32 })
+	return ok && slices.Contains(p.Peers(), uint32(id))
 }
 
 // relayNonce is one challenge issued to a relay's door, good for one dial's proofs
@@ -615,15 +683,21 @@ func (m *Membership) relayedKeys(relay link.PeerID, req network.RelayJoin) ([]st
 	return network.VerifyProofs(req.Keys, req.Challenge, nil)
 }
 
-// relayedSlot is the slot of a participant joining through relay, if it is one.
+// relayedSlot is the slot of a participant joining through relay, if it is one: a
+// new place the assignment held under that relay, or one taken back through it,
+// which keeps the holder it left with.
 func (m *Membership) relayedSlot(relay, leaf link.PeerID) (uint8, bool) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == leaf })
-	if i < 0 || m.sessionRoster[i].Holder != relay {
+	if i < 0 {
 		return 0, false
 	}
-	return m.sessionRoster[i].Slot, true
+	through := m.sessionRoster[i].Holder
+	if r, back := m.returning[leaf]; back {
+		through = r.via
+	}
+	return m.sessionRoster[i].Slot, through == relay
 }
 
 // admitRelayedLocked crosses the arrival of a participant that installed its relay's

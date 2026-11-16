@@ -109,25 +109,68 @@ func TestASessionARunOpensIsAwayOnlyFromWhomItKept(t *testing.T) {
 	}
 }
 
-// TestAPinnedForkRelaysOnlyThePeopleItsDoorTookIn: whom a fork from a pinned session
-// takes along is each person linked to it at a -relay door it serves: not the host
-// it lost, the relay it came in through, a bot or anyone not linked, and nobody at
-// all when it serves no door.
-func TestAPinnedForkRelaysOnlyThePeopleItsDoorTookIn(t *testing.T) {
+// behind is a network system passing on the raw artifacts of the participants named.
+type behind []uint32
+
+func (behind) Init()                   {}
+func (behind) Priority() int           { return 0 }
+func (behind) Name() string            { return "behind" }
+func (behind) Update()                 {}
+func (behind) Reaches() bool           { return true }
+func (behind) Up() uint32              { return 0 }
+func (behind) Carries(uint32) bool     { return false }
+func (behind) Carry(uint32)            {}
+func (b behind) Relays(id uint32) bool { return slices.Contains(b, id) }
+
+// TestAPinnedForkTakesAlongThePeopleBehindIt: whom a fork from a pinned session takes
+// along is each person behind it at a -relay door it serves, linked to it or one
+// whose artifacts it passes on: not the host it lost, the relay it came in through, a
+// bot or anyone else, and nobody at all when it serves no door.
+func TestAPinnedForkTakesAlongThePeopleBehindIt(t *testing.T) {
 	t.Parallel()
 	mesh := network.NewMesh()
 	for _, id := range []link.PeerID{engine.CoordinatorParticipant, 3, 4, 5} {
 		mesh.Link(2, id)
 	}
 	roster := []network.RosterEntry{{ID: engine.CoordinatorParticipant}, {ID: 2}, {ID: 3}, {ID: 4},
-		{ID: 5, Holder: 2}, {ID: 6, Holder: 4}, {ID: 7}}
-	m := &Membership{joinedThrough: 3}
+		{ID: 5, Holder: 2}, {ID: 6, Holder: 4}, {ID: 7}, {ID: 8}}
+	m := wraithWorld()()
+	m.joinedThrough = 3
+	m.world.AddSystem(behind{7}, engine.SystemProfile{})
 	if got := m.relayedLocked(mesh.Node(2), roster, 2); len(got) != 0 {
 		t.Fatalf("a fork serving no door takes %v along; want nobody", got)
 	}
 	m.relayBound = "127.0.0.1:1"
-	if got, want := m.relayedLocked(mesh.Node(2), roster, 2), map[link.PeerID]bool{4: true}; !maps.Equal(got, want) {
-		t.Fatalf("a fork at its door takes %v along; want the person linked to it there alone, %v", got, want)
+	if got, want := m.relayedLocked(mesh.Node(2), roster, 2), map[link.PeerID]bool{4: true, 7: true}; !maps.Equal(got, want) {
+		t.Fatalf("a fork at its door takes %v along; want the person linked to it there and the one behind that, %v", got, want)
+	}
+}
+
+// TestAPlaceTakenBackThroughARelayKeepsItsHolder: a person's place a relay's door
+// takes back stays a person's while its dial is in flight, so the bot waiting under
+// it keeps a holder that is no bot, and the relay's steps find it by that dial as
+// they find a new place by the holder it was held under.
+func TestAPlaceTakenBackThroughARelayKeepsItsHolder(t *testing.T) {
+	t.Parallel()
+	const relay, person, bot, newcomer = 2, 3, 4, 5
+	key := network.NewKey().ID()
+	m := &Membership{sessionRoster: []network.RosterEntry{{ID: engine.CoordinatorParticipant}, {ID: relay, Slot: 1},
+		{ID: person, Slot: 2, Away: true, Key: key}, {ID: bot, Slot: 3, Away: true, Holder: person},
+		{ID: newcomer, Slot: 4, Holder: relay}}}
+	if p, err := m.keyedLocked([]string{key}, relay, nil, false); err != nil || p.ID != person || p.Holder != 0 {
+		t.Fatalf("the relay's door took back place %d held by %d (%v); want the person's own, %d, held by nobody", p.ID, p.Holder, err, person)
+	}
+	offer := network.SessionOffer{Host: engine.CoordinatorParticipant, Assigned: person, Term: network.FirstTerm, Roster: m.sessionRoster}
+	if err := offer.Validate(); err != nil {
+		t.Fatalf("the roster a returning person is offered: %v", err)
+	}
+	for leaf, slot := range map[link.PeerID]uint8{person: 2, newcomer: 4} {
+		if got, ok := m.relayedSlot(relay, leaf); !ok || got != slot {
+			t.Fatalf("participant %d joins through relay %d on slot %d (%t); want slot %d", leaf, relay, got, ok, slot)
+		}
+		if _, ok := m.relayedSlot(person, leaf); ok {
+			t.Fatalf("participant %d reads as joining through %d, which never asked for it", leaf, person)
+		}
 	}
 }
 

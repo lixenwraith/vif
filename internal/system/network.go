@@ -2743,6 +2743,23 @@ func (s *NetworkSystem) Carry(id uint32) { s.noteDown(id) }
 // Reaches reports a path to the authority. Caller holds the world lock.
 func (s *NetworkSystem) Reaches() bool { return s.up() != 0 }
 
+// Up is up for the session layer, whose relayed joins ask the authority on it.
+// Caller holds the world lock.
+func (s *NetworkSystem) Up() uint32 { return s.up() }
+
+// Relays reports a participant whose raw artifacts this instance passed on toward
+// the authority within the epoch window: one behind it, on a link of its own or of
+// any relay behind it. Caller holds the world lock.
+func (s *NetworkSystem) Relays(id uint32) bool {
+	if id == 0 || int(id) >= len(s.rawEpochs) {
+		return false
+	}
+	s.mu.Lock()
+	high := s.rawEpochs[id].high
+	s.mu.Unlock()
+	return high != 0 && s.localTick() <= high+parameter.NetworkEpochWindow
+}
+
 // FollowThrough takes the link a handoff came through as this instance's path to
 // the host it names, which it has no link of its own to. Caller holds the world lock.
 func (s *NetworkSystem) FollowThrough(id uint32) {

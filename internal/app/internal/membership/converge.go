@@ -94,25 +94,31 @@ func (m *Membership) Downstream() (out []uint32) {
 	return out
 }
 
-// relayLinks is the network system as the succession asks it about paths: whether
-// this run reaches its authority, and whose artifacts it carries there.
+// relayLinks is the network system as the session layer asks it about paths:
+// whether this run reaches its authority and on which link, and whose artifacts it
+// carries there.
 type relayLinks interface {
 	Reaches() bool
+	Up() uint32
 	Carries(id uint32) bool
+	Relays(id uint32) bool
 	Carry(id uint32)
 }
 
 // links runs fn on the network system under the world lock; a run without one
 // has nothing to ask.
 func (m *Membership) links(fn func(relayLinks)) {
-	m.world.RunSafe(func() {
-		for _, sys := range m.world.Systems() {
-			if l, ok := sys.(relayLinks); ok {
-				fn(l)
-				return
-			}
+	m.world.RunSafe(func() { m.linksLocked(fn) })
+}
+
+// linksLocked is links for a caller that holds the world lock.
+func (m *Membership) linksLocked(fn func(relayLinks)) {
+	for _, sys := range m.world.Systems() {
+		if l, ok := sys.(relayLinks); ok {
+			fn(l)
+			return
 		}
-	})
+	}
 }
 
 // Reaches reports a path to the authority; a run with no network system has
@@ -575,9 +581,9 @@ func (m *Membership) redial(lost link.PeerID) bool {
 
 // redialDoor dials the lost host, or the lost relay, at addr while this run waits on
 // it. Admitted back into its own place, the run is replaced by the one admitted; a
-// refusal no retry helps, a door nothing answers at, or a place that is not this
-// run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
-// A run that stays in its session holds its place again.
+// refusal no retry helps, a host's door nothing answers at, or a place that is not
+// this run's begins the walk, which a lost host's run then rejoins through
+// (rejoinThrough). A run that stays in its session holds its place again.
 func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *place, relay bool) {
 	defer m.lent.Store(nil) // after the place is held again, where it is
 	dial := cfg
@@ -593,7 +599,9 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			err = d.seat(wire.Holder != 0)
 		}
 		if err != nil {
-			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
+			// A relay's door nothing answers at may be its run on the way back to a
+			// relay of its own, and is dialled again; a host's is that host gone.
+			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) && !relay {
 				m.log.Info("session", "msg", "the redial was refused", "peer", uint64(lost), "error", err.Error())
 				m.authority.RedialRefused(lost)
 			} else {
@@ -602,9 +610,9 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			continue
 		}
 		back := &RestartAsk{Notice: notice, Dialled: d}
-		if relay && d.Offer().Host == lost && m.authority.Fixed() {
-			// The relay forked a session of its own, which kept this run's place: in a
-			// pinned session nobody else takes the host's place over.
+		if relay && d.Offer().Host != m.authority.Holder() && m.authority.Fixed() {
+			// A relay above forked a session of its own, which kept this run's place: in
+			// a pinned session nobody else takes the host's place over.
 			back.Notice = "Host connection lost; playing on in your relay's session"
 		}
 		if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {

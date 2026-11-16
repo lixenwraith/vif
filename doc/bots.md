@@ -55,13 +55,14 @@ into the session it joins, and `:leave` takes them out of one with the run.
 | Bot of | Admitted | Leaves when |
 |---|---|---|
 | the host | by the host, as any joiner | the host ends, it is dropped, or a `-serve` host begins its drain |
-| a guest | through the guest's own link, the authority deciding | the guest leaves or loses its session, or it is dropped |
+| a guest | through the guest's own way to the host, the authority deciding | the guest leaves or loses its session, or it is dropped |
 
 - After a hand-off, a holder that inherited authority admits new bots itself; a
   guest keeps seating bots through whoever holds authority.
 - A person who joins at a guest's `-relay` address plays through the guest the
   same way but is not its bot: it holds no holder, is dropped on its own, and
-  keeps its slot when the guest leaves.
+  keeps its slot when the guest leaves. It seats bots of its own and relays for
+  others as any run does, however many relays stand between it and the host.
 - When its holder leaves, a bot's cursor waits as a Wraith with the holder's and
   goes when the holder's does: after two minutes, or when it is dropped. A holder
   that comes back seats its bots again, and each takes back its own place.

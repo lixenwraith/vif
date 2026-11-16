@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -1288,6 +1289,78 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 	}
 	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host")
 	waitForMotion(t, person, cursorOf(t, person, host.membership.LocalParticipant()), "the host's cursor on the relayed person")
+}
+
+// TestARunBehindARelaySeatsItsBotsAndRelaysForOthers: a run that joined at a guest's
+// -relay door holds no link to the host, and the person at its own -relay door and
+// that person's bot are admitted all the same, each asked for up the relays
+// between, and play through them.
+func TestARunBehindARelaySeatsItsBotsAndRelaysForOthers(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr, relayAddr, deepAddr := freeAddress(t), freeAddress(t), freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr, RelayAddress: deepAddr}}, "roam", nil)
+	waitForCursors(t, host, 4)
+	waitListening(t, deepAddr)
+	deep, _ := driveBot(t, Config{Membership: Membership{JoinAddress: deepAddr, Bots: []string{"roam"}}}, "roam", nil)
+	for _, a := range []*App{host, relay, person, deep} {
+		waitForCursors(t, a, 6)
+	}
+	did := deep.membership.LocalParticipant()
+	held := map[uint32][]uint32{}
+	for _, e := range host.instance().WorldRoster() {
+		held[uint32(e.Holder)] = append(held[uint32(e.Holder)], uint32(e.ID))
+	}
+	if len(held[0]) != 4 || len(held[did]) != 1 {
+		t.Fatalf("the host holds %v by holder; want four independent participants and a bot of %d", held, did)
+	}
+	if h, r, p, d := host.membership.SessionTransport().PeerCount(), relay.membership.SessionTransport().PeerCount(),
+		person.membership.SessionTransport().PeerCount(), deep.membership.SessionTransport().PeerCount(); h != 2 || r != 2 || p != 2 || d != 2 {
+		t.Fatalf("the host, the relay, the person and the one behind it hold %d, %d, %d and %d links; want 2 each", h, r, p, d)
+	}
+	waitForMotion(t, host, cursorOf(t, host, held[did][0]), "the bot of a person two relays from the host, on the host")
+	waitForMotion(t, deep, cursorOf(t, deep, host.membership.LocalParticipant()), "the host's cursor two relays away")
+}
+
+// TestARelayedStepNamesNobodyTheHostHoldsALinkTo: a step passed on names the relay
+// that asked, and the host takes none naming a participant it holds a link to,
+// which asks for itself: a guest retiring another guest's bot in its name retires
+// nobody.
+func TestARelayedStepNamesNobodyTheHostHoldsALinkTo(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	holder, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	other, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
+	waitForCursors(t, host, 5)
+	hid := link.PeerID(holder.membership.LocalParticipant())
+	roster := host.instance().WorldRoster()
+	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.Holder == hid })
+	if i < 0 {
+		t.Fatalf("the host's roster holds no bot of participant %d: %+v", hid, roster)
+	}
+	step, err := json.Marshal(network.RelayJoin{Step: network.RelayAbandon, Leaf: roster[i].ID, Path: []link.PeerID{hid}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !other.membership.SessionTransport().Send(host.membership.LocalParticipant(), uint8(network.MsgRelayJoin), step) {
+		t.Fatal("the guest's step did not go out to its host")
+	}
+	at := host.Position()
+	waitUntil(t, func() bool {
+		p := host.Position()
+		return p.Run != at.Run || p.Tick >= at.Tick+2*parameter.NetworkApplyHorizonTicks
+	},
+		"the ticks a dismissal would land in")
+	if now := host.instance().WorldRoster(); !slices.ContainsFunc(now, func(e network.RosterEntry) bool { return e.ID == roster[i].ID && !e.Away }) {
+		t.Fatalf("a guest retired another guest's bot, participant %d, in that guest's name: %+v", roster[i].ID, now)
+	}
 }
 
 // TestAPersonFindsAnotherPathWhenItsRelayLeaves: left with no link, a relayed
