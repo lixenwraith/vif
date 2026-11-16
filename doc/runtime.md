@@ -679,7 +679,7 @@ A seat (`internal/app/internal/membership/seat.go`) is that driver on another
 headless instance in the holder's process, on its own goroutine and paced against
 the authority like any guest. It joins on an in-process stream (`seatLink`) its
 holder serves with the handshake it holds when the seat dials: a still-guest's
-relays the join on its own link, an authority's admits it as any joiner. A run in no
+relays the join up its way to the authority, an authority's admits it as any joiner. A run in no
 session first opens one with no listener (`openSessionLocked`), which `:host` later
 serves a listener on (`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat

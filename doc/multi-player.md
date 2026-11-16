@@ -557,8 +557,8 @@ person at the guest's `-relay` address — is served by the guest as a coordinat
 would: it asks the authority to allocate the identity and, once
 the joiner installed the world the guest last proved, to cross its arrival with
 what the joiner reported (`MsgRelayJoin`). It asks on its link to the authority,
-or with none on its up link, where each relay it carries is behind passes the
-question on with the link it came up on, and the answer comes back down those links
+or, holding none, on its up link: each relay on the way passes the question on,
+adding the link it came up on, and the answer comes back down those links
 (`RelayJoin.Path`, `Membership.passRelayJoinLocked`); the authority reads the first
 of them as the relay that asked, and refuses one naming a participant it holds a
 link to. A guest that took the session over asks
