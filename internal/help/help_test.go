@@ -11,6 +11,7 @@ import (
 var documentedByLiteral = map[string]string{
 	"operator_delete":     "EDITING d{motion}",
 	"operator_change":     "EDITING c{motion}",
+	"operator_yank":       "EDITING y{motion}",
 	"prefix_g":            "MOVEMENT gg and the g-prefixed motions",
 	"prefix_macro_play":   "MACROS @{a-z}",
 	"macro_record_toggle": "MACROS q{a-z}",
@@ -37,7 +38,15 @@ func TestBindingsDocumented(t *testing.T) {
 // unboundByDefault lists documented actions no default key takes, since the game's
 // own action has it; a keymap or a scenario binds them, and their entry shows then
 var unboundByDefault = map[string]string{
-	"mode_append": "a cycles auto fire; the tutor binds append",
+	"mode_append":     "a cycles auto fire; the tutorial binds append",
+	"mode_open_below": "o finds in a column",
+	"mode_open_above": "O finds in a column",
+	"put_after":       "p pauses",
+	"put_before":      "put_after has no key",
+	"undo_change":     "u undoes a cursor move",
+	"redo_change":     "undo_change has no key",
+	"mark_set":        "m is the middle column",
+	"mark_jump":       "the backtick opens the console",
 }
 
 // TestEntriesResolve fails on a typo or on documentation left behind by an

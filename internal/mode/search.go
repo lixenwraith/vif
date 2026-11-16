@@ -14,23 +14,35 @@ type searchQuery struct {
 	forward, whole bool
 }
 
-// PerformSearch moves the cursor to the next match of a text pattern from it, the
-// map wrapping round; whole matches a word only where no word glyph adjoins it
-func PerformSearch(ctx *engine.GameContext, searchText string, forward, whole bool) bool {
-	pos, ok := ctx.World.LocalCursor()
-	return ok && searchFrom(ctx, pos.X, pos.Y, searchText, forward, whole)
-}
-
-// searchFrom is PerformSearch from cell x, y rather than the cursor's
-func searchFrom(ctx *engine.GameContext, x, y int, searchText string, forward, whole bool) bool {
-	if searchText == "" {
+// search moves the cursor to the count-th match of q from cell (x, y), each sought
+// from the one before it, the map wrapping round; it reports whether any was found
+func search(ctx *engine.GameContext, x, y int, q searchQuery, count int) bool {
+	if q.text == "" {
 		return false
 	}
-	grid := buildCharacterGrid(ctx)
-	if forward {
-		return searchForward(ctx, grid, []rune(searchText), x+1, y, whole)
+	grid, pattern := buildCharacterGrid(ctx), []rune(q.text)
+	var first vmath.Point
+	found := 0
+	for found < count {
+		at, ok := searchBackward(ctx, grid, pattern, x-1, y, q.whole)
+		if q.forward {
+			at, ok = searchForward(ctx, grid, pattern, x+1, y, q.whole)
+		}
+		if !ok {
+			break
+		}
+		x, y, found = at.X, at.Y, found+1
+		// Back on the first match, the matches are a ring: its whole turns are skipped
+		if found == 1 {
+			first = at
+		} else if at == first {
+			count = found + (count-found)%(found-1)
+		}
 	}
-	return searchBackward(ctx, grid, []rune(searchText), x-1, y, whole)
+	if found > 0 {
+		OpJump(ctx, x, y)
+	}
+	return found > 0
 }
 
 // wordAt is what * and # search for, and the column its run starts at: the word
@@ -58,6 +70,24 @@ func wordAt(ctx *engine.GameContext, x, y int) (searchQuery, int) {
 	return searchQuery{}, -1
 }
 
+// runAt is what * and # search for in Visual, and the column it starts at: the run
+// of glyphs adjoining the cursor's on its row within the bounds' columns, matched
+// anywhere; from an empty cell, wordAt's
+func runAt(ctx *engine.GameContext, x, y int, bounds engine.PingAbsoluteBounds) (searchQuery, int) {
+	if getCharAt(ctx, x, y) == 0 {
+		return wordAt(ctx, x, y)
+	}
+	start := x
+	for start > bounds.MinX && getCharAt(ctx, start-1, y) != 0 {
+		start--
+	}
+	var run []rune
+	for i := start; i <= bounds.MaxX && getCharAt(ctx, i, y) != 0; i++ {
+		run = append(run, getCharAt(ctx, i, y))
+	}
+	return searchQuery{text: string(run)}, start
+}
+
 // buildCharacterGrid maps each cell to its top glyph's character, as it is drawn
 func buildCharacterGrid(ctx *engine.GameContext) map[vmath.Point]rune {
 	grid := make(map[vmath.Point]rune)
@@ -71,8 +101,8 @@ func buildCharacterGrid(ctx *engine.GameContext) map[vmath.Point]rune {
 	return grid
 }
 
-// searchForward searches forward from the given position
-func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int, whole bool) bool {
+// searchForward returns the first match from the given position on, wrapping round
+func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int, whole bool) (vmath.Point, bool) {
 	// Search from start position to end of screen
 	for y := startY; y < ctx.World.Resources.Config.MapHeight; y++ {
 		xStart := 0
@@ -82,8 +112,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 
 		for x := xStart; x <= ctx.World.Resources.Config.MapWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern, whole) {
-				OpJump(ctx, x, y)
-				return true
+				return vmath.Point{X: x, Y: y}, true
 			}
 		}
 	}
@@ -92,8 +121,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 	for y := range startY {
 		for x := 0; x <= ctx.World.Resources.Config.MapWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern, whole) {
-				OpJump(ctx, x, y)
-				return true
+				return vmath.Point{X: x, Y: y}, true
 			}
 		}
 	}
@@ -101,16 +129,15 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 	// Search remaining part of start line
 	for x := range startX {
 		if matchesPattern(grid, x, startY, pattern, whole) {
-			OpJump(ctx, x, startY)
-			return true
+			return vmath.Point{X: x, Y: startY}, true
 		}
 	}
 
-	return false
+	return vmath.Point{}, false
 }
 
-// searchBackward searches backward from the given position
-func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int, whole bool) bool {
+// searchBackward returns the first match from the given position back, wrapping round
+func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int, whole bool) (vmath.Point, bool) {
 	// Search from start position to beginning of screen
 	for y := startY; y >= 0; y-- {
 		xEnd := ctx.World.Resources.Config.MapWidth - len(pattern)
@@ -120,8 +147,7 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 
 		for x := xEnd; x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern, whole) {
-				OpJump(ctx, x, y)
-				return true
+				return vmath.Point{X: x, Y: y}, true
 			}
 		}
 	}
@@ -130,8 +156,7 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 	for y := ctx.World.Resources.Config.MapHeight - 1; y > startY; y-- {
 		for x := ctx.World.Resources.Config.MapWidth - len(pattern); x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern, whole) {
-				OpJump(ctx, x, y)
-				return true
+				return vmath.Point{X: x, Y: y}, true
 			}
 		}
 	}
@@ -139,12 +164,11 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 	// Search remaining part of start line
 	for x := ctx.World.Resources.Config.MapWidth - len(pattern); x > startX; x-- {
 		if matchesPattern(grid, x, startY, pattern, whole) {
-			OpJump(ctx, x, startY)
-			return true
+			return vmath.Point{X: x, Y: startY}, true
 		}
 	}
 
-	return false
+	return vmath.Point{}, false
 }
 
 // matchesPattern checks if the pattern matches at the given position, and when whole,

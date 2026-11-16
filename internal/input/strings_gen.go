@@ -114,6 +114,8 @@ func (i IntentType) String() string {
 		return "IntentPause"
 	case IntentConsole:
 		return "IntentConsole"
+	case IntentOperatorBounds:
+		return "IntentOperatorBounds"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}
@@ -218,6 +220,14 @@ func (i MotionOp) String() string {
 		return "MotionColoredGlyphDown"
 	case MotionLastGlyph:
 		return "MotionLastGlyph"
+	case MotionOpenBelow:
+		return "MotionOpenBelow"
+	case MotionOpenAbove:
+		return "MotionOpenAbove"
+	case MotionMark:
+		return "MotionMark"
+	case MotionMarkLine:
+		return "MotionMarkLine"
 	default:
 		return fmt.Sprintf("MotionOp(%d)", i)
 	}
@@ -229,6 +239,8 @@ func (i OperatorOp) String() string {
 		return "OperatorNone"
 	case OperatorDelete:
 		return "OperatorDelete"
+	case OperatorYank:
+		return "OperatorYank"
 	default:
 		return fmt.Sprintf("OperatorOp(%d)", i)
 	}
@@ -269,6 +281,22 @@ func (i SpecialOp) String() string {
 		return "SpecialSearchWordForward"
 	case SpecialSearchWordBack:
 		return "SpecialSearchWordBack"
+	case SpecialDeleteCharBack:
+		return "SpecialDeleteCharBack"
+	case SpecialDeleteLine:
+		return "SpecialDeleteLine"
+	case SpecialToggleCase:
+		return "SpecialToggleCase"
+	case SpecialPutAfter:
+		return "SpecialPutAfter"
+	case SpecialPutBefore:
+		return "SpecialPutBefore"
+	case SpecialUndoChange:
+		return "SpecialUndoChange"
+	case SpecialRedoChange:
+		return "SpecialRedoChange"
+	case SpecialMarkSet:
+		return "SpecialMarkSet"
 	default:
 		return fmt.Sprintf("SpecialOp(%d)", i)
 	}

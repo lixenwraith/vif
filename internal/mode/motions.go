@@ -359,6 +359,48 @@ func MotionLastGlyph(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
+// MotionOpenBelow and MotionOpenAbove are vim's o and O as vif plays them: the row
+// below or above at its first glyph, or in the cursor's column on a row with none.
+// Insert follows, typing what stands there.
+func MotionOpenBelow(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return motionOpen(ctx, x, y, 1)
+}
+
+func MotionOpenAbove(ctx *engine.GameContext, x, y, count int) MotionResult {
+	return motionOpen(ctx, x, y, -1)
+}
+
+func motionOpen(ctx *engine.GameContext, x, y, dy int) MotionResult {
+	endX, endY := rowStart(ctx, y+dy, x), y+dy
+	if isCursorBlocked(ctx, endX, endY) {
+		endX, endY = x, y
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: endY,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: endY != y,
+	}
+}
+
+// MotionChangeWord is cw's range, as vim's: from a glyph, to the last glyph of its
+// word and count-1 words on, never the gap after it; from an empty cell, w's
+func MotionChangeWord(ctx *engine.GameContext, x, y, count int, big bool) MotionResult {
+	forward, end, atEnd := MotionWordForward, MotionWordEnd, isWordEndAt
+	if big {
+		forward, end, atEnd = MotionWORDForward, MotionWORDEnd, isWORDEndAt
+	}
+	switch {
+	case getCharAt(ctx, x, y) == 0:
+		return forward(ctx, x, y, count)
+	case !atEnd(ctx, x, y):
+		return end(ctx, x, y, count)
+	case count == 1:
+		return charCells(x, y, x)
+	}
+	return end(ctx, x, y, count-1)
+}
+
 // MotionScreenVerticalMid implements 'M' motion
 func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.MapHeight / 2

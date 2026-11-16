@@ -95,6 +95,7 @@ type GlyphSystem struct {
 	statRateMult    *status.AtomicFloat
 	statNextSpawnMS *atomic.Int64
 	statOrphanGlyph *atomic.Int64
+	statCleared     *atomic.Int64 // clears served, which an edit's undo history ends at
 	buffers         bufferTelemetry
 
 	toggle
@@ -112,6 +113,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statRateMult = world.Resources.Status.Floats.Get("glyph.rate_mult")
 	s.statNextSpawnMS = world.Resources.Status.Ints.Get("glyph.next_spawn_ms")
 	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_glyph")
+	s.statCleared = world.Resources.Status.Ints.Get("glyph.cleared")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "glyph", "placement")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
@@ -136,6 +138,7 @@ func (s *GlyphSystem) Init() {
 	s.statRateMult.Set(1.0)
 	s.statNextSpawnMS.Store(0)
 	s.statOrphanGlyph.Store(0)
+	s.statCleared.Store(0)
 	s.buffers.Reset()
 	s.enabled = true
 }
@@ -156,6 +159,7 @@ func (s *GlyphSystem) EventTypes() []event.EventType {
 		event.EventMetaSystemCommandRequest,
 		event.EventGlyphLineRequest,
 		event.EventGlyphClearRequest,
+		event.EventGlyphPutRequest,
 	}
 }
 
@@ -186,6 +190,26 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GlyphClearPayload); ok {
 			s.clear(payload)
 		}
+
+	case event.EventGlyphPutRequest:
+		// As a scenario's line, a put stands with the spawner off, but for a player
+		if payload, ok := ev.Payload.(*event.GlyphPutPayload); ok && !s.world.Watches() {
+			s.put(payload)
+		}
+	}
+}
+
+// put lays each cell's glyph as it was yanked, passing over one the palette lacks, a
+// cell off the map and one a wall, rock or a glyph holds, this put's own included
+func (s *GlyphSystem) put(p *event.GlyphPutPayload) {
+	for i := range p.Cells {
+		c := &p.Cells[i]
+		if !c.Drawable() || !s.world.Positions.TakesGlyph(c.X, c.Y) {
+			continue
+		}
+		e := s.world.CreateEntity(core.DomainPlayer)
+		s.world.Positions.SetPosition(e, component.PositionComponent{X: c.X, Y: c.Y})
+		s.attachGlyph(e, c.Rune, c.Type, c.Level, false)
 	}
 }
 
@@ -205,6 +229,7 @@ func (s *GlyphSystem) clear(p *event.GlyphClearPayload) {
 		return true
 	})
 	s.world.DestroyEntitiesBatch(s.cleared)
+	s.statCleared.Add(1)
 }
 
 // Update runs the spawn system logic

@@ -297,8 +297,13 @@ Libraries · Branches.
 - In a bare world whose cursor entity carries no `CursorComponent`,
   `PushCursorMove` predicts nothing and only crosses `EventCursorMoveRequest`, which
   no `CursorSystem` applies, so `LocalCursor` stays put. A router test that chains
-  keys, a motion then what acts from its cell, applies each move from the queue
-  itself (`lineWorld` in `internal/mode/router_test.go`).
+  keys, a motion then what acts from its cell, applies each move and edit from the
+  queue itself, a key at a time (`lineWorld` in `internal/mode/router_test.go`,
+  read back with `screen`).
+- `.` owes the text Insert typed after its change through `Machine.Next`, which
+  types nothing until the router has entered Insert: whatever routes `Process`'s
+  intent drains `Next` after it, settling each, as `App.takeEventWith` and the
+  test helpers `press` and `tutorialKeys` do.
 
 ## Session tests
 
@@ -874,7 +879,16 @@ Libraries · Branches.
   clear destroys it at once rather than by a death batch, or the write reuses an
   entity the batch then takes.
 - A line delete's `EventDeleteRequest` carries rows alone (`start_x` stays 0), so
-  a guard on `dd` compares `range_type` and `start_y`; `x` fills every field.
+  a guard on `dd` compares `range_type` and `start_y`; `x` fills every field, and
+  a range's start is its first cell whichever way the motion went.
+- A transition on a request runs its entry before the system that handles the
+  request, so what that system pushes lands after the entry's events: typing's step
+  right overtook the next lesson's cursor placement until the tutorial's `Stand`
+  took `delay_ms = 1`. A mode is the router's alone, so a lesson entered from
+  Insert stays in Insert.
+- The router's change history ends at a glyph clear (`glyph.cleared`) and a new
+  game: without the first, `u` in a lesson laid back the line the lesson before
+  deleted, into cells the new one left empty.
 - Reading a pane: the status bar's first item is the FSM state and its time, the
   column ruler counts from the cursor, and the large glyph some way off the cursor
   is the magnifier, the glyph under it in the large face.
@@ -910,7 +924,7 @@ Libraries · Branches.
   expands them itself, so the older build is refused at the door instead.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
-  `wad/scenario/` for its name (`tutor` lists its systems one by one).
+  `wad/scenario/` for its name (`tutorial` lists its systems one by one).
 
 ## Corpus
 

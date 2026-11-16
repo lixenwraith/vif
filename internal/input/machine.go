@@ -83,8 +83,16 @@ type Machine struct {
 	charSpecial SpecialOp // r's replace, which a char completes in place of a motion
 	prefix      rune
 
-	// lastChange is the last change completed, which '.' completes again
+	// lastChange is the last change completed, which '.' completes again, and
+	// lastText what Insert typed after it, which '.' types after it
 	lastChange Intent
+	lastText   string
+
+	// entering is the last key's intent when it asks for Insert, typed what Insert
+	// typed since it was entered, and pending what a repeat owes after its change
+	entering Intent
+	typed    []rune
+	pending  []Intent
 
 	// Marker state - direction pending color selection
 	markerDirection MotionOp
@@ -104,13 +112,52 @@ func NewMachine() *Machine {
 	}
 }
 
+// insertTextMax is the longest Insert text '.' repeats: a longer one is play, not
+// an edit, and is no part of its change
+const insertTextMax = 64
+
 // SetMode updates the parser's mode context
 // Called by mode.Router when game mode changes
 func (m *Machine) SetMode(mode InputMode) {
+	if mode == ModeInsert && m.mode != ModeInsert {
+		m.typed = m.typed[:0]
+	}
+	if m.mode == ModeInsert && mode != ModeInsert {
+		m.endInsert()
+	}
 	m.mode = mode
 	if mode == ModeNormal {
 		m.Reset()
 	}
+}
+
+// endInsert makes what Insert typed part of the change that entered it, for '.':
+// a change's own text, or with text typed, the i, a, A, I, o or O that entered
+func (m *Machine) endInsert() {
+	text := string(m.typed)
+	if len(m.typed) > insertTextMax {
+		text = ""
+	}
+	if m.entering.changes() || m.entering.Type != IntentNone && text != "" {
+		m.lastChange, m.lastText = m.entering, text
+	}
+	m.entering = Intent{}
+}
+
+// Next returns what a repeat still owes once its change is routed: the text Insert
+// typed after it, a character a call, then the return to Normal. It owes nothing,
+// nil, where the change entered no Insert.
+func (m *Machine) Next() *Intent {
+	if len(m.pending) == 0 || m.mode != ModeInsert {
+		m.pending = m.pending[:0]
+		return nil
+	}
+	intent := m.pending[0]
+	m.pending = m.pending[1:]
+	if intent.Type == IntentTextChar {
+		m.typed = append(m.typed, intent.Char)
+	}
+	return &intent
 }
 
 // Feedback is what the status bar's key cell shows: the keys of a sequence still
@@ -163,12 +210,26 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 		}
 		return nil
 	}
+	m.pending = m.pending[:0]
+	entered := m.mode == ModeInsert
 	intent := m.pressKey(ev)
 	if ev.Action == terminal.KeyRepeat && intent != nil && intent.toggles() {
 		return nil // a toggle flips once a press; motion, text and fire repeat
 	}
-	if intent != nil && intent.changes() {
+	if intent == nil {
+		return nil
+	}
+	if intent.changes() {
 		m.lastChange = *intent
+		if len(m.pending) == 0 {
+			m.lastText = "" // a repeat's text is pending, and stands
+		}
+	}
+	if !entered {
+		m.entering = Intent{}
+		if intent.ModeTarget == ModeTargetInsert {
+			m.entering = *intent
+		}
 	}
 	return intent
 }
@@ -187,14 +248,18 @@ func (i *Intent) toggles() bool {
 	return false
 }
 
-// changes reports an intent that edits glyphs, which '.' completes again: an
-// operator over a range, x, D, C and r. Insert's typing is not kept.
+// changes reports an intent that edits glyphs, which '.' completes again: a delete
+// or change over a range, x, X, D, C, s, S, r, ~ and a put. A yank edits none.
 func (i *Intent) changes() bool {
 	switch i.Type {
-	case IntentOperatorMotion, IntentOperatorLine, IntentOperatorCharMotion:
-		return true
+	case IntentOperatorMotion, IntentOperatorLine, IntentOperatorCharMotion, IntentOperatorBounds:
+		return i.Operator == OperatorDelete
 	case IntentSpecial:
-		return i.Special == SpecialDeleteChar || i.Special == SpecialDeleteToEnd || i.Special == SpecialReplaceChar
+		switch i.Special {
+		case SpecialDeleteChar, SpecialDeleteToEnd, SpecialReplaceChar, SpecialDeleteCharBack,
+			SpecialDeleteLine, SpecialToggleCase, SpecialPutAfter, SpecialPutBefore:
+			return true
+		}
 	}
 	return false
 }
@@ -394,8 +459,14 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 		m.state = StateCharWait
 		return nil
 
-	case BehaviorOperator:
+	case BehaviorOperator, BehaviorYank:
 		m.operator, m.opKey, m.opMode = OperatorDelete, key, entry.ModeTarget
+		if entry.Behavior == BehaviorYank {
+			m.operator = OperatorYank
+		}
+		if m.mode == ModeVisual {
+			return m.completeOperator(IntentOperatorBounds, MotionNone, 0) // the bounds are its range
+		}
 		m.state = StateOperatorWait
 		return nil
 
@@ -440,7 +511,8 @@ func (m *Machine) completeCharMotion(char rune) *Intent {
 }
 
 // repeatChange completes the last change again; a count typed before '.' replaces
-// the change's own, and the next '.' keeps it, as in vim
+// the change's own, and the next '.' keeps it, as in vim. A change that enters
+// Insert owes the text typed there and the return to Normal (Next).
 func (m *Machine) repeatChange() *Intent {
 	if m.lastChange.Type == IntentNone {
 		m.Reset()
@@ -452,6 +524,12 @@ func (m *Machine) repeatChange() *Intent {
 	intent := m.lastChange
 	intent.Command = m.captureCommand()
 	m.Reset()
+	if intent.ModeTarget == ModeTargetInsert {
+		for _, r := range m.lastText {
+			m.pending = append(m.pending, Intent{Type: IntentTextChar, Char: r})
+		}
+		m.pending = append(m.pending, Intent{Type: IntentModeSwitch, ModeTarget: ModeTargetNormal})
+	}
 	return &intent
 }
 
@@ -707,7 +785,10 @@ func (m *Machine) processInsert(ev terminal.Event) *Intent {
 		return &Intent{Type: IntentInsertDeleteForward}
 	}
 
-	// Printable character
+	// Printable character, kept as the text of the change that entered Insert
+	if len(m.typed) <= insertTextMax {
+		m.typed = append(m.typed, ev.Rune)
+	}
 	return &Intent{
 		Type: IntentTextChar,
 		Char: ev.Rune,

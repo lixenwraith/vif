@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"errors"
 	"fmt"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
 	"maps"
@@ -460,16 +461,21 @@ func TestNavigationTakesTickCounts(t *testing.T) {
 }
 
 // TestAScenarioKeymapBindsPlayKeysAlone: [keymap] takes the normal, operator and
-// prefix_g sections, each key a play action or none. A system action, which could
-// take the quit or the menu from a player who joined, and any other section are refused.
+// prefix_g sections and normal_keys, each key a play action or none. A system
+// action, a special key the default keymap gives one, either of which could take
+// the quit or the menu from a player who joined, and any other section are refused.
 func TestAScenarioKeymapBindsPlayKeysAlone(t *testing.T) {
 	appends, _ := input.ActionEntry("mode_append")
+	redo, _ := input.ActionEntry("redo_change")
+	keys, _ := terminal.KeyByName("ctrl_r")
 	for _, c := range []struct {
 		table   string
 		refused bool
 	}{
-		{"[keymap.normal]\na = \"mode_append\"\np = \"none\"\n", false},
+		{"[keymap.normal]\na = \"mode_append\"\np = \"none\"\n[keymap.normal_keys]\nctrl_r = \"redo_change\"\n", false},
 		{"[keymap.normal]\nj = \"quit\"\n", true},
+		{"[keymap.normal_keys]\nctrl_r = \"help\"\n", true},
+		{"[keymap.normal_keys]\nescape = \"redo_change\"\n", true},
 		{"[keymap.overlay]\nq = \"overlay_activate\"\n", true},
 		{"[keymap.normal]\na = \"no_such_action\"\n", true},
 		{"keymap = 1\n", true},
@@ -482,8 +488,9 @@ func TestAScenarioKeymapBindsPlayKeysAlone(t *testing.T) {
 			t.Errorf("%q was taken", c.table)
 		case !c.refused && err != nil:
 			t.Errorf("%q: %v", c.table, err)
-		case !c.refused && (s.Keys.NormalRunes['a'] != appends || s.Keys.NormalRunes['p'].Behavior != input.BehaviorNone):
-			t.Errorf("%q read as %+v", c.table, s.Keys.NormalRunes)
+		case !c.refused && (s.Keys.NormalRunes['a'] != appends || s.Keys.NormalRunes['p'].Behavior != input.BehaviorNone ||
+			s.Keys.SpecialKeys[keys] != redo):
+			t.Errorf("%q read as %+v and %+v", c.table, s.Keys.NormalRunes, s.Keys.SpecialKeys)
 		}
 	}
 }
@@ -504,7 +511,7 @@ func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 // place of the roots', and travel in the canonical form; a name the scenario has no
 // file for fails the load
 func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
-	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "tutor"), scenarioRegion)
+	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "tutorial"), scenarioRegion)
 	write := func(name, body string) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -517,7 +524,7 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 	if sc.Files() != 3 || !sc.ContentBlocks {
 		t.Fatalf("scenario holds %d files, blocks %v; want the entry, the region and the corpus, laid in blocks", sc.Files(), sc.ContentBlocks)
 	}
-	copied, err := UnmarshalScenario("tutor", sc.Marshal())
+	copied, err := UnmarshalScenario("tutorial", sc.Marshal())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +539,7 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 		}
 	}
 	src, err := Corpus(Options{Scenario: dir, Content: dir}, sc)
-	if err != nil || src.FS == nil || !src.Explicit || src.Label != "scenario tutor" {
+	if err != nil || src.FS == nil || !src.Explicit || src.Label != "scenario tutorial" {
 		t.Fatalf("the run's corpus = %+v, %v; want the scenario's own over the -f root", src, err)
 	}
 

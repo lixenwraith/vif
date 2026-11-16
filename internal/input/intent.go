@@ -17,13 +17,13 @@ const (
 	IntentMotion     // h,j,k,l,w,b,0,$,G,gg,arrows,etc
 	IntentCharMotion // f,F,t,T + target char
 
-	// Normal mode operators
-	IntentOperatorMotion     // d + motion (e.g., dw, d2w)
-	IntentOperatorLine       // dd (line-wise delete)
-	IntentOperatorCharMotion // d + f/t + char (e.g., df;)
+	// Normal mode operators: d, c or y
+	IntentOperatorMotion     // operator + motion (e.g., dw, d2w)
+	IntentOperatorLine       // operator doubled, over whole lines (dd, cc, yy)
+	IntentOperatorCharMotion // operator + f/t + char (e.g., df;)
 
 	// Normal mode special commands
-	IntentSpecial     // x, D, C, r, n, N, *, #, ;, ,
+	IntentSpecial     // x, X, D, C, s, S, r, ~, n, N, *, #, ;, ,, the puts, change undo and redo, a mark set
 	IntentNuggetJump  // Tab
 	IntentGoldJump    // Shift+Tab
 	IntentFireMain    // Enter in Normal mode
@@ -84,6 +84,8 @@ const (
 	IntentOverlayWheel // Wheel step while an overlay has the keys: X, Y, ScrollDir
 	IntentPause        // p - :pause, the pause only another ends
 	IntentConsole      // ` - the console of messages and commands, opened or closed
+
+	IntentOperatorBounds // d, c or y in Visual: over the ping bounds, with no motion
 )
 
 // MotionOp identifies motion algorithm
@@ -129,14 +131,19 @@ const (
 	MotionColoredGlyphUp               // gk + color
 	MotionColoredGlyphDown             // gj + color
 	MotionLastGlyph                    // A: the line's last glyph, never $'s step past it
+	MotionOpenBelow                    // vim's o: the row below, at its first glyph
+	MotionOpenAbove                    // vim's O: the row above, at its first glyph
+	MotionMark                         // vim's ` + letter: a mark's cell
+	MotionMarkLine                     // ' + letter: a mark's row, at its first glyph
 )
 
 // OperatorOp identifies operator type
 type OperatorOp uint8
 
 const (
-	OperatorNone OperatorOp = iota
-	OperatorDelete
+	OperatorNone   OperatorOp = iota
+	OperatorDelete            // d and c: fills the register, then deletes
+	OperatorYank              // y: fills the register alone
 )
 
 // SpecialOp identifies special commands
@@ -153,6 +160,14 @@ const (
 	SpecialReplaceChar                 // r + char
 	SpecialSearchWordForward           // *
 	SpecialSearchWordBack              // #
+	SpecialDeleteCharBack              // X
+	SpecialDeleteLine                  // S, with its Insert: cc as one key
+	SpecialToggleCase                  // ~
+	SpecialPutAfter                    // vim's p
+	SpecialPutBefore                   // vim's P
+	SpecialUndoChange                  // vim's u
+	SpecialRedoChange                  // vim's Ctrl-R
+	SpecialMarkSet                     // vim's m + letter
 )
 
 // ModeTarget identifies mode switch destination
@@ -187,7 +202,7 @@ type Intent struct {
 	ModeTarget    ModeTarget // A switch's mode, or the one a motion, operator or special enters after
 	ScrollDir     ScrollDir
 	Count         int  // Effective count (minimum 1)
-	Char          rune // Target char of f/t, the glyph r types, or a typed char
+	Char          rune // Target char of f/t, the glyph r types, a mark's letter, or a typed char
 	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
 	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
 	Touch         bool // A left press a finger made, on a host that reports one

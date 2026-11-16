@@ -186,6 +186,8 @@ const (
 	EventGlyphLineRequest
 	// EventGlyphClearRequest (GlyphClearPayload) [local] removes the glyphs in a rectangle without effect, every glyph when the rectangle is empty
 	EventGlyphClearRequest
+	// EventGlyphPutRequest (GlyphPutPayload) [local] lays glyphs cell by cell, each with its rune, colour and level, passing over a held cell
+	EventGlyphPutRequest
 
 	// --- Energy ---
 
@@ -258,7 +260,7 @@ const (
 	EventCharacterTyped
 	// EventDeleteRequest (DeleteRequestPayload) [local] signals a deletion operation (x, d, etc.)
 	EventDeleteRequest
-	// EventGlyphReplaceRequest (GlyphReplaceRequestPayload) [local] signals r retyping the glyphs of a row's cells as one char
+	// EventGlyphReplaceRequest (GlyphReplaceRequestPayload) [local] signals r, ~ or an undo retyping the glyphs of a row's cells as text
 	EventGlyphReplaceRequest
 	// EventKeyCaptureRequest (KeyCapturePayload) [local] replaces the keys a scenario takes from Normal, Visual and Insert parsing
 	EventKeyCaptureRequest
