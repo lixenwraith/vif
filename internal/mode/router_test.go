@@ -487,6 +487,7 @@ func TestAChangeIsTakenBackAndMadeAgainWhileItsCellsStand(t *testing.T) {
 		{"one two", "rx3~uu\x12\x12", "XNE two"},
 		{"ab", "yypu", "ab"},
 		{"ab", "yypu\x12", "ab\nab"},
+		{"ab cd", "ywwpu", "ab cd"},
 		{"one two", "xuwx\x12", "one  wo"},
 		{"abc", "xlrziz\x1bu", "a c"},
 	} {
