@@ -62,9 +62,28 @@ func TestTutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 	}
 }
 
+// tutorKeys types keys into a headless tutor as its player would, a tick or two
+// after each so a lesson's delayed placement lands: \x1b is Escape, \x12 Ctrl-R.
+func tutorKeys(t *testing.T, a *App, keys string) {
+	t.Helper()
+	for _, r := range keys {
+		ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
+		switch r {
+		case '\x1b':
+			ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
+		case '\x12':
+			ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlR}
+		}
+		for intent := a.inputMachine.Process(ev); intent != nil; intent = a.inputMachine.Next() {
+			inject(t, a, intent)
+		}
+		a.Tick(2)
+	}
+}
+
 // The tutor's keymap holds over the player's for its run: with an installed keymap
 // binding a to auto fire and p to pause, as a copy of the defaults does, a steps
-// right into Insert, as vim's append, and p does nothing.
+// right into Insert, as vim's append, and p puts and never pauses.
 func TestTutorsKeysHoldOverThePlayersKeymap(t *testing.T) {
 	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "tutor"})
 	if err != nil {
@@ -84,20 +103,82 @@ func TestTutorsKeysHoldOverThePlayersKeymap(t *testing.T) {
 	}
 	t.Cleanup(a.Close)
 	a.Tick(10)
-	key := func(k terminal.Key, r rune) {
-		if intent := a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r}); intent != nil {
-			inject(t, a, intent)
-		}
-	}
 	before, _ := a.World().LocalCursor()
-	key(terminal.KeyRune, 'a')
+	tutorKeys(t, a, "a")
 	after, _ := a.World().LocalCursor()
 	if !a.Context().IsInsertMode() || after.X != before.X+1 || after.Y != before.Y {
 		t.Fatalf("a took the cursor from %v to %v, Insert %v; want one cell right, in Insert", before, after, a.Context().IsInsertMode())
 	}
-	key(terminal.KeyEscape, 0)
-	key(terminal.KeyRune, 'p')
+	tutorKeys(t, a, "\x1bp")
 	if a.Context().TimeCtl.IsPaused() || !a.Context().IsNormalMode() {
 		t.Fatalf("p paused the tutor or left Normal mode")
+	}
+}
+
+// Each lesson on an edit ends on the keys it asks for, played through the real
+// systems: a delete by motion, the Insert entries, a change, a retype, a repeat
+// with its Insert text, a yank and its puts, an undo and redo, which take back no
+// earlier lesson's change, the word searches, a mark and Visual, whose lesson alone
+// raises the shield its d takes a block under.
+func TestTutorsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutor"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutor scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	read := func() (state string, glyphs int, shield bool) {
+		w.RunSafe(func() {
+			state = w.Resources.Status.Strings.Get("fsm.state").Load()
+			glyphs = w.Components.Glyph.CountEntities()
+			s, _ := w.Components.Shield.GetComponent(w.Resources.Player.Entity)
+			shield = s.Active
+		})
+		return state, glyphs, shield
+	}
+	a.Tick(10)
+	for _, c := range []struct{ keys, want string }{
+		{"ssssss", "DeleteMotion"},
+		{"dwfxD", "Insert"},
+		{"s", "Append"},
+		{"A}\x1bI{\x1bj^a>", "Open"},
+		{"\x1bobelow\x1bkOabove", "Change"},
+		{"\x1bcw\x1bjcc\x1b", "Replace"},
+		{"fzrsfS5~", "Repeat"},
+		{"Ino\x1bj.j.", "Yank"},
+		{"yypddp", "Undo"},
+		{"u", "Undo"},
+		{"ddu\x12", "Bracket"},
+		{"ss", "Star"},
+		{"**#", "Marks"},
+		{"maG'a", "Map"},
+	} {
+		_, before, _ := read()
+		tutorKeys(t, a, c.keys)
+		state, after, shield := read()
+		if state != c.want || shield {
+			t.Fatalf("%q left the tutor in %s with the shield up %v, want %s with it down", c.keys, state, shield, c.want)
+		}
+		// The last lesson's delete is no change of this one's for u to take back
+		if c.keys == "u" && after != before {
+			t.Fatalf("u on a new lesson left %d glyphs of %d, want what the lesson laid", after, before)
+		}
+	}
+	tutorKeys(t, a, "sv")
+	state, laid, shield := read()
+	if state != "Visual" || !shield {
+		t.Fatalf("s and v left the tutor in %s with the shield up %v, want Visual with it up", state, shield)
+	}
+	tutorKeys(t, a, "d")
+	if state, left, _ := read(); state != "VisualLeave" || laid-left < 20 {
+		t.Fatalf("d in Visual left the tutor in %s having taken %d glyphs, want VisualLeave and a block of them", state, laid-left)
+	}
+	tutorKeys(t, a, "\x1bs")
+	if state, _, shield := read(); state != "Free" || shield {
+		t.Fatalf("past the last lesson the tutor stands in %s with the shield up %v, want Free with it down", state, shield)
 	}
 }
