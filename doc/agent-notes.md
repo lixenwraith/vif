@@ -873,9 +873,16 @@ Libraries · Branches.
 - Which file is the player's own is `paths.OwnRoot`, `paths.Shared` and
   `paths.Special`, and every host builds its `resource.Options` from `vif.toml` with
   `Options.ApplySettings`, which marks a root or keymap another's `vif.toml` names
-  foreign: a host never decides it alone. A `-k` file setting something but no
-  keymap section is refused rather than upgraded, so a wrong path never has its
-  file replaced; an empty one is a keymap binding nothing of its own.
+  foreign: a host never decides it alone. A `-k` file setting something but neither
+  `fill` nor a keymap section is refused rather than upgraded, so a wrong path never
+  has its file replaced; an empty one is a keymap binding nothing of its own.
+- `keymap.toml` is the built-in table and what `Fill` draws from; any other embedded
+  keymap (`vim.toml`) is read over it by name and says `fill = false`, without
+  which a copy's first upgrade gains the whole table. A new one needs its `put`
+  line in the Makefile. A name is `paths.IsKeymapName`, in the resolver and in
+  `Settings.resolve` alike: a `[paths]` name joined to the file's directory is lost.
+- The tutorial keeps its own `[keymap]` and a test holds the vim keymap to it: a
+  scenario cannot bind `pause`, which the vim keymap moves to Ctrl-Z.
 - `os.UserConfigDir` reads `XDG_CONFIG_HOME` only on Linux and the BSDs, so a test
   setting it alone writes the developer's own files on macOS and Windows: point
   `HOME` and `AppData` there too and skip where `paths.UserRoot` still lies

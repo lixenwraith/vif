@@ -154,6 +154,12 @@ func IsScenarioName(name string) bool {
 		!strings.HasPrefix(slash, ".") && !strings.Contains(slash, "/.")
 }
 
+// IsKeymapName reports whether name is a keymap the roots resolve below input/ and
+// the binary embeds, rather than a file's path: one element with no extension.
+func IsKeymapName(name string) bool {
+	return IsScenarioName(name) && filepath.Base(name) == name && filepath.Ext(name) == ""
+}
+
 // WalkScenarios visits each scenario below root's scenario/, by its slash-separated
 // path there and its directory, shallowest first and in path order among equals,
 // until visit returns false. A directory holding scenario.toml is a scenario and

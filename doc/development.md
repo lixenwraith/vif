@@ -60,7 +60,7 @@ make dev       # generated code + race-enabled debug build
 | `tools` | Build every `tool/*` command, and `bin/ascimage` from the `lixenwraith/ascimage` version `go.mod` requires. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
-| `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, a keymap or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `CLEAN=1` (here and for `install`) removes the previous install first. |
+| `install-config` | Copy `wad/`, bot graphs, keymaps and `vif.toml` into the user config root, an `input/keymap.toml` or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `CLEAN=1` (here and for `install`) removes the previous install first. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
 | `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
 | `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
@@ -189,7 +189,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
 | `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, or a directory containing one. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
-| `-k`, `-config-keymap <path>` | Keymap override TOML. |
+| `-k`, `-config-keymap <name-or-path>` | Keymap override TOML, or the name of one in a root's `input/` or embedded, as `vim` ([Input §10](input-and-modes.md#10-keymap-override-files)). |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |
 | `-config-sounds <path>` | Sound definition override TOML; strict optional. |
 

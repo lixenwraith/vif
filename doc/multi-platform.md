@@ -388,9 +388,9 @@ more, so a later resize or visibility change cannot replace that reason.
 
 ## 7. External maps and assets
 
-A browser has no config root: solo, it plays the embedded scenario, content and
-keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
-build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
+A browser has no config root: solo, it plays the embedded scenario and content on
+the built-in keymap or an embedded one `-k` names (`?arg=-k%3Dvim`), and CLI
+arguments alone cannot give it the editable `wad/` tree a native build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
 keeps in the site's storage (`localStorage`, handed to the Worker at the start,
 since a Worker has none), so each visit starts as the last was left: a settings
 document made from the embedded one at the first change and brought up to date at

@@ -14,7 +14,7 @@ log = ""
 journal = ""
 music = ""
 # What -s, -f and -k name: a scenario name or path, a content directory or
-# file, a keymap file.
+# file, a keymap file or the name of one, as "vim".
 scenario = ""
 content = ""
 keymap = ""

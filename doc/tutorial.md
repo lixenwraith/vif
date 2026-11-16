@@ -62,7 +62,9 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
   `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
   `redo_change`, and `m` to `mark_set`
-  ([Input §10](input-and-modes.md#10-keymap-override-files)).
+  ([Input §10](input-and-modes.md#10-keymap-override-files)). The vim keymap
+  binds each the same, so `-k vim` plays any game on the keys taught here, and
+  the last lesson says so.
 
 A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph
 and the heading, under a white flash; the parent's exit runs only when the last

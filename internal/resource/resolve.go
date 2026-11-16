@@ -36,7 +36,8 @@ type Options struct {
 	// Content is a corpus directory or a single content file.
 	Content string
 
-	// Keymap, Music and Sounds are explicit TOML overrides.
+	// Keymap is a keymap file, or the name of one in a root's input/ or embedded;
+	// Music and Sounds are explicit TOML overrides.
 	Keymap string
 	Music  string
 	Sounds string
@@ -151,30 +152,60 @@ func Scenarios(o Options) []string {
 	return names
 }
 
-// Keymap returns the external keymap path, "" for the embedded default keymap.
-func Keymap(o Options) (string, error) {
-	path, _, err := keymap(o)
-	return path, err
+// Keymap returns the keymap a run reads over the built-in table, nil for none, and
+// what an error names it by: its file, or the name of an embedded one.
+func Keymap(o Options) ([]byte, string, error) {
+	path, embedded, _, err := keymap(o)
+	if err != nil || path == "" {
+		return embedded, o.Keymap, err
+	}
+	data, err := os.ReadFile(path)
+	return data, path, err
 }
 
-// keymap is Keymap's path and whether it is the player's own, which a run writes
-// back brought up to date: one they name, or one in the -config-dir root or the
-// user root, as vif.toml goes, unless a vif.toml not theirs named it; never one in
-// a shared root (paths.Shared) or a special file (paths.Special), such as -k /dev/null.
-func keymap(o Options) (string, bool, error) {
-	path, err := paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
-	if err != nil || path == "" {
-		return "", false, err
+// keymap finds the keymap Options names: a file, or a name as input/<name>.toml in
+// the roots and then embedded, else the roots' input/keymap.toml; neither is the
+// built-in table alone. own says a run writes the file back brought up to date: one
+// the player names or has in the -config-dir or user root, unless a vif.toml not
+// theirs named it, and never a shared (paths.Shared) or special (paths.Special) one.
+func keymap(o Options) (path string, embedded []byte, own bool, err error) {
+	roots, file := newResolver(o).roots, paths.KeymapConfigFile
+	switch info, err := os.Stat(o.Keymap); {
+	case o.Keymap == "":
+	case err == nil && !info.IsDir():
+		path = o.Keymap
+	case paths.IsKeymapName(o.Keymap):
+		file = o.Keymap + ".toml"
+	case err == nil:
+		return "", nil, false, fmt.Errorf("%s is a directory", o.Keymap)
+	default:
+		return "", nil, false, err // a path, which names no file
+	}
+	if path == "" {
+		path = paths.FindFile(roots, paths.InputDirName, file)
+	}
+	switch {
+	case path != "":
+	case o.Keymap == "":
+		return "", nil, false, nil
+	default:
+		if embedded, err = fs.ReadFile(asset.Keymaps, file); err == nil {
+			return "", embedded, false, nil
+		}
+		if !paths.ExternalFiles() {
+			return "", nil, false, fmt.Errorf("keymap %q not found: a browser holds only the embedded keymaps", o.Keymap)
+		}
+		return "", nil, false, fmt.Errorf("keymap %q not found as a file, in a configuration root or embedded", o.Keymap)
 	}
 	dir := o.Dir
 	if o.ForeignDir {
 		dir = ""
 	}
-	own := paths.OwnRoot(dir, filepath.Dir(filepath.Dir(path)))
+	own = paths.OwnRoot(dir, filepath.Dir(filepath.Dir(path)))
 	if o.Keymap != "" {
 		own = !o.ForeignKeymap
 	}
-	return path, own && !paths.Special(path) && !paths.Shared(path), nil
+	return path, nil, own && !paths.Special(path) && !paths.Shared(path), nil
 }
 
 // ApplySettings gives each of Dir, Scenario, Content and Keymap a flag left empty
@@ -204,7 +235,7 @@ func (o *Options) ApplySettings(s paths.Settings, own bool) {
 // line naming the changes, "" when there were none; another's is left as it is, and
 // one that does not read is for the run to refuse.
 func UpgradeKeymap(o Options) string {
-	path, own, err := keymap(o)
+	path, _, own, err := keymap(o)
 	if err != nil || !own {
 		return ""
 	}

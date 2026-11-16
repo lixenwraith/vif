@@ -768,6 +768,7 @@ on_enter = [
     { macro = "Note", text = "There a cycles auto fire, p pauses, o and O find a glyph in the column,", row = 9 },
     { macro = "Note", text = "u undoes a cursor move, m is the middle column, s is cl and S is cc.", row = 10 },
     { macro = "Note", text = "A keymap gives a key back to vi by its action: put_after, undo_change.", row = 11 },
+    { macro = "Note", text = "The vim keymap gives them back in any game: -k vim, or keymap in vif.toml.", row = 12 },
     { macro = "Line", text = "this tutorial played them as vi does: s goes on", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 22 of 22: what a game makes of a p o O u m s S; s goes on" },

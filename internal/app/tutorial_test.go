@@ -1,11 +1,13 @@
 package app
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/input"
@@ -112,6 +114,41 @@ func TestTutorialsKeysHoldOverThePlayersKeymap(t *testing.T) {
 	tutorialKeys(t, a, "\x1bp")
 	if a.Context().TimeCtl.IsPaused() || !a.Context().IsNormalMode() {
 		t.Fatalf("p paused the tutorial or left Normal mode")
+	}
+}
+
+// The vim keymap gives back each key the tutorial's keymap does, to the same
+// action, and a run that names it plays them so in any game: a steps into Insert
+// where the built-in keymap cycles auto fire.
+func TestTheVimKeymapPlaysTheKeysTheTutorialTaught(t *testing.T) {
+	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "tutorial"})
+	if err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	data, _ := fs.ReadFile(asset.Keymaps, "vim.toml")
+	vim, err := input.LoadKeyConfig(data)
+	if err != nil || len(sc.Keys.NormalRunes) == 0 {
+		t.Fatalf("the vim keymap, %v; the tutorial binds %d keys", err, len(sc.Keys.NormalRunes))
+	}
+	for r, entry := range sc.Keys.NormalRunes {
+		if vim.NormalRunes[r] != entry {
+			t.Errorf("%q: the tutorial binds %+v, the vim keymap %+v", r, entry, vim.NormalRunes[r])
+		}
+	}
+	for k, entry := range sc.Keys.SpecialKeys {
+		if vim.SpecialKeys[k] != entry {
+			t.Errorf("%s: the tutorial binds %+v, the vim keymap %+v", input.SpecialKeyName(k), entry, vim.SpecialKeys[k])
+		}
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30,
+		Resources: resource.Options{Embedded: true, Keymap: "vim"}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	if tutorialKeys(t, a, "a"); !a.Context().IsInsertMode() {
+		t.Fatal("a did not enter Insert in a run on the vim keymap")
 	}
 }
 

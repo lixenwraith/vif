@@ -31,7 +31,7 @@ _arguments \
   '-config-dir[Configuration root holding scenario/ input/ audio/ content/ image/ bot/]:dir:_files -/' \
   '(-s -config-scenario)'{-s,-config-scenario}'[Installed scenario name or path below scenario/, scenario.toml, or a scenario directory]:path:_files' \
   '(-f -config-content)'{-f,-config-content}'[Content directory, or a single content file]:path:_files' \
-  '(-k -config-keymap)'{-k,-config-keymap}'[Keymap TOML]:path:_files' \
+  '(-k -config-keymap)'{-k,-config-keymap}'[Keymap TOML, or the name of one in input/ or built in, as vim]:path:_files' \
   '-config-music[Music pattern override TOML]:path:_files' \
   '-config-sounds[Sound definition override TOML]:path:_files' \
   '-color[Colour depth; auto detects the terminal]:value:(auto 256 true)' \

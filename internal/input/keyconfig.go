@@ -92,9 +92,9 @@ func LoadKeyConfig(data []byte) (*KeyTable, error) {
 
 // UpgradeKeymap brings a keymap an earlier build left up to this build's, as
 // paths.UpgradeSettings does vif.toml: a section it does not read, a key it cannot
-// name and a binding it refuses go with their own comments, then each embedded
-// binding of a key bound in no spelling comes with its comments. It names the
-// changes, and refuses a document setting something but no keymap section (errNotKeymap).
+// name and a binding it refuses go with their own comments, then, unless it says
+// fill = false, each embedded binding of a key bound in no spelling comes with its
+// comments. It names the changes, and refuses a document that is no keymap (errNotKeymap).
 func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {
@@ -108,7 +108,9 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	var dropped, why []string
 	bound := make(map[string]map[any]string) // per section, the spelling each key is bound under
 	tree := doc.Tree()
-	keymap := len(tree) == 0
+	fill, said := tree[fillKey].(bool) // a keymap of its player's own bindings alone says false
+	fill = fill || !said
+	keymap := len(tree) == 0 || said
 	for name := range tree {
 		_, known := sectionKind(name)
 		keymap = keymap || known
@@ -120,6 +122,8 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 		special, known := sectionKind(name)
 		table, ok := tree[name].(map[string]any)
 		switch {
+		case name == fillKey && said:
+			continue
 		case !known:
 			gone, dropped = append(gone, toml.Key{name}), append(dropped, binding(toml.Key{name}, ok))
 			continue
@@ -175,14 +179,16 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 			return nil, nil, err
 		}
 	}
-	for _, k := range spelt {
-		if _, err := shipped.Delete(k); err != nil {
+	var added []toml.Key
+	if fill {
+		for _, k := range spelt {
+			if _, err := shipped.Delete(k); err != nil {
+				return nil, nil, err
+			}
+		}
+		if added, err = doc.Fill(shipped); err != nil {
 			return nil, nil, err
 		}
-	}
-	added, err := doc.Fill(shipped)
-	if err != nil {
-		return nil, nil, err
 	}
 	added = slices.DeleteFunc(added, func(k toml.Key) bool {
 		return slices.ContainsFunc(reset, func(r toml.Key) bool { return sameKey(k, r) })
@@ -203,6 +209,9 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	}
 	return doc.Bytes(), notes, nil
 }
+
+// fillKey is the key a keymap sets false at its top to gain no embedded binding
+const fillKey = "fill"
 
 // errNotKeymap refuses a document no section of which is a keymap's
 var errNotKeymap = fmt.Errorf("not a keymap: it has none of the sections %s", sectionNames())
