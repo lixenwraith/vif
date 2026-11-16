@@ -192,6 +192,44 @@ transitions = [{ trigger = "Tick", target = "Draw" }]
 	}
 }
 
+// TestOnlyAnAbsentDeltaMeansOne: a delta of 0 adds, takes, multiplies by and divides
+// by 0, and an action that names none steps by 1.
+func TestOnlyAnAbsentDeltaMeansOne(t *testing.T) {
+	const doc = `
+[regions.r]
+initial = "Boot"
+
+[states.Boot]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "mul", value = 7 } },
+    { action = "SetVar", payload = { name = "div", value = 7 } },
+    { action = "SetVar", payload = { name = "one", value = 7 } },
+    { action = "IncrementVar", payload = { name = "inc", delta = 0 } },
+    { action = "DecrementVar", payload = { name = "dec", delta = 0 } },
+    { action = "MultiplyVar", payload = { name = "mul", delta = 0 } },
+    { action = "DivideVar", payload = { name = "div", delta = 0 } },
+    { action = "IncrementVar", payload = { name = "up" } },
+    { action = "DecrementVar", payload = { name = "down" } },
+    { action = "MultiplyVar", payload = { name = "one" } },
+    { action = "DivideVar", payload = { name = "one" } },
+]
+`
+	m := fsm.NewMachine[struct{}]()
+	std.Register(m, std.Host[struct{}]{})
+	if err := m.LoadScenario([]byte(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Init(struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int64{"inc": 0, "dec": 0, "mul": 0, "div": 7, "up": 1, "down": -1, "one": 7} {
+		if got := m.GetVar(name); got != want {
+			t.Errorf("%s = %d, want %d", name, got, want)
+		}
+	}
+}
+
 // TestAStringPayloadVarFillsItsBraces: a message carries a variable's value where it
 // says {}, and the compiled message stays a template for the next emit.
 func TestAStringPayloadVarFillsItsBraces(t *testing.T) {

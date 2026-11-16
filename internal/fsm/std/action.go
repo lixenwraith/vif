@@ -21,12 +21,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Name == "" {
 			return
 		}
-		delta := a.Delta
-		if delta == 0 && a.SourceVar == "" {
-			delta = 1
-		}
-		delta = resolveVarValue(m, delta, a.SourceVar)
-		result := m.IncrementVar(a.Name, delta)
+		result := m.IncrementVar(a.Name, operand(m, a, 1))
 		if a.Min != nil || a.Max != nil {
 			m.SetVar(a.Name, clampValue(result, a.Min, a.Max))
 		}
@@ -36,12 +31,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Name == "" {
 			return
 		}
-		delta := a.Delta
-		if delta == 0 && a.SourceVar == "" {
-			delta = 1
-		}
-		delta = resolveVarValue(m, delta, a.SourceVar)
-		result := m.IncrementVar(a.Name, -delta)
+		result := m.IncrementVar(a.Name, -operand(m, a, 1))
 		if a.Min != nil || a.Max != nil {
 			m.SetVar(a.Name, clampValue(result, a.Min, a.Max))
 		}
@@ -51,12 +41,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Name == "" {
 			return
 		}
-		multiplier := a.Delta
-		if multiplier == 0 && a.SourceVar == "" {
-			multiplier = 1
-		}
-		multiplier = resolveVarValue(m, multiplier, a.SourceVar)
-		result := m.GetVar(a.Name) * multiplier
+		result := m.GetVar(a.Name) * operand(m, a, 1)
 		result = clampValue(result, a.Min, a.Max)
 		m.SetVar(a.Name, result)
 	})
@@ -65,11 +50,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Name == "" {
 			return
 		}
-		divisor := a.Delta
-		if divisor == 0 && a.SourceVar == "" {
-			divisor = 1
-		}
-		divisor = resolveVarValue(m, divisor, a.SourceVar)
+		divisor := operand(m, a, 1)
 		if divisor == 0 {
 			return // No-op on division by zero
 		}
@@ -82,7 +63,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Name == "" {
 			return
 		}
-		divisor := resolveVarValue(m, a.Delta, a.SourceVar)
+		divisor := operand(m, a, 0)
 		if divisor == 0 {
 			return // No-op on modulo by zero
 		}
@@ -128,6 +109,18 @@ func drawInRange(root uint64, seed, index, lo, hi int64) int64 {
 		return int64(x)
 	}
 	return int64(uint64(lo) + x%span)
+}
+
+// operand is what an arithmetic action applies: its source variable's value, else
+// its delta, else absent, which a delta of 0 is not
+func operand[T any](m *fsm.Machine[T], a *VariableArgs, absent int64) int64 {
+	switch {
+	case a.SourceVar != "":
+		return m.GetVar(a.SourceVar)
+	case a.Delta != nil:
+		return *a.Delta
+	}
+	return absent
 }
 
 // resolveVarValue returns the source var value when sourceVar is set, else the literal

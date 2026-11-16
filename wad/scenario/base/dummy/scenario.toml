@@ -48,7 +48,7 @@ background = true
 # --- Macros ---
 
 [macros.Offset]
-doc = "Set `name` to `from` plus `delta`, which is not 0."
+doc = "Set `name` to `from` plus `delta`."
 params = { name = "string", from = "string", delta = "int" }
 body = [
     { action = "CopyVar", payload = { name = "${name}", source_var = "${from}" } },

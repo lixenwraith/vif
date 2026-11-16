@@ -35,7 +35,7 @@ type RegionControlArgs struct {
 type VariableArgs struct {
 	Name      string `toml:"name"`
 	Value     int64  `toml:"value"`
-	Delta     int64  `toml:"delta"`
+	Delta     *int64 `toml:"delta"`      // Absent, an increment, decrement, multiply or divide takes 1
 	SourceVar string `toml:"source_var"` // If set, use this var's value instead of Value/Delta
 	Min       *int64 `toml:"min"`        // Optional clamp lower bound
 	Max       *int64 `toml:"max"`        // Optional clamp upper bound

@@ -361,8 +361,8 @@ region keeps its state, time and pending delays, runs nothing and drops its even
 { action = "DecrementVar", payload = { name = "var_name", delta = 1 } }
 ```
 
-`delta` defaults to 1 for `IncrementVar`, `DecrementVar`, `MultiplyVar` and
-`DivideVar` when it is omitted or zero and no `source_var` is given.
+`IncrementVar`, `DecrementVar`, `MultiplyVar` and `DivideVar` step by 1 when
+neither `delta` nor `source_var` is given; a `delta` of 0 is 0.
 
 ### Arithmetic Actions
 
