@@ -162,7 +162,7 @@ func main() {
 	}
 	if window {
 		if openWindow == nil {
-			fmt.Fprintln(os.Stderr, asked+": this build has no desktop window; one is built on Linux and FreeBSD without vif_nogui")
+			fmt.Fprintln(os.Stderr, asked+": desktop window unavailable in this build")
 			os.Exit(exitFailure)
 		}
 		openWindow()

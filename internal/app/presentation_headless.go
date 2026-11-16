@@ -3,7 +3,7 @@
 package app
 
 import (
-	"fmt"
+	"errors"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"os"
 
@@ -46,13 +46,13 @@ func (a *App) showStartupStatus(message string) {
 func (a *App) showJoinStatus(message string) { a.showStartupStatus(message) }
 
 func Run(Config, Host) error {
-	return fmt.Errorf("interactive play is unavailable in a vif_headless build; use -serve")
+	return errors.New("interactive play unavailable in this build; use -serve")
 }
 
 func PlayJournal(Config, ...string) error {
-	return fmt.Errorf("journal presentation is unavailable in a vif_headless build")
+	return errors.New("journal presentation unavailable in this build")
 }
 
 func runPresented(*App, pacedSource, string, string, bool, <-chan os.Signal) error {
-	return fmt.Errorf("presentation is unavailable in a vif_headless build")
+	return errors.New("presentation unavailable in this build")
 }

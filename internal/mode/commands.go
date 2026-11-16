@@ -174,26 +174,31 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	}
 }
 
+// inspects names the commands that read a run or set its own view and play
+// nothing, which a replay's viewer and a spectator both keep.
+func inspects(cmd string) bool {
+	switch cmd {
+	case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+		return true
+	}
+	return false
+}
+
 // The menu and command line share the same session and replay policy.
 func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	if cmd == "replay" && ctx.ReplaySeek == nil {
 		return "Only in a replay"
 	}
 	// A replay's viewer inspects a world the recording authors
-	if ctx.Viewer.Load() {
-		switch cmd {
-		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
-		default:
-			return "Unavailable in a replay"
-		}
+	if ctx.Viewer.Load() && cmd != "replay" && !inspects(cmd) {
+		return "Unavailable in a replay"
 	}
 
 	// A spectator holds no place: it inspects its run, changes what it looks from and
 	// its own settings, and leaves; nothing it types plays
-	if ctx.World.Watches() {
+	if ctx.World.Watches() && !inspects(cmd) {
 		switch cmd {
-		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit",
-			"m", "mouse", "session", "player", "spectate", "join", "leave", "lan", "relay", "takeover", "register", "login", "logout":
+		case "m", "mouse", "session", "player", "spectate", "join", "leave", "lan", "relay", "takeover", "register", "login", "logout":
 		default:
 			return spectatingUnavailable
 		}

@@ -27,7 +27,8 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 
 	switch intent.Motion {
 	case input.MotionScreenTop:
-		r.ctx.SetOverlayScroll(0)
+		visible, total := r.overlayView()
+		r.showOverlayFrom(0, visible, total)
 	case input.MotionScreenBottom:
 		r.scrollOverlay(r.ctx.GetOverlayContentH())
 	default:

@@ -131,7 +131,8 @@ func TestAFeedPortReleasesATickOnlyOnItsMark(t *testing.T) {
 // TestANewcomerBeginsAtTheNewestStartingPoint: a subscriber is sent the newest
 // starting point and the records since its cut, never the feed before it. One
 // already reading is sent each starting point too, to check itself against, and is
-// held back by none. A starting point whose cut was replaced is not published.
+// held back by none. A starting point whose cut was replaced is not published, and
+// a run that read two before taking either begins at the newer, past its cut.
 func TestANewcomerBeginsAtTheNewestStartingPoint(t *testing.T) {
 	hub, w := feedOrigin(t, feedConfig())
 	w.Sync(w.Cut(0), []byte("world@0"))
@@ -168,6 +169,22 @@ func TestANewcomerBeginsAtTheNewestStartingPoint(t *testing.T) {
 	if head := string(early.TakeHead()); head != "world@3" {
 		t.Fatalf("a subscriber already reading was handed %q, want world@3", head)
 	}
+
+	hub, w = feedOrigin(t, feedConfig())
+	w.Sync(w.Cut(0), []byte("world@0"))
+	idle := feedViewer(t, hub, feedConfig())
+	tick(1)
+	tick(2)
+	w.Sync(w.Cut(2), []byte("world@2"))
+	tick(3)
+	tick(4)
+	tick(5)
+	w.Flush()
+	feedEventually(t, "the three ticks past the newer cut", func() bool { return idle.Backlog() == 3 })
+	if head := string(idle.TakeHead()); head != "world@2" {
+		t.Fatalf("a run that read two starting points began at %q, want world@2", head)
+	}
+	feedWant(t, feedTickFrames(t, idle, 3), "0x12:t3")
 }
 
 // TestANewGameRestartsAFeedsTicks: a mark that does not follow the last one cuts the

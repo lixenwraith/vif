@@ -408,7 +408,14 @@ other (`TimeControl.SetHeld`). A guest's `:pause` is refused, and a second one
 before the first lands asks nothing more. A held participant still drains its
 links and answers the link probe off the tick, so a hold times nobody out, and the
 host sends the held tick's round once, whatever its schedule said
-(`Corrections.publishRound`), so every link proves the held world.
+(`Corrections.publishRound`), so every link proves the held world. That round
+carries no clock, so an install leaves a hold or a rate scheduled at or before its
+tick to apply (`NetworkSystem.snapshotContainsLocked`). A hold whose tick a guest
+has reached lands between two ticks, settled at once (`landLateHold`): one whose
+crossing came late where it found the guest, one the held round carried the guest
+to at the held tick, each before that round's proof is kept. A guest that ran
+further stands that far past its host and resumes on the host's first epoch past
+its own tick. A hold its host has produced past has ended, and goes.
 
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
@@ -1277,7 +1284,9 @@ nobody watching the authority copies nothing. A record is `[kind][length][body]`
   it is served again; `FeedKeep`, a quiet feed that is alive.
 
 The hub keeps the newest starting point and the records since its cut, which is
-where a newcomer begins, so a second viewer costs the host no capture. A subscriber
+where a newcomer begins, so a second viewer costs the host no capture; a port that
+read a second before its run took the first begins at that one, past the ticks
+queued before its cut (`FeedPort.take`). A subscriber
 a queue (256 records) behind, one whose write stalls 5 s and one that sends
 anything is dropped, never waited for.
 
@@ -1333,9 +1342,11 @@ session anew or only its link went, and otherwise starts a local game
 the slot `-spectate` named, else the first played. Left or up follows the player
 before, right or down the one after, a press on a cursor that player, and
 `:spectate <slot>` or a Players row names one; when that player leaves or goes
-away the view moves to the next one playing (`World.KeepView`). Its other play
-keys do nothing, its commands are those that inspect the run or change its own
-settings, and `:leave` starts a local game. A page spectates with
+away the view moves to the next one playing, and with nobody playing stays on the
+Wraith it had (`World.KeepView`). A run that spectates again after its feed ended
+looks from the slot it had come to (`RestartAsk.Follow`). Its other play keys do
+nothing, its commands are those that inspect the run or change its own settings
+(`inspects`), and `:leave` starts a local game. A page spectates with
 `?arg=-spectate=<link>` and leaves after 30 s hidden, since a feed nobody looks at
 is its session's bandwidth for nothing.
 

@@ -457,12 +457,10 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	run := s.world.Resources.Event.Queue.NextRun()
 	s.ctx.Log.SetRun(run)
 
-	// 5. Config reset (map dimensions to viewport)
-	// A reset is one logical shared action every participant applies from the same
-	// artifact, so the bounds it produces must not be a function of this terminal.
-	// While the map is not this instance's to derive (D-14) the session's bounds
-	// carry across the reset; only a run that owns them returns them to its viewport,
-	// raised to the scenario's floor.
+	// 5. Config reset (map dimensions to viewport). Every participant applies a reset
+	// from one artifact, so its bounds are no function of this terminal: while the
+	// map is not this instance's to derive (D-14) the session's carry across it, and
+	// only a run that owns them returns them to its viewport, at the scenario's floor.
 	config := s.ctx.World.Resources.Config
 	if s.ctx.World.MapSizeLocal() {
 		config.MapWidth, config.MapHeight = config.FloorMapSize(config.ViewportWidth, config.ViewportHeight)

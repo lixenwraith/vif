@@ -23,11 +23,12 @@ func search(ctx *engine.GameContext, x, y int, q searchQuery, count int) bool {
 	grid, pattern := buildCharacterGrid(ctx), []rune(q.text)
 	var first vmath.Point
 	found := 0
+	find, step := searchBackward, -1
+	if q.forward {
+		find, step = searchForward, 1
+	}
 	for found < count {
-		at, ok := searchBackward(ctx, grid, pattern, x-1, y, q.whole)
-		if q.forward {
-			at, ok = searchForward(ctx, grid, pattern, x+1, y, q.whole)
-		}
+		at, ok := find(ctx, grid, pattern, x+step, y, q.whole)
 		if !ok {
 			break
 		}

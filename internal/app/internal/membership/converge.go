@@ -132,13 +132,16 @@ func (m *Membership) Carry(id uint32) { m.links(func(l relayLinks) { l.Carry(id)
 
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
 // a manifest, a request or a repair is acted on the moment it lands, and a resume
-// once the drain that carried it is done. A viewer's feed is read beside its ticks.
+// once the drain that carried it is done. A hold come late lands here, settled at
+// once as its end is. A viewer's feed is read beside its ticks.
 func (m *Membership) DrainOffTick() {
 	var feed *link.FeedPort
 	m.world.RunSafe(func() {
 		for _, sys := range m.world.Systems() {
-			if d, ok := sys.(interface{ DrainOffTick() }); ok {
-				d.DrainOffTick()
+			if d, ok := sys.(interface{ DrainOffTick() bool }); ok {
+				if d.DrainOffTick() {
+					m.scheduler.SettleLocked()
+				}
 				break
 			}
 		}

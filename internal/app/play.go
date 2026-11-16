@@ -454,8 +454,8 @@ func (p *player) took(c *replayCopy, b batch) {
 }
 
 // adopt presents a copy a move positioned, carrying the viewer's HUD, frame rate,
-// camera edge, speakers and flight recorder over so they continue from it; the log
-// follows the presented copy.
+// camera edge, console, speakers and flight recorder over so they continue from
+// it; the log follows the presented copy.
 func (p *player) adopt(c *replayCopy) {
 	rw, old, twin := p.rw, p.a, c.a
 	from := old.Position()
@@ -466,6 +466,9 @@ func (p *player) adopt(c *replayCopy) {
 	twin.ctx.OverlayHUD.Store(old.ctx.OverlayHUD.Load())
 	twin.ctx.MaxFPS.Store(old.ctx.MaxFPS.Load())
 	twin.world.SetCameraEdge(old.world.CameraEdge())
+	lines, _ := old.ctx.ConsoleLines(nil)
+	twin.ctx.ClearConsole() // a copy presented before lists what it showed then
+	twin.ctx.AdoptConsole(lines)
 	twin.ctx.SetPresentationSize(p.termW, p.termH)
 	if o := twin.orchestrator; o != nil {
 		if w, h := o.Size(); w != p.termW || h != p.termH {

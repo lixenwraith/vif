@@ -38,7 +38,7 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: endX, EndY: y,
-		Type: RangeChar, Style: StyleInclusive,
+		Type: RangeChar, Style: StyleExclusive, // dh is X: the cells stepped over
 		Valid: endX != x,
 	}
 }
@@ -139,7 +139,7 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 	return MotionResult{
 		StartX: x, StartY: y,
 		EndX: endX, EndY: y,
-		Type: RangeChar, Style: StyleInclusive,
+		Type: RangeChar, Style: StyleExclusive, // dl is x, and cl is s
 		Valid: endX != x,
 	}
 }

@@ -1686,7 +1686,8 @@ func (m *Membership) socketPort() (*link.SocketPort, error) {
 }
 
 // joinPort is the port this run takes joins at now: the one it opened a session on,
-// after :host or a fork, else the one it joined with; nil with neither.
+// after :host or a fork, else its service's, which it joined with or serves from;
+// nil with neither.
 func (m *Membership) joinPort() *link.SocketPort {
 	m.sessionMu.Lock()
 	port := m.midRunPort

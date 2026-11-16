@@ -200,9 +200,10 @@ type NetworkSystem struct {
 	due, retain []barrierArtifact
 	dueStates   []pendingState
 
-	// paceSamples holds the newest arrival offsets of the authority's epochs, and
-	// paceCount how many are live; paceSettled is the first local tick sampled after
-	// the last step is served. See observeAuthorityEpoch.
+	// paceSamples holds the newest arrival offsets of the authority's epochs, or on
+	// a viewer the closed ticks it had in hand (paceViewer), and paceCount how many
+	// are live; paceSettled is the first local tick sampled after the last step is
+	// served. See observeAuthorityEpoch.
 	paceSamples [parameter.NetworkPaceWindow]int64
 	paceCount   int
 	paceLatest  int64
@@ -368,8 +369,7 @@ func (w *window) has(n, width uint64) bool {
 	return ok && w.seen[i]&bit != 0
 }
 
-// newest reports the highest number admitted, for the playout lag telemetry that
-// asks how far behind a peer's production is.
+// newest reports the highest number admitted: how far a peer's production has come.
 func (w *window) newest() uint64 { return w.high }
 
 // participantSlots sizes every array this system indexes by participant identity.
@@ -710,6 +710,7 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 	same := s.delayTicks == ticks
 	s.delayTicks = ticks
 	s.mu.Unlock()
+	s.leadPushed = 0 // dispatched: a session opened at the default again is read anew
 	if r := s.world.Resources.Network; r != nil {
 		same = r.BarrierDelayTicks == ticks
 		r.BarrierDelayTicks = ticks
@@ -1593,17 +1594,28 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 // names no fence for is kept: a duplicate is repaired by the next correction, a
 // discarded action is not. bySequence reports a fence decided. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
-	if !barrierBound(a.frame.Event) {
-		if fence := s.snapshotFences.Seq(link.PeerID(a.source)); fence != 0 {
-			contained = a.frame.Seq <= fence
-			return contained, contained
-		}
-		// No fence for this source. Falling through to the tick would reintroduce
-		// exactly the misjudgement the fence exists to prevent, so an unnamed source
-		// is treated as unrepresented.
+	switch a.frame.Event {
+	// The clock is in no capture: a rate it passed still applies, and a hold lands
+	// (landLateHold) unless it has ended.
+	case event.EventGameSpeed:
 		return false, false
+	case event.EventGameHold:
+		return a.applyTick <= s.snapshotFloor && s.holdEndedLocked(a), false
 	}
-	return a.applyTick <= s.snapshotFloor, false
+	if barrierBound(a.frame.Event) {
+		return a.applyTick <= s.snapshotFloor, false
+	}
+	// A source with no fence is unrepresented: the tick would misjudge it as the
+	// fence exists not to.
+	fence := s.snapshotFences.Seq(link.PeerID(a.source))
+	contained = fence != 0 && a.frame.Seq <= fence
+	return contained, contained
+}
+
+// holdEndedLocked reports a hold its host has produced past, which only that hold's
+// end lets it: a held host closes no epoch. Caller MUST hold mu.
+func (s *NetworkSystem) holdEndedLocked(a barrierArtifact) bool {
+	return s.epochs[a.source].newest() > a.applyTick
 }
 
 // DrainPeers translates inbound frames without advancing a tick, for a join that
@@ -1938,13 +1950,12 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) {
 
 // DrainOffTick translates what the endpoint already holds without the poll
 // counting as a tick, so a manifest, request or repair is acted on at the tick it
-// describes rather than at the next one.
-//
-// Caller MUST hold updateMutex.
-func (s *NetworkSystem) DrainOffTick() {
+// describes rather than at the next one, and reports a hold landed for its caller
+// to settle. Caller MUST hold updateMutex.
+func (s *NetworkSystem) DrainOffTick() (settle bool) {
 	p := s.port()
 	if p == nil || !s.enabled {
-		return
+		return false
 	}
 	s.refreshLink(p)
 	// A viewer's feed closing the tick past its own is its host going on, which a
@@ -1960,6 +1971,7 @@ func (s *NetworkSystem) DrainOffTick() {
 	}
 	s.drainWith(p, poll)
 	s.release(p)
+	return s.landLateHold()
 }
 
 // drainWith is one poll of the endpoint, whichever door it came through, and
@@ -3070,12 +3082,40 @@ func (s *NetworkSystem) leaf() bool { return len(s.Downstream()) == 0 }
 // applyDue publishes due artifacts in the same source/sequence order everywhere.
 func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.writeDueStates(nextTick)
+	s.rosterDue = [participantSlots]rosterDue{} // a change no handler took is no later tick's
+	_, peer := s.dispatch(nextTick, false)
+	s.statPeerArtifacts.Store(int64(peer))
+	s.statPeerApplied.Store(peer != 0)
+}
+
+// landLateHold dispatches a hold whose tick this instance has reached, for its
+// caller to settle between two ticks, so it stands where the crossing found it and
+// not a tick on. One its host has produced past has ended, and goes. Caller MUST
+// hold updateMutex.
+func (s *NetworkSystem) landLateHold() bool {
+	at := s.localTick()
+	s.mu.Lock()
+	s.scheduled = slices.DeleteFunc(s.scheduled, func(a barrierArtifact) bool {
+		ended := a.frame.Event == event.EventGameHold && a.applyTick <= at && s.holdEndedLocked(a)
+		if ended {
+			s.scheduledBytes -= frameBytes(a.frame)
+		}
+		return ended
+	})
+	s.mu.Unlock()
+	local, peer := s.dispatch(at, true)
+	return local+peer > 0
+}
+
+// dispatch pushes the artifacts scheduled at or before tick, or only the holds
+// among them, which come late by then, and counts its own and its peers'.
+func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 	s.mu.Lock()
 	due := s.due[:0]
 	keep := s.scheduled[:0]
 	held := 0
 	for _, a := range s.scheduled {
-		if a.applyTick <= nextTick {
+		if a.applyTick <= tick && (!holds || a.frame.Event == event.EventGameHold) {
 			due = append(due, a)
 		} else {
 			keep = append(keep, a)
@@ -3097,9 +3137,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 		return cmp.Compare(a.frame.Seq, b.frame.Seq)
 	})
 
-	local, peer := 0, 0
 	retain := s.retain[:0]
-	s.rosterDue = [participantSlots]rosterDue{} // a change no handler took is no later tick's
 	if s.superseding() {
 		localSource = 0 // what its identity crossed is the run's it took its place back from
 	}
@@ -3120,7 +3158,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
 			continue
 		}
-		if a.applyTick < nextTick {
+		if a.applyTick < tick || holds {
 			// Committed frames reach a paced guest before their tick, so this counts
 			// a guest running ahead of its band; its next correction repairs it.
 			s.statLate.Add(1)
@@ -3160,9 +3198,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.due, s.retain = due[:0], retain[:0]
 	s.statAppliedLocal.Add(int64(local))
 	s.statAppliedPeer.Add(int64(peer))
-	s.statPeerArtifacts.Store(int64(peer))
-	s.statPeerApplied.Store(peer != 0)
 	s.statRecv.Add(int64(peer))
+	return local, peer
 }
 
 // Only the authority may author roster changes, which create or destroy shared

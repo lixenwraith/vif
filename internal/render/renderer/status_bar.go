@@ -636,11 +636,10 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	players := r.gameCtx.World.Resources.Player
 	// A spectator's feed has no round trip to read: the badge says whom it follows
 	if r.gameCtx.World.Watches() {
-		text := fmt.Sprintf(" Spectating %dP ", players.Count())
-		if slot := players.ViewSlot(); players.Viewed() != 0 {
-			text = fmt.Sprintf(" Spectating %X of %dP ", slot, players.Count())
+		if players.Viewed() == 0 {
+			return r.pal.net[severitySettled].with(fmt.Sprintf(" Spectating %dP ", players.Count())), true
 		}
-		return r.pal.net[severitySettled].with(text), true
+		return r.pal.net[severitySettled].with(fmt.Sprintf(" Spectating %X of %dP ", players.ViewSlot(), players.Count())), true
 	}
 	identity := fmt.Sprintf("%dP", players.Count())
 	if slot := players.LocalSlot(); slot != parameter.NoPlayerSlot {

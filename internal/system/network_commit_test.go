@@ -454,9 +454,10 @@ func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 }
 
 // TestAnAuthorityStampsItsOneTickFromItsFirstReading: nothing commits the
-// authority's crossings late, so it holds no reading: alone, with a peer, or on
-// taking the term with a guest's readings in its window, it pushes its one tick
-// at once. A guest alone, with no path to read, keeps the lead it has.
+// authority's crossings late, so it holds no reading: alone, with a peer, on
+// taking the term with a guest's readings in its window, or in the session it
+// leaves into, opened at the default again, it pushes its one tick at once. A
+// guest alone, with no path to read, keeps the lead it has.
 func TestAnAuthorityStampsItsOneTickFromItsFirstReading(t *testing.T) {
 	t.Parallel()
 	alone, linked := &linkedPort{}, &linkedPort{peers: []uint32{2}}
@@ -481,6 +482,13 @@ func TestAnAuthorityStampsItsOneTickFromItsFirstReading(t *testing.T) {
 	successor.world.Resources.Network.Authority.Store(3)
 	if got := pushed(successor, linked); !slices.Equal(got, one) {
 		t.Fatalf("a guest taking the term with a 9 in its window pushed the leads %v, want %v", got, one)
+	}
+	left := sessionSystem(t, 1, 100, alone)
+	pushed(left, alone)
+	left.adoptDelay(parameter.NetworkBarrierMinDelayTicks)
+	left.world.Resources.Network.BarrierDelayTicks = parameter.NetworkBarrierDelayTicks
+	if got := pushed(left, alone); !slices.Equal(got, one) {
+		t.Fatalf("an authority whose lead went back to the default pushed the leads %v, want %v", got, one)
 	}
 	if got := pushed(sessionSystem(t, 3, 100, alone), alone); len(got) != 0 {
 		t.Fatalf("a guest alone pushed the leads %v, want none", got)
@@ -968,6 +976,41 @@ func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
 	guest.scheduleCrossings(1, epoch(1, 101))
 	if resumed != 1 {
 		t.Fatalf("the authority's epoch past the guest resumed it %d times, want 1", resumed)
+	}
+}
+
+// TestAnInstallLeavesTheClockItPassesToApply: no capture carries the hold or the
+// rate, so a world installed at or past one still scheduled leaves it to apply. A
+// hold goes only once its host has produced past it, which is that hold's end.
+func TestAnInstallLeavesTheClockItPassesToApply(t *testing.T) {
+	t.Parallel()
+	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
+	epoch := func(produced uint64, frames ...event.ScheduledWireFrame) {
+		t.Helper()
+		body, err := event.EncodeWireBatch(event.WireBatch{Source: 1, ProducedTick: produced, Committed: true, Frames: frames})
+		if err != nil {
+			t.Fatal(err)
+		}
+		guest.scheduleCrossings(1, body)
+	}
+	clock := func(et event.EventType, seq uint64) event.ScheduledWireFrame {
+		return event.ScheduledWireFrame{ApplyTick: 101, Frame: event.WireFrame{Event: et, Domain: core.DomainShared, Seq: seq}}
+	}
+	scheduled := func() (out []event.EventType) {
+		for _, a := range guest.scheduled {
+			out = append(out, a.frame.Event)
+		}
+		return out
+	}
+	epoch(100, clock(event.EventGameHold, 1), clock(event.EventGameSpeed, 2), clock(event.EventSwarmSpawnRequest, 3))
+	guest.AdoptSnapshot(101, 1, nil)
+	if got, want := scheduled(), []event.EventType{event.EventGameHold, event.EventGameSpeed}; !slices.Equal(got, want) {
+		t.Fatalf("a world installed at the held tick leaves %v scheduled, want %v", got, want)
+	}
+	epoch(102)
+	guest.AdoptSnapshot(102, 1, nil)
+	if got, want := scheduled(), []event.EventType{event.EventGameSpeed}; !slices.Equal(got, want) {
+		t.Fatalf("a world installed past a hold its host ran on from leaves %v scheduled, want %v", got, want)
 	}
 }
 

@@ -704,6 +704,7 @@ type FeedPort struct {
 	begun   bool       // a starting point has come
 	taken   bool       // the run took one: ticks are released
 	ticks   []feedTick // whole ticks not yet released, the oldest first
+	cut     int        // how many of them the newest cut found queued
 	open    Bundle     // the frames of the tick whose mark has not come
 	out     []Message  // released, awaiting Drain
 	granted uint64     // the tick Ready last released
@@ -759,12 +760,18 @@ func (p *FeedPort) take(r *FeedReader, rec []byte) error {
 	}
 	switch rec[0] {
 	case FeedSync:
+		// Its world holds the ticks queued before its cut: a run that begins from it
+		// takes none of them
+		if !p.taken {
+			p.ticks, p.cut = p.ticks[p.cut:], 0
+		}
 		p.begun, p.head = true, FeedBody(rec)
 		select {
 		case p.heads <- struct{}{}:
 		default:
 		}
 	case FeedCut:
+		p.cut = len(p.ticks)
 		return r.cut(rec)
 	case FeedData:
 		if !p.begun {
@@ -817,10 +824,10 @@ func (p *FeedPort) Attribute(peer uint32) {
 
 // Inject hands the run a frame ahead of the feed's own: what a starting point
 // carried beside its state, which the run takes before its first tick.
-func (p *FeedPort) Inject(_ uint32, kind uint8, payload []byte) {
+func (p *FeedPort) Inject(kind MessageType, payload []byte) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.out = append(p.out, Message{Type: MessageType(kind), Payload: payload})
+	p.out = append(p.out, Message{Type: kind, Payload: payload})
 }
 
 // Ready reports whether tick may run: its mark has arrived, and what the feed

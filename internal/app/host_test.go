@@ -1405,6 +1405,50 @@ func TestAHoldStopsEveryParticipantAtOneTick(t *testing.T) {
 	assertMeshParity(t, apps, 0)
 }
 
+// TestAHoldComeLateLandsWhereItsGuestStands: a guest a tick ahead of its host takes
+// the hold as its crossing lands, and one the held round carries to the hold takes
+// it there, so neither runs a tick more and each keeps that round's proof.
+func TestAHoldComeLateLandsWhereItsGuestStands(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name  string
+		ahead bool
+	}{
+		{"at the hold's tick before its host", true},
+		{"behind the hold by more than a correction waits for", false},
+	} {
+		apps := meshSession(t, 0xA1A8, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		host, guest := apps[0], apps[1]
+		for range 8 { // past the first tick, where the host's lead settles
+			tickAll(apps)
+		}
+		if tt.ahead {
+			guest.Tick(1 + int(statOf(host, "network.barrier_delay_ticks")))
+		} else {
+			host.Tick(parameter.NetworkHoldTicks + 1)
+		}
+		mode.ExecuteCommand(host.Context(), "pause")
+		host.Settle()
+		for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+			host.Tick(1)
+		}
+		if err := host.corrections.Publish(); err != nil {
+			t.Fatalf("%s: publish the held round: %v", tt.name, err)
+		}
+		guest.ApplyPendingCorrections()
+		at := host.Position().Tick
+		if !host.Context().TimeCtl.Held() || !guest.Context().TimeCtl.Held() || guest.Position().Tick != at {
+			t.Fatalf("%s: the host holds %v at tick %d and its guest %v at %d", tt.name,
+				host.Context().TimeCtl.Held(), at, guest.Context().TimeCtl.Held(), guest.Position().Tick)
+		}
+		if _, tick, err := guest.corrections.ProvedWorld(at, time.Now()); err != nil || tick != at {
+			t.Fatalf("%s: the guest proves tick %d of the held tick %d: %v", tt.name, tick, at, err)
+		}
+		assertMeshParity(t, apps, 0)
+	}
+}
+
 // TestOnlyTheHostHoldsALiveSession: what a hold stops is everyone, so starting one is
 // the host's alone, as ending one is. A guest asking is told so and nothing crosses.
 func TestOnlyTheHostHoldsALiveSession(t *testing.T) {

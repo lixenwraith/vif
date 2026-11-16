@@ -717,7 +717,7 @@ func (p *DeleteRequestPayload) Covers(x, y int) bool {
 }
 
 // GlyphReplaceRequestPayload retypes the glyphs of row Y from X on as Text's runes, a
-// cell each, a space leaving its cell as it is: the glyphs a delete would reach
+// cell each, a space leaving its cell as it is: the glyph each cell draws
 type GlyphReplaceRequestPayload struct {
 	X    int    `toml:"x"`
 	Y    int    `toml:"y"`

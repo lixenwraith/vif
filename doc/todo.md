@@ -1336,24 +1336,26 @@ mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`
 decide whether a drag's intermediate cells are a move each or one move to the cell
 the tick ends on.
 
-### Hold a guest its correction carries past the hold
+### Land a joining seat inside its pace band
 
 - Priority: P2
-- Affected files: `internal/system/network.go` (`AdoptSnapshot`),
-  `internal/converge/correction.go` (`publishRound`),
-  `internal/app/internal/corrector/snapshot_stage.go`
-- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session)
+- Affected files: `internal/app/internal/membership/host.go`
+  (`ResumeJoinedSession`), `internal/app/script.go` (`drive`),
+  `internal/converge/correction.go` (`ProvedWorld`)
+- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
+  [§3.6](multi-player.md#36-holding-a-session)
 
-A hold reaches a guest as a crossing, and the host sends the held tick's round once
-(§3.6). A guest more than `NetworkHoldTicks` behind when that round arrives takes
-it at once, as any guest behind does: it lands on the held tick, the hold it had
-scheduled at or before that tick is pruned as part of the world it installed, and
-nothing holds it. It plays on alone against a host that sends nothing until the
-resume. A socket probe held a host as its guest seated a bot, 10 ticks behind: the
-guest ran on unheld in every run. What would close it: a round sent for a hold says
-so, or `AdoptSnapshot` applies a hold it prunes, and the guest stands held at the
-world it installed, as a joiner does (`SessionOffer.Held`). A test holds a session
-whose guest stands `NetworkHoldTicks + 1` behind.
+A join's catch-up runs the joiner to the newest epoch it heard and its first tick
+follows at once, so a seat in its holder's process stands a tick ahead of it nine
+samples in ten, the late edge of its band, where its pace rests: an authority
+crossing reaches it with what the join took as its whole margin. Over 3 s on an
+idle machine `network.barrier_late` read 2 to 12, a correction each. A hold that
+late lands between ticks (§3.6), but a guest that ran a whole tick further stands
+past its host, and a relay there refuses every join for the hold's length
+(`ProvedWorld` waits for a proof at its own tick). What would close it: the
+joiner's first tick waits part of an interval, or the catch-up stops a tick short,
+read over the divergence harness's four shapes and a socket seat's
+`network.barrier_late`; and a held relay serves the proof it holds.
 
 ### Settle a replay's placements as its run's install did
 
@@ -1563,6 +1565,27 @@ What to look at:
   read in code alone. A holder is the joiner's own word at the host
   (`noteJoinerReport`), so a place a direct guest of the host claimed was a relayed
   person's bot is kept too, and that person's own `-relay` door could seat it.
+- `:host <addr> migrate` on the kept session moves a policy its people already hold
+  as pinned: `beginHostingLocked` guards only a successor asking to pin, so the
+  people who came back at `returnAcceptor` give up at this host's loss while its
+  newcomers walk the list. Refuse a word other than the session's, as there.
+- A relayed join whose relay loses its uplink before the join crosses in may leave
+  its roster entry on the host (`relayRelease` drops `tellAuthority`'s false), read
+  in code alone: that key would then be refused through that relay as a stale link.
+
+### Derive a door's passphrase off the world lock
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`beginHostingLocked`,
+  `changeScenarioLocked`), `internal/network/admission.go` (`NewPassphraseDoor`)
+- Guide: [Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)
+
+`:host <addr> passphrase` derives the door's verifier, Argon2id over 64 MiB, under
+the world lock and `sessionMu`, where an account command runs its KDF in a
+goroutine: the ticks it takes are dropped for every participant. It is no one-line
+move, since `openSessionLocked` closes the door it finds. What would close it: read
+`engine.ticks_dropped` across the command first, then open the session, derive off
+the lock and serve the listeners under it again.
 
 ### Widen how a guest offers to take a session over
 
@@ -2287,6 +2310,11 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   `storeTarget`'s stat and the rename, what mode and owner the temporary file has
   before its `Chmod`, what `keepOwner` does in a run as root, and what a link into
   a directory other users may write leads to.
+- Seen in an audit, read in code alone: `-check` says a run writes a file back by
+  the file's type and mode (`WriteBack`), where `Store` also needs its directory
+  writable, so on a read-only mount the two disagree; two runs saving at once each
+  rename over the other's key, `saving` being one process's; and a crash between
+  `CreateTemp` and the rename leaves a `vif.toml.<n>.tmp` nothing removes.
 
 ### Review when a start writes the settings and what it shows
 

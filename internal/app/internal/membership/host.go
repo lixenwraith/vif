@@ -1228,14 +1228,7 @@ func (m *Membership) releaseMidRunJoiner(id link.PeerID) {
 	m.midRunGate.Lock()
 	defer m.midRunGate.Unlock()
 
-	m.sessionMu.Lock()
-	port := m.midRunPort
-	m.sessionMu.Unlock()
-	if port == nil {
-		// A dedicated host never opened a socket of its own: its endpoint is the
-		// one NetworkService contributed for -serve.
-		port, _ = m.socketPort()
-	}
+	port := m.joinPort()
 	if port == nil {
 		return
 	}
@@ -1282,8 +1275,7 @@ func (m *Membership) sendMidRunGate(port *link.SocketPort, id link.PeerID) error
 // playout lead past the admission, where every epoch flushed before it has applied,
 // waits for its install and says which world and how long its transfer took. A held
 // session reaches no lead: the joiner is handed the held tick's world and what is
-// scheduled past it, and holds there too. A new game under the gate refuses it, as
-// one with no world by the deadline refuses it as behind.
+// scheduled past it, and holds there too. A new game or no world read refuses it.
 func (m *Membership) gateJoiner(port *link.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {
@@ -1303,8 +1295,8 @@ func (m *Membership) gateJoiner(port *link.SocketPort, offer network.SessionOffe
 			port.Send(uint32(offer.Assigned), uint8(network.MsgJoinReply), network.RefusalReply(ErrSessionMoved))
 			return 0, 0, 0, ErrSessionMoved
 		}
-		// No world read by the deadline, a relay's proof that has not come, is load
-		// rather than the session: told so, a seat dials again.
+		// Whatever kept a world from being read is told as load, a relay's proof that
+		// has not come above all: a seat dials again, and a closing host refuses that.
 		if err != nil {
 			err = joinBehind("%v", err)
 			port.Send(uint32(offer.Assigned), uint8(network.MsgJoinReply), network.RefusalReply(err))

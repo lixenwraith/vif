@@ -107,13 +107,19 @@ func TestTheBacktickOpensTheConsoleAndItsCommandLineReturnsToIt(t *testing.T) {
 
 // TestTheConsoleFollowsItsFootUntilScrolledOff: the console keeps to its newest row
 // until a key, the wheel or the scrollbar moves it off, and follows again once one
-// brings it back. Under the command line, PgUp and PgDn page it, the wheel and the
-// scrollbar move it, and a press elsewhere leaves the line as typed.
+// brings it back, as g does where every row fits. Under the command line, PgUp and
+// PgDn page it, the wheel and the scrollbar move it, and a press elsewhere leaves
+// the line as typed.
 func TestTheConsoleFollowsItsFootUntilScrolledOff(t *testing.T) {
 	c := newConsoleRun(t)
 	ctx := c.ctx
 	c.key(terminal.KeyRune, '`')
 	g := ctx.OverlayGeometry()
+	ctx.SetOverlayContentH(1)
+	c.key(terminal.KeyRune, 'g')
+	if got := ctx.GetOverlayScroll(); got != parameter.ConsoleFollow {
+		t.Fatalf("g on rows that all fit left the view at %d, not following", got)
+	}
 	total := 10 * g.ContentH
 	ctx.SetOverlayContentH(total) // as the renderer lays the rows out
 	foot := total - g.ContentH

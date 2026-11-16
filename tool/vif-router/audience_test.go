@@ -341,7 +341,7 @@ func TestAWatchDialNobodyFeedsIsToldSo(t *testing.T) {
 	go router.serve(listener)
 	control, door := publishDoor(t, addr, network.PublishRequest{Session: "match"})
 	defer control.Close()
-	if _, _, err := spectate(addr, door.ID, nil); !errors.Is(err, network.ErrUnwatched) || !strings.Contains(err.Error(), "no session to watch") {
+	if _, _, err := spectate(addr, door.ID, nil); !errors.Is(err, network.ErrUnwatched) || !strings.Contains(err.Error(), "no session to spectate") {
 		t.Fatalf("a watch dial on a published door answered %v", err)
 	}
 	if n := pod.dials.Load(); n != 0 {
