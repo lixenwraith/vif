@@ -181,89 +181,11 @@ func upgradeStore(s SettingsStore) ([]string, error) {
 	return notes, s.Store(out)
 }
 
-// drop removes keys from doc, each with the comments that are its own; those inside
-// an inline value go as that value is written again without them, once
-func drop(doc *toml.Document, keys []toml.Key) error {
-	var inside []toml.Key
-	for _, k := range keys {
-		if _, err := doc.Delete(k); err != nil {
-			inside = append(inside, k)
-		}
-	}
-	for len(inside) > 0 {
-		var err error
-		if inside, err = dropInside(doc, inside); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// dropInside writes again the inline value holding keys[0], that of the key above it
-// the document sets, without it or any other of keys it holds, and returns the rest
-func dropInside(doc *toml.Document, keys []toml.Key) ([]toml.Key, error) {
-	key := keys[0]
-	var why []error
-	for i := len(key) - 1; i > 0; i-- {
-		v, ok := valueAt(doc.Tree(), key[:i])
-		if !ok {
-			continue
-		}
-		var rest []toml.Key
-		for _, k := range keys {
-			if len(k) > i && slices.Equal(k[:i], key[:i]) {
-				v = without(v, k[i:])
-			} else {
-				rest = append(rest, k)
-			}
-		}
-		err := doc.Set(key[:i], v)
-		if err == nil {
-			return rest, nil
-		}
-		why = append(why, err)
-	}
-	if len(why) == 0 {
-		return nil, fmt.Errorf("%s: no value holds it", key)
-	}
-	return nil, errors.Join(why...)
-}
-
-// valueAt is the value tree holds at key
-func valueAt(tree map[string]any, key toml.Key) (any, bool) {
-	var v any = tree
-	for _, k := range key {
-		table, ok := v.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		if v, ok = table[k]; !ok {
-			return nil, false
-		}
-	}
-	return v, true
-}
-
-// without is a copy of the table v less the key rest names in it
-func without(v any, rest toml.Key) any {
-	table, ok := v.(map[string]any)
-	if !ok {
-		return v
-	}
-	table = maps.Clone(table)
-	if len(rest) == 1 {
-		delete(table, rest[0])
-	} else if sub, ok := table[rest[0]]; ok {
-		table[rest[0]] = without(sub, rest[1:])
-	}
-	return table
-}
-
 // UpgradeSettings brings a settings document an earlier build left up to this
 // build's: each key this build does not take, or whose value it refuses, goes with
 // the comments that are its own, then each key the embedded document sets that it
-// lacks comes with its comments where that document puts it (toml Document.Fill).
-// Every other line and value stays. It names the changes, counting many adds.
+// lacks comes where that document puts it, or into the table written inline over
+// it (toml Document.Fill). Every other line and value stays. It names the changes.
 func UpgradeSettings(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {
@@ -309,8 +231,10 @@ func UpgradeSettings(data []byte) ([]byte, []string, error) {
 		}
 	}
 	refused(doc.Tree(), shipped.Tree(), nil)
-	if err := drop(doc, slices.Concat([]toml.Key(unknown), reset)); err != nil {
-		return nil, nil, err
+	for _, k := range slices.Concat([]toml.Key(unknown), reset) {
+		if _, err := doc.Delete(k); err != nil {
+			return nil, nil, err
+		}
 	}
 	added, err := doc.Fill(shipped)
 	if err != nil {

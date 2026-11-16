@@ -640,8 +640,9 @@ read, a key it cannot name and a binding it refuses go, each with its own commen
 so the embedded binding stands unless another spelling of the key binds it; each
 embedded binding of a key the file binds in no spelling then comes with its
 comments. Every other binding stays, unbindings included. A section written inline
-(`normal = { h = "undo" }`) is written again without what goes and gains no
-binding, as a `vif.toml` table written inline does. A file setting something yet
+(`normal = { h = "undo" }`) is edited where it stands, as a `vif.toml` table
+written inline is: what goes is taken from it and each binding it lacks joins
+it. A file setting something yet
 none of the sections above is no keymap: a run refuses it, as one that does not
 parse, and nothing writes it; an empty one, or one of comments alone, binds nothing
 of its own and is brought up to date as any other. Starting, vif writes the

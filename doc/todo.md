@@ -164,31 +164,145 @@ the maze again (Trim what a tick spends outside the position index).
 
 ## Armada
 
-### Give the fixed shooter what its first version lacks
+Armada is to become a vertical scroller that keeps its three ships, likely the
+first scenario built on a painted map ([Authoring](#authoring)). Its items follow
+the editor's foundation.
+
+### Redesign armada as a vertical scroller
 
 - Priority: P2
-- Affected files: `wad/scenario/base/armada/scenario.toml`,
-  `internal/system/behavior.go`, `internal/system/cursor.go`
-- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
+- Affected files: `wad/scenario/base/armada/`, `internal/system/wall.go` (the cave
+  step), `pkg/position/surface.go`, `internal/engine/position.go` (`RockField`),
+  `internal/system/particle.go`, `internal/render/renderer/rock.go`,
+  `internal/event/payload.go` (`CaveStartPayload`)
+- Prerequisite: [Lay a painted map a scenario carries](#lay-a-painted-map-a-scenario-carries),
+  for the first form
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment),
+  [Position §1](position-package.md#1-the-boundary)
+
+The ship keeps to the bottom and fires up, and the map comes down past it with the
+darts, lancers and wardens in it. The game has one scroll, the cave's: a profile of
+columns shifted left a column at a time (`ShiftRock`), which pushes what it meets
+left, crushes a cursor against the left edge and carries particles left. Given a
+direction and a source, that one scroll is each form armada may take:
+
+- **A painted map, likely the first.** The map's rows enter at the top as the
+  scroll steps. Its tiles are a third kind of surface, blocks laid from the map's
+  record as rock is from the cave's (Position §1 leaves a *shape* of that kind
+  unbuilt), where walls as entities would move every one in view each step. What
+  a row carries beside walls, a program's spawn or a loot, is raised as it enters.
+- **Procedural rock.** The cave on its side, endless: `pkg/cave`'s profile is a
+  function of an index and serves rows as it serves columns.
+- **No terrain.** The pace and the drift alone, the region spawning the ranks.
+
+What the direction needs, whatever the source: a surface of widths a row with a
+solid side, where `pkg/position` holds heights a column (`Above`, `Below`) and
+shifts a column; the cave step's push, its crush edge (`EventCursorCrushed`, here
+the bottom) and the particle carry along rows; the rock renderer; and names, the
+events and `CaveResource` being the cave's.
+
+To settle with the design:
+
+- The painted map's other route, a view scrolling over a map laid whole. It is a
+  second scroll beside the cave's, and every reader of the map's edges (a
+  cursor's bounds, a spawn search, the glyph spawner, a bounce, the camera) then
+  needs a window beside the map.
+- The pace: a row is twice a column's height on screen, so a pace in rows reads
+  twice as fast, and a 40-row map shows a third of what a 120-column side-scroller
+  does ahead (`[map] min_height`).
+- Whether a rank keeps its place on the screen, as now, or passes with the map.
+
+[Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
+follow the redesign.
+
+### Let a program read what its scenario decides
+
+- Priority: P2
+- Affected files: `internal/system/behavior.go` (`BehaviorVocabulary`),
+  `internal/component/behavior.go`, `internal/engine` (the scheduler, a derived
+  resource), `internal/event/payload.go`
+- Guide: [Behavior machines §6.2](machine-design.md#62-vocabulary),
   [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
 
-The first version plays on what the machine had, plus the home cell. What a
-refinement needs from the code:
+A program's guards read its instance and the world and nothing of its scenario: no
+status row, no scenario variable, and its edges fire on `Timeout`, `Tick` and
+`AfterTick` alone. So armada's ships roll for themselves (`Chance`): dives thin
+out as the armada does, nothing caps how many fly at once, and a later wave dives
+no faster, the damage multiplier being the only ramp. Any scenario whose species
+should answer its stage meets the same wall. In the order they cost:
 
-- **Dive pacing.** A ship rolls for itself (`Chance`), so dives thin out as the
-  armada does and nothing caps how many fly at once. A guard reading a status row
-  (`behavior.count`) or a scenario event a program's edge can trigger on would let
-  the last ships dive hardest and hold a salvo to a few.
-- **A band for the ship.** The cursor roams the whole map; only the gun's aim
-  keeps it under the ranks. A `[map]` key bounding the rows a cursor may stand on
-  would hold it to the bottom; no event lays a wall row the width of the map.
-- **Ranks that move.** A slot is a fixed cell. A swaying armada needs an offset
-  every home cell reads, and a flown entrance a verb that follows a path instead
-  of the materialize.
-- **A backdrop.** The text is off, since special fire blasts it among the ranks.
-  A starfield needs glyphs special fire leaves alone, or a drift the blast skips.
-- **A ramp of its own.** The damage multiplier doubling a wave is the only ramp;
-  `Param` genes or a variable a program reads would let later waves dive faster.
+- **A guard on a status row**, `Status { key, op, value }`, as a region's
+  `StatusIntCompare`: on `behavior.count` the last ships dive hardest.
+- **A guard on a scenario variable**, `Var { name, op, value }`. No system
+  reaches the machine, so the scheduler publishes its variables as a derived
+  resource. A candidate's `duration_ms` already overrides its state's, so a guard
+  on `wave` picks a faster dive with no new timing key.
+- **A count of a program's instances by state**,
+  `behavior.<program>.state.<State>`, bound with the lifecycle rows before
+  `Freeze`, so a region reads how many dive.
+- **A signal**, `EventBehaviorSignalRequest { program, signal, count }`, Shared:
+  it raises a bit on `count` of the program's instances, chosen alike on every
+  instance, which a `Signalled { name }` guard reads and its entry clears. The
+  region sends a salvo of the size it chose and the ships stop rolling.
+
+Each reads or writes Shared state alike on every instance: a variable is the
+machine's and captured with it (D-19), a status row is one a region may read
+already, and the bit joins `BehaviorComponent` and its capture (`snapshot.Schema`).
+
+### Rework what armada's first version worked around
+
+- Priority: P2
+- Affected files: `internal/system/behavior.go`, `internal/behavior/program.go`,
+  `internal/fsm/std/action.go`, `args.go`, `internal/event/payload.go`,
+  `internal/system/mount.go`, `wad/scenario/base/armada/scenario.toml`
+- Guide: [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs),
+  [Arithmetic Actions](fsm-reference.md#arithmetic-actions)
+
+The first version plays on what the machine had, and where that was too little the
+scenario works around it. Each workaround is a gap any authored scenario meets,
+given here with the form that retires it; the redesign is written on them.
+
+- **A roll that is a rate.** `Chance { percent }` is a whole percent a step, so a
+  chance under 1% a tick takes two rolls under an `And` (`Hold`), and the wait it
+  makes follows the run's tick (`-tick`). A `mean_ms` beside it rolls each step's
+  share of that mean wait, finer than a percent and the same at any tick;
+  `percent` stays for the one roll a `Timeout` candidate makes.
+- **A cell named from the map.** The ship's start is four variable actions on
+  `map_width` and `map_height` and a rank's left end three, as `dummy`, `recall`
+  and the tutorial lay themselves out, while `EventBehaviorSpawnRequest` alone
+  names an edge (`edge`, `inset`). An `origin` on `EmitEvent`, an edge, a corner
+  or the centre the payload's `x` and `y` count from, resolved from the grid,
+  gives every payload that names a cell the same and retires the arithmetic.
+- **An offset of zero.** `IncrementVar` and its kin read a `delta` of 0 as 1, so
+  a macro cannot pass 0 and `Rank` counts its columns from a cell left of the
+  first. Only an absent `delta` should mean 1.
+- **A rank in one request.** `Rank` spends three actions a ship, 84 a wave. A
+  map's legend naming a program
+  ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
+  rows of characters laid at an origin, drawn in the editor as walls are.
+- **A mount of the body's own.** A warden is armed by a region that catches
+  `EventSpeciesCreated`, captures the entity and emits `EventMountRequest`, its
+  interval picked by a counter so volleys drift apart; the program copied into
+  another scenario comes unarmed unless that region comes too. A
+  `[prototype.mount]` the spawn applies, its interval spread drawn for each host
+  as a shot's is, retires the region, the capture and the `pick`.
+- **`Home` and the home cell.** The verb `Home` steers to the target and
+  `to = "home"` names the cell an instance spawned on: one word, two things. The
+  cell takes a name of its own (`post`), and `to` reaches the verbs that lack it:
+  `TargetDistance`, so a program knows it is off its post, and `Home`, so it
+  steers back. A ship holds its place by `Freeze`, which stands only while
+  nothing pushes the body, and a wall or rock does.
+- **An end of its own.** An instance ends by a kill, its `lifetime_ms` or a
+  cancel, and `EventBehaviorCancelRequest` names a program, every instance of it.
+  A ship that leaves the map past the player needs an effect that ends its own
+  instance, counted apart from a kill and dropping nothing.
+- **Arrivals among the ranks.** A joiner's cursor lands on the map's centre
+  whatever the boot request asked
+  ([Place an arrival](#place-an-arrival-where-its-scenario-places-a-cursor)),
+  here under the ranks.
+- **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
+  strobe and the reset are five states armada copies as six other scenarios do,
+  the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).
 
 ## Bots
 
@@ -344,63 +458,271 @@ what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
-### Hold armada and the tutorial to the shared-region rule
+The map editor leads this section. Its foundation is the P1 items, in the order
+they stand; the editor follows at P2, on a terminal and in the desktop window, with
+[armada's redesign](#redesign-armada-as-a-vertical-scroller) its first scenario.
+The rest wait.
+
+### Hold every scenario to the shared-region rule at load
+
+- Priority: P1
+- Affected files: `internal/resource/check.go` (`ValidateScenario`),
+  `internal/app/domain_test.go` (`scenarioTrees`),
+  `wad/scenario/base/tutorial/scenario.toml`
+- Guide: [D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)
+
+A region a local event moves advances on the instance that produced the event and
+nowhere else. `TestFSMTriggersAreReplicated` holds the shipped scenarios to that
+through a list kept by hand (`scenarioTrees`), which leaves out `armada`, which
+passes, and `tutorial`, which fails: its lessons step on a player's edit requests,
+typed glyphs and mode changes and count `EventEnergyGlyphConsumed`. A scenario an
+author writes is never read by it: it loads, plays alone and comes apart in a
+session.
+
+What closes it: `ValidateScenario` refuses a transition a local event triggers in
+a scenario seating more than one player, naming the state and the trigger, so
+`-check`, a start, `:n` and the editor hold every scenario alike; the tutorial
+takes `max_players = 1`; and `scenarioTrees`' list goes with the rule's move.
+
+### Describe a scenario document in the schema
+
+- Priority: P1
+- Affected files: `internal/manifest/schema.go`, `internal/event` (the registry
+  generator), `internal/fsm/config.go`, `internal/resource/scenario.go`
+  (`entryKeys`), `internal/behavior/program.go`
+- Guide: [Behavior machines §5](machine-design.md#5-dialect-kernel)
+
+The editor's forms and pickers come from one description, the one `-schema`
+prints, and it holds too little for them: 209 events with their fields, the names
+of 38 enums and three vocabularies with their arguments. Missing:
+
+- **An event's class and line.** Nothing says an event is local, shared or a
+  crossing, or what it does, though its type's comment holds both, so nothing
+  tells a picker which a scenario may emit or trigger on.
+- **A field's shape.** A type is its Go spelling: a nested one
+  (`[]event.MazeRoomSpec`, `component.WallVisualConfig`, `color.RGB`) is a name
+  with no fields, a `time.Duration` hides that it takes nanoseconds, and nothing
+  marks the pair that is a cell, the entity a capture fills, or the string naming
+  one of the scenario's own (a program, a loot kind).
+- **The document's shape.** The keys of the entry (`entryKeys` and the hand
+  readers of `[map]`, `[content]` and `[navigation]`), of a region, a state, a
+  transition and an action's modifiers, and of a program and its `[prototype]`,
+  each with its kind, as `dialect.Fields` gives an argument's.
+- **The systems.** The names a scenario toggles and what each requires, which
+  `-check` holds a scenario to and nothing lists.
+- **The status rows.** What `StatusIntCompare` and `StatusToVar` may read lives in
+  a built world's registry, some rows the scenario's own
+  (`behavior.<program>.count`, `fsm.<region>.*`): `-schema -s <name>` would print
+  them from a world built for that scenario and never run.
+
+Each is a field more in the JSON under one `SchemaVersion`. The editor reads the
+same description in the binary, never a table of its own.
+
+### Name a load fault by its file and key
+
+- Priority: P1
+- Affected files: `internal/resource/check.go`, `internal/fsm/loader.go`,
+  `file_loader.go`, `internal/behavior/compile.go`, `loot.go`
+- Guide: [FSM §12](fsm-and-configuration.md#12-validation-rules-and-diagnostics)
+
+A fault is a line of text naming its place in its stage's own words (`state 'A':
+unknown key "on_entr"`, `program 'scarab': state 'Lock': on_update[0]: …`), joined
+with its stage's others, and a state's fault names no file. `ValidateScenario`
+stops at the first stage that fails, of the programs, the loot, the machine and
+the systems, so an author clears one to meet the next. The editor has to land each
+fault on the node or the cell that made it.
+
+What closes it: one fault type, a file, a key path and a message, that every stage
+returns and `-check` prints as it prints text today, and a validation that goes
+on to every stage a failed one does not starve. A path counts an array's elements
+as expanded, so an action past an `each` maps back to the element written by
+expanding each written element alone, which asks nothing of the macro library.
+
+### Lay a painted map a scenario carries
+
+- Priority: P1
+- Affected files: `internal/resource/scenario.go` (`entryKeys`),
+  `internal/fsm/file_loader.go` (`includeBehaviors`), `internal/system/wall.go`,
+  `internal/pattern`, `internal/event/payload.go`
+- Guide: [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline),
+  [FSM reference: Root Config](fsm-reference.md#root-config-scenariotoml)
+
+A wall event takes its cells one by one, or lays a maze, a cave or an `.aimg` from
+the `image/` category, which the digest leaves out and a joiner is not sent. A map
+drawn by hand has no form a scenario carries. The form, tiles first and
+[images after](#carry-an-image-in-the-scenario):
+
+- **`[maps]` in the entry**, beside `[behaviors]`: each map inline or a file of
+  the scenario, so it is read, bounded, digested and sent as a program is, and
+  compiled once a run.
+- **Rows over a legend.** `rows` are strings of one width, a character a cell;
+  `legend` gives a character its tile, a wall's glyph, colours, box style and
+  block mask named once, and a space is open map. A 500 by 250 map is 125 KB of
+  rows, half a file's bound.
+- **Laid by name**, `EventMapLayRequest { map, x, y }`, through the wall system
+  as a pattern is, as one composite or as loose walls; a request naming no map of
+  the scenario fails the load where it is written, as a program's does.
+- **Its own size.** A map is as large as its rows, and the scenario holds the map
+  to it (`[map] fixed`, its level setup). A layout that stretches with the
+  terminal is not this item's.
+
+Next on the same legend, each a kind of entry: a program's spawn, which makes a
+rank a few rows ([Armada](#rework-what-armadas-first-version-worked-around)); a
+loot; and a named cell a payload takes, the marker the editor drags. Laying a
+large map costs what td's maze does at a reset, tens of milliseconds
+([Engine](#trim-what-a-tick-spends-outside-the-position-index)).
+
+### Write a scenario back as `vif.toml` is written
+
+- Priority: P1
+- Affected files: `internal/resource` (a scenario store beside `SaveDownload`),
+  `internal/paths` (`OwnRoot`, `Shared`), `internal/app/internal/membership`
+  (`RestartAsk`)
+- Guide: [Filesystem §2](filesystem-layout.md#2-installed-configuration-tree),
+  [§3](filesystem-layout.md#3-resolution-policy)
+
+An edit goes into the author's file through `toml.Document`, as a setting goes
+into `vif.toml` (`saveTable`), and the library writes only what then reads
+otherwise: the editor changes the tree it read and sets it. Run against the
+shipped scenarios, one action changed in the 40 lines of td's `TdSetup.on_enter`
+changes that line alone, its 10 comments kept; an argument of an invocation is
+set in place among the others; a state under a header has its keys set, added
+and deleted; and a raider's `[[frames]]` keeps every table that reads the same.
+What it leaves out is a name for one table of an array of tables: the array is
+set. The rest is vif's:
+
+- **Whose file.** A scenario in one of the player's roots is written in place
+  (`paths.OwnRoot`). One in a shared root, the checkout's `wad/` or a system
+  root, or among the downloads, is copied under a name of the author's into the
+  user root's `scenario/` at the first change, as `SettingsFor` seeds a `vif.toml`.
+- **Never stored broken.** What is stored validates, as `saveTable` reads its
+  document again, and a save over several files lands whole or not at all, as
+  `SaveDownload`'s does. To decide: what becomes of edits that do not validate
+  yet.
+- **A test play before a save.** `Options.Provided` already runs a scenario held
+  in memory, a joiner's, but a restart names one by name
+  (`RestartAsk.Scenario`): the ask carries the documents as edited.
+
+### Read a block's form from its macro
+
+- Priority: P1
+- Affected files: `internal/fsm` (beside `file_loader.go`),
+  `internal/manifest/schema.go`
+- Prerequisite: [Describe a scenario document in the schema](#describe-a-scenario-document-in-the-schema)
+- Design: [TOML macros](toml-macros.md)
+
+The palette is the scenario's macro set and a block's form its parameters. The
+macro library defines, expands and folds and lists nothing of a set, and need
+not: a definition is plain data in the parsed document, its `params`, `defaults`
+and `doc`, and its `base` and `with`, whose open parameters a walk of the bases
+gives. What a form needs beyond that is derived here:
+
+- **A parameter's kind.** A `string` may name a state, a region, a variable, an
+  event or a species, and two `int`s a cell. Expanding the macro once over marker
+  arguments shows where each lands in the document's shape: in a `target` it
+  names a state and takes a picker and an edge of the graph, in a payload's cell
+  a marker on the map. A name spelled from an argument (`"${theme}Fg"`) cannot be
+  probed and stays a plain field.
+- **A fault's block.** A state written as an invocation keeps its name, so a
+  state's fault is its block's
+  ([Name a load fault](#name-a-load-fault-by-its-file-and-key)).
+- **Blocks from plain tables.** `Fold` writes back as invocations what a set's
+  macros expand to, so a scenario written out by hand takes a library's blocks.
+
+The library's part is wanted, not needed to start. A table has no order and a
+definition refuses a key it does not know, so a form lists its fields by name
+under the macro's one `doc`: a parameter's place and a line of its own are two
+keys of a definition (P2). A block of several states is the root `[[expand]]`
+[TOML macros §7](toml-macros.md#7-rejected-alternatives) defers (P3).
+
+### Keep a block library a scenario copies from
 
 - Priority: P2
-- Affected files: `internal/app/domain_test.go` (`scenarioTrees`),
-  `wad/scenario/base/tutorial/scenario.toml`
+- Affected files: `wad/block/`, `internal/resource/resolve.go`, `internal/paths`,
+  `Makefile` (`install-config`)
+- Design: [TOML macros §5](toml-macros.md#5-where-macros-live)
 
-`TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists, which
-leaves out `armada` and `tutorial`. Listed, armada passes and the tutorial fails:
-its lessons step on a player's edit requests, typed glyphs and mode changes and
-count `EventEnergyGlyphConsumed`, all local events, so in a session of its up to 16
-players only the authority's player's keys would move them (D-20). What closes it:
-the tutorial's lessons advance on what every instance sees, or the tutorial seats
-one player, and both scenarios listed.
+No macro comes with the binary, since a scenario must expand alike on two builds,
+so a block a scenario did not write is copied into it. Nothing holds blocks to
+copy: td's, cave's and the campaign's macro files are their scenarios' own, and
+each scenario writes the common shapes again. What closes it:
+
+- **A category in the roots**, `block/`, each file a macro file, shipped in
+  `wad/block/` and resolved as every resource is.
+- **A copy on first use.** The macro, and those its body or its base names, go
+  into a macro file of the scenario that `macro_files` lists. A set refuses a
+  name defined twice, so a copy meeting one of the scenario's is refused or
+  renamed.
+- **Its first blocks**, from what the shipped scenarios repeat: the player's
+  lifecycle seven of them copy (boot, its retry, the defeat watch on
+  `session.any_defeated`, the strobe and the reset), td's `SpawnAwait` and
+  `Announce`, cave's `RaiderStates`, armada's `Ship` and its wave loop.
+
+A copy never follows its library: a scenario plays its own bytes.
 
 ### Build the map and scenario editor
 
 - Priority: P2
-- Affected files: `lixenwraith/toml/macro`, `internal/fsm`, `internal/manifest/schema.go`,
-  `internal/mode`, `internal/render/renderer`, `internal/resource`
+- Affected files: `internal/mode`, `internal/render/renderer`, `internal/resource`,
+  `internal/fsm`, `doc/multi-platform.md`
+- Prerequisite: the P1 items above
 - Design: [TOML macros](toml-macros.md)
 
-The editor writes ordinary scenarios: a directory under the user root's `scenario/`
-that loads, digests, transfers and lists like a hand-written one, so nothing at run
-time knows an editor made it.
+The editor writes ordinary scenarios: a directory under a root's `scenario/` that
+loads, digests, transfers and lists as one written by hand, so nothing at run time
+knows an editor made it. It brings no format and no table of its own: documents
+are edited in place, blocks are macros, forms come from the schema and a fault
+lands on what made it, each an item above.
 
-- **Documents, not a format.** It edits the parsed trees of the entry, region and
-  macro files and saves them with `toml.Marshal`, which drops comments, so it writes
-  only files it owns (a blocks file, a region file per edited region) and opens
-  hand-written ones read-only.
-- **Blocks are macros.** The palette is the scenario's macro set and a block's form
-  its parameters, defaults and `doc`. A placed block is an invocation, and one
-  placed as a state (`Name = { macro = ... }`) is a node the graph view draws. A
-  block from a shared library is copied into the scenario's macro files on first
-  use, since expansion reads nothing outside the scenario.
-- **Macro metadata still needed**, each additive to `lixenwraith/toml/macro`: reference kinds
-  (`state`, `region`, `var`, `event`, `status`) the expander checks as strings, so
-  the editor offers pickers and draws an edge per `state` argument; a `point` kind
-  the map canvas shows as a draggable marker for pylons, towers and spawns;
-  parameter order and per-parameter docs, since a TOML table has no order; root
-  `[[expand]]` for blocks spanning several states or a whole region; and provenance,
-  so a load error such as an unknown target lands on the block that produced it.
-- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists each
-  vocabulary's actions and guards with their arguments and every event's payload
-  fields ([Behavior machines §5](machine-design.md#5-dialect-kernel)).
-- **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
-  `.aimg` walls). A painted map needs a static form the digest covers, and
-  `.aimg` assets come from the `image/` category, which it does not and a joiner
-  is not sent. Decide between a TOML wall encoding (rectangles or run-length rows)
-  and admitting `.aimg` to the scenario container under its bounds.
-- **In the game.** An editor mode beside command and visual in `internal/mode` acts on
-  a paused world and draws through an overlay like `:graph`. Applying an edit
-  validates with `resource.ValidateScenario` and restarts on it as `:n` does, since
-  a run plays one scenario. Editing inside a multiplayer session is out of scope.
+- **In the game.** An operator's mode beside Command and Overlay
+  ([Input §2](input-and-modes.md#2-modes)): it holds a solo game, is no part of
+  the journal, and is refused in a live session and in a replay. Applying an edit
+  validates and restarts on it as `:n` does, since a run plays one scenario.
+- **The map is the canvas.** The held world draws as it plays. The cursor moves
+  by Normal's motions, counts, marks and search, a selection is Visual's, and the
+  mouse paints. A tile, a spawn and a marker are entries of the map's legend.
+- **Forms are menu pages.** The palette, a block's form and the scenario's
+  settings are pages of the [menu](config-menu.md), searched, drawn and
+  navigated as it is.
+- **The graph.** A scenario's regions, states and blocks as nodes and each
+  `target` an edge, drawn through an overlay as `:graph` draws a route graph,
+  read-only first.
+- **Hosts.** A terminal and the desktop window first. Android and a browser
+  refuse it with the sentence `unavailable` gives
+  ([next item](#edit-on-android-and-in-a-browser)), a difference
+  `doc/multi-platform.md` records.
 
-In order: reference kinds, order and provenance; a read-only graph of a scenario's
-regions, states and blocks; placing and editing blocks into editor-owned files; the
-map layer and point markers; root `[[expand]]` blocks and library copies.
+In order: the read-only graph; placing and editing blocks; painting a map and its
+markers; the test play; library copies.
+
+### Edit on Android and in a browser
+
+- Priority: P2
+- Affected files: `internal/resource`, `cmd/vif/browser.go`, `web/terminal.js`,
+  `android/app`, `doc/multi-platform.md`
+- Prerequisite: [Build the map and scenario editor](#build-the-map-and-scenario-editor)
+
+A browser has no root to write a scenario in, and its storage is the few MiB the
+settings and the places share; Android's user root is in the app's files, out of
+its player's reach. Both need the store the downloads ask for
+([Manage the downloads](#manage-the-downloads-from-the-menu-and-the-command-line)),
+keyed by name for an author's own; a scenario file taken in and handed out, the
+`.vifscen` of [Fetch a bundle](#fetch-a-content-addressed-bundle-over-http); and
+the gestures a canvas takes of a touch screen, a drag that paints and two fingers
+that pan.
+
+### Carry an image in the scenario
+
+- Priority: P3
+- Affected files: `internal/resource/scenario.go` (`validScenarioName`, the
+  bounds), `internal/service/adapter_file.go`, `internal/system/wall.go`
+- Prerequisite: [Lay a painted map a scenario carries](#lay-a-painted-map-a-scenario-carries)
+
+An `.aimg` or `.aimgz` the entry names joins the scenario's files, under its
+bounds and its digest, so a backdrop reaches a joiner and a browser as its maps
+do. The container admits `.toml` alone, `WallPatternSpawnRequest` opens a name
+below a root's `image/` through the file service, and an image's block mask is
+its request's, one for every cell.
 
 ### Give the vim keys what their second round left
 
@@ -455,7 +777,8 @@ Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
 keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
 round adds `[ ]`, the markers and macros, practises the keys it only tells
 (`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
-map's edge, and cues a lesson cleared.
+map's edge ([a cell named from the map](#rework-what-armadas-first-version-worked-around)),
+and cues a lesson cleared.
 
 ## Browser sessions
 
@@ -2247,30 +2570,18 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   later key's explanation with it; a copy keeps its old block until the player
   edits it.
 
-### Let toml edit a key inside an inline value
-
-- Priority: P3
-- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`,
-  `Document.Fill`), `internal/paths/settings.go` (`dropInside`, `saveTable`),
-  `internal/input/keyconfig.go` (`drop`)
-- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { mouse =
-  false }`), and `Fill` adds none there. The upgrades write such a value again
-  without the keys that go, its line's comment kept but the comments inside it and
-  its spelling lost, and add nothing to it, so a key a later build ships reads as
-  its default without its line; `saveTable` does not write there, so a menu change
-  to an inline `[play]` reads `[play] not written`. Edits and adds inside an inline
-  value in the library retire the workarounds and let the save and the upgrades
-  write there.
-
 ### Drop a settings file's keys in one read
 
 - Priority: P3
-- Affected files: `lixenwraith/toml` (`Document.Delete`), `internal/paths/settings.go`
-  (`drop`), `internal/input/keyconfig.go` (`drop`)
+- Affected files: `lixenwraith/toml` (`Document.Delete`, `Document.Set`),
+  `internal/paths/settings.go` (`UpgradeSettings`), `internal/input/keyconfig.go`
+  (`UpgradeKeymap`)
 - Each `Delete` reads the document again, so an upgrade dropping n keys costs n
   reads: a `vif.toml` or keymap holding 3000 unknown keys takes seconds to start.
   A `Delete` of many keys in one edit makes it one read. No file vif writes comes
-  near; one a player pastes another program's settings into could.
+  near; one a player pastes another program's settings into could. A `Set` over
+  tables written under headers costs the same, a read a statement it sets: 300
+  of 3,000 tables changed in one array took 2.7 s.
 
 ### Write a hard-linked settings file in place
 

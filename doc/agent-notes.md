@@ -120,6 +120,11 @@ Libraries · Branches.
   a variable, a heredoc that only edits the Makefile's install recipe included:
   edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
   `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
+- A probe of a dependency's API against the checkout's files runs from a module of
+  its own outside the tree: its `go.mod` takes this module's `go` line, a lower
+  one asking for a toolchain nothing serves, and its `go.sum` a copy of this
+  one's, and `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module
+  cache with no network.
 
 ## Events and ticks
 
@@ -859,11 +864,6 @@ Libraries · Branches.
 - A changed shipped default reaches only a copy that lacks the key: a run writes
   every default into the player's own file and keeps it from then on as their
   value. A default every player must get takes a new key name, dropping the old.
-- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { ... }`)
-  and `Fill` adds none there: the upgrades write that value again without every
-  key that goes from it at once, since `Set` refuses a value nested past 1000 that
-  the parser takes through dotted keys, and `saveTable` still refuses it
-  ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
 - `Fill` puts a key it adds above the comments that close its table, and copies the
   comments above a table's header but not those that open the file: compare an
   upgrade by what it reads or binds, never by the embedded file's text.
