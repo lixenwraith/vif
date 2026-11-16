@@ -359,9 +359,8 @@ func TestAJoinThroughARelayLandsInAHeldSessionHeld(t *testing.T) {
 // TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism: a dropped
 // participant leaves a Wraith in its slot, and what comes back is an ordinary dial,
 // which the full session admits once that Wraith gives up its place. The join runs
-// twice against one lobby host — once through the start gate, once through the
-// mid-run one — with a disconnect between, asserting the second arrival lands on a
-// world the host has moved past.
+// through the start gate, then the mid-run one, a disconnect between, and the
+// second arrival lands on a world the host has moved past.
 func TestAReconnectIsTheSameJoin(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3019
@@ -446,11 +445,10 @@ func joinDeadline(d time.Duration) <-chan os.Signal {
 }
 
 // dialSession dials until the coordinator answers with an offer, proving the keys a
-// run that kept them proves. Both things it retries past are the protocol's own: a
-// host binding on its own goroutine is not listening yet, and a refusal — a lobby
-// mid-close, a Wraith giving up its place — is the answer the design tells a dialer to
-// retry on. A refusal spends the address's admission budget, so it is retried at a
-// rejoin's pace.
+// run that kept them proves. It retries past a host not listening yet, binding on
+// its own goroutine, and past a refusal, a lobby mid-close or a Wraith giving up
+// its place, which the design tells a dialer to retry on at a rejoin's pace, since
+// each refusal spends the address's admission budget.
 func dialSession(t *testing.T, addr string, keys ...network.Key) (*network.PendingJoin, network.SessionOffer) {
 	t.Helper()
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
@@ -1115,12 +1113,10 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configur
 }
 
 // lobbySession is a host and players-1 guests started as RunScript starts -host and
-// -join, over real sockets: the host's lobby waits for all of them, each dialling it
-// as its run starts, and closes on them at once. Guests open no door of their own,
-// so the session is a star. The host comes first, its guests after it in the order
-// of the slots the lobby gave them. Every guest dials from one address, whose
-// admission budget lets a burst in each window: a larger lobby fills over windows,
-// each refused dial asking again at admitPace.
+// -join, over real sockets: the lobby waits for all of them and closes on them at
+// once, a star, since guests open no door. The host comes first, its guests in the
+// order of their slots. Every guest dials from one address, whose admission budget
+// lets a burst in each window: a larger lobby fills over windows, at admitPace.
 func lobbySession(t *testing.T, host Config, players int, guest Config) []*App {
 	t.Helper()
 	windows := max(players-2, 0) / parameter.NetworkAdmitBurst // after the first
@@ -1451,6 +1447,59 @@ func TestAHoldComeLateLandsWhereItsGuestStands(t *testing.T) {
 			t.Fatalf("%s: the guest proves tick %d of the held tick %d: %v", tt.name, tick, at, err)
 		}
 		assertMeshParity(t, apps, 0)
+	}
+}
+
+// TestAGuestFollowsItsHostIntoTheNextGame: a guest reaches its host's next game
+// though nothing ends its own. The crossing that would have is lost with its frame
+// and never sent again; or the host starts the game from a hold the guest stands a
+// tick past, so no epoch of the old game comes to resume it. The host's first epoch
+// of the next game is that game's start, and the guest converges on it.
+func TestAGuestFollowsItsHostIntoTheNextGame(t *testing.T) {
+	t.Parallel()
+	for _, held := range []bool{false, true} {
+		apps := meshSession(t, 0xA1AB, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		host, guest := apps[0], apps[1]
+		for range 8 { // past the first tick, where the host's lead settles
+			tickAll(apps)
+		}
+		var port *link.MeshPort
+		guest.World().RunSafe(func() { port, _ = guest.World().Resources.Network.Port.(*link.MeshPort) })
+		if port == nil {
+			t.Fatal("this fixture no longer runs on a mesh port")
+		}
+		if held {
+			guest.Tick(2 + int(statOf(host, "network.barrier_delay_ticks"))) // a tick past where the hold lands
+			mode.ExecuteCommand(host.Context(), "pause")
+			host.Settle()
+			for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+				host.Tick(1)
+			}
+			guest.ApplyPendingCorrections()
+			if h, g := host.Position().Tick, guest.Position().Tick; !guest.Context().TimeCtl.Held() || g <= h {
+				t.Fatalf("the guest holds %v at tick %d, its host at %d; want it held past its host", guest.Context().TimeCtl.Held(), g, h)
+			}
+		}
+		was := host.Position().Run
+		mode.ExecuteCommand(host.Context(), "n")
+		host.Settle()
+		if !held {
+			port.SetShape(link.LinkShape{LossEvery: 1})
+			host.Tick(1) // the epoch that carries the reset, which the guest's link loses
+			port.SetShape(link.LinkShape{})
+		}
+		for range 6 { // the host's reset, its first epoch of the new game, a tick's grace
+			host.Tick(1)
+			guest.ApplyPendingCorrections() // a held run drains its link here alone
+			guest.Tick(1)
+		}
+		if h, g := host.Position().Run, guest.Position().Run; h != was+1 || g != h {
+			t.Fatalf("from a hold %v: the host plays game %d and its guest %d, from %d; want both in the next", held, h, g, was)
+		}
+		alignTicks(t, host, guest) // the guest's game began a tick or two after its host's
+		want := deliverCorrection(t, host, []*App{guest}, func() { tickAll(apps) })
+		assertCorrected(t, want, guest, "the guest that followed its host's new game")
 	}
 }
 
@@ -2183,8 +2232,7 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 // command table: the role each kind of run holds, what :join, :host and :leave
 // answer in it, and how :session names it. A run whose session is its own bots'
 // takes :join and :host and has nothing to leave, one its session left may join
-// another or leave, and a guest that inherited the term is a successor, which may
-// open a door with :host.
+// another or leave, and a successor, having inherited the term, may :host a door.
 func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	ticking := func(a *App) *App {

@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
@@ -554,6 +555,76 @@ func TestAPeerCrossingSurvivesAProjectionThatPredatesIt(t *testing.T) {
 	installCorrection(t, guest, cap)
 	if got := cursorCell(t, guest, 0); got != moved {
 		t.Fatalf("the projection took the host's move back: cursor at %v, want %v", got, moved)
+	}
+}
+
+// swarmsOf counts the swarms an instance holds.
+func swarmsOf(a *App) (n int) {
+	a.World().RunSafe(func() { n = len(a.World().Components.Swarm.Entities()) })
+	return n
+}
+
+// TestAnInstallJudgesTheBarrierByTheTickItsCaptureWasReadAt: a projection carries a
+// capture to the guest's tick, and the capture holds no more for it. An agreed
+// artifact the guest applied after that tick is applied once by every projection
+// of a capture read before it; one that reached the guest late, before the install
+// or after it, still applies.
+func TestAnInstallJudgesTheBarrierByTheTickItsCaptureWasReadAt(t *testing.T) {
+	t.Parallel()
+	spawn := func(host *App) {
+		host.Context().PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: 40, Y: 20})
+	}
+	session := func() (host, guest *App) {
+		apps := meshSession(t, 0x9EAD1EDBE, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		for range 8 { // past the first tick, where the host's lead settles
+			tickAll(apps)
+		}
+		return apps[0], apps[1]
+	}
+
+	host, guest := session()
+	var read []snapshot.SharedCapture
+	for range 4 {
+		read = append(read, mustCaptureShared(t, host))
+		host.Tick(1)
+		guest.Tick(1)
+	}
+	spawn(host)
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		host.Tick(1)
+		guest.Tick(1)
+	}
+	for _, cap := range read {
+		installCorrection(t, guest, cap)
+		if n := swarmsOf(guest); n != 1 {
+			t.Fatalf("a capture read at tick %d, projected to %d, left the guest %d swarms of the one it applied",
+				cap.Header.Tick, guest.Position().Tick, n)
+		}
+	}
+
+	// A projection the guest's world already equals writes the barrier alone, and
+	// one it does not writes the world too: each is held to the rule.
+	for _, late := range []struct{ before, moved bool }{{true, false}, {true, true}, {false, false}, {false, true}} {
+		host, guest := session()
+		cap := mustCaptureShared(t, host)
+		guest.Tick(3) // ahead of its host, so what the host crosses next reaches it late
+		if late.before {
+			spawn(host)
+			host.Tick(1)
+		}
+		if late.moved {
+			divergeGuest(t, guest)
+		}
+		installCorrection(t, guest, cap)
+		if !late.before {
+			spawn(host)
+			host.Tick(1)
+		}
+		guest.Tick(1)
+		if n := swarmsOf(guest); n != 1 {
+			t.Fatalf("a spawn that reached the guest late, %+v, left it %d swarms", late, n)
+		}
 	}
 }
 

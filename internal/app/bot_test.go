@@ -1318,10 +1318,16 @@ func TestARunBehindARelaySeatsItsBotsAndRelaysForOthers(t *testing.T) {
 	if len(held[0]) != 4 || len(held[did]) != 1 {
 		t.Fatalf("the host holds %v by holder; want four independent participants and a bot of %d", held, did)
 	}
-	if h, r, p, d := host.membership.SessionTransport().PeerCount(), relay.membership.SessionTransport().PeerCount(),
-		person.membership.SessionTransport().PeerCount(), deep.membership.SessionTransport().PeerCount(); h != 2 || r != 2 || p != 2 || d != 2 {
-		t.Fatalf("the host, the relay, the person and the one behind it hold %d, %d, %d and %d links; want 2 each", h, r, p, d)
-	}
+	// A seat whose join a loaded machine refused as behind dials again in a moment,
+	// its cursor a Wraith meanwhile: its link is waited for.
+	waitUntil(t, func() bool {
+		for _, a := range []*App{host, relay, person, deep} {
+			if a.membership.SessionTransport().PeerCount() != 2 {
+				return false
+			}
+		}
+		return true
+	}, "two links each on the host, the relay, the person and the one behind it")
 	waitForMotion(t, host, cursorOf(t, host, held[did][0]), "the bot of a person two relays from the host, on the host")
 	waitForMotion(t, deep, cursorOf(t, deep, host.membership.LocalParticipant()), "the host's cursor two relays away")
 }

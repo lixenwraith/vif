@@ -186,9 +186,11 @@ on a run change each end drops what it keyed by tick and refuses an artifact nam
 another run: a correction by its header (`Corrections.followRun`), an epoch or owner
 sync by the run its batch names, since a guest's last epochs of a run reach the
 authority a round trip after the reset applied there. The run after this one is
-the exception: its first world reaches a guest whose reset is still on its way, so
-the chunk header carries the run, the assembly orders transfers by run then tick,
-and `Apply` keeps such a body at the head of its inbox until the reset enters it. A
+the exception: its first world and epochs reach a guest whose reset is still on its
+way, so the chunk header carries the run, the assembly orders transfers by run then
+tick, `Apply` keeps such a body at the head of its inbox until the reset enters
+it, and the barrier keeps the epochs and syncs for it, and ends the run itself on
+the authority's word where no reset comes (multi-player §3.2). A
 body or a repair leaves in `SnapshotCorrectionChunkBytes` chunks while the link's
 backlog, the bytes sent beyond what its latest echo reports received, drains within
 `SnapshotBulkQueue` past the round trip, so an epoch waits behind a chunk, not a

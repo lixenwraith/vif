@@ -193,8 +193,13 @@ func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
 }
 
 // destroyMember ends one member its owner found dead, tombstoning its entry; an
-// ablative kind's cell fades out where it stood
+// ablative kind's cell fades out where it stood. A crossed one names its producer's
+// entities, which this instance may hold under other numbers until a correction, so
+// only what is that header's member here ends: any other is a cursor or a species.
 func (s *CompositeSystem) destroyMember(headerEntity, memberEntity core.Entity) {
+	if m, ok := s.world.Components.Member.GetComponent(memberEntity); !ok || m.HeaderEntity != headerEntity {
+		return
+	}
 	if header, ok := s.world.Components.Header.GetPtr(headerEntity); ok {
 		for i := range header.MemberEntries {
 			if header.MemberEntries[i].Entity != memberEntity {
