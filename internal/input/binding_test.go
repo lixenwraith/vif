@@ -150,14 +150,16 @@ func TestAnUpgradePutsBackEachShippedBindingAsShipped(t *testing.T) {
 }
 
 // TestUpgradingAKeymapEditsInlineSections: a key to drop or a binding it refuses in
-// a section written inline goes as that section is written again without it, its
-// other bindings kept.
+// a section written inline goes from it and each embedded binding it lacks joins
+// it, its other bindings and the comment on its line kept.
 func TestUpgradingAKeymapEditsInlineSections(t *testing.T) {
 	out, notes, err := UpgradeKeymap([]byte("normal = { h = \"undo\", zz = \"x\", q = \"bogus\" } # mine\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(out), "normal = { h = \"undo\" } # mine\n") || len(notes) != 3 || notes[0] != `dropped [normal] "zz"` ||
+	line, _, _ := strings.Cut(string(out), "\n")
+	if !strings.HasPrefix(line, "normal = { h = \"undo\", ") || !strings.HasSuffix(line, " } # mine") || strings.Contains(line, "zz") ||
+		!strings.Contains(line, " q = ") || strings.Contains(line, "bogus") || len(notes) != 3 || notes[0] != `dropped [normal] "zz"` ||
 		notes[1] != `reset to the default: [normal] key "q": unknown action: "bogus"` {
 		t.Errorf("notes %q:\n%s", notes, out)
 	}

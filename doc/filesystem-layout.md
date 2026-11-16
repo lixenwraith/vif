@@ -185,10 +185,9 @@ then comes with its own comments after the key the shipped file puts before it, 
 table it lacks where the shipped file heads it (toml `Document.Fill`). Every other
 line, comment and value stays, one equal to its default included, so a default a
 later build changes reaches only a file that lacks the key. A table written inline
-(`play = { mouse = false }`) is the exception, since toml edits no key inside a
-value: a key dropped from it goes as the table is written again without it, in
-toml's own spelling and without the comments inside it, and a key it lacks is not
-added but reads as its default ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
+(`play = { mouse = false }`) is edited where it stands: a key dropped goes from
+it, the rest of its line as written, and a key it lacks joins it, without the
+shipped file's comments, which a line has no room for.
 Starting, vif writes the result back to the player's own file (below), once, and
 names the changes on its status line, a watched replay's, script's or bot's too, or
 on standard output for a run that draws nothing (a headless bot or replay,

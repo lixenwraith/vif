@@ -582,25 +582,14 @@ large map costs what td's maze does at a reset, tens of milliseconds
   [§3](filesystem-layout.md#3-resolution-policy)
 
 An edit goes into the author's file through `toml.Document`, as a setting goes
-into `vif.toml` (`saveTable`): the statement named is written again and every
-other line, comment and spelling stays. Run against the shipped scenarios, the
-library vif requires does most of it already:
-
-- **Works.** A value replaced, a state written on one line among them; a state
-  added key by key under a header of its own; a region added; a state deleted
-  with its comments.
-- **Refused.** A key inside an inline value, so one argument of an invocation is
-  set by writing the invocation again; a header's table set whole, so its keys
-  are set one by one; and anything under an array of tables (a program's
-  `[[frames]]`), which a delete and a set turn into one inline line.
-- **Lost.** A value written again is one line, its keys sorted: one action
-  changed in td's `TdSetup.on_enter` turns its 40 lines and 10 comments into a
-  line of 2,149 bytes, which `Format` does not break again.
-
-So a block, an invocation on a line, is edited exactly, and a hand-written value
-of many lines loses its layout to an edit inside it. The editor says so before it
-makes one, until the library edits inside a value
-([Rendering](#let-toml-edit-a-key-inside-an-inline-value)). The rest is vif's:
+into `vif.toml` (`saveTable`), and the library writes only what then reads
+otherwise: the editor changes the tree it read and sets it. Run against the
+shipped scenarios, one action changed in the 40 lines of td's `TdSetup.on_enter`
+changes that line alone, its 10 comments kept; an argument of an invocation is
+set in place among the others; a state under a header has its keys set, added
+and deleted; and a raider's `[[frames]]` keeps every table that reads the same.
+What it leaves out is a name for one table of an array of tables: the array is
+set. The rest is vif's:
 
 - **Whose file.** A scenario in one of the player's roots is written in place
   (`paths.OwnRoot`). One in a shared root, the checkout's `wad/` or a system
@@ -2581,32 +2570,18 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   later key's explanation with it; a copy keeps its old block until the player
   edits it.
 
-### Let toml edit a key inside an inline value
-
-- Priority: P3
-- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`,
-  `Document.Fill`), `internal/paths/settings.go` (`dropInside`, `saveTable`),
-  `internal/input/keyconfig.go` (`drop`)
-- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { mouse =
-  false }`), and `Fill` adds none there. The upgrades write such a value again
-  without the keys that go, its line's comment kept but the comments inside it and
-  its spelling lost, and add nothing to it, so a key a later build ships reads as
-  its default without its line; `saveTable` does not write there, so a menu change
-  to an inline `[play]` reads `[play] not written`. Edits and adds inside an inline
-  value in the library retire the workarounds and let the save and the upgrades
-  write there. A scenario's values are arrays of inline tables over many lines, so
-  the editor ([Authoring](#write-a-scenario-back-as-viftoml-is-written)) adds two
-  cases: an element of an array, and a key under an array of tables.
-
 ### Drop a settings file's keys in one read
 
 - Priority: P3
-- Affected files: `lixenwraith/toml` (`Document.Delete`), `internal/paths/settings.go`
-  (`drop`), `internal/input/keyconfig.go` (`drop`)
+- Affected files: `lixenwraith/toml` (`Document.Delete`, `Document.Set`),
+  `internal/paths/settings.go` (`UpgradeSettings`), `internal/input/keyconfig.go`
+  (`UpgradeKeymap`)
 - Each `Delete` reads the document again, so an upgrade dropping n keys costs n
   reads: a `vif.toml` or keymap holding 3000 unknown keys takes seconds to start.
   A `Delete` of many keys in one edit makes it one read. No file vif writes comes
-  near; one a player pastes another program's settings into could.
+  near; one a player pastes another program's settings into could. A `Set` over
+  tables written under headers costs the same, a read a statement it sets: 300
+  of 3,000 tables changed in one array took 2.7 s.
 
 ### Write a hard-linked settings file in place
 
