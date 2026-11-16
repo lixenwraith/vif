@@ -82,8 +82,10 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 	}
 	baseDir := path.Dir(cleanName)
 	if entry {
-		if err := includeBehaviors(fsys, parsed, baseDir, visited, macros); err != nil {
-			return nil, fmt.Errorf("%s: %w", cleanName, err)
+		for _, t := range [...][2]string{{"behaviors", "behavior"}, {"maps", "map"}} {
+			if err := includeTables(fsys, parsed, t[0], t[1], baseDir, visited, macros); err != nil {
+				return nil, fmt.Errorf("%s: %w", cleanName, err)
+			}
 		}
 		if err := includeContent(fsys, parsed, baseDir, visited); err != nil {
 			return nil, fmt.Errorf("%s: %w", cleanName, err)
@@ -166,38 +168,39 @@ func readExpanded(fsys fs.FS, name string, visited *[]string, macros *macro.Set)
 	return parsed, macros, nil
 }
 
-// includeBehaviors replaces each behaviors.<name> table naming a file with that
-// file, read as the entry's other files are; a table without file is the program
-func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string, macros *macro.Set) error {
-	raw, ok := entry["behaviors"]
+// includeTables replaces each table of the entry's key, its behaviors or its maps,
+// that names a file with that file, read as the entry's other files are; a table
+// without file is the what itself
+func includeTables(fsys fs.FS, entry map[string]any, key, what, baseDir string, visited *[]string, macros *macro.Set) error {
+	raw, ok := entry[key]
 	if !ok {
 		return nil
 	}
-	programs, ok := raw.(map[string]any)
+	tables, ok := raw.(map[string]any)
 	if !ok {
-		return errors.New("behaviors must be a table of programs")
+		return fmt.Errorf("%s must be a table of tables", key)
 	}
-	for _, name := range slices.Sorted(maps.Keys(programs)) {
-		program, ok := programs[name].(map[string]any)
+	for _, name := range slices.Sorted(maps.Keys(tables)) {
+		table, ok := tables[name].(map[string]any)
 		if !ok {
-			return fmt.Errorf("behavior '%s' must be a table", name)
+			return fmt.Errorf("%s '%s' must be a table", what, name)
 		}
-		ref, hasFile := program["file"]
+		ref, hasFile := table["file"]
 		if !hasFile {
 			continue
 		}
 		file, ok := ref.(string)
 		switch {
 		case !ok:
-			return fmt.Errorf("behavior '%s': file must be a string", name)
-		case len(program) > 1:
-			return fmt.Errorf("behavior '%s': file must be the table's only key", name)
+			return fmt.Errorf("%s '%s': file must be a string", what, name)
+		case len(table) > 1:
+			return fmt.Errorf("%s '%s': file must be the table's only key", what, name)
 		}
 		doc, _, err := readExpanded(fsys, path.Join(baseDir, file), visited, macros)
 		if err != nil {
-			return fmt.Errorf("behavior '%s': %w", name, err)
+			return fmt.Errorf("%s '%s': %w", what, name, err)
 		}
-		programs[name] = doc
+		tables[name] = doc
 	}
 	return nil
 }

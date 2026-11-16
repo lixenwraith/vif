@@ -85,23 +85,48 @@ func (s *MountSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
+// mountFault says why no host can carry the mount a request asks for, "" when one can
+func mountFault(p *event.MountRequestPayload) string {
+	pulse := p.Pulse
+	switch {
+	case p.Weapon < 0 || p.Weapon >= component.WeaponCount:
+		return "weapon names no kind"
+	case p.Lane < 0 || p.Lane > len(vmath.Octants):
+		return fmt.Sprintf("lane %d is not 0, which aims, or 1..%d", p.Lane, len(vmath.Octants))
+	case pulse.Radius < 0 || pulse.DurationMs < 0 || pulse.GrowMs < 0 || pulse.HitIntervalMs < 0:
+		return "pulse radius and timings are not negative"
+	case pulse.Style >= component.PulseStyleCount || pulse.Attack < 0 || pulse.Attack >= component.CombatAttackTypeCount:
+		return "pulse style or attack names none"
+	case p.SpreadMs < 0 || p.SpreadMs >= int(mountInterval(p)/time.Millisecond):
+		return fmt.Sprintf("spread_ms %d is not under its interval, %v", p.SpreadMs, mountInterval(p))
+	}
+	return ""
+}
+
+// mountInterval is the time between a mount's discharges before its host's spread:
+// the request's, else its weapon's cooldown
+func mountInterval(p *event.MountRequestPayload) time.Duration {
+	if p.IntervalMs > 0 {
+		return time.Duration(p.IntervalMs) * time.Millisecond
+	}
+	return component.WeaponSpecs[p.Weapon].Cooldown
+}
+
 // attach puts one weapon on a host. A cursor's weapons are its loadout (D-13), and
 // a Player-domain entity cannot carry Shared state.
 func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	_, placed := s.world.Positions.GetPosition(p.Host)
 	pulse := p.Pulse
-	if !placed || p.Host.Domain() != core.DomainShared || s.world.Components.Cursor.HasEntity(p.Host) ||
-		p.Weapon < 0 || p.Weapon >= component.WeaponCount || p.Lane < 0 || p.Lane > len(vmath.Octants) ||
-		pulse.Radius < 0 || pulse.DurationMs < 0 || pulse.GrowMs < 0 || pulse.HitIntervalMs < 0 ||
-		pulse.Style >= component.PulseStyleCount || pulse.Attack < 0 || pulse.Attack >= component.CombatAttackTypeCount {
+	if !placed || p.Host.Domain() != core.DomainShared || s.world.Components.Cursor.HasEntity(p.Host) || mountFault(p) != "" {
 		s.statRejects.Add(1)
 		return
 	}
 	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	spec := &component.WeaponSpecs[p.Weapon]
-	interval := time.Duration(p.IntervalMs) * time.Millisecond
-	if interval <= 0 {
-		interval = spec.Cooldown
+	interval := mountInterval(p)
+	if p.SpreadMs > 0 {
+		// Each host's own, drawn as its shots' spread is, so every instance agrees (D-8)
+		interval += time.Duration((s.shotRand(p.Host).Float64()*2 - 1) * float64(ms(p.SpreadMs)))
 	}
 	reach := float64(p.Range)
 	if reach <= 0 {

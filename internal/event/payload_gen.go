@@ -135,6 +135,8 @@ var payloadNew = [EventTypeCount]func() any{
 	EventKrakenSpawnRequest:              func() any { return new(KrakenSpawnRequestPayload) },
 	EventBehaviorSpawnRequest:            func() any { return new(BehaviorSpawnRequestPayload) },
 	EventBehaviorCancelRequest:           func() any { return new(BehaviorCancelRequestPayload) },
+	EventBehaviorSignalRequest:           func() any { return new(BehaviorSignalRequestPayload) },
+	EventMapLayRequest:                   func() any { return new(MapLayRequestPayload) },
 	EventWindStart:                       func() any { return new(WindStartPayload) },
 	EventDriftStart:                      func() any { return new(DriftStartPayload) },
 	EventDriftCancel:                     func() any { return new(DriftCancelPayload) },
@@ -309,6 +311,8 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventKrakenSpawnRequest:              &codecKrakenSpawnRequestPayload,
 	EventBehaviorSpawnRequest:            &codecBehaviorSpawnRequestPayload,
 	EventBehaviorCancelRequest:           &codecBehaviorCancelRequestPayload,
+	EventBehaviorSignalRequest:           &codecBehaviorSignalRequestPayload,
+	EventMapLayRequest:                   &codecMapLayRequestPayload,
 	EventWindStart:                       &codecWindStartPayload,
 	EventDriftStart:                      &codecDriftStartPayload,
 	EventDriftCancel:                     &codecDriftCancelPayload,
@@ -972,6 +976,7 @@ var codecMountRequestPayload = structCodec{size: unsafe.Sizeof(MountRequestPaylo
 	{off: unsafe.Offsetof(MountRequestPayload{}.Host), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.IntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.SpreadMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Range), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Muzzle), kind: kindFloat},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Lane), kind: kindInt, size: unsafe.Sizeof(int(0))},
@@ -1306,7 +1311,7 @@ var codecCursorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorSpawn
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Control), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.PeerID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Auto), kind: kindBool},
-	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Center), kind: kindBool},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Origin), kind: kindUint, size: unsafe.Sizeof(MapAnchor(0))},
 }}
 
 func (p *CursorSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1521,6 +1526,26 @@ func (p *BehaviorCancelRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecBehaviorCancelRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorCancelRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(BehaviorCancelRequestPayload{}.Program), kind: kindString},
+}}
+
+func (p *BehaviorSignalRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBehaviorSignalRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBehaviorSignalRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorSignalRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Program), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Signal), kind: kindUint, size: unsafe.Sizeof(component.BehaviorSignal(0))},
+	{off: unsafe.Offsetof(BehaviorSignalRequestPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *MapLayRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMapLayRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMapLayRequestPayload = structCodec{size: unsafe.Sizeof(MapLayRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MapLayRequestPayload{}.Map), kind: kindUint, size: unsafe.Sizeof(component.MapID(0))},
+	{off: unsafe.Offsetof(MapLayRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MapLayRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *WindStartPayload) codec() (*structCodec, unsafe.Pointer) {

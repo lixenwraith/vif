@@ -22,7 +22,11 @@ type Set[C any] struct {
 	protos   []component.BehaviorPrototype
 	graphs   []*machine.Graph[component.BehaviorState, C]
 	initials []component.BehaviorState
+	fits     []func(C)
+	signals  [][]string // each program's signals, a bit each in declared order
+	hears    [][]uint8  // by program and state, the signals an edge out of it takes
 	loot     component.LootSet
+	maps     []component.MapLayout
 }
 
 func (s *Set[C]) Len() int { return len(s.names) }
@@ -40,27 +44,68 @@ func (s *Set[C]) Graph(i int) *machine.Graph[component.BehaviorState, C] { retur
 // Initial is the state a spawn of program i starts in
 func (s *Set[C]) Initial(i int) component.BehaviorState { return s.initials[i] }
 
+// Fit is what a spawn of program i applies to its instance before it starts, its
+// prototype's fittings; nil when it has none
+func (s *Set[C]) Fit(i int) func(C) { return s.fits[i] }
+
+// Signals is the signals program i declares, signal n its bit n
+func (s *Set[C]) Signals(i int) []string { return s.signals[i] }
+
+// Hears is the signals an instance of program i in state takes on an edge out of it
+func (s *Set[C]) Hears(i int, state component.BehaviorState) uint8 {
+	if int(state) >= len(s.hears[i]) {
+		return 0
+	}
+	return s.hears[i][state]
+}
+
 // Loot is the loot kinds and drop tables the scenario declares
 func (s *Set[C]) Loot() *component.LootSet { return &s.loot }
 
-// Declared is what the scenario adds to the code's names: its programs and its kinds
+// Maps is the maps the scenario declares, in sorted-name order
+func (s *Set[C]) Maps() []component.MapLayout { return s.maps }
+
+// Declared is what the scenario adds to the code's names: its programs with their
+// signals, and its kinds
 func (s *Set[C]) Declared() component.Declared {
-	return component.Declared{Programs: s.names, Loot: s.loot.Names()}
+	d := component.Declared{Programs: s.names, Loot: s.loot.Names(), Signals: make(map[string][]string)}
+	for _, m := range s.maps {
+		d.Maps = append(d.Maps, m.Name)
+	}
+	for i, name := range s.names {
+		if len(s.signals[i]) > 0 {
+			d.Signals[name] = s.signals[i]
+		}
+	}
+	return d
 }
 
-// Compile builds the loot a scenario's entry declares, its [loot] and [drops] as
-// loot holds them, any other key unread, so the resolved entry itself serves; then
-// every program against v, each a machine graph whose states take IDs in
-// sorted-name order. Every fault is reported, each naming its program or loot and
-// place; no programs is an empty set.
-func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, loot map[string]any) (*Set[C], error) {
+// Compile builds the loot and the maps a scenario's entry declares, its [loot],
+// [drops] and [maps] as entry holds them, any other key unread, so the resolved
+// entry itself serves; then every program against v, each a machine graph whose
+// states take IDs in sorted-name order. Every fault is reported, each naming its
+// program, loot or map and place; no programs is an empty set.
+func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, entry map[string]any) (*Set[C], error) {
 	names := slices.Sorted(maps.Keys(programs))
 	if len(names) > parameter.BehaviorProgramsMax {
 		return nil, fmt.Errorf("%d behavior programs, at most %d", len(names), parameter.BehaviorProgramsMax)
 	}
 	set := &Set[C]{names: names}
 	var errs []error
-	set.loot, errs = compileLoot(loot, names)
+	set.loot, errs = compileLoot(entry, names)
+	layouts, faults := compileMaps(entry, names)
+	set.maps, errs = layouts, append(errs, faults...)
+	// A payload may name any program's signal, so each is read ahead of the compile
+	for _, name := range names {
+		var signals []string
+		list, _ := programs[name]["signals"].([]any)
+		for _, item := range list {
+			if s, ok := item.(string); ok {
+				signals = append(signals, s)
+			}
+		}
+		set.signals = append(set.signals, signals)
+	}
 	payloads := dialect.NewNames()
 	if v.names != nil {
 		payloads = v.names(set.Declared())
@@ -71,11 +116,14 @@ func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, loot m
 			continue
 		}
 		c := compiler[C]{v: v, program: name, payloads: payloads, loot: &set.loot}
-		proto, graph, initial := c.build(programs[name], component.SpeciesDataFirst+component.SpeciesType(i))
+		raw, fit := c.fittings(programs[name])
+		proto, graph, initial := c.build(raw, component.SpeciesDataFirst+component.SpeciesType(i))
 		errs = append(errs, c.errs...)
 		set.protos = append(set.protos, proto)
 		set.graphs = append(set.graphs, graph)
 		set.initials = append(set.initials, initial)
+		set.fits = append(set.fits, fit)
+		set.hears = append(set.hears, c.hears)
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
@@ -92,6 +140,11 @@ type compiler[C any] struct {
 	ids      map[string]component.BehaviorState
 	sites    int
 	errs     []error
+
+	signals []string // the program's, a bit each
+	hears   []uint8  // by state, the signals an edge out of it takes
+	onEdge  bool     // an edge is compiling, which may take a signal
+	heard   uint8    // the signals its guards read
 }
 
 // fail records err at where, a path below the program; each error a join holds
@@ -107,6 +160,34 @@ func (c *compiler[C]) fail(where string, err error) {
 		err = fmt.Errorf("%s: %w", where, err)
 	}
 	c.errs = append(c.errs, fmt.Errorf("program '%s': %w", c.program, err))
+}
+
+// fittings builds the [prototype] tables the host registered, in key order, and
+// returns the program without them, for the strict decode, and what a spawn applies
+func (c *compiler[C]) fittings(raw map[string]any) (map[string]any, func(C)) {
+	proto, _ := raw["prototype"].(map[string]any)
+	var fs []func(C)
+	cloned := false
+	for _, key := range slices.Sorted(maps.Keys(c.v.fittings)) {
+		table, ok := proto[key]
+		if !ok {
+			continue
+		}
+		// An empty table fits nothing, which is how a macro's default leaves a body bare
+		if t, isTable := table.(map[string]any); !isTable || len(t) > 0 {
+			f, err := c.v.fittings[key](c.payloads, table)
+			if err != nil {
+				c.fail("prototype: "+key, err)
+			}
+			fs = append(fs, f)
+		}
+		if !cloned { // the document is its caller's, so a copy loses the key
+			raw, proto, cloned = maps.Clone(raw), maps.Clone(proto), true
+			raw["prototype"] = proto
+		}
+		delete(proto, key)
+	}
+	return raw, sequence(fs)
 }
 
 func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (proto component.BehaviorPrototype, graph *machine.Graph[component.BehaviorState, C], initial component.BehaviorState) {
@@ -134,6 +215,19 @@ func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (
 	for i, name := range names {
 		c.ids[name] = component.BehaviorState(i)
 	}
+	c.signals, c.hears, proto.Signals = doc.Signals, make([]uint8, len(names)), doc.Signals
+	if len(c.signals) > parameter.BehaviorSignalsMax {
+		c.fail("signals", fmt.Errorf("%d signals, at most %d", len(c.signals), parameter.BehaviorSignalsMax))
+		return
+	}
+	for i, name := range c.signals {
+		switch {
+		case !wellNamed(name):
+			c.fail("signals", fmt.Errorf("%.32q is not [a-z][a-z0-9_]* of at most %d bytes", name, parameter.BehaviorNameMax))
+		case slices.Index(c.signals, name) != i:
+			c.fail("signals", fmt.Errorf("%q is declared twice", name))
+		}
+	}
 	initial, ok := c.ids[doc.Initial]
 	if !ok {
 		c.fail("initial", c.unknownState(doc.Initial))
@@ -145,13 +239,14 @@ func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (
 	}
 	for i, g := range doc.Global {
 		where := fmt.Sprintf("global[%d]", i)
-		e := c.edge(where, g.Guard, g.GuardArgs, g.Target, g.Actions, g.Fallback)
+		e, heard := c.edge(where, g.Guard, g.GuardArgs, g.Target, g.Actions, g.Fallback)
 		if len(g.From) == 0 {
 			c.fail(where, errors.New("from lists no state"))
 		}
 		for _, name := range g.From {
 			if id, ok := c.ids[name]; ok {
 				e.From |= machine.MaskOf(id)
+				c.hears[id] |= heard
 			} else {
 				c.fail(where+": from", c.unknownState(name))
 			}
@@ -206,7 +301,8 @@ func (c *compiler[C]) state(b *machine.Builder[component.BehaviorState, C], name
 
 	for i, t := range d.Transitions {
 		at := fmt.Sprintf("%s: transitions[%d]", where, i)
-		e := c.edge(at, t.Guard, t.GuardArgs, t.Target, t.Actions, t.Fallback)
+		e, heard := c.edge(at, t.Guard, t.GuardArgs, t.Target, t.Actions, t.Fallback)
+		c.hears[id] |= heard
 		switch t.Trigger {
 		case "Timeout":
 			if t.Guard != "" {
@@ -223,14 +319,42 @@ func (c *compiler[C]) state(b *machine.Builder[component.BehaviorState, C], name
 	}
 }
 
-// edge compiles what transitions and global edges share
-func (c *compiler[C]) edge(where, guard string, guardArgs map[string]any, target any, actions []actionDoc, fallback any) machine.Edge[component.BehaviorState, C] {
-	return machine.Edge[component.BehaviorState, C]{
+// edge compiles what transitions and global edges share, and the signals its
+// guards read, which it lowers as it commits, ahead of its actions
+func (c *compiler[C]) edge(where, guard string, guardArgs map[string]any, target any, actions []actionDoc, fallback any) (machine.Edge[component.BehaviorState, C], uint8) {
+	c.onEdge, c.heard = true, 0
+	e := machine.Edge[component.BehaviorState, C]{
 		Guard:    c.guard(where, guard, guardArgs),
 		Do:       c.effects(where+": actions", actions),
 		To:       c.targets(where+": target", target),
 		Fallback: c.fallback(where+": fallback", fallback),
 	}
+	c.onEdge = false
+	if heard, word := c.heard, c.v.signals; heard != 0 {
+		e.Do = sequence([]func(C){func(ctx C) { *word(ctx) &^= heard }, e.Do})
+	}
+	return e, c.heard
+}
+
+// signalled builds the guard that passes while a signal of the program's is raised,
+// and notes it for the edge compiling
+func (c *compiler[C]) signalled(args map[string]any) (func(C) bool, error) {
+	a, err := dialect.Decode[signalArgs](args)
+	if err != nil {
+		return nil, err
+	}
+	i := slices.Index(c.signals, a.Name)
+	switch {
+	case i < 0 && len(c.signals) == 0:
+		return nil, fmt.Errorf("signal %q: the program declares no signals", a.Name)
+	case i < 0:
+		return nil, fmt.Errorf("signal %q is not one of %s", a.Name, strings.Join(c.signals, ", "))
+	case !c.onEdge:
+		return nil, errors.New("only an edge takes a signal")
+	}
+	bit, word := uint8(1)<<i, c.v.signals
+	c.heard |= bit
+	return func(ctx C) bool { return *word(ctx)&bit != 0 }, nil
 }
 
 // targets reads a state name, or a list of names and candidate tables
@@ -310,6 +434,9 @@ func (c *compiler[C]) guard(where, name string, args map[string]any) func(C) boo
 	}
 	g, err := dialect.Tree[func(C) bool]{
 		Leaf: func(name string) (func(map[string]any) (func(C) bool, error), bool) {
+			if name == signalled && c.v.signals != nil {
+				return c.signalled, true
+			}
 			vb, ok := c.v.verbs[name]
 			if !ok {
 				return nil, false

@@ -78,7 +78,11 @@ releases decay from them.
 it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width, the
 `energy` and `heat` a hit costs, and a `pulse` table), capturing the host from
 `EventSpeciesCreated` as a gateway is attached; a species may set the component
-itself. Each tick it:
+itself, and a behavior program's `[prototype.mount]` is that request for each of
+its instances ([FSM reference](fsm-reference.md#behavior-programs)). `spread_ms`
+draws each host's interval that far either side of the one asked, seeded from the
+tick and the host as a shot's spread is, so hosts mounted alike fire apart on
+every instance alike. Each tick it:
 
 - aims at the nearest cursor within range, aspect-corrected, from Shared positions;
 - fires when ready and, under `MountArmed`, only while the host holds `Armed`;

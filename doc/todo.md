@@ -166,7 +166,10 @@ the maze again (Trim what a tick spends outside the position index).
 
 Armada is to become a vertical scroller that keeps its three ships, likely the
 first scenario built on a painted map ([Authoring](#authoring)). Its items follow
-the editor's foundation.
+the editor's foundation. Its ships already hold and fly back to a post, leave the
+map of their own accord (`Leave`, `AtEdge`), carry their mounts, and take their
+dives from the region (`Status`, `Var`, a signal), and its ranks are maps
+([FSM reference](fsm-reference.md#behavior-programs)).
 
 ### Redesign armada as a vertical scroller
 
@@ -214,95 +217,6 @@ To settle with the design:
 
 [Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
 follow the redesign.
-
-### Let a program read what its scenario decides
-
-- Priority: P2
-- Affected files: `internal/system/behavior.go` (`BehaviorVocabulary`),
-  `internal/component/behavior.go`, `internal/engine` (the scheduler, a derived
-  resource), `internal/event/payload.go`
-- Guide: [Behavior machines §6.2](machine-design.md#62-vocabulary),
-  [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
-
-A program's guards read its instance and the world and nothing of its scenario: no
-status row, no scenario variable, and its edges fire on `Timeout`, `Tick` and
-`AfterTick` alone. So armada's ships roll for themselves (`Chance`): dives thin
-out as the armada does, nothing caps how many fly at once, and a later wave dives
-no faster, the damage multiplier being the only ramp. Any scenario whose species
-should answer its stage meets the same wall. In the order they cost:
-
-- **A guard on a status row**, `Status { key, op, value }`, as a region's
-  `StatusIntCompare`: on `behavior.count` the last ships dive hardest.
-- **A guard on a scenario variable**, `Var { name, op, value }`. No system
-  reaches the machine, so the scheduler publishes its variables as a derived
-  resource. A candidate's `duration_ms` already overrides its state's, so a guard
-  on `wave` picks a faster dive with no new timing key.
-- **A count of a program's instances by state**,
-  `behavior.<program>.state.<State>`, bound with the lifecycle rows before
-  `Freeze`, so a region reads how many dive.
-- **A signal**, `EventBehaviorSignalRequest { program, signal, count }`, Shared:
-  it raises a bit on `count` of the program's instances, chosen alike on every
-  instance, which a `Signalled { name }` guard reads and its entry clears. The
-  region sends a salvo of the size it chose and the ships stop rolling.
-
-Each reads or writes Shared state alike on every instance: a variable is the
-machine's and captured with it (D-19), a status row is one a region may read
-already, and the bit joins `BehaviorComponent` and its capture (`snapshot.Schema`).
-
-### Rework what armada's first version worked around
-
-- Priority: P2
-- Affected files: `internal/system/behavior.go`, `internal/behavior/program.go`,
-  `internal/fsm/std/action.go`, `args.go`, `internal/event/payload.go`,
-  `internal/system/mount.go`, `wad/scenario/base/armada/scenario.toml`
-- Guide: [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs),
-  [Arithmetic Actions](fsm-reference.md#arithmetic-actions)
-
-The first version plays on what the machine had, and where that was too little the
-scenario works around it. Each workaround is a gap any authored scenario meets,
-given here with the form that retires it; the redesign is written on them.
-
-- **A roll that is a rate.** `Chance { percent }` is a whole percent a step, so a
-  chance under 1% a tick takes two rolls under an `And` (`Hold`), and the wait it
-  makes follows the run's tick (`-tick`). A `mean_ms` beside it rolls each step's
-  share of that mean wait, finer than a percent and the same at any tick;
-  `percent` stays for the one roll a `Timeout` candidate makes.
-- **A cell named from the map.** The ship's start is four variable actions on
-  `map_width` and `map_height` and a rank's left end three, as `dummy`, `recall`
-  and the tutorial lay themselves out, while `EventBehaviorSpawnRequest` alone
-  names an edge (`edge`, `inset`). An `origin` on `EmitEvent`, an edge, a corner
-  or the centre the payload's `x` and `y` count from, resolved from the grid,
-  gives every payload that names a cell the same and retires the arithmetic.
-- **An offset of zero.** `IncrementVar` and its kin read a `delta` of 0 as 1, so
-  a macro cannot pass 0 and `Rank` counts its columns from a cell left of the
-  first. Only an absent `delta` should mean 1.
-- **A rank in one request.** `Rank` spends three actions a ship, 84 a wave. A
-  map's legend naming a program
-  ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
-  rows of characters laid at an origin, drawn in the editor as walls are.
-- **A mount of the body's own.** A warden is armed by a region that catches
-  `EventSpeciesCreated`, captures the entity and emits `EventMountRequest`, its
-  interval picked by a counter so volleys drift apart; the program copied into
-  another scenario comes unarmed unless that region comes too. A
-  `[prototype.mount]` the spawn applies, its interval spread drawn for each host
-  as a shot's is, retires the region, the capture and the `pick`.
-- **`Home` and the home cell.** The verb `Home` steers to the target and
-  `to = "home"` names the cell an instance spawned on: one word, two things. The
-  cell takes a name of its own (`post`), and `to` reaches the verbs that lack it:
-  `TargetDistance`, so a program knows it is off its post, and `Home`, so it
-  steers back. A ship holds its place by `Freeze`, which stands only while
-  nothing pushes the body, and a wall or rock does.
-- **An end of its own.** An instance ends by a kill, its `lifetime_ms` or a
-  cancel, and `EventBehaviorCancelRequest` names a program, every instance of it.
-  A ship that leaves the map past the player needs an effect that ends its own
-  instance, counted apart from a kill and dropping nothing.
-- **Arrivals among the ranks.** A joiner's cursor lands on the map's centre
-  whatever the boot request asked
-  ([Place an arrival](#place-an-arrival-where-its-scenario-places-a-cursor)),
-  here under the ranks.
-- **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
-  strobe and the reset are five states armada copies as six other scenarios do,
-  the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).
 
 ## Bots
 
@@ -541,35 +455,33 @@ expanding each written element alone, which asks nothing of the macro library.
 ### Lay a painted map a scenario carries
 
 - Priority: P1
-- Affected files: `internal/resource/scenario.go` (`entryKeys`),
-  `internal/fsm/file_loader.go` (`includeBehaviors`), `internal/system/wall.go`,
-  `internal/pattern`, `internal/event/payload.go`
-- Guide: [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline),
-  [FSM reference: Root Config](fsm-reference.md#root-config-scenariotoml)
+- Affected files: `internal/behavior/maps.go`, `internal/component/declared.go`
+  (`MapLayout`), `internal/system/wall.go`, `internal/pattern`,
+  `internal/resource/scenario.go` (the bounds)
+- Guide: [FSM reference: Maps](fsm-reference.md#maps),
+  [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline)
 
-A wall event takes its cells one by one, or lays a maze, a cave or an `.aimg` from
-the `image/` category, which the digest leaves out and a joiner is not sent. A map
-drawn by hand has no form a scenario carries. The form, tiles first and
-[images after](#carry-an-image-in-the-scenario):
+A scenario carries maps: `[maps]` in its entry, each inline or a file of its own,
+read, bounded, digested and sent as a program is and compiled once a run; `rows`
+of one width over a `legend`; and `EventMapLayRequest { map, x, y }`, which a
+request naming no map of the scenario fails the load on. A legend lays a
+program's spawn and nothing else, so a formation is drawn and a level is not. A
+wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg`
+from the `image/` category, which the digest leaves out and a joiner is not sent.
+What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
 
-- **`[maps]` in the entry**, beside `[behaviors]`: each map inline or a file of
-  the scenario, so it is read, bounded, digested and sent as a program is, and
-  compiled once a run.
-- **Rows over a legend.** `rows` are strings of one width, a character a cell;
-  `legend` gives a character its tile, a wall's glyph, colours, box style and
-  block mask named once, and a space is open map. A 500 by 250 map is 125 KB of
+- **A tile.** A legend entry that is a wall: its glyph, colours, box style and
+  block mask named once. `MapLayout` gains its cells beside `Spawns`, and the wall
+  system lays them on the lay request as it lays a pattern, as one composite or as
+  loose walls, a batch a block mask and box style. A 500 by 250 map is 125 KB of
   rows, half a file's bound.
-- **Laid by name**, `EventMapLayRequest { map, x, y }`, through the wall system
-  as a pattern is, as one composite or as loose walls; a request naming no map of
-  the scenario fails the load where it is written, as a program's does.
 - **Its own size.** A map is as large as its rows, and the scenario holds the map
   to it (`[map] fixed`, its level setup). A layout that stretches with the
   terminal is not this item's.
+- **A loot, and a named cell** a payload takes, the marker the editor drags, each
+  a kind of legend entry its own system lays.
 
-Next on the same legend, each a kind of entry: a program's spawn, which makes a
-rank a few rows ([Armada](#rework-what-armadas-first-version-worked-around)); a
-loot; and a named cell a payload takes, the marker the editor drags. Laying a
-large map costs what td's maze does at a reset, tens of milliseconds
+Laying a large map costs what td's maze does at a reset, tens of milliseconds
 ([Engine](#trim-what-a-tick-spends-outside-the-position-index)).
 
 ### Write a scenario back as `vif.toml` is written
@@ -785,7 +697,7 @@ Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
 keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
 round adds `[ ]`, the markers and macros, practises the keys it only tells
 (`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
-map's edge ([a cell named from the map](#rework-what-armadas-first-version-worked-around)),
+map's edge (`origin`, [FSM reference](fsm-reference.md#event-emission)),
 and cues a lesson cleared.
 
 ## Browser sessions
@@ -2167,20 +2079,6 @@ The record is built to be replaced: one type, made in one place
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
 
-### Place an arrival where its scenario places a cursor
-
-- Priority: P2
-- Affected files: `internal/system/network.go`,
-  `internal/app/internal/membership/join.go`, `internal/engine/resource.go`
-
-A participant's cursor lands on the map centre whatever the scenario's boot request
-asked: `addParticipant` and a joiner's roster both push `Center: true` with the
-template's heat and energy, so a recall guest starts at the centre and not below the
-buttons where the boot cursor stands. Anything hostile a scenario puts at the centre
-strikes each arrival on its first ticks. Keep the boot request's placement beside
-the heat and energy template (`PlayerResource.SetInitialResources`) and spawn
-arrivals from it, or let a scenario name spawn cells by slot.
-
 ### Merge two sessions
 
 - Priority: P3
@@ -2437,8 +2335,32 @@ each with the smallest change that would answer it:
 
 `Graph.States` lists a graph's states and `Graph.Flags` a state's flags, for an
 overlay that labels each instance of a species with its state and progress, as
-`:graph` draws a route graph. Nothing reads either, and only tests read
-`Graph.Name`: build the overlay, or delete the two reads until one is wanted.
+`:graph` draws a route graph. A data species' per-state rows read `States` and
+`Name` (`behavior.<program>.state.<State>`); nothing reads `Flags`: build the
+overlay, or delete that read until one is wanted.
+
+### Let a program's event name its own cell
+
+- Priority: P3
+- Affected files: `internal/system/behavior.go` (`EmitEvent`),
+  `internal/fsm/std/payload.go` (`emitOrigin`)
+
+A program's `EmitEvent` payload is fixed at load, and the scenario's `origin`
+is the map's alone, so a body cannot drop loot where it stands, raise an effect
+on its post or lay a map from itself. The smallest form: an `origin` on the verb
+that also takes what `to` does (`self`, `stored`, `post`), moving the payload's
+`x` and `y` as the scenario's does, the move shared by both.
+
+### Let a data species' machine arm its mount
+
+- Priority: P3
+- Affected files: `internal/system/behavior.go`, `internal/system/mount.go`
+
+A `[prototype.mount]` fires whenever a cursor is in range, a stunned or diving
+host's included, where a storm circle's fires only while its state is flagged
+`Armed` and never while held. The smallest form: an `Armed` flag in the
+vocabulary and a `trigger = "armed"` on the mount, written to `Mount.Armed` each
+step as the circles write theirs.
 
 ### Push a data species with the wind
 

@@ -238,15 +238,15 @@ func (s Scenario) Behaviors() (map[string]map[string]any, error) {
 	return out, nil
 }
 
-// Loot resolves the entry and returns its [loot] kinds and [drops] tables, which
-// its programs' compile reads beside them
+// Loot resolves the entry and returns its [loot] kinds, [drops] tables and [maps],
+// which its programs' compile reads beside them
 func (s Scenario) Loot() (map[string]any, error) {
 	doc, err := fsm.ResolveScenario(s.FS(), s.entry)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]any{}
-	for _, key := range []string{"loot", "drops"} {
+	for _, key := range []string{"loot", "drops", "maps"} {
 		if v, ok := doc[key]; ok {
 			out[key] = v
 		}
@@ -378,7 +378,7 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 
 // entryKeys are the top-level keys a scenario entry may hold
 var entryKeys = []string{"behaviors", "content", "description", "drops", "keymap", "loot", "macro_files",
-	"macros", "map", "max_players", "min_players", "navigation", "regions", "states", "systems"}
+	"macros", "map", "maps", "max_players", "min_players", "navigation", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
 // .toml-only, naming nothing outside itself, its entry holding only entryKeys.

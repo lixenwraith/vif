@@ -48,7 +48,7 @@ background = true
 # --- Macros ---
 
 [macros.Offset]
-doc = "Set `name` to `from` plus `delta`, which is not 0."
+doc = "Set `name` to `from` plus `delta`."
 params = { name = "string", from = "string", delta = "int" }
 body = [
     { action = "CopyVar", payload = { name = "${name}", source_var = "${from}" } },
@@ -242,7 +242,7 @@ transitions = [
 [states.PlayerBoot]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 10000 } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 10, energy = 10000 } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerStart", capture_vars = { entity = "player_entity" } },

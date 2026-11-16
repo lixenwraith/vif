@@ -160,7 +160,7 @@ func (s *CursorSystem) move(p *event.CursorMoveRequestPayload, own bool) {
 // spawn creates one cursor in a roster slot, announcing success or refusal
 func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 	roster := s.world.Resources.Player
-	roster.SetInitialResources(p.Heat, p.Energy)
+	roster.SetTemplate(engine.CursorTemplate{Heat: p.Heat, Energy: p.Energy, Origin: p.Origin, X: p.X, Y: p.Y})
 
 	// An arrival applying at a reset's own tick joins the roster the boot rebuilds:
 	// taking it as this request's own would leave the boot's nothing to build.
@@ -227,10 +227,7 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 		s.rosterOffMap(slot, p)
 		return
 	}
-	x, y := p.X, p.Y
-	if p.Center {
-		x, y = config.MapWidth/2, config.MapHeight/2
-	}
+	x, y := p.Origin.Cell(p.X, p.Y, config.MapWidth, config.MapHeight)
 	x, y, ok := s.world.ResolveFreeCell(
 		max(0, min(x, config.MapWidth-1)), max(0, min(y, config.MapHeight-1)),
 		component.WallBlockCursor)
@@ -317,7 +314,7 @@ func (s *CursorSystem) wraith(slot uint8, waited time.Duration) {
 }
 
 // reclaim gives a Wraith back to its participant: equipped again at the free cell
-// nearest the one it held, or the map's centre for one it held off the map, with
+// nearest the one it held, or the request's for one it held off the map, with
 // what its player brought back of the game still played over the template.
 func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.WraithComponent, p *event.CursorSpawnRequestPayload) {
 	w := s.world
@@ -326,7 +323,7 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	if !config.CursorsOffMap {
 		x, y = wraith.X, wraith.Y
 		if x < 0 {
-			x, y = config.MapWidth/2, config.MapHeight/2
+			x, y = p.Origin.Cell(p.X, p.Y, config.MapWidth, config.MapHeight)
 		}
 		var placed bool
 		x, y, placed = w.ResolveFreeCell(

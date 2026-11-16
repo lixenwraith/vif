@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -194,9 +195,10 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 }
 
-// TestALandingProbedAtHomeFliesTheBodyBackToItsSpawnCell: to = "home" names the cell
-// the header spawned on, so a sortie that stored its target's cell stores home next
-func TestALandingProbedAtHomeFliesTheBodyBackToItsSpawnCell(t *testing.T) {
+// TestALandingProbedAtItsPostFliesTheBodyBackToItsSpawnCell: to = "post" names the
+// cell the header spawned on, so a sortie that stored its target's cell stores its
+// post next
+func TestALandingProbedAtItsPostFliesTheBodyBackToItsSpawnCell(t *testing.T) {
 	head, _, _ := strings.Cut(wardenProgram, "[states.Roam]")
 	program := strings.Replace(head, `initial = "Roam"`, `initial = "Sortie"`, 1) + `
 [states.Rest]
@@ -211,7 +213,7 @@ transitions = [{ trigger = "Timeout", target = "Return", fallback = "hold" }]
 [states.Return]
 duration_ms = 500
 probe = "FindLanding"
-probe_args = { to = "home" }
+probe_args = { to = "post" }
 on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "ChargeToStored" }]
 transitions = [{ trigger = "Timeout", target = "Rest", actions = [{ action = "ZeroVelocity" }] }]
@@ -232,6 +234,144 @@ transitions = [{ trigger = "Timeout", target = "Rest", actions = [{ action = "Ze
 	stepWhile(t, w, s, b, back)
 	if end, _ := w.Positions.GetPosition(header); end.X != wardenX || end.Y != wardenY {
 		t.Fatalf("after the return the body stands at (%d,%d), want its spawn cell (%d,%d)", end.X, end.Y, wardenX, wardenY)
+	}
+}
+
+// wardenHead is the warden's program down to its states, which a test writes
+func wardenHead(initial string) string {
+	head, _, _ := strings.Cut(wardenProgram, "[states.Roam]")
+	return strings.Replace(head, `initial = "Roam"`, `initial = "`+initial+`"`, 1)
+}
+
+// TestAProgramSteersBackToThePostItWasPushedOff: Home steers to the cell its to
+// names, and TargetDistance measures to it, so a body a wall pushed returns
+func TestAProgramSteersBackToThePostItWasPushedOff(t *testing.T) {
+	program := wardenHead("Hold") + `
+[states.Hold]
+on_update = [{ action = "Home", payload = { to = "post" } }]
+transitions = [{ trigger = "Tick", guard = "TargetDistance", guard_args = { to = "post", op = "gt", cells = 2 }, target = "Back" }]
+
+[states.Back]
+on_update = [{ action = "Home", payload = { to = "post" } }]
+transitions = [{ trigger = "Tick", guard = "TargetDistance", guard_args = { to = "post", op = "lt", cells = 1 }, target = "Hold" }]
+`
+	const back, hold component.BehaviorState = 0, 1
+	ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY)
+	w := ctx.World
+	b, _ := w.Components.Behavior.GetPtr(header)
+	for range 5 {
+		stepBehaviors(w, s)
+	}
+	if pos, _ := w.Positions.GetPosition(header); b.Machine.State != hold || pos.X != wardenX || pos.Y != wardenY {
+		t.Fatalf("a warden on its post stands at (%d,%d) in state %d, want its post held", pos.X, pos.Y, b.Machine.State)
+	}
+
+	kinetic, _ := w.Components.Kinetic.GetPtr(header)
+	kinetic.PreciseX += 6
+	s.place(header, wardenX+6, wardenY)
+	if stepBehaviors(w, s); b.Machine.State != back {
+		t.Fatalf("six cells off its post the warden is in state %d, want Back", b.Machine.State)
+	}
+	for range int(5 * time.Second / parameter.GameUpdateInterval) {
+		stepBehaviors(w, s)
+	}
+	if pos, _ := w.Positions.GetPosition(header); b.Machine.State != hold || pos.X != wardenX || pos.Y != wardenY {
+		t.Fatalf("five seconds on the warden stands at (%d,%d) in state %d, want its post (%d,%d) held",
+			pos.X, pos.Y, b.Machine.State, wardenX, wardenY)
+	}
+}
+
+// TestAChanceByMeanWaitRollsEachStepsShare: mean_ms fires once a mean wait whatever
+// the tick, where a percent is a roll a step
+func TestAChanceByMeanWaitRollsEachStepsShare(t *testing.T) {
+	program := wardenHead("Wait") + `
+[states.Wait]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", guard = "Chance", guard_args = { mean_ms = 1000 }, target = "Go" }]
+
+[states.Go]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", target = "Wait" }]
+`
+	const went component.BehaviorState = 0
+	fired := func(tick time.Duration) int {
+		ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY)
+		w := ctx.World
+		b, _ := w.Components.Behavior.GetPtr(header)
+		n := 0
+		for range int(400 * time.Second / tick) {
+			w.Resources.Game.State.IncrementGameTicks()
+			w.Resources.Time.Update(engine.SimTime(0, tick), engine.SimTime(0, tick), tick)
+			s.Update()
+			if b.Machine.State == went {
+				n++
+			}
+		}
+		w.Resources.Event.Queue.Consume()
+		return n
+	}
+	// 400 s of a one-second mean wait, each firing costing its tick in Go
+	for _, tick := range []time.Duration{50 * time.Millisecond, 10 * time.Millisecond} {
+		if n := fired(tick); n < 330 || n > 440 {
+			t.Errorf("at a %v tick a one-second mean wait fired %d times in 400 s, want about 380 to 400", tick, n)
+		}
+	}
+
+	for args, want := range map[string]string{
+		`{ mean_ms = 1000, percent = 5 }`: "not both",
+		`{ mean_ms = -5 }`:                "mean_ms -5 is not positive",
+		`{}`:                              "percent must be 1..100",
+	} {
+		doc, err := toml.NewParser([]byte(strings.Replace(program, `{ mean_ms = 1000 }`, args, 1))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Chance %s compiled: %v, want %q", args, err, want)
+		}
+	}
+}
+
+// TestAnInstanceItsOwnLeaveEndsIsNoKill: a body that reaches the edge it flies at
+// ends itself through its state's exit, counted as left, and nothing reports a kill
+func TestAnInstanceItsOwnLeaveEndsIsNoKill(t *testing.T) {
+	program := wardenHead("Fly") + `
+[states.Fly]
+duration_ms = 400
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [
+    { trigger = "Timeout", target = "Fly" },
+    { trigger = "AfterTick", guard = "AtEdge", guard_args = { edge = "bottom" }, target = "Gone" },
+]
+
+[states.Gone]
+duration_ms = 400
+on_enter = [{ action = "Telegraph", payload = { color = "white" } }, { action = "Leave", payload = { effect = "fadeout" } }]
+on_exit = [{ action = "CancelTelegraph" }]
+transitions = [{ trigger = "Timeout", target = "Fly" }]
+`
+	// The warden is two rows high with its header on the first
+	ctx, s, header := newProgramWorld(t, program, wardenX, 34)
+	w := ctx.World
+	var events []event.GameEvent
+	var destroy *event.CompositeDestroyRequestPayload
+	for range 20 {
+		events = append(events, stepBehaviors(w, s)...)
+		if n := len(events); n > 0 && events[n-1].Type == event.EventCompositeDestroyRequest {
+			destroy, _ = events[n-1].Payload.(*event.CompositeDestroyRequestPayload)
+			break
+		}
+	}
+	if destroy == nil || destroy.HeaderEntity != header || destroy.Effect != component.DeathFadeout {
+		t.Fatalf("at the bottom edge the warden asked for %+v, want its composite fading out", destroy)
+	}
+	if kills, cancels := countEvents(events, event.EventSpeciesKilled), countEvents(events, event.EventSplashTimerCancel); kills != 0 || cancels != 1 {
+		t.Fatalf("leaving raised %d kills and %d telegraph cancels, want none and its state's exit", kills, cancels)
+	}
+	reg := w.Resources.Status.Ints
+	if left, count := reg.Get("behavior.warden.left").Load(), reg.Get("behavior.warden.count").Load(); left != 1 || count != 0 {
+		t.Fatalf("behavior.warden.left = %d and count = %d, want 1 and 0", left, count)
 	}
 }
 
@@ -692,5 +832,233 @@ func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
 	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
 		t.Fatalf("a payload naming no species compiled: %v", err)
+	}
+}
+
+// TestASpawnMountsItsPrototypesWeapon: [prototype.mount] is the mount request each
+// spawn makes for its own header, and each host's interval is drawn inside its spread
+func TestASpawnMountsItsPrototypesWeapon(t *testing.T) {
+	const mount = "[prototype.mount]\nweapon = \"turret\"\ninterval_ms = 3000\nspread_ms = 600\nrange = 1000\nenergy = 300\n\n"
+	armed := func(mount string) string {
+		return strings.Replace(wardenProgram, "[states.Roam]", mount+"[states.Roam]", 1)
+	}
+	ctx, s, _ := newProgramWorld(t, armed(mount), wardenX+4, wardenY)
+	w := ctx.World
+	mounts := ready(NewMountSystem(w)).(*MountSystem)
+	intervals := map[time.Duration]bool{}
+	for i := range 4 {
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+			Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 10 + 12*i, Y: 25}})
+		var host core.Entity
+		for _, ev := range slices.Clone(w.Resources.Event.Queue.Consume()) {
+			if p, ok := ev.Payload.(*event.MountRequestPayload); ok {
+				host = p.Host
+				mounts.HandleEvent(ev)
+			}
+		}
+		m, ok := w.Components.Mount.GetComponent(host)
+		if !ok || !w.Components.Behavior.HasEntity(host) || m.Weapon != component.WeaponTurret || m.Damage.EnergyDrain != 300 {
+			t.Fatalf("spawn %d mounted %+v on %d, want its header's turret", i, m, host)
+		}
+		if m.Interval < 2400*time.Millisecond || m.Interval > 3600*time.Millisecond {
+			t.Fatalf("spawn %d fires every %v, want within 600 ms of 3 s", i, m.Interval)
+		}
+		intervals[m.Interval] = true
+	}
+	if len(intervals) < 3 {
+		t.Fatalf("four hosts drew %d intervals, want each its own", len(intervals))
+	}
+	bare, plain, _ := newProgramWorld(t, armed("[prototype.mount]\n\n"), wardenX+4, wardenY)
+	plain.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 40, Y: 25}})
+	if n := countEvents(bare.World.Resources.Event.Queue.Consume(), event.EventMountRequest); n != 0 {
+		t.Fatalf("an empty mount table asked for %d mounts, want a bare body", n)
+	}
+
+	for table, want := range map[string]string{
+		"[prototype.mount]\nweapon = \"turret\"\nhost = 3\n\n":                           "host is the body",
+		"[prototype.mount]\nrange = 10\n\n":                                              "weapon is required",
+		"[prototype.mount]\nweapon = \"cannon\"\n\n":                                     `weapon: "cannon" is not one of`,
+		"[prototype.mount]\nweapon = \"turret\"\ninterval_ms = 500\nspread_ms = 500\n\n": "spread_ms 500 is not under its interval",
+	} {
+		doc, err := toml.NewParser([]byte(armed(table))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q compiled: %v, want %q", table, err, want)
+		}
+	}
+}
+
+// TestAProgramReadsWhatItsScenarioDecides: a Status guard reads a row every instance
+// holds alike, a Var guard a variable of the scenario machine's, and each state's
+// row counts the instances standing in it
+func TestAProgramReadsWhatItsScenarioDecides(t *testing.T) {
+	program := wardenHead("Hold") + `
+[states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", target = "Dive", guard = "And", guard_args = { guards = [
+    { name = "Status", args = { key = "behavior.warden.count", op = "lte", value = 2 } },
+    { name = "Var", args = { name = "wave", op = "gte", value = 3 } },
+] } }]
+
+[states.Dive]
+on_update = [{ action = "Freeze" }]
+`
+	ctx, s, _ := newProgramWorld(t, program, wardenX+30, wardenY)
+	w := ctx.World
+	wave := int64(0)
+	w.Resources.Scenario.Bind(func(name string) int64 {
+		if name != "wave" {
+			t.Errorf("the guard read variable %q", name)
+		}
+		return wave
+	})
+	spawn := func(x int) {
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+			Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: x, Y: 25}})
+	}
+	spawn(10)
+	spawn(30)
+	reg := w.Resources.Status.Ints
+	standing := func() [2]int64 {
+		stepBehaviors(w, s)
+		return [2]int64{reg.Get("behavior.warden.state.Dive").Load(), reg.Get("behavior.warden.state.Hold").Load()}
+	}
+	wave = 3
+	if got := standing(); got != [2]int64{0, 3} {
+		t.Fatalf("three wardens at wave 3 stand %v in Dive and Hold, want all holding past a count of 2", got)
+	}
+	for _, header := range w.Components.Behavior.Entities()[:1] {
+		w.Components.Behavior.RemoveEntity(header)
+	}
+	wave = 2
+	if got := standing(); got != [2]int64{0, 2} {
+		t.Fatalf("two wardens at wave 2 stand %v, want both holding under wave 3", got)
+	}
+	wave = 3
+	if got := standing(); got != [2]int64{2, 0} {
+		t.Fatalf("two wardens at wave 3 stand %v, want both diving", got)
+	}
+
+	local := strings.Replace(program, "behavior.warden.count", "kills.warden", 1)
+	doc, err := toml.NewParser([]byte(local)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), `key "kills.warden" is one instance's own`) {
+		t.Fatalf("a guard on a row instances do not share compiled: %v", err)
+	}
+}
+
+// TestASignalIsRaisedOnAsManyAsItCountsOfThoseItsEdgeTakes: a request raises its
+// signal on count of the instances whose state takes it, the same ones whatever
+// order the store holds them in, and a payload names program and signal at load
+func TestASignalIsRaisedOnAsManyAsItCountsOfThoseItsEdgeTakes(t *testing.T) {
+	program := strings.Replace(wardenHead("Hold"), `initial = "Hold"`, "initial = \"Hold\"\nsignals = [\"dive\"]", 1) + `
+[states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", guard = "Signalled", guard_args = { name = "dive" }, target = "Dive" }]
+
+[states.Dive]
+duration_ms = 400
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Hold" }]
+`
+	const dive component.BehaviorState = 0
+	diving := func(reorder bool) []core.Entity {
+		ctx, s, _ := newProgramWorld(t, program, wardenX+30, wardenY)
+		w := ctx.World
+		for i := range 5 {
+			s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+				Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 8 + 12*i, Y: 25}})
+		}
+		w.Resources.Event.Queue.Consume()
+		headers := slices.Clone(w.Components.Behavior.Entities())
+		slices.Sort(headers)
+		if reorder { // another store order, as an instance a correction rebuilt may hold
+			for _, header := range headers[1:4] {
+				b, _ := w.Components.Behavior.GetComponent(header)
+				w.Components.Behavior.RemoveEntity(header)
+				w.Components.Behavior.SetComponent(header, b)
+			}
+		}
+		busy, _ := w.Components.Behavior.GetPtr(headers[0])
+		busy.Machine.State, busy.Machine.Duration = dive, time.Hour
+
+		names := event.PayloadNames(s.set.Declared())
+		payload, err := event.AuthoredPayload(names, event.EventBehaviorSignalRequest,
+			map[string]any{"program": "warden", "signal": "dive", "count": int64(2)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSignalRequest, Payload: payload})
+		if busy.Signals != 0 {
+			t.Fatal("a warden already diving, whose state takes no dive, was signalled")
+		}
+		stepBehaviors(w, s)
+		var out []core.Entity
+		for _, header := range headers[1:] {
+			if b, _ := w.Components.Behavior.GetComponent(header); b.Machine.State == dive {
+				if b.Signals != 0 {
+					t.Fatalf("warden %d dived still holding its signal", header)
+				}
+				out = append(out, header)
+			}
+		}
+		for _, bad := range []map[string]any{{"program": "warden", "signal": "retreat"}, {"program": "swarm", "signal": "dive"}} {
+			if _, err := event.AuthoredPayload(names, event.EventBehaviorSignalRequest, bad); err == nil {
+				t.Fatalf("a request for %v decoded", bad)
+			}
+		}
+		return out
+	}
+	first, second := diving(false), diving(true)
+	if len(first) != 2 || !slices.Equal(first, second) {
+		t.Fatalf("a signal for two of five holding wardens sent %v, and %v in another store order, want the same two", first, second)
+	}
+}
+
+// TestALaidMapStandsItsFormationFromItsCell: a lay request names a map of the
+// scenario's at load, and each instance its legend names stands where its row and
+// column put it from the request's cell
+func TestALaidMapStandsItsFormationFromItsCell(t *testing.T) {
+	doc, err := toml.NewParser([]byte(wardenProgram)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := toml.NewParser([]byte("[maps.rank]\nlegend = { w = { program = \"warden\" } }\nrows = [\"w      w\", \"        \", \"    w   \"]\n")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+	w.Resources.Behaviors, w.Resources.Maps = set.Prototypes(), set.Maps()
+	w.Resources.Target = &engine.TargetResource{}
+	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+
+	names := event.PayloadNames(set.Declared())
+	payload, err := event.AuthoredPayload(names, event.EventMapLayRequest, map[string]any{"map": "rank", "x": int64(20), "y": int64(10)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.HandleEvent(event.GameEvent{Type: event.EventMapLayRequest, Payload: payload})
+	var stood []component.PositionComponent
+	for _, header := range w.Components.Behavior.Entities() {
+		pos, _ := w.Positions.GetPosition(header)
+		stood = append(stood, pos)
+	}
+	want := []component.PositionComponent{{X: 20, Y: 10}, {X: 27, Y: 10}, {X: 24, Y: 12}}
+	if !slices.Equal(stood, want) {
+		t.Fatalf("the rank stands at %v, want %v", stood, want)
+	}
+	if _, err := event.AuthoredPayload(names, event.EventMapLayRequest, map[string]any{"map": "wave"}); err == nil ||
+		!strings.Contains(err.Error(), `map: "wave" is not one of rank`) {
+		t.Fatalf("a request for a map the scenario lacks decoded: %v", err)
 	}
 }

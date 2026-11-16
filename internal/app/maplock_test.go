@@ -281,7 +281,7 @@ func writeOffMapScenario(t *testing.T, root string) {
 		"[regions.player]\ninitial = \"PlayerBoot\"\nbackground = true\n" +
 		"[regions.keys]\ninitial = \"Keys\"\n" +
 		"[states.PlayerBoot]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", " +
-		"event = \"EventCursorSpawnRequest\", payload = { center = true, heat = 10, energy = 100 } }]\n" +
+		"event = \"EventCursorSpawnRequest\", origin = \"center\", payload = { heat = 10, energy = 100 } }]\n" +
 		"[states.Keys]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", " +
 		"event = \"EventKeyCaptureRequest\", payload = { keys = \"12\" }, reconcile = true }]\n"
 	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(body), 0o600); err != nil {

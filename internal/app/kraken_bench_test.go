@@ -33,7 +33,7 @@ func BenchmarkKrakenRegion(b *testing.B) {
 			defer a.Close()
 			a.Tick(40)
 			a.Context().PushEventOrigin(event.EventCursorSpawnRequest,
-				&event.CursorSpawnRequestPayload{Auto: true, Center: true}, event.OriginDebug)
+				&event.CursorSpawnRequestPayload{Auto: true, Origin: event.MapAnchorCenter}, event.OriginDebug)
 			a.Settle()
 			a.Tick(20)
 			w := a.World()

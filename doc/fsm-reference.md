@@ -23,7 +23,7 @@ graph is written in this dialect with its own actions and guards
 The embedded main campaign is the only shipped source of `main`; `-s main`
 falls back to it. A scenario named `main` in a root is an optional user override.
 
-Region `file`, `macro_files` and behavior program `file` references resolve
+Region `file`, `macro_files`, behavior program and map `file` references resolve
 relative to the entry config's directory and cannot climb out of it. A region file
 holds only `[states]`, and a state defined twice across files fails the load. A
 scenario is at most 64 `.toml` files, 256 KiB each and 1 MiB in all. A joiner
@@ -93,6 +93,9 @@ scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's
 
 [loot.upgrade]                      # A loot kind of the scenario's own, its keys in Loot
 [drops.raider]                      # A drop table kills roll, its keys in Loot
+
+[maps]
+rank = { file = "rank.toml" }       # A map the scenario lays by name, inline or its own file (Maps)
 
 [keymap.normal]                     # Play keys over the player's keymap for the run; also
 a = "mode_append"                   # [keymap.operator], [keymap.prefix_g]; no system action
@@ -298,6 +301,7 @@ same boundary.
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
 { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { edge = "right", inset = 2 }, payload_vars = { y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion"] } }
+{ action = "EmitEvent", event = "EventLootSpawnRequest", origin = "center", payload = { type = "energy", x = -12, y = 3 } }
 ```
 
 The event name and payload are compiled at load: an unknown event, a payload key
@@ -335,6 +339,18 @@ names included: a pick of `species` from `["eye", "snake"]` beside
 value the field takes, a table or a list among them. `payload_vars` sets the other
 fields after the pick, never the picked one.
 
+`origin` names the point of the map the payload's cell counts from, so a layout
+follows the map with no arithmetic on `map_width` and `map_height`: a corner
+(`top_left`, which a bare cell counts from, `top_right`, `bottom_left`,
+`bottom_right`), the middle of an edge (`top`, `bottom`, `left`, `right`) or
+`center`, the middle being the map's size halved. It is added to `x` and `y` as
+the event is emitted, after `payload_vars`, on the map every instance holds alike
+(D-14); a payload whose cell has other names takes
+`origin = { at = "center", x = "origin_x", y = "origin_y" }`, each a dot path as a
+`payload_vars` key is. A payload with no such number fields fails the load.
+`EventCursorSpawnRequest` keeps its anchor for the cursor system instead
+([Cursor Lifecycle](#cursor-lifecycle)).
+
 ### Region Control
 
 ```toml
@@ -361,8 +377,8 @@ region keeps its state, time and pending delays, runs nothing and drops its even
 { action = "DecrementVar", payload = { name = "var_name", delta = 1 } }
 ```
 
-`delta` defaults to 1 for `IncrementVar`, `DecrementVar`, `MultiplyVar` and
-`DivideVar` when it is omitted or zero and no `source_var` is given.
+`IncrementVar`, `DecrementVar`, `MultiplyVar` and `DivideVar` step by 1 when
+neither `delta` nor `source_var` is given; a `delta` of 0 is 0.
 
 ### Arithmetic Actions
 
@@ -499,14 +515,16 @@ An action guard sees no event payload, so a payload guard there is always false.
 The world spawns with no cursor. A configuration must spawn one explicitly:
 
 ```toml
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } }
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 10, y = 5, slot = 1, heat = 10, energy = 100 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 10, energy = 100 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "bottom", payload = { y = -1, slot = 1, heat = 10, energy = 100 } }
 { action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } }
 ```
 
-`center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index;
-`heat` and `energy` are the cursor's starting values, zero when omitted, and the
-first spawn's pair is what every joining participant's cursor starts with. A despawn
+`x` and `y` count from the request's `origin`, the top left when it names none;
+`auto` overrides `slot` with the lowest free index; `heat` and `energy` are the
+cursor's starting values, zero when omitted. The first request is the template:
+every joining participant's cursor starts with its pair and lands on its cell,
+counted from its anchor on the map standing as that cursor arrives. A despawn
 names `all`, an `entity` or a `slot`. `EventCursorSpawned` carries `entity`, `slot`,
 `x`, `y`; `EventCursorSpawnFailed` signals a full roster, a taken slot or a blocked
 map. A cursor-less configuration is legal.
@@ -943,7 +961,12 @@ no program of the scenario fails the load where it is authored, and one arriving
 otherwise raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
-it names none. `wad/scenario/base/cave` is the worked example: its raider types,
+it names none. `EventBehaviorSignalRequest { program, signal, count }` raises one
+of the program's `signals` on `count` of its instances, or with no count on all:
+those whose state has an edge guarded by `Signalled` on it and that do not hold it
+yet, drawn alike on every instance, so a region sends a salvo of the size it
+chose where each instance would roll for itself; a request naming no program, or
+a signal that program does not declare, fails the load. `wad/scenario/base/cave` is the worked example: its raider types,
 materializing in, fly one attack cycle, a chase, a lock, then a charge or a
 teleport, as thirty-two programs over one macro (`RaiderStates` in its
 `macros.toml`). Each program file is one invocation of its rank's macro
@@ -955,6 +978,7 @@ on_update[0]: unknown sustained action 'Freez'`).
 
 ```toml
 initial = "Roam"                    # State a spawn starts in
+signals = ["dive"]                  # What EventBehaviorSignalRequest may raise on an instance, at most 8 (optional)
 suspend = { guard = "Stunned" }     # While it holds: no clock, tick, move or strike (optional)
 
 [prototype]
@@ -998,6 +1022,12 @@ missile = { damage = 9 }            # Families: tracer, shield, lightning, explo
 color = { r = 255, g = 120, b = 0 }  # The beams' colour
 fill_ms = 300                       # Each beam's head running in; hold_ms and recede_ms likewise
 
+[prototype.mount]                   # A weapon each instance carries: EventMountRequest's keys but host (optional)
+weapon = "turret"                   # Required: rod, launcher, disruptor, turret, emitter or gun
+interval_ms = 3000                  # Between discharges; its weapon's cooldown when left out
+spread_ms = 600                     # Each instance's own interval is drawn this far either side
+energy = 300                        # What a hit costs a shield, heat a bare cursor
+
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
 flags = ["Enraged"]                 # Held while the state runs
@@ -1033,6 +1063,10 @@ target = "Roam"
   glyphs unless the prototype names `none`, `flash` or `fadeout`; a lifetime's end
   fades the body out and a cancel leaves nothing
   ([ECS §7](ecs-and-events.md#death-effects)).
+- The mount: each spawn asks the mount system for it on its own header
+  ([Combat §3](combat.md#3-drivers)), so a program copied into another scenario
+  comes armed, and with `spread_ms` no two instances fire in step. An empty table
+  mounts nothing, which is how a macro's default leaves a body unarmed.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.
@@ -1057,19 +1091,30 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 ([Behavior machines §2.3](machine-design.md#23-step)). The vocabulary, which
 `-schema` lists as `vocabularies.behavior`:
 
-- Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
-  cell aspect), `LineOfSight { to }` (the body clears the way from where it stands
-  to the target, with `to = "stored"` to the cell `StoreTarget` kept, or with
-  `to = "home"` to the cell its header spawned on), `HasTarget`,
-  `Stunned`, `HPFraction { op, value }`,
-  `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
-  (mixed from tick, entity and site, so no random stream moves),
+- A verb's `to` names the cell it reads: the target when left out, `stored` the
+  cell `StoreTarget` kept, or `post` the cell the header spawned on.
+- Guards: `TargetDistance { to, op, cells }` (header to that cell, rows scaled by
+  the cell aspect, so `to = "post"` tells a body it is off its post),
+  `LineOfSight { to }` (the body clears the way from where it stands),
+  `HasTarget`, `Stunned`, `HPFraction { op, value }`, `HitWall` (this step's move
+  met a wall or the map edge), `AtEdge { edge }` (the body touches the map's
+  `left`, `right`, `top` or `bottom` edge), `Chance` (mixed from tick, entity and
+  site, so no random stream moves: `{ percent }` is one roll, for a `Timeout`'s
+  candidate, and `{ mean_ms }` a rate, each step rolling its share of that mean
+  wait, so a `Tick` edge fires as often at any tick and finer than a percent),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
+- Guards on what the scenario decides: `Status { key, op, value }` (a status row,
+  as a region's `StatusIntCompare` reads one, a bool row as 1 or 0: on
+  `behavior.count` the last ships dive hardest; every instance steps a program for
+  itself, so a row one instance alone holds, a `player.` or `kills.` one, fails
+  the load), `Var { name, op, value }` (a variable of the scenario's machine, so a
+  candidate guarded on `wave` picks a faster dive) and `Signalled { name }` (one
+  of the program's `signals` is raised on the instance; the edge that commits on
+  it lowers it, and until one does it stays raised).
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
-  `FindLanding { to }` (the nearest place the footprint fits around the target,
-  the stored cell or home, as `LineOfSight` names them; probed at home ahead of
-  `StoreTarget`, it sends a charge or a teleport back to the spawn cell, as
-  armada's ships fly home).
+  `FindLanding { to }` (the nearest place the footprint fits around that cell;
+  probed at its post ahead of `StoreTarget`, it sends a charge or a teleport back
+  to the spawn cell, as armada's ships fly back).
 - Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
@@ -1078,9 +1123,14 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Materialize { spawn, duration_ms }` (a `swarm`, `nugget` or program's style over the
   footprint at the target for `duration_ms`, its style's own when that is 0 or
   absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (any
-  Shared species, a program's among them, landing at the header plus x, y) and
+  Shared species, a program's among them, landing at the header plus x, y),
+  `Leave { effect }` (ends its own instance as the step returns, through its
+  state's exit, leaving `none`, the default, `flash`, `fadeout` or `scatter` of
+  the body: no kill, so nothing drops, and `behavior.<name>.left` counts it) and
   `EmitEvent` (shared and local events).
-- Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
+- Sustained: `Home { to }` (steer by the prototype's physics, to the target along
+  its route, or straight at the stored cell or its post, so a body a wall pushed
+  off its post flies back where `Freeze` would leave it), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
@@ -1096,9 +1146,12 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   teleport marks where an attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
-the lower roster slot taking a tie, so every instance of a session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
-composite's integrity work as for every composite species; a program does not
-script them.
+the lower roster slot taking a tie, so every instance of a session aims alike. Hit
+points, lifetime, contact strikes, gold breaking and the composite's integrity
+work as for every composite species; a program does not script them. An instance
+ends by a kill, its `lifetime_ms`, a cancel or its own `Leave`. A region reads how
+many stand in each state from `behavior.<name>.state.<State>`, as it reads
+`behavior.<name>.count`.
 
 ## Loot
 
@@ -1147,3 +1200,33 @@ tiers = [                           # Rolled in order, at most 8, each dropping 
 - `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
   later tier that is not unique when this tier skips all its loot; a roll that
   misses adds none.
+
+## Maps
+
+A map is a layout drawn in characters that the scenario lays by name. The entry's
+`[maps]` table lists at most 32, each inline or in a file of its own, which is
+read, expanded, carried, digested and sent to a joiner as a program's is. A name
+is `[a-z][a-z0-9_]*` of at most 24 bytes.
+
+```toml
+[maps.wave]
+legend = { W = { program = "warden" }, d = { program = "dart" } }
+rows = [
+    "  W     W  ",                  # One width, a character a cell; a space is open map
+    "d  d   d  d",
+]
+```
+
+- `legend`: what each character lays. `{ program = "dart" }` is an instance of that
+  behavior program with its header on the cell, at most 256 a map; a character no
+  entry names, or an entry naming no program of the scenario, fails the load.
+- `EventMapLayRequest { map, x, y }` lays it with its top left at the cell, which
+  an `origin` counts from an edge or the centre: each instance stands as its own
+  `EventBehaviorSpawnRequest` would stand it, at once or through its entrance, in
+  row order. A request naming no map of the scenario fails the load where it is
+  written.
+
+`-check` prints `maps ok: <n> (<names>)`, each fault naming its map and place
+(`map 'wave': rows[1] is 10 cells wide, and the first 11`). A legend lays programs
+alone for now: wall tiles, loot and named cells are
+[to come](todo.md#lay-a-painted-map-a-scenario-carries).
