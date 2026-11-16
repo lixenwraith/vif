@@ -56,7 +56,7 @@ type SessionController interface {
 	// given or one made for "new", and returns it to be shown once; a run in a
 	// session others hold is refused, since that session's doors keep theirs.
 	SetPassphrase(phrase string) (string, error)
-	RequestSession(site string, players int, scenario string) error
+	RequestSession(site string, players, bots int, scenario string) error
 	HostError() error
 	JoinError() error
 	// Leave takes the run out of its session into one of its own, the world as it

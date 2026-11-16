@@ -434,12 +434,12 @@ func (a wsAddr) Network() string { return "websocket" }
 func (a wsAddr) String() string  { return string(a) }
 
 // RequestSession asks site's router for a new session, within timeout, and
-// returns the link this build joins it by. players and scenario choose from what the
-// site advertises, zero for its defaults; a refusal, an unauthorised one included, is
-// its message. signIn is the process's sign-in for the site, shown to an https site
-// alone, so the site budgets the account rather than the address.
-func RequestSession(site string, players int, scenario, signIn string, timeout time.Duration) (target, fingerprint string, err error) {
-	req, err := siteRequest(site, players, scenario, signIn)
+// returns the link this build joins it by. players, bots (the session's own) and
+// scenario choose from what the site advertises, zero for its defaults; a refusal,
+// an unauthorised one included, is its message. signIn is the process's sign-in for
+// the site, shown to an https site alone, so it budgets the account, not the address.
+func RequestSession(site string, players, bots int, scenario, signIn string, timeout time.Duration) (target, fingerprint string, err error) {
+	req, err := siteRequest(site, players, bots, scenario, signIn)
 	if err != nil {
 		return "", "", err
 	}
@@ -469,11 +469,12 @@ func RequestSession(site string, players int, scenario, signIn string, timeout t
 // siteRequest is the create a site's router reads, the sign-in as a bearer when the
 // site is reached over TLS: over plain http it would cross in the clear, and a page
 // sends its cookie instead.
-func siteRequest(site string, players int, scenario, signIn string) (*http.Request, error) {
+func siteRequest(site string, players, bots int, scenario, signIn string) (*http.Request, error) {
 	body, err := json.Marshal(struct {
 		Players  int    `json:"players,omitempty"`
+		Bots     int    `json:"bots,omitempty"`
 		Scenario string `json:"scenario,omitempty"`
-	}{players, scenario})
+	}{players, bots, scenario})
 	if err != nil {
 		return nil, err
 	}

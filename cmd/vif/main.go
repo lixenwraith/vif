@@ -344,7 +344,8 @@ func requestSiteSession(scenario string) error {
 	if paths.ExternalFiles() {
 		signIn = app.SignInFor(paths.PlaceFile{Path: paths.SignInsFile()}, site.Addr)
 	}
-	target, fingerprint, err := network.RequestSession(site.Addr, flagSession.players, scenario, signIn)
+	// The session's own bots are the menu's to ask for: -bot here seats this player's
+	target, fingerprint, err := network.RequestSession(site.Addr, flagSession.players, 0, scenario, signIn)
 	if err != nil {
 		return fmt.Errorf("-join %s: %w", site.Addr, err)
 	}

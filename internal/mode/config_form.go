@@ -111,6 +111,7 @@ var configForms = map[string]configFormSpec{
 		fields: []configFormField{
 			{"Site", "https://lixen.com", "Allocator site's http(s):// origin. Submitting creates a session and joins the returned link.", inputURI},
 			{"Players", "0", "Total player slots, including you. 0 uses the server default; the server may impose a lower limit.", inputNumber},
+			{"Bots", "0", "Bots the server seats in the session, counted among its players. 0 asks for none, and a server may offer none; your own bots join with you either way.", inputNumber},
 			{"Scenario", "", "Scenario name on the server; blank uses its default. Local scenario files are not uploaded.", inputText},
 		},
 		unavailable: engine.SessionController.JoinError,
@@ -119,7 +120,11 @@ var configForms = map[string]configFormSpec{
 			if err != nil {
 				return fmt.Errorf("players must be a number (0 uses the server default)")
 			}
-			if err := ctx.SessionCtl.RequestSession(strings.TrimSpace(f.Value(0)), n, strings.TrimSpace(f.Value(2))); err != nil {
+			bots, err := strconv.Atoi(strings.TrimSpace(f.Value(2)))
+			if err != nil {
+				return fmt.Errorf("bots must be a number (0 asks for none)")
+			}
+			if err := ctx.SessionCtl.RequestSession(strings.TrimSpace(f.Value(0)), n, bots, strings.TrimSpace(f.Value(3))); err != nil {
 				return err
 			}
 			ctx.MacroClearFlag.Store(true)

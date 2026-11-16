@@ -236,6 +236,11 @@ Libraries · Branches.
 - A redial lends the run's place to its dial for the whole walk (`Membership.lent`),
   and `m.place` is nil meanwhile: what signs for the run, a link, a notice or the
   record that takes a term, reads `LocalKey`, which answers through the loan.
+- A relayed join's frames are taken under the world lock (`onRelayJoin`), and its
+  steps are asked from the handshake's goroutine, which takes that lock to send
+  (`tellAuthority`): a step the frame handler sends goes by `tellAuthorityLocked`.
+  A place taken back through a relay keeps its own holder meanwhile
+  (`returnPlace.via`), or a person with bots waiting reads as a bot holding bots.
 - What a player brings back to its Wraith (`event.CursorRecord`) is judged where it
   is written, `CursorSystem.restore` on every instance, never at the door: by the
   game it names (`Run` against the queue's run, which a reset advances) and by
@@ -681,6 +686,15 @@ Libraries · Branches.
 - A host loss is three such runs: a host opened with `:host`, two guests that
   `:join` it mid-run, then `:q` on the host. `:session` on each guest, and its log's
   `session` and `net` lines (`-l=<dir>`), say who took the term or why nobody did.
+- Each run of a session needs a state root of its own (`XDG_STATE_HOME`): a place is
+  kept under the key that root holds, so a second run from one root is refused as
+  "this player's place is still linked to the run it left". `-nw` seats a run
+  without its press, a run started with `-bot -watch` is driven and never redials,
+  and `kill -9` on a `-serve` host is a host lost, where a signal it takes drains.
+- A tree is a guest with `-relay <addr>`, a run that joined there with a `-relay` of
+  its own, and one behind that: `./script/test.sh tree` loses its host. A Go test
+  has no restart loop, so a run coming back through its relay's new run is seen
+  only there.
 - A takeover needs the host's `-authority migrate` and a guest's `[play] takeover =
   true` in its scratch `vif.toml` before it starts. `kill -STOP` on the host is one
   gone silent: the loss shows a link timeout later, as the guest's convergence floor

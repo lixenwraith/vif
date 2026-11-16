@@ -532,10 +532,10 @@ up and committed copies down with the sender's own, a frame or two a link a tick
 whatever the roster. A frame of any other kind releases the link's bundle before
 it, so a link reads its frames in the order they were sent; a correction chunk
 travels alone. A guest admitting its own bot asks the coordinator
-on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
-retire a failed join, and, once its `-relay` door is open, to name that door in the
-chain (`RelayDoor`); the first two are answered on that link with
-`MsgRelayAdmit` (0x2F). A run publishes its door through the router with
+with `MsgRelayJoin` (0x21), on its own link or up the relays it is behind, to
+allocate it, cross its arrival or retire a failed join, and, once its `-relay` door
+is open, to name that door in the chain (`RelayDoor`); the first two are answered
+with `MsgRelayAdmit` (0x2F), back down the links the question's `Path` names. A run publishes its door through the router with
 `MsgSessionPublish` (0x32) on the front door, answered with `MsgSessionPublished`
 (0x33) on the stream it then holds as its control connection; the router asks it to
 open a connection back for a dial with `MsgTunnelOpen` (0x34), which the run opens

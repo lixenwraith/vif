@@ -107,6 +107,15 @@ type endpointConditions struct {
 	Terminating *bool `json:"terminating,omitempty"`
 }
 
+// resourceQuota is a namespace's quota as the API server reports it: what each
+// resource it counts may total, and what the objects it admitted total now.
+type resourceQuota struct {
+	Status struct {
+		Hard map[string]string `json:"hard"`
+		Used map[string]string `json:"used"`
+	} `json:"status"`
+}
+
 type kubeList[T any] struct {
 	Items []T `json:"items"`
 }

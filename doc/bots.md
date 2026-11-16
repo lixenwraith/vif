@@ -55,13 +55,14 @@ into the session it joins, and `:leave` takes them out of one with the run.
 | Bot of | Admitted | Leaves when |
 |---|---|---|
 | the host | by the host, as any joiner | the host ends, it is dropped, or a `-serve` host begins its drain |
-| a guest | through the guest's own link, the authority deciding | the guest leaves or loses its session, or it is dropped |
+| a guest | through the guest's own way to the host, the authority deciding | the guest leaves or loses its session, or it is dropped |
 
 - After a hand-off, a holder that inherited authority admits new bots itself; a
   guest keeps seating bots through whoever holds authority.
 - A person who joins at a guest's `-relay` address plays through the guest the
   same way but is not its bot: it holds no holder, is dropped on its own, and
-  keeps its slot when the guest leaves.
+  keeps its slot when the guest leaves. It seats bots of its own and relays for
+  others as any run does, however many relays stand between it and the host.
 - When its holder leaves, a bot's cursor waits as a Wraith with the holder's and
   goes when the holder's does: after two minutes, or when it is dropped. A holder
   that comes back seats its bots again, and each takes back its own place.
@@ -96,7 +97,7 @@ Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:bot add`, `:bot drop` and `:player` work there.
+`:n`, `:pause`, `:bot add`, `:bot drop` and `:player` work there.
 
 ## Telling cursors apart
 
@@ -108,20 +109,24 @@ identify cursors for this session only, and a dropped player's slot may be reuse
 
 ## Pause, speed and session lifetime
 
-- A host's `:pause` stops every participant at the same tick, bots included, until
-  its next `:pause`; a bot in a held session waits with it. A menu or the command
-  line pauses a host only while every other participant is its own bot; its bots
-  stand still with it, and anyone joining ends that pause. A guest or a watched
-  bot in a session cannot pause.
-- Speed changes are refused in a live session, one only your bots share included.
-  `-speed max` is for one solo watched or headless bot.
+- A session stops only by its host: its `:pause`, or `p`, stops every participant
+  and spectator at the same tick, bots included, until the next one. A watched bot
+  whose run hosts gives it from its own terminal, by `p` as by `:pause`; a guest's
+  is refused, a bot's run included, and a `-serve` host has nobody to give one.
+- A menu or the command line pauses a person's host only while every other
+  participant is its own bot; its bots stand still with it, and anyone joining ends
+  that pause. A watched bot in a session plays on under them.
+- A session runs at its host's `:speed`, which no guest changes. `-speed max` is
+  for one solo watched or headless bot.
 - Bots count as occupancy. A `-serve` session only its own bots occupy plays on
   until a termination signal, which sends them away at once; in the fleet, also
   until the session Job's one-hour deadline. A guest's bots count only while the
   guest is in the session.
-- The fleet router takes a `bots` count, closed by default (`bots_max` 0); see
-  [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
-  request form asks for bots yet.
+- A site's session takes the bots its players bring, as any session does:
+  `-join <link> -bot N`, `:bot add`. Its own, which the site runs, are the Bots
+  field of the menu's Request a session; a site offers as many as it chooses, and
+  lixen.com none yet ([The session fleet](kubernetes-fleet.md)). `-join <site>`
+  asks for none: `-bot` there seats yours.
 
 ## Writing a graph
 
@@ -355,9 +360,7 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 ## Not built yet
 
-- [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
 - [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)

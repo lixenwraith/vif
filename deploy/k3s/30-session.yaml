@@ -184,7 +184,7 @@ spec:
               cpu: ${CPU_REQUEST}
               memory: ${MEMORY_REQUEST}
             limits:
-              cpu: 500m
+              cpu: ${CPU_LIMIT}
               memory: ${MEMORY_LIMIT}
           # There is one health path, and its code answers one question: should
           # this process still be running. Startup suppresses liveness while the

@@ -61,6 +61,7 @@ if [ "$BOTS" -gt "$most" ]; then
 fi
 # The router's envelope: each bot adds a seat's cost (tool/vif-router/manifest.go).
 CPU_REQUEST=$((100 + 64 * BOTS))m
+CPU_LIMIT=$((500 + 64 * BOTS))m
 MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
 MEMORY_LIMIT=$((480 + 32 * BOTS))Mi
 GOMEMLIMIT=$((448 + 32 * BOTS))MiB
@@ -76,6 +77,7 @@ rendered=$(sed \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${BOTS}|$BOTS|g" \
 	-e "s|\${CPU_REQUEST}|$CPU_REQUEST|g" \
+	-e "s|\${CPU_LIMIT}|$CPU_LIMIT|g" \
 	-e "s|\${MEMORY_REQUEST}|$MEMORY_REQUEST|g" \
 	-e "s|\${MEMORY_LIMIT}|$MEMORY_LIMIT|g" \
 	-e "s|\${GOMEMLIMIT}|$GOMEMLIMIT|g" \
