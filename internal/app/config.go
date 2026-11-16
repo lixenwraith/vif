@@ -199,6 +199,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 			c.Membership.JoinAddress = next.Join
 		}
 		if c.Membership.Watch {
+			c.Membership.Follow = next.Follow
 			return c, c.alone() // no place waits for a viewer whose session stays away
 		}
 	case next.Join == "" && next.Dialled != nil:

@@ -387,10 +387,10 @@ func (m *Membership) watchSessionAt(port *link.FeedPort, head network.WatchHead,
 
 	port.Attribute(uint32(o.Host))
 	for _, b := range head.Epochs {
-		port.Inject(0, uint8(network.MsgEvent), b)
+		port.Inject(network.MsgEvent, b)
 	}
 	for _, b := range head.States {
-		port.Inject(0, uint8(network.MsgStateSync), b)
+		port.Inject(network.MsgStateSync, b)
 	}
 	m.world.RunSafe(func() {
 		r := engine.NewNetworkResource(port)
@@ -460,6 +460,8 @@ func (m *Membership) feedEnded(err error) {
 	}
 	var ended link.FeedEnded
 	over := errors.As(err, &ended) && !ended.Again
+	var slot uint8 // whom it looks from now, which the run that spectates again starts at
+	m.world.RunSafe(func() { slot = m.world.Resources.Player.ViewSlot() })
 	m.log.Info("session", "msg", "viewer's feed ended", "error", fmt.Sprint(err), "over", over, "tick", m.run.Position().Tick)
 	switch {
 	case m.run.Mode() != config.ModePlay:
@@ -468,9 +470,9 @@ func (m *Membership) feedEnded(err error) {
 		m.run.ReplaceWith(&RestartAsk{Notice: cmp.Or(ended.Reason, "The session ended") + "; started a local game"})
 	case ended.Again:
 		m.ctx.SetStatusMessage("Session restarting; spectating again...", parameter.StatusProgress)
-		m.run.ReplaceWith(&RestartAsk{Rejoin: true})
+		m.run.ReplaceWith(&RestartAsk{Rejoin: true, Follow: slot})
 	default:
 		m.ctx.SetStatusMessage("Lost the session; spectating again...", parameter.StatusProgress)
-		m.run.ReplaceWith(&RestartAsk{Rejoin: true})
+		m.run.ReplaceWith(&RestartAsk{Rejoin: true, Follow: slot})
 	}
 }

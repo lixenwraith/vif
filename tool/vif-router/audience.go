@@ -24,7 +24,7 @@ const (
 
 // errFeedOver refuses a dial whose session's feed ended while it was answered: the
 // next dial opens the feed anew, or is told why it cannot.
-var errFeedOver = &network.Refusal{Code: network.RefusalStarting, Reason: "the session's feed is starting again"}
+var errFeedOver = &network.Refusal{Code: network.RefusalStarting, Reason: "the session is starting again"}
 
 // audiences are the sessions watched through this router. Each is one subscription
 // to its pod's feed, which a hub here repeats to every spectator, so a spectator

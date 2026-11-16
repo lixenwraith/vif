@@ -633,7 +633,7 @@ func readRoute(r io.Reader, kind link.MessageType) (string, error) {
 }
 
 // ErrUnwatched refuses a watch dial at a door whose session carries no feed.
-var ErrUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to watch"}
+var ErrUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to spectate"}
 
 // ErrUnstarted refuses a watch dial at a session still in its lobby, which holds
 // players alone. It is no refusal that passes in moments: a dial retrying one
@@ -683,7 +683,6 @@ func ServeWatch(conn net.Conn, c Coordinator, timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	defer conn.SetDeadline(time.Time{})
 	if timeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(timeout))
 	}
@@ -1572,7 +1571,7 @@ func (p *PendingJoin) Watch() (net.Conn, error) {
 		defer p.conn.SetDeadline(time.Time{})
 	}
 	dropped := func(err error) error {
-		return link.PlainError{Text: "the host dropped the watch before its feed", Cause: err}
+		return link.PlainError{Text: "the host dropped the spectator before its session came", Cause: err}
 	}
 	if err := link.NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
 		return nil, dropped(err)

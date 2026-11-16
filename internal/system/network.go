@@ -200,9 +200,10 @@ type NetworkSystem struct {
 	due, retain []barrierArtifact
 	dueStates   []pendingState
 
-	// paceSamples holds the newest arrival offsets of the authority's epochs, and
-	// paceCount how many are live; paceSettled is the first local tick sampled after
-	// the last step is served. See observeAuthorityEpoch.
+	// paceSamples holds the newest arrival offsets of the authority's epochs, or on
+	// a viewer the closed ticks it had in hand (paceViewer), and paceCount how many
+	// are live; paceSettled is the first local tick sampled after the last step is
+	// served. See observeAuthorityEpoch.
 	paceSamples [parameter.NetworkPaceWindow]int64
 	paceCount   int
 	paceLatest  int64
