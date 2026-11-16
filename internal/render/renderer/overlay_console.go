@@ -16,12 +16,13 @@ import (
 
 // consoleRow is one screen row of the console: a message's first row carries its
 // stamp, the rest of it wraps under its text, and its last row may end with the
-// count of its repeats, tail runes long
+// count of its repeats, tail, drawn tailX cells into the text
 type consoleRow struct {
 	stamp string
 	text  string
+	tail  string
+	tailX int
 	kind  parameter.StatusKind
-	tail  int
 }
 
 // consoleView caches the console's rows, rebuilt when a message comes in or the
@@ -63,10 +64,10 @@ func (r *OverlayRenderer) renderConsole(buf *render.RenderBuffer, g engine.Overl
 		row := rows[offset+i]
 		y := top + i
 		body.Text(0, y, row.stamp, pal.stamp, visual.RgbOverlayBg, terminal.AttrNone)
-		text := []rune(row.text)
-		split := len(text) - row.tail
-		body.Text(textX, y, string(text[:split]), pal.kind[row.kind], visual.RgbOverlayBg, terminal.AttrNone)
-		body.Text(textX+split, y, string(text[split:]), pal.stamp, visual.RgbOverlayBg, terminal.AttrNone)
+		body.Text(textX, y, row.text, pal.kind[row.kind], visual.RgbOverlayBg, terminal.AttrNone)
+		if row.tail != "" {
+			body.Text(textX+row.tailX, y, row.tail, pal.stamp, visual.RgbOverlayBg, terminal.AttrNone)
+		}
 	}
 
 	if g.ScrollW > 0 {
@@ -129,7 +130,9 @@ func (r *OverlayRenderer) consoleRows(width int) []consoleRow {
 				row.stamp = stamp
 			}
 			if i == len(wrapped)-1 && tail != "" {
-				row.tail = min(tui.RuneLen(strings.TrimLeft(tail, " ")), tui.RuneLen(part))
+				runes := []rune(part)
+				row.tailX = len(runes) - min(tui.RuneLen(strings.TrimLeft(tail, " ")), len(runes))
+				row.text, row.tail = string(runes[:row.tailX]), string(runes[row.tailX:])
 			}
 			v.rows = append(v.rows, row)
 		}

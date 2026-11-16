@@ -2310,6 +2310,11 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   `storeTarget`'s stat and the rename, what mode and owner the temporary file has
   before its `Chmod`, what `keepOwner` does in a run as root, and what a link into
   a directory other users may write leads to.
+- Seen in an audit, read in code alone: `-check` says a run writes a file back by
+  the file's type and mode (`WriteBack`), where `Store` also needs its directory
+  writable, so on a read-only mount the two disagree; two runs saving at once each
+  rename over the other's key, `saving` being one process's; and a crash between
+  `CreateTemp` and the rename leaves a `vif.toml.<n>.tmp` nothing removes.
 
 ### Review when a start writes the settings and what it shows
 

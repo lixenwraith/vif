@@ -442,13 +442,13 @@ type SettingsStore interface {
 // embedded one) writes its settings back: that file when it is the player's own
 // (OwnSettings), else the user root's, made at the first change from the one read,
 // which every later run reads but one whose -config-dir holds that one. Nil
-// without a user root, or for a special file in one of the player's roots.
+// without a user root, or for a special or shared file in one of the player's roots.
 func SettingsFor(override, read string) SettingsStore {
 	user := UserRoot()
 	switch {
 	case OwnSettings(override, read):
 		return FileStore{Path: read}
-	case user == "" || read != "" && Special(read) && OwnRoot(override, filepath.Dir(read)):
+	case user == "" || read != "" && OwnRoot(override, filepath.Dir(read)):
 		return nil
 	}
 	return FileStore{Path: filepath.Join(user, SettingsFile), Seed: read}
@@ -504,10 +504,10 @@ func Special(path string) bool {
 }
 
 // OwnSettings reports whether the vif.toml read ("" for the embedded one) is the
-// player's own, at the top of one of their roots and no special file, which a run
-// writes back
+// player's own, at the top of one of their roots and neither a special file nor a
+// link into a shared root, which a run writes back
 func OwnSettings(override, read string) bool {
-	return read != "" && OwnRoot(override, filepath.Dir(read)) && !Special(read)
+	return read != "" && OwnRoot(override, filepath.Dir(read)) && !Special(read) && !Shared(read)
 }
 
 // FileStore is the vif.toml at Path, or a keymap a run stores whole. One not there

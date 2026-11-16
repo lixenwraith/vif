@@ -567,7 +567,8 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 // the override or the user root; one read further down, or none, makes the user
 // root's, which the next run reads, starting as the file read with its relative
 // paths made absolute. An override naming a system root is not the player's, a
-// special file in their root is never written, and without a user root nothing is.
+// special file in their root or a link from it into a shared one is never written,
+// and without a user root nothing is.
 func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
 		t.Skip("system roots are Unix-specific")
@@ -626,6 +627,12 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	}
 	if got := SettingsFor("", mine); got != nil || OwnSettings("", mine) {
 		t.Fatalf("a link to %s is written: %+v", os.DevNull, got)
+	}
+	if err := errors.Join(os.Remove(mine), os.Symlink(site, mine)); err != nil {
+		t.Fatal(err)
+	}
+	if got := SettingsFor("", mine); got != nil || OwnSettings("", mine) {
+		t.Fatalf("a link into a system root is written: %+v", got)
 	}
 
 	t.Setenv("XDG_CONFIG_HOME", "")

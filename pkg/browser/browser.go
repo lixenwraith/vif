@@ -86,10 +86,9 @@ type Host struct {
 
 // Open presents on the page: the texture and the zoom go over first, then frames
 // as the page takes them. The host lives as long as the Worker, so nothing closes it.
-// The grid the page measured at its own cell is not the one it shows at a zoom kept
-// from an earlier visit, and a joiner reports its size before the run takes a
-// resize, so Open returns once the page has fitted the zoom and answered: the run
-// starts at, and a dedicated host sizes a shared map from, the grid on screen.
+// A zoom kept from an earlier visit shows another grid than the page measured, and
+// a joiner reports its size before the run takes a resize, so Open returns once the
+// page has fitted the zoom: the run starts at the grid on screen.
 func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	if a == nil {
 		return nil, errors.New("browser: an atlas is required")

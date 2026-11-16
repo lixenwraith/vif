@@ -181,6 +181,10 @@ Libraries · Branches.
 
 ## Sessions
 
+- A crossing whose effect no capture carries, as the hold and the rate are the
+  clock's (`TimeControl`), is no part of a world installed at or past its tick: it
+  joins `snapshotContainsLocked`'s clock cases, or a guest a correction carries to
+  that tick loses it for good.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
@@ -453,7 +457,8 @@ Libraries · Branches.
   outside `Resources`, not a `Config` field: a copy a seek installs would put back
   the value it was captured with, and `livePlay` reads it off the lock. A replay's
   `player.adopt` must carry each such setting to the copy it presents (HUD, frame
-  rate, camera edge), or the viewer's choice is lost at the next seek.
+  rate, camera edge), and the console's lines, or the viewer's are lost at the
+  next seek.
 
 ## Networking and admission
 
