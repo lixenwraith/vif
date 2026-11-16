@@ -1317,6 +1317,13 @@ mount) never crosses. What would close it: a row for the direct request on its
 owner, and on both requests an emitter that is zero or the owner; a refusal test
 for each beside the `network.artifacts_refused` ones.
 
+A crossing's target is an entity number too, its producer's: an instance that
+applied an arrival late allocates the cursor after what the others allocated
+first, and holds both under other numbers until a correction. A typed member's
+end checks what it names (`CompositeSystem.destroyMember`), after a host destroyed
+a Wraith's cursor under a gold member's number; a hit's `TargetEntity` and
+`HitEntity` are not checked against what their producer meant.
+
 ### Publish a player's session at the router
 
 - Priority: P3
@@ -1744,22 +1751,14 @@ the file, so they wait for a pause between waves of netcode work.
 
 - Priority: P2
 - Affected files: `internal/converge/authority.go` (`driveShedding`, `peerLost`),
-  `internal/converge/correction.go` (`observeFloor`, `Apply`),
-  `internal/converge/reach.go` (`Reach.cutOff`), `internal/system/network.go`
-  (`scheduleCrossings`), `internal/render/renderer/status_bar.go`
+  `internal/converge/correction.go` (`observeFloor`), `internal/converge/reach.go`
+  (`Reach.cutOff`), `internal/render/renderer/status_bar.go`
 - Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
   [§5.1](multi-player.md#51-succession)
 
 A guest reads its host's silence from its link alone: one that stops answering is
-dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Three states
+dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Two stalls
 fall between that and a host that only slows:
-- **A guest left in the run before its host's**: a guest reaches the next run only
-  as the reset applies on it, and until then that run's worlds wait at the head of
-  `Apply`'s inbox and its epochs are refused. One whose barrier never dispatches a
-  crossed reset, its epoch refused past the schedule's caps or the apply window, or
-  gone with a relay that left, predicts alone for good over a link that answers.
-  What would close it: the floor reading below, or a next-run world that has waited
-  past the floor is adopted as a join's is.
 - **A host whose loop stalls while its transport answers**, a deadlock on the world
   lock or a pathological tick: the probe is answered on transport goroutines, so the
   link stays up and the guest predicts alone for as long as the stall lasts. Its
@@ -1774,6 +1773,28 @@ fall between that and a host that only slows:
   shed nobody, and 1.5 s and 4 s shed the guest. What would close it: a single drop
   longer than the link-dead time is not counted, or the share has to hold over two
   windows.
+
+### Carry what no capture holds to a guest that lost its frame
+
+- Priority: P3
+- Affected files: `internal/system/network.go` (`leaveRun`, `snapshotContainsLocked`),
+  `internal/snapshot/capture.go` (`CaptureHeader`), `internal/converge/correction.go`
+  (`resolve`)
+- Guide: [Multi-player §3.2](multi-player.md#32-the-capture-boundary),
+  [§3.6](multi-player.md#36-holding-a-session)
+
+A hold, a rate and a run's end are in no capture, so a guest that loses the frame
+carrying one hears of it from nothing else. A run's end it takes from its
+authority's first epoch of the next (`leaveRun`); three cases stay open:
+- a new game that waits for its host's press sends no epoch, so a guest the reset
+  never reached plays the old game on until the press, then starts unheld;
+- a run only counts up, so a guest a run ahead of its authority, a successor having
+  taken the term before the reset reached it, refuses all that authority sends;
+- a lost hold lasts until its host resumes, and a lost rate until the next one.
+
+What would close them: the capture header carries the hold, its kind and the rate
+beside the run, an install adopts them, and a whole world naming another run is
+taken as a join's is.
 
 ### Correct a guest that joined while its link read as silent
 

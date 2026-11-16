@@ -654,7 +654,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	}
 	migrate := m.cfg.Migrate
 	if authority != "" {
-		m.cfg.Migrate = authority == AuthorityMigrate
+		m.setMigrate(authority == AuthorityMigrate)
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
@@ -663,14 +663,14 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	m.wiring.HostListeners = nil
 	if lns == nil {
 		if lns, err = BindDoors(*m.cfg, addr); err != nil {
-			m.cfg.Migrate = migrate
+			m.setMigrate(migrate)
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
 			CloseDoors(lns)
-			m.cfg.Migrate = migrate
+			m.setMigrate(migrate)
 			return err
 		}
 	}
@@ -683,13 +683,14 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	for _, ln := range lns {
 		if err := port.Serve(ln); err != nil {
 			CloseDoors(lns)
-			m.cfg.Migrate = migrate
+			m.setMigrate(migrate)
 			return fmt.Errorf("host: %w", err)
 		}
 	}
-	// A dial already in reads these only once it has the world lock this call holds.
 	// The policy is the session's from here: only this run's bots were offered one.
+	m.sessionMu.Lock()
 	m.cfg.HostAddress = addr
+	m.sessionMu.Unlock()
 	m.restartWaitsLocked()
 	m.authority.Pin(!m.cfg.Migrate)
 	bound := doorsText(m.newcomerDoors(port))
@@ -748,7 +749,9 @@ func (m *Membership) hostTakenSessionLocked(addr string) error {
 		}
 	}
 	bound := doorsText(m.newcomerDoors(port))
+	m.sessionMu.Lock()
 	m.cfg.HostAddress, m.cfg.JoinAddress = addr, ""
+	m.sessionMu.Unlock()
 	m.log.Info("session", "msg", "hosting opened on a session taken over",
 		"address", bound, "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
 	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
@@ -1011,7 +1014,10 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
 	// The -relay door alone answers to that name, for the people it kept. A gate in
 	// flight reads its offer under the session lock alone, so they change under it.
-	cfg, wire := *m.cfg, *m.wiring
+	left := struct {
+		join, host, name string
+		players          int
+	}{m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers}
 	m.sessionMu.Lock()
 	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = "", "", "", 0
 	m.sessionMu.Unlock()
@@ -1021,7 +1027,7 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 	if err := m.openSessionLocked(kept); err != nil {
 		m.place.Store(prior)
 		m.sessionMu.Lock()
-		*m.cfg, *m.wiring = cfg, wire
+		m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = left.join, left.host, left.name, left.players
 		m.sessionMu.Unlock()
 		for _, c := range carried {
 			m.places.forget(c)
@@ -1041,7 +1047,7 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 		// Before the session is anyone's to dial: from here the door takes back the
 		// people kept, and nobody else (returnAcceptor).
 		m.tunnelMu.Lock()
-		m.returnDoor = &cfg.SessionName
+		m.returnDoor = &left.name
 		m.tunnelMu.Unlock()
 	} else {
 		m.CloseDoor()
@@ -1609,7 +1615,7 @@ func (m *Membership) injectPort() (interface {
 // port it actually got.
 func (m *Membership) HostAddr() string {
 	m.sessionMu.Lock()
-	port := m.midRunPort
+	port, named := m.midRunPort, m.cfg.HostAddress
 	m.sessionMu.Unlock()
 	if port == nil {
 		return ""
@@ -1617,7 +1623,15 @@ func (m *Membership) HostAddr() string {
 	if bound := port.Addr(); bound != nil {
 		return bound.String()
 	}
-	return m.cfg.HostAddress
+	return named
+}
+
+// setMigrate sets the policy this run opens a session with, under the lock a gate
+// reads its offer under.
+func (m *Membership) setMigrate(on bool) {
+	m.sessionMu.Lock()
+	m.cfg.Migrate = on
+	m.sessionMu.Unlock()
 }
 
 // newestHeldEpoch is the highest production epoch among the frames the gate held.

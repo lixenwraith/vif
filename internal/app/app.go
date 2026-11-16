@@ -471,7 +471,7 @@ func (a *App) persistPlay() {
 	if p == was {
 		return
 	}
-	a.cfg.Play = p
+	a.world.RunSafe(func() { a.cfg.Play = p }) // a redial copies the config under the lock
 	if err := paths.SavePlay(a.cfg.Settings, was, p); err != nil {
 		a.settingsUnsaved(err)
 	}
@@ -481,7 +481,7 @@ func (a *App) persistPlay() {
 func (a *App) settingsUnsaved(err error) {
 	a.log.Warn("app", "msg", "settings not saved", "error", err.Error())
 	a.ctx.SetStatusMessage("Settings not saved: "+err.Error(), parameter.StatusAlert)
-	a.cfg.Settings = nil
+	a.world.RunSafe(func() { a.cfg.Settings = nil })
 }
 
 // applyMapLatch installs this run's D-14 position before any system is built and

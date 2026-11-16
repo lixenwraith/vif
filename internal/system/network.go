@@ -79,12 +79,23 @@ type NetworkSystem struct {
 	// they will not arrive again; relay reordering is repaired by correction.
 	appliedPeerSeq [participantSlots]uint64
 
-	// snapshotFloor and snapshotFences describe the last installed world.
+	// snapshotFloor and snapshotFences are the tick and fences the last installed
+	// capture was read at, which a projection may have carried the world past.
 	// Barrier-bound membership uses ApplyTick; ordinary crossings use source
 	// sequence because the authority may have applied them late.
 	snapshotFloor     uint64
 	snapshotAuthority uint32
 	snapshotFences    link.CrossingFences
+
+	// ahead is the epochs and syncs of the run after this one that came before this
+	// instance's own reset, kept for aheadRun in the order they came, from tick
+	// aheadSince. aheadAt is the tick the authority's first one came at, zero with
+	// none: its word that this run has ended, whatever became of the reset (leaveRun).
+	ahead      []aheadMessage
+	aheadBytes int
+	aheadRun   uint64
+	aheadSince uint64
+	aheadAt    uint64
 
 	buf [parameter.NetworkDrainWindow]link.Inbound // per-tick drain window
 
@@ -139,14 +150,13 @@ type NetworkSystem struct {
 	// because a drop is a frame this instance could not read and these are frames it
 	// read and refused: past a reset's last epochs, a non-zero pair names a peer
 	// whose ticks or whose volume are not those of a participant.
-	statRefusedTick    *atomic.Int64
-	statScheduleFull   *atomic.Int64
-	statAgreedRestored *atomic.Int64
-	statJoinLag        *atomic.Int64
-	statLag            *atomic.Int64
-	statStale          *atomic.Bool
-	statCorrections    *atomic.Int64
-	statForged         *atomic.Int64
+	statRefusedTick  *atomic.Int64
+	statScheduleFull *atomic.Int64
+	statJoinLag      *atomic.Int64
+	statLag          *atomic.Int64
+	statStale        *atomic.Bool
+	statCorrections  *atomic.Int64
+	statForged       *atomic.Int64
 
 	// The authority's commit: crossings that reached it late (and the part of those
 	// too late to apply), and on a guest, raw epochs refused for lacking a commit.
@@ -395,6 +405,13 @@ type lostChange struct {
 	arrived, marked, crossed bool
 }
 
+// aheadMessage is one epoch or sync of the next run, as its link carried it.
+type aheadMessage struct {
+	from uint32
+	kind link.MessageType
+	body []byte
+}
+
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
 // and the epoch its source produced it in.
 type barrierArtifact struct {
@@ -455,7 +472,6 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statScheduleFull = s.intStat(reg, "network.artifacts_schedule_full")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
 	s.statSuperseded = s.intStat(reg, "network.artifacts_authority_superseded")
-	s.statAgreedRestored = s.intStat(reg, "network.artifacts_restored")
 	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
 	s.statLag = s.intStat(reg, "network.lag_ticks")
 	s.statStale = s.boolStat(reg, "network.stale")
@@ -489,6 +505,7 @@ func (s *NetworkSystem) Init() {
 	s.lastSync = [parameter.MaxPlayers]uint64{}
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
 	s.keepLost()
+	s.aheadAt = 0 // the run before's: what waited for this one is taken at its first drain
 	s.expiring = [participantSlots]bool{}
 	if s.restart == restartCrossed {
 		s.restart = restartDue // cleared with the barrier it stood on: the new game's to cross
@@ -922,6 +939,7 @@ func (s *NetworkSystem) LeaveSession() {
 	s.enabled = true
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
 	s.lost = [participantSlots]lostChange{}
+	s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	local := s.localSource
@@ -1326,7 +1344,7 @@ func (s *NetworkSystem) RetainedAfter(tick uint64, fences link.CrossingFences) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, a := range s.applied {
-		if s.retainedContainedLocked(a, tick, fences) {
+		if held, _ := capturedBy(a, tick, fences); held {
 			continue
 		}
 		frames = append(frames, event.ScheduledWireFrame{Frame: a.frame, ApplyTick: a.applyTick})
@@ -1375,14 +1393,18 @@ func (s *NetworkSystem) PendingStates(tick uint64) []event.WireBatch {
 	return out
 }
 
-// retainedContainedLocked is snapshotContainsLocked against a capture being
-// projected rather than the one last installed. Caller MUST hold mu.
-func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences link.CrossingFences) bool {
-	if !barrierBound(a.frame.Event) {
-		fence := fences.Seq(link.PeerID(a.source))
-		return fence != 0 && a.frame.Seq <= fence
+// capturedBy reports whether a capture read at tick with these fences holds a: a
+// barrier-bound artifact by its apply tick, which is exact, any other by its
+// source's fence. A source the capture names no fence for is kept: a duplicate is
+// repaired by the next correction, a discarded action is not. bySequence reports a
+// fence decided.
+func capturedBy(a barrierArtifact, tick uint64, fences link.CrossingFences) (held, bySequence bool) {
+	if barrierBound(a.frame.Event) {
+		return a.applyTick <= tick, false
 	}
-	return a.applyTick <= tick
+	fence := fences.Seq(link.PeerID(a.source))
+	held = fence != 0 && a.frame.Seq <= fence
+	return held, held
 }
 
 // ScheduleReplay puts artifacts another instance retained on this barrier's
@@ -1472,16 +1494,17 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	return active
 }
 
-// AdoptSnapshot rebases scheduled state onto an installed world. The production
-// epoch never rewinds, because peers key duplicates by it: a rewound source holds
-// new crossings for its next unsent epoch. Barrier-bound artifacts use the tick
-// floor and ordinary ones source fences, for late arrivals too. Caller holds
-// updateMutex.
-func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link.CrossingFences) {
-	defer s.settleArrival() // once the barrier stands at the installed tick
+// AdoptSnapshot rebases the barrier onto an installed world. captured is the tick
+// its capture was read at, which a projection may have carried the world past: what
+// that capture holds is judged by it and the fences alone (capturedBy), for late
+// arrivals too, and all else stays to apply. The production epoch never rewinds,
+// since peers key duplicates by it. Caller holds updateMutex.
+func (s *NetworkSystem) AdoptSnapshot(captured uint64, authority uint32, fences link.CrossingFences) {
+	defer s.settleArrival() // once the barrier stands on the installed capture
+	at := s.localTick()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.snapshotFloor = tick
+	s.snapshotFloor = captured
 	s.snapshotAuthority = authority
 	s.snapshotFences = fences
 	localFence := fences.Seq(link.PeerID(s.localSource))
@@ -1544,32 +1567,19 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 		s.suffixBytes += rec.bytes
 	}
 	s.suffix = pruned
-	// Retention keeps what the installed world lacks. A barrier-bound artifact it
-	// predates goes back on the schedule, since its consumed copy is the only one;
-	// a peer's ordinary frame is kept for the next projection to re-apply.
-	restored, retained := 0, s.applied[:0]
-	for _, a := range s.applied {
-		if s.retainedContainedLocked(a, tick, fences) {
-			continue
-		}
-		retained = append(retained, a)
-		if barrierBound(a.frame.Event) {
-			restored++
-			s.scheduled = append(s.scheduled, a)
-			s.scheduledBytes += frameBytes(a.frame)
-		}
-	}
-	s.applied = retained
-	if restored > 0 {
-		s.statAgreedRestored.Add(int64(restored))
-	}
+	// Retention keeps what the capture lacks, which every projection of a capture
+	// read before it applies again: the world this one wrote holds it already.
+	s.applied = slices.DeleteFunc(s.applied, func(a barrierArtifact) bool {
+		in, _ := capturedBy(a, captured, fences)
+		return in
+	})
 	// Production epochs are source-local replay keys, not captured world state.
 	// Moving this high-water mark backwards makes the receiver discard a genuinely
 	// new batch as a duplicate. A forward install can skip empty unsent epochs, but
 	// an epoch holding a pending crossing must retain its original key and deadline;
 	// flushCrossings closes it once, then catches the high-water mark up to the world.
 	if len(s.crossings) == 0 {
-		s.productionEpoch = max(s.productionEpoch, tick+1)
+		s.productionEpoch = max(s.productionEpoch, at+1)
 	}
 	s.localSource = s.world.Session().Participant
 	if r := s.world.Resources.Network; r != nil {
@@ -1583,34 +1593,25 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 	}
 	if dropped > 0 || pendingDropped > 0 {
 		s.world.Log().Debug("converge", "msg", "snapshot pruned crossings",
-			"tick", tick, "authority", authority, "local_fence", localFence,
+			"captured", captured, "tick", at, "authority", authority, "local_fence", localFence,
 			"fences", len(fences), "scheduled", dropped, "sequence_superseded", superseded,
 			"pending_local", pendingDropped)
 	}
 }
 
-// snapshotContainsLocked uses source fences for ordinary crossings and the tick
-// floor for barrier-bound ones, whose apply tick is exact. A source the capture
-// names no fence for is kept: a duplicate is repaired by the next correction, a
-// discarded action is not. bySequence reports a fence decided. Caller holds mu.
+// snapshotContainsLocked is capturedBy against the capture last installed, for
+// what is scheduled or arrives. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
 	switch a.frame.Event {
 	// No capture holds the clock, nor the reset that ends the run it was read in: a
-	// rate or a reset the floor passed still applies, and a hold lands (landLateHold)
-	// unless it has ended.
+	// rate or a reset still applies, and a hold lands (landLateHold) unless it has
+	// ended.
 	case event.EventGameSpeed, event.EventGameResetRequest:
 		return false, false
 	case event.EventGameHold:
 		return a.applyTick <= s.snapshotFloor && s.holdEndedLocked(a), false
 	}
-	if barrierBound(a.frame.Event) {
-		return a.applyTick <= s.snapshotFloor, false
-	}
-	// A source with no fence is unrepresented: the tick would misjudge it as the
-	// fence exists not to.
-	fence := s.snapshotFences.Seq(link.PeerID(a.source))
-	contained = fence != 0 && a.frame.Seq <= fence
-	return contained, contained
+	return capturedBy(a, s.snapshotFloor, s.snapshotFences)
 }
 
 // holdEndedLocked reports a hold its host has produced past, which only that hold's
@@ -1704,9 +1705,89 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 		s.release(p)
 	}
 	s.follow(p, nextTick)
-	s.applyDue(nextTick)
+	if !s.leaveRun(nextTick) {
+		s.applyDue(nextTick)
+	}
 	s.publishBarrierTelemetry(nextTick, p)
 	return s.barrierActive.Load()
+}
+
+// otherRun takes a batch of another run than this instance's and reports whether
+// it did. A reset applies at one agreed tick, so the next run's first epochs can
+// come before a late reset has landed: one of the next run is kept for it, within
+// the schedule's bounds, and any other refused, as what a guest sent a round trip
+// before the reset reaches its authority after.
+func (s *NetworkSystem) otherRun(from uint32, kind link.MessageType, body []byte, batch event.WireBatch) bool {
+	run := s.localRun()
+	switch {
+	case batch.Run == run:
+		return false
+	case batch.Run != run+1 || len(s.ahead) >= parameter.NetworkScheduledMax ||
+		s.aheadBytes+len(body) > parameter.NetworkScheduledBytes:
+		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
+		return true
+	}
+	if len(s.ahead) == 0 {
+		s.aheadSince = s.localTick()
+	}
+	s.ahead = append(s.ahead, aheadMessage{from: from, kind: kind, body: slices.Clone(body)})
+	s.aheadBytes, s.aheadRun = s.aheadBytes+len(body), batch.Run
+	// The authority's own batch says its run has ended this one and is under way:
+	// a held instance goes on from it, as from any epoch its host produced past it
+	if authority := s.authorityParticipant(); batch.Source == authority && s.participantID() != authority {
+		if s.aheadAt == 0 {
+			s.aheadAt = max(1, s.localTick())
+		}
+		if r := s.world.Resources.Network; r != nil && r.OnAuthorityAhead != nil {
+			r.OnAuthorityAhead()
+		}
+	}
+	return true
+}
+
+// takeAhead admits what was kept for the run this instance has now entered.
+func (s *NetworkSystem) takeAhead() {
+	if len(s.ahead) == 0 || s.localRun() < s.aheadRun {
+		return
+	}
+	kept := s.ahead
+	s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
+	for _, m := range kept {
+		s.dispatchMessage(m.from, &link.Message{Type: m.kind, Payload: m.body})
+	}
+}
+
+// leaveRun ends a run its authority has left and reports whether it did. Only the
+// authority ends one, and all it sent of this run came before its first batch of
+// the next: a tick past that batch and past this run's last epoch, whatever would
+// have ended the run here is lost, so it ends now, applying nothing more. The new
+// game takes what was kept, and its first correction what this one missed.
+func (s *NetworkSystem) leaveRun(nextTick uint64) bool {
+	if len(s.ahead) != 0 && nextTick > s.aheadSince+parameter.NetworkCommitLateTicks {
+		// A reset this long after would commit none of what waited for it
+		s.statRefusedTick.Add(int64(len(s.ahead)))
+		s.ahead, s.aheadBytes, s.aheadAt = nil, 0, 0
+	}
+	if !s.enabled || s.aheadAt == 0 || nextTick <= s.aheadAt+1 {
+		return false
+	}
+	var last uint64
+	if authority := s.authorityParticipant(); int(authority) < len(s.epochs) {
+		s.mu.Lock()
+		last = s.epochs[authority].newest()
+		s.mu.Unlock()
+	}
+	if nextTick <= last+1 {
+		return false
+	}
+	s.aheadAt = 0
+	s.world.Log().Warn("session", "msg", "run ended on its authority's next", "tick", nextTick,
+		"authority_last", last, "kept", len(s.ahead))
+	s.world.Resources.Event.Queue.PushReady(event.GameEvent{
+		Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{},
+		Origin: event.OriginNetwork, Domain: core.DomainPlayer,
+	})
+	return true
 }
 
 // follow closes nextTick's intake for an audience: all the authority committed
@@ -1978,6 +2059,7 @@ func (s *NetworkSystem) DrainOffTick() (settle bool) {
 // drainWith is one poll of the endpoint, whichever door it came through, and
 // returns how many notifications it took.
 func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound) int) int {
+	s.takeAhead()
 	n := poll(s.buf[:])
 	for i := range n {
 		if !s.enabled {
@@ -2513,8 +2595,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
 		return
 	}
-	if batch.Run != s.localRun() {
-		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
+	if s.otherRun(from, network.MsgEvent, body, batch) {
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
@@ -3221,14 +3302,14 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 }
 
 // Only the authority may author roster changes, which create or destroy shared
-// identities, and a hold or a rate, which stop or pace everyone: the one that sent
-// the frame, or the one it applies under — a dropped guest sees the link close before
-// its dismissal's tick and takes the term itself. Nobody acts as another
+// identities, a reset, a hold or a rate, which end, stop or pace everyone's game: the
+// one that sent the frame, or the one it applies under — a dropped guest sees the link
+// close before its dismissal's tick and takes the term itself. Nobody acts as another
 // participant's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
-		event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
+		event.EventGameResetRequest, event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	}
 	actor, ok := crossingActors[et]
@@ -3442,8 +3523,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		s.statDrop.Add(1)
 		return
 	}
-	if batch.Run != s.localRun() {
-		s.statRefusedTick.Add(1)
+	if s.otherRun(from, network.MsgStateSync, body, batch) {
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()

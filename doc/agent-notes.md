@@ -193,6 +193,22 @@ Libraries · Branches.
   clock's (`TimeControl`) and a reset ends the run its captures are read in, is no
   part of a world installed at or past its tick: it joins `snapshotContainsLocked`'s
   first cases, or a guest a correction carries to that tick loses it for good.
+- The barrier judges an install by the tick its capture was read at
+  (`AdoptSnapshot`'s `captured`), which `WriteStagedLocked` keeps apart from the tick
+  it writes the world at. Handed the projected tick, it prunes a late artifact as
+  held by a world that never had it, and forgets a retained one the next older
+  capture needs. The staging world's barrier outlives an install: one that put its
+  own retained artifacts back on its schedule doubled them at every projection.
+- A crossing names entities by its producer's numbers. An instance that applied
+  an arrival late allocated its cursor after what the others allocated first, so
+  until a correction one number is a gold member there and a cursor here: a handler
+  that destroys what a crossed number names checks the entity is what was meant
+  (`CompositeSystem.destroyMember`), or a guest's typed letter ends a cursor.
+- Only the authority ends a run, and its epochs name the run it is in: a guest
+  follows that (`leaveRun`), since what ends a run on it, a crossed reset or a
+  transition whose entry emits one, can be lost, refused or left behind a hold. Two
+  resets settled in one tick advance the run twice, so the tick that leaves a run
+  applies nothing else, and a new path to a reset is checked against that.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
@@ -443,10 +459,15 @@ Libraries · Branches.
   copy, build its race binary there and run it under the same load, keeping the
   branch clean. Probe after the wait has run out: a dump ahead of the racing step
   moves it, and hid a failure seen one run in ten.
-- A guest left in the run before its host's, its link up and the floor's alert its
-  status, lost the reset's crossing, the one thing that moves a run: print what the
-  barrier does with the reset's epoch (`scheduleCrossings`, `dispatch`,
-  `AdoptSnapshot`).
+- Eight race processes of one socket test starve its host to 11 to 18 ticks a
+  second, under the game's 20, so a gate's 5 s and a test's 15 s end before a
+  convergence floor of 60 ticks does: a join three relays deep then fails by load
+  alone (`TestARunBehindARelaySeatsItsBotsAndRelaysForOthers`, 1 of 80). A probe
+  in `World.removeEntity` printing the stack when the entity is a cursor names
+  whatever ended one without a despawn.
+- A mesh link loses exactly the frames that arrive while its `LossEvery` is 1
+  (`MeshPort.SetShape`): a test loses one epoch by setting it round the host tick
+  that flushes it (`TestAGuestFollowsItsHostIntoTheNextGame`).
 - A socket test's dump whose status reads "" where the test set one saw a new game
   come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
   the resets since the run began. Which of two runs applies a new game first races
@@ -464,9 +485,12 @@ Libraries · Branches.
   reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
   Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
   correction loop, between ticks.
-- A handshake's goroutine reads an offer's fields under `sessionMu` alone
-  (`offerLocked`), so what one names changes under `sessionMu`, the world lock held
-  or not, as `leaveSessionLocked` clears the session's name and ceiling.
+- The session half of a run's config (`m.cfg`, `m.wiring`: addresses, name, policy,
+  ceiling) changes on the run's driving goroutine alone, under the world lock and
+  `sessionMu` together, so a reader elsewhere holds either: a handshake reads an
+  offer's fields under `sessionMu` alone (`offerLocked`), a router's door builds its
+  acceptor on each connection's goroutine (`relayAcceptor`), and a redial copies the
+  whole config under the world lock (`JoinBase`), where `persistPlay` writes too.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and

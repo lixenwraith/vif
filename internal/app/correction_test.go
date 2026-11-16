@@ -1618,7 +1618,9 @@ func TestAWriteInPlaceMatchesACaptureWrite(t *testing.T) {
 		gotDiff engine.WorldDifference
 		written corrector.StagedWrite
 	)
-	inPlace.world.RunSafe(func() { gotDiff, written, err = inPlace.glue.WriteStagedLocked(&source.glue, late.Header, true) })
+	inPlace.world.RunSafe(func() {
+		gotDiff, written, err = inPlace.glue.WriteStagedLocked(&source.glue, late.Header, late.Header.Tick, true)
+	})
 	if err != nil {
 		t.Fatalf("write in place: %v", err)
 	}
