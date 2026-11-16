@@ -595,6 +595,9 @@ set. The rest is vif's:
   (`paths.OwnRoot`). One in a shared root, the checkout's `wad/` or a system
   root, or among the downloads, is copied under a name of the author's into the
   user root's `scenario/` at the first change, as `SettingsFor` seeds a `vif.toml`.
+- **Nothing the author did not say.** A store writes the edit and adds no
+  default: a key left out stays out, and a scenario's `[keymap]` is never filled
+  as a player's keymap is, only held to what this build reads.
 - **Never stored broken.** What is stored validates, as `saveTable` reads its
   document again, and a save over several files lands whole or not at all, as
   `SaveDownload`'s does. To decide: what becomes of edits that do not validate
@@ -735,8 +738,13 @@ its request's, one for every cell.
 The second round is in: a register for `y` and the puts, a change undo and redo,
 marks, `o O`, `s S X ~`, counted searches, `.` with its Insert text, and Visual's
 `d c y r ~ *` over the ping bounds. A vim key whose letter vif reads its own way
-has an action no default key binds, for a keymap or a scenario to attach. What is
-left:
+has an action no default key binds, which the vim keymap (`-k vim`) and the
+tutorial attach. What is left:
+
+- **What the vim keymap cannot give back.** `H` and `L` go to the map's top and
+  bottom rows where vim's go to the window's, and `J`, `K`, Ctrl-F, Ctrl-B, Ctrl-E
+  and Ctrl-Y have no action: a join, a lookup, a whole page and a scrolled view.
+  Enter, Space, Backspace, Tab, `[`, `]` and `gh gj gk gl` stay the game's.
 
 - **Named registers.** `"a` before a yank, a delete or a put would name one of 26
   registers beside the unnamed one, sharing the macros' letters but not their
@@ -2533,7 +2541,9 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   authoritative readback first; the row then follows `sfx_volume`'s shape on
   every host, the native menu's stepper included. Keymap, backend, paths and
   colour depth remain startup settings; `:d break` stays on the command line,
-  since a row cannot take its arguments.
+  since a row cannot take its arguments. A Keymap row choosing among the built-in
+  table and the keymaps a name finds (`vim`) would reach them where no flag does,
+  on Android and for a browser's player, and needs the key table rebuilt in a run.
 
 ### Camera edge follow-ups
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed scenario/*.toml content/*.toml input/keymap.toml vif.toml bot/*.toml
+//go:embed scenario/*.toml content/*.toml input/*.toml vif.toml bot/*.toml
 var assetFS embed.FS
 
 var (
@@ -23,6 +23,9 @@ var (
 	DefaultContent fs.FS
 	// DefaultBots holds the shipped bot graphs, one <name>.toml each.
 	DefaultBots fs.FS
+	// Keymaps holds the shipped keymaps by name: keymap.toml, the built-in table,
+	// and those read over it, as vim.toml.
+	Keymaps fs.FS
 )
 
 const MainScenarioEntry = "scenario.toml"
@@ -38,6 +41,7 @@ func init() {
 	MainScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultBots = sub("bot")
+	Keymaps = sub("input")
 	DefaultKeymap = read("input/keymap.toml")
 	DefaultSettings = read("vif.toml")
 }

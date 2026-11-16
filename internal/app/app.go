@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -610,15 +609,11 @@ func (a *App) Close() {
 // own back once, at its start (resource.UpgradeKeymap).
 func (a *App) loadKeymap() error {
 	kt := input.DefaultKeyTable()
-	path, err := resource.Keymap(a.cfg.Resources)
+	data, path, err := resource.Keymap(a.cfg.Resources)
 	if err != nil {
-		return fmt.Errorf("keymap path: %w", err)
+		return fmt.Errorf("keymap load: %w", err)
 	}
-	if path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("keymap load: %w", err)
-		}
+	if data != nil {
 		if data, _, err = input.UpgradeKeymap(data); err != nil {
 			return fmt.Errorf("keymap config %s: %w", path, err)
 		}

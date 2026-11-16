@@ -30,7 +30,7 @@ complete -c vif -o d -o config-embedded -d 'Use the embedded scenario and conten
 complete -c vif -o config-dir -x -a '(__fish_complete_directories)' -d 'Configuration root holding scenario/ input/ audio/ content/ image/ bot/'
 complete -c vif -o s -o config-scenario -r -F -d 'Installed scenario name or path below scenario/, scenario.toml, or a scenario directory'
 complete -c vif -o f -o config-content -r -F -d 'Content directory, or a single content file'
-complete -c vif -o k -o config-keymap -r -F -d 'Keymap TOML'
+complete -c vif -o k -o config-keymap -r -F -d 'Keymap TOML, or the name of one in input/ or built in, as vim'
 complete -c vif -o config-music -r -F -d 'Music pattern override TOML'
 complete -c vif -o config-sounds -r -F -d 'Sound definition override TOML'
 complete -c vif -o color -x -a 'auto 256 true' -d 'Colour depth; auto detects the terminal'

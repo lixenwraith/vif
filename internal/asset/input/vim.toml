@@ -1,0 +1,40 @@
+# The vim keymap, read over the built-in one by `vif -k vim` or keymap = "vim"
+# under [paths] in vif.toml: each key vif reads its own way goes back to vim
+# wherever vif has vim's action for it, as the tutorial plays them. What only a
+# game does keeps its key: Enter, Space and Backspace fire, Tab and Shift-Tab jump
+# to the nugget and the gold, and [ ] and gh gj gk gl find glyphs.
+
+# Its own bindings alone: bringing it up to date drops what a build cannot read
+# and adds none of the built-in bindings it leaves out.
+fill = false
+
+[normal]
+a = "mode_append"          # the game's: cycle auto-fire, which :auto does
+o = "mode_open_below"      # the game's: the nearest glyph below, which ] is
+O = "mode_open_above"      # the game's: the nearest glyph above, which [ is
+p = "put_after"            # the game's: pause, which Ctrl-Z is here
+P = "put_before"
+u = "undo_change"          # the game's: undo a cursor move, which Ctrl-O is here
+m = "mark_set"             # the game's: the middle column, which gm is here
+"`" = "mark_jump"          # the game's: the console, which :console opens
+H = "motion_screen_top"    # the map's top row; the game's: half a page left
+L = "motion_screen_bottom" # the map's bottom row; the game's: half a page right
+J = "none"                 # vim joins lines; half a page down is Ctrl-D here
+K = "none"                 # vim looks a word up; half a page up is Ctrl-U here
+
+[normal_keys]
+ctrl_r = "redo_change"
+ctrl_d = "motion_half_page_down"
+ctrl_u = "motion_half_page_up"
+ctrl_o = "undo"
+ctrl_z = "pause"
+
+[operator]
+H = "motion_screen_top"
+L = "motion_screen_bottom"
+J = "none"
+K = "none"
+"`" = "mark_jump"
+
+[prefix_g]
+m = "motion_screen_horizontal_mid"

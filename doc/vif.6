@@ -119,8 +119,8 @@ Installed scenario name or path below scenario/, scenario.toml, or a scenario di
 .B \-f, \-config\-content <path>
 Content directory, or a single content file
 .TP
-.B \-k, \-config\-keymap <path>
-Keymap TOML
+.B \-k, \-config\-keymap <name|path>
+Keymap TOML, or the name of one in input/ or built in, as vim
 .TP
 .B \-config\-music <path>
 Music pattern override TOML
@@ -338,6 +338,13 @@ Scenarios, each a directory holding scenario.toml, in groups to any depth:
 base/ holds the shipped ones, downloads/ the scenarios sessions' hosts sent
 when [session] save_downloads saves them, and a player files their own as they
 like.
+.TP
+.I input/<name>.toml
+Keymaps, each read over the built-in bindings: keymap.toml unless \-k or [paths]
+keymap names another, by its name or a path. The vim keymap, which gives back to
+vim the keys vif reads its own way, is compiled in and resolves last. A keymap
+saying fill = false at its top gains none of the built-in bindings when a run
+brings it up to date.
 .TP
 .I bot/<name>.toml
 Bot graphs that \-bot and :bot add name; a path also works. The default

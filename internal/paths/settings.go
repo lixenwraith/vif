@@ -288,14 +288,18 @@ func ParseSettings(data []byte) (Settings, error) {
 }
 
 // resolve makes each path what it names from a file in dir; a scenario name, bare or
-// a path below scenario/, stays a name the roots resolve, as -s takes it.
+// a path below scenario/, and a keymap name stay names the roots resolve, as -s and
+// -k take them.
 func (s *Settings) resolve(dir string) {
 	p := &s.Paths
-	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Keymap, &p.Downloads} {
+	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Downloads} {
 		*v = settingsPath(dir, *v)
 	}
 	if !IsScenarioName(p.Scenario) || strings.HasPrefix(p.Scenario, "~") {
 		p.Scenario = settingsPath(dir, p.Scenario)
+	}
+	if !IsKeymapName(p.Keymap) {
+		p.Keymap = settingsPath(dir, p.Keymap)
 	}
 }
 

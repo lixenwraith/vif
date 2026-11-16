@@ -153,7 +153,7 @@ Nightly builds of this binary are also the container image
 <!-- if client windows -->
 The binary carries the main scenario and a tutorial typing corpus. The `td`,
 `recall`, `blank`, `cave` and `armada` scenarios, the full corpus, wall images
-and editable copies of the keymap, bot graphs and `vif.toml` are the wad,
+and editable copies of the keymaps, bot graphs and `vif.toml` are the wad,
 `vif-@LABEL@-wad.tar.gz` in the same release. It unpacks as the `vif/`
 configuration directory:
 
