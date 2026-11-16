@@ -734,7 +734,7 @@ darts in the first wave, lancers over them from the second and four wardens over
 those from the third. A ship holds its slot until a roll it makes each tick sends
 it down: it turns red and marks the cell its target stands on with the charge line and
 the landing marker, dives there, then flies back to the cell it spawned on
-(`FindLanding { to = "home" }`), so a slot shot empty stays empty. A rank up has
+(`FindLanding { to = "post" }`), so a slot shot empty stays empty. A rank up has
 more hit points (4, 10, 24) and a costlier touch and dives slower on a longer
 warning. Each warden takes a turret as it lands (`EventMountRequest`, the `arms`
 region) and fires an aimed bullet every three seconds or so, each on its own

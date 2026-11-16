@@ -569,21 +569,22 @@ lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
 per instance:
 
 - Predicates read the instance and the world: `TargetDistance`, `LineOfSight`,
-  `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `Chance`, `Param` (the
+  `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `AtEdge`, `Chance`, `Param` (the
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
-  (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
-  the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
-  lock's charge or teleport goes to the cell it stored, as the raiders in `cave` do,
-  or with `to = "home"` the cell the header spawned on (`BehaviorComponent.HomeX`,
-  `HomeY`), which armada's ships fly back to.
+  (`FindFreeAreaInside` over the footprint). A verb's `to` (`aim`) reads the live
+  target, or with `stored` the cell `StoreTarget` kept, so a lock's charge or
+  teleport goes to the cell it stored, as the raiders in `cave` do, or with `post`
+  the cell the header spawned on (`BehaviorComponent.PostX`, `PostY`), which
+  armada's ships hold and fly back to.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
   `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
-  `SpawnSpecies` (any Shared species, a program's among them, by its land request)
-  and `EmitEvent`.
+  `SpawnSpecies` (any Shared species, a program's among them, by its land request),
+  `Leave` (it marks the context, and the host ends the instance as the step
+  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`.
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
   per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
   over the in-place helpers of `pkg/vmath/physics` the code species use
@@ -713,7 +714,7 @@ smaller part of it.
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, home cell, `Shielded`, `TeleportLine`,
+  instance, pattern frame and accumulator, stored target, post, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
@@ -779,7 +780,8 @@ A machine adds no source of divergence and no identity of its own.
   through `vmath.MixChain` (D-8), as mount spread and soft collision do, so a
   guard's short-circuit or a predicted death moves no stream. `Chance` mixes
   `BehaviorSystem.chanceRoot` (derived from the shared domain root at `Init`,
-  carried by `SaveLocal`) with the tick, the entity and its site; the blue circle
+  carried by `SaveLocal`) with the tick, the entity and its site, and holds a rate
+  against the step's share of its mean wait in integers; the blue circle
   draws its landing's direction before it searches.
 - **Order.** Edges run in declaration or array order, no map is iterated at run
   time, and programs are sorted by name before IDs are assigned. Verbs are native

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/bits"
 	"slices"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ type BehaviorSystem struct {
 // behaviorTelemetry is one program's rows, keyed behavior.<program>
 type behaviorTelemetry struct {
 	count     *atomic.Int64
+	left      *atomic.Int64 // instances its own Leave ended, no kill
 	lifecycle lifecycleTelemetry
 }
 
@@ -78,6 +80,7 @@ func NewBehaviorSystem(world *engine.World, set *BehaviorSet) engine.System {
 	for _, name := range set.Names() {
 		s.programs = append(s.programs, behaviorTelemetry{
 			count:     reg.Ints.Get("behavior." + name + ".count"),
+			left:      reg.Ints.Get("behavior." + name + ".left"),
 			lifecycle: newLifecycleTelemetry(reg, "behavior."+name),
 		})
 	}
@@ -93,6 +96,7 @@ func (s *BehaviorSystem) Init() {
 	s.statUnknown.Store(0)
 	for i := range s.programs {
 		s.programs[i].count.Store(0)
+		s.programs[i].left.Store(0)
 		s.programs[i].lifecycle.Reset()
 	}
 	s.motion.Reset()
@@ -229,6 +233,10 @@ func (s *BehaviorSystem) Update() {
 		}
 
 		flags, suspended := s.set.Graph(int(b.Program)).Step(&b.Machine, c, dt)
+		if c.left {
+			s.leave(header, b.Program, c.leaving)
+			continue
+		}
 
 		// The state's outputs, written every step; the ward needs its refresh
 		shielded := flags&behaviorShielded != 0
@@ -351,7 +359,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	s.world.Components.Protection.SetComponent(header, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
-	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{Program: uint8(i), HomeX: headerX, HomeY: headerY})
+	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{Program: uint8(i), PostX: headerX, PostY: headerY})
 
 	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	s.world.Components.Kinetic.SetComponent(header, component.KineticComponent{
@@ -406,6 +414,10 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		EvalID:      evalID,
 	})
 	s.programs[i].lifecycle.spawned.Add(1)
+	if s.ctx.left {
+		s.leave(header, uint8(i), s.ctx.leaving)
+		return
+	}
 	s.countNow(i)
 }
 
@@ -474,6 +486,13 @@ func (s *BehaviorSystem) terminate(header core.Entity, effect component.DeathEff
 		HeaderEntity: header,
 		Effect:       effect,
 	})
+}
+
+// leave ends an instance its own program's Leave took off the map: counted apart
+// from a kill, which it is not, so nothing drops
+func (s *BehaviorSystem) leave(header core.Entity, program uint8, effect component.DeathEffect) {
+	s.programs[program].left.Add(1)
+	s.terminate(header, effect)
 }
 
 // integrate is every tick's movement unless Freeze ran: the footprint bounces off
@@ -556,15 +575,18 @@ type behaviorCtx struct {
 	probed         bool // a probe resolved one for the entry being taken
 	hitWall        bool // this step's movement met a wall or the map edge
 	frozen         bool // Freeze ran: this tick does not move
+
+	left    bool                  // Leave ran: the instance ends as its step returns
+	leaving component.DeathEffect // what its Leave leaves of the body
 }
 
 // target is the cell the instance's group aims at, the cursor's by default
 func (c *behaviorCtx) target() (int, int, bool) { return resolveBaseTarget(c.sys.world, c.entity) }
 
-// targetDistance measures header to target with rows scaled by the cell aspect, so
-// a distance reads alike on both axes
-func (c *behaviorCtx) targetDistance() (float64, bool) {
-	x, y, ok := c.target()
+// distance measures header to the cell aim reads with rows scaled by the cell
+// aspect, so a distance reads alike on both axes
+func (c *behaviorCtx) distance(aim func(*behaviorCtx) (int, int, bool)) (float64, bool) {
+	x, y, ok := aim(c)
 	pos, placed := c.sys.world.Positions.GetPosition(c.entity)
 	if !ok || !placed {
 		return 0, false
@@ -577,18 +599,21 @@ func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, tru
 
 // aim reads the cell a verb's to names: the target by default, with "stored" the
 // cell StoreTarget kept, which holds still however the cursors move after it, or
-// with "home" the cell the instance spawned on
-func (a *targetArgs) aim() (func(*behaviorCtx) (int, int, bool), error) {
-	switch a.To {
+// with "post" the cell the instance spawned on
+func aim(to string) (func(*behaviorCtx) (int, int, bool), error) {
+	switch to {
 	case "", "target":
 		return (*behaviorCtx).target, nil
 	case "stored":
 		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.TargetX, c.behavior.TargetY, true }, nil
-	case "home":
-		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.HomeX, c.behavior.HomeY, true }, nil
+	case "post":
+		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.PostX, c.behavior.PostY, true }, nil
 	}
-	return nil, fmt.Errorf("to %q is not one of target, stored, home", a.To)
+	return nil, fmt.Errorf("to %q is not one of target, stored, post", to)
 }
+
+// mapEdges are the map's edges as AtEdge names them, in the order it tests them
+var mapEdges = [...]string{"left", "right", "top", "bottom"}
 
 // telegraphColors are the colours a program names a telegraph's splash by
 var telegraphColors = []struct {
@@ -600,6 +625,7 @@ var telegraphColors = []struct {
 type (
 	behaviorNoArgs struct{}
 	distanceArgs   struct {
+		To    string     `toml:"to"`
 		Op    dialect.Op `toml:"op"`
 		Cells float64    `toml:"cells"`
 	}
@@ -611,7 +637,14 @@ type (
 		Value float64    `toml:"value"`
 	}
 	chanceArgs struct {
-		Percent int `toml:"percent"`
+		Percent int   `toml:"percent"`
+		MeanMs  int64 `toml:"mean_ms"`
+	}
+	edgeArgs struct {
+		Edge string `toml:"edge"`
+	}
+	leaveArgs struct {
+		Effect string `toml:"effect"`
 	}
 	paramArgs struct {
 		Index int        `toml:"index"`
@@ -650,13 +683,17 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 
 	// --- Guards: read-only ---
 	v.Predicate("TargetDistance", func(a *distanceArgs) (func(*behaviorCtx) bool, error) {
+		aim, err := aim(a.To)
+		if err != nil {
+			return nil, err
+		}
 		return func(c *behaviorCtx) bool {
-			d, ok := c.targetDistance()
+			d, ok := c.distance(aim)
 			return ok && a.Op.Holds(d, a.Cells)
 		}, nil
 	})
 	v.Predicate("LineOfSight", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
-		aim, err := a.aim()
+		aim, err := aim(a.To)
 		if err != nil {
 			return nil, err
 		}
@@ -678,12 +715,44 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	})
 	v.Predicate("HitWall", reads(func(c *behaviorCtx) bool { return c.hitWall }))
 	v.Seeded("Chance", func(a *chanceArgs, site int) (func(*behaviorCtx) bool, error) {
-		if a.Percent < 1 || a.Percent > 100 {
+		roll := func(c *behaviorCtx) uint64 {
+			tick := c.sys.world.Resources.Game.State.GetGameTicks()
+			return vmath.MixChain(c.sys.chanceRoot, tick, uint64(c.entity), uint64(site))
+		}
+		switch {
+		case a.MeanMs != 0 && a.Percent != 0:
+			return nil, errors.New("takes percent, one roll, or mean_ms, a rate, not both")
+		case a.MeanMs > 0:
+			// Each step rolls its share of the mean wait, so the wait is the same at any tick
+			mean := uint64(a.MeanMs) * uint64(time.Millisecond)
+			return func(c *behaviorCtx) bool {
+				step := uint64(c.dt)
+				if step >= mean {
+					return true
+				}
+				share, _ := bits.Div64(step, 0, mean)
+				return roll(c) < share
+			}, nil
+		case a.MeanMs < 0:
+			return nil, fmt.Errorf("mean_ms %d is not positive", a.MeanMs)
+		case a.Percent < 1 || a.Percent > 100:
 			return nil, fmt.Errorf("percent must be 1..100, got %d", a.Percent)
 		}
+		return func(c *behaviorCtx) bool { return roll(c)%100 < uint64(a.Percent) }, nil
+	})
+	v.Predicate("AtEdge", func(a *edgeArgs) (func(*behaviorCtx) bool, error) {
+		edge := slices.Index(mapEdges[:], a.Edge)
+		if edge < 0 {
+			return nil, fmt.Errorf("edge %q is not one of %s", a.Edge, strings.Join(mapEdges[:], ", "))
+		}
 		return func(c *behaviorCtx) bool {
-			tick := c.sys.world.Resources.Game.State.GetGameTicks()
-			return vmath.MixChain(c.sys.chanceRoot, tick, uint64(c.entity), uint64(site))%100 < uint64(a.Percent)
+			pos, ok := c.sys.world.Positions.GetPosition(c.entity)
+			if !ok {
+				return false
+			}
+			body, config := c.proto.Footprint.At(pos.X, pos.Y), c.sys.world.Resources.Config
+			return [...]bool{body.X <= 0, body.X+body.Width >= config.MapWidth,
+				body.Y <= 0, body.Y+body.Height >= config.MapHeight}[edge]
 		}, nil
 	})
 	v.Predicate("Param", func(a *paramArgs) (func(*behaviorCtx) bool, error) {
@@ -705,7 +774,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		return ok
 	}))
 	v.Probe("FindLanding", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
-		aim, err := a.aim()
+		aim, err := aim(a.To)
 		if err != nil {
 			return nil, err
 		}
@@ -763,6 +832,17 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Effect("CancelTelegraph", does(func(c *behaviorCtx) {
 		c.sys.world.PushLocal(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{AnchorEntity: c.entity})
 	}))
+	v.Effect("Leave", func(a *leaveArgs) (func(*behaviorCtx), error) {
+		// What it leaves is an effect of the body, as a prototype's death is
+		bodyEffects := component.DeathEffectNames[:component.DeathParticle]
+		effect := component.DeathSilent
+		if i := slices.Index(bodyEffects, a.Effect); i >= 0 {
+			effect = component.DeathEffect(i)
+		} else if a.Effect != "" {
+			return nil, fmt.Errorf("effect %q is not one of %s", a.Effect, strings.Join(bodyEffects, ", "))
+		}
+		return func(c *behaviorCtx) { c.left, c.leaving = true, effect }, nil
+	})
 	v.Effect("Lightning", func(a *colorArgs) (func(*behaviorCtx), error) {
 		i := slices.Index(component.LightningColorNames[:], a.Color)
 		if i < 0 {
@@ -855,19 +935,37 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	})
 
 	// --- Sustained: every tick the state holds ---
-	v.Sustained("Home", does(func(c *behaviorCtx) {
-		// A knocked-back body flies before it steers again
-		if c.combat.RemainingKineticImmunity > 0 {
-			return
+	v.Sustained("Home", func(a *targetArgs) (func(*behaviorCtx), error) {
+		// The target is routed to as every species routes; a cell of its own is flown at
+		at := func(c *behaviorCtx) (float64, float64, bool) {
+			x, y, _ := ResolveMovementTarget(c.sys.world, c.entity, c.kinetic)
+			return x, y, true
 		}
-		k := &c.kinetic.Kinetic
-		x, y, _ := ResolveMovementTarget(c.sys.world, c.entity, c.kinetic)
-		turn := physics.TurnSeverity(k, x, y, parameter.NavCorneringBase, 1.0)
-		physics.ApplyHoming(k, x, y, &c.proto.Homing, c.dtSec)
-		if turn > 0 {
-			physics.ApplyLinearDrag(k, turn*parameter.NavCorneringBrake, c.dtSec)
+		if a.To != "" && a.To != "target" {
+			cell, err := aim(a.To)
+			if err != nil {
+				return nil, err
+			}
+			at = func(c *behaviorCtx) (float64, float64, bool) {
+				x, y, ok := cell(c)
+				px, py := vmath.Point{X: x, Y: y}.Center()
+				return px, py, ok
+			}
 		}
-	}))
+		return func(c *behaviorCtx) {
+			// A knocked-back body flies before it steers again
+			x, y, ok := at(c)
+			if c.combat.RemainingKineticImmunity > 0 || !ok {
+				return
+			}
+			k := &c.kinetic.Kinetic
+			turn := physics.TurnSeverity(k, x, y, parameter.NavCorneringBase, 1.0)
+			physics.ApplyHoming(k, x, y, &c.proto.Homing, c.dtSec)
+			if turn > 0 {
+				physics.ApplyLinearDrag(k, turn*parameter.NavCorneringBrake, c.dtSec)
+			}
+		}, nil
+	})
 	v.Sustained("ChargeToStored", does(func(c *behaviorCtx) {
 		m := c.behavior.Machine
 		if m.Duration <= 0 {

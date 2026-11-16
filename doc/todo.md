@@ -262,11 +262,6 @@ The first version plays on what the machine had, and where that was too little t
 scenario works around it. Each workaround is a gap any authored scenario meets,
 given here with the form that retires it; the redesign is written on them.
 
-- **A roll that is a rate.** `Chance { percent }` is a whole percent a step, so a
-  chance under 1% a tick takes two rolls under an `And` (`Hold`), and the wait it
-  makes follows the run's tick (`-tick`). A `mean_ms` beside it rolls each step's
-  share of that mean wait, finer than a percent and the same at any tick;
-  `percent` stays for the one roll a `Timeout` candidate makes.
 - **A rank in one request.** `Rank` spends three actions a ship, 84 a wave. A
   map's legend naming a program
   ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
@@ -277,16 +272,6 @@ given here with the form that retires it; the redesign is written on them.
   another scenario comes unarmed unless that region comes too. A
   `[prototype.mount]` the spawn applies, its interval spread drawn for each host
   as a shot's is, retires the region, the capture and the `pick`.
-- **`Home` and the home cell.** The verb `Home` steers to the target and
-  `to = "home"` names the cell an instance spawned on: one word, two things. The
-  cell takes a name of its own (`post`), and `to` reaches the verbs that lack it:
-  `TargetDistance`, so a program knows it is off its post, and `Home`, so it
-  steers back. A ship holds its place by `Freeze`, which stands only while
-  nothing pushes the body, and a wall or rock does.
-- **An end of its own.** An instance ends by a kill, its `lifetime_ms` or a
-  cancel, and `EventBehaviorCancelRequest` names a program, every instance of it.
-  A ship that leaves the map past the player needs an effect that ends its own
-  instance, counted apart from a kill and dropping nothing.
 - **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
   strobe and the reset are five states armada copies as six other scenarios do,
   the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).

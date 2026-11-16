@@ -411,10 +411,10 @@ func TestAnOriginCountsAPayloadsCellFromItsAnchor(t *testing.T) {
 	}
 
 	for actions, want := range map[string]string{
-		`{ action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "middle" }`:                        `at: "middle" is not one of top_left, top`,
+		`{ action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "middle" }`:                         `at: "middle" is not one of top_left, top`,
 		`{ action = "EmitEvent", event = "EventSplashTextRequest", origin = "top", payload = { text = "go" } }`: `carries no number field 'x', 'y'`,
-		`{ action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease", origin = "top" }`:               `carries no payload`,
-		`{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = { at = "top", x = "heat" } }`:     `keeps its origin for its own x and y`,
+		`{ action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease", origin = "top" }`:                `carries no payload`,
+		`{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = { at = "top", x = "heat" } }`:      `keeps its origin for its own x and y`,
 	} {
 		if _, err := load(actions, true); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s loaded: %v, want %q", actions, err, want)

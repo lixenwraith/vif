@@ -87,12 +87,12 @@ transitions = [
     { trigger = "AfterTick", guard = "HitWall", target = "Return", fallback = "hold" },
 ]
 
-# Home is the slot, or the nearest room by it should a wall stand there; with no
-# room anywhere the ship waits where it is
+# Its post is the slot, or the nearest room by it should a wall stand there; with
+# no room anywhere the ship waits where it is
 [macros.Ship.body.states.Return]
 duration_ms = "${return_ms}"
 probe = "FindLanding"
-probe_args = { to = "home" }
+probe_args = { to = "post" }
 on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "ChargeToStored" }]
 transitions = [{ trigger = "Timeout", target = "Hold" }]

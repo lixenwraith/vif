@@ -1072,19 +1072,22 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 ([Behavior machines §2.3](machine-design.md#23-step)). The vocabulary, which
 `-schema` lists as `vocabularies.behavior`:
 
-- Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
-  cell aspect), `LineOfSight { to }` (the body clears the way from where it stands
-  to the target, with `to = "stored"` to the cell `StoreTarget` kept, or with
-  `to = "home"` to the cell its header spawned on), `HasTarget`,
-  `Stunned`, `HPFraction { op, value }`,
-  `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
-  (mixed from tick, entity and site, so no random stream moves),
+- A verb's `to` names the cell it reads: the target when left out, `stored` the
+  cell `StoreTarget` kept, or `post` the cell the header spawned on.
+- Guards: `TargetDistance { to, op, cells }` (header to that cell, rows scaled by
+  the cell aspect, so `to = "post"` tells a body it is off its post),
+  `LineOfSight { to }` (the body clears the way from where it stands),
+  `HasTarget`, `Stunned`, `HPFraction { op, value }`, `HitWall` (this step's move
+  met a wall or the map edge), `AtEdge { edge }` (the body touches the map's
+  `left`, `right`, `top` or `bottom` edge), `Chance` (mixed from tick, entity and
+  site, so no random stream moves: `{ percent }` is one roll, for a `Timeout`'s
+  candidate, and `{ mean_ms }` a rate, each step rolling its share of that mean
+  wait, so a `Tick` edge fires as often at any tick and finer than a percent),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
-  `FindLanding { to }` (the nearest place the footprint fits around the target,
-  the stored cell or home, as `LineOfSight` names them; probed at home ahead of
-  `StoreTarget`, it sends a charge or a teleport back to the spawn cell, as
-  armada's ships fly home).
+  `FindLanding { to }` (the nearest place the footprint fits around that cell;
+  probed at its post ahead of `StoreTarget`, it sends a charge or a teleport back
+  to the spawn cell, as armada's ships fly back).
 - Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
@@ -1093,9 +1096,14 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Materialize { spawn, duration_ms }` (a `swarm`, `nugget` or program's style over the
   footprint at the target for `duration_ms`, its style's own when that is 0 or
   absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (any
-  Shared species, a program's among them, landing at the header plus x, y) and
+  Shared species, a program's among them, landing at the header plus x, y),
+  `Leave { effect }` (ends its own instance as the step returns, through its
+  state's exit, leaving `none`, the default, `flash`, `fadeout` or `scatter` of
+  the body: no kill, so nothing drops, and `behavior.<name>.left` counts it) and
   `EmitEvent` (shared and local events).
-- Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
+- Sustained: `Home { to }` (steer by the prototype's physics, to the target along
+  its route, or straight at the stored cell or its post, so a body a wall pushed
+  off its post flies back where `Freeze` would leave it), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
@@ -1111,9 +1119,10 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   teleport marks where an attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
-the lower roster slot taking a tie, so every instance of a session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
-composite's integrity work as for every composite species; a program does not
-script them.
+the lower roster slot taking a tie, so every instance of a session aims alike. Hit
+points, lifetime, contact strikes, gold breaking and the composite's integrity
+work as for every composite species; a program does not script them. An instance
+ends by a kill, its `lifetime_ms`, a cancel or its own `Leave`.
 
 ## Loot
 
