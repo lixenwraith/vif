@@ -91,10 +91,13 @@ flowchart LR
 ```
 
 Only scored candidates enter the fixed-capacity, descending archive, so elitism
-is structural, and an optional equality hook holds a genotype once, at its
-latest score, so the archive does not fill with clones of its best member and a
-re-evaluated member follows a changing objective. Outcome
-count advances generations. The proposal ring is bounded; the pending table is
+is structural, and an optional equality hook holds a genotype once, so the
+archive does not fill with clones of its best member. A repeat outcome replaces
+its genotype's score, which follows a changing objective, or under a merge hook
+folds into it with a count, as a running mean does for a noisy one that stays
+put; `Reevaluate` hands out the member scored longest ago. Outcome count
+advances generations, and a schedule may set the mutation rate and strength as
+each ends. The proposal ring is bounded; the pending table is
 open-addressed, an evaluation occupying one of the eight slots from its id's
 home slot, so `PendingCapacity` bounds the evaluations in flight and one is
 evicted only when its whole window holds newer ones. The registry manages up to
@@ -105,16 +108,18 @@ The root `genetic` package uses `math/rand/v2` PCG streams and depends only on t
 standard library. `Seed` is explicit (`0` is valid), and deterministic queue
 refill is the default, so a seed plus one operation sequence yields one proposal
 stream without consulting wall time. `StreamingEngine.Checkpoint`/`Restore`
-carry the complete continuation point: PCG position, archive, queued proposals,
-pending evaluations, partial generation, IDs and counters. Archive-only
+carry the complete continuation point: PCG position, archive with each member's
+count and turn, queued proposals, pending evaluations, partial generation, the
+rate and strength in force, IDs and counters. Archive-only
 `Snapshot`/`Inject` remain available when learned candidates should persist but
 in-flight work need not.
 
-Operators include tournament/roulette selection, uniform/N-point crossover,
-bounded or Gaussian perturbation, capacity-reusing slice cloning, and a
-normalized gene-spread diversity metric. The optional fitness/tracking packages
-scalarize multi-metric lifetimes, and the optional persistence package provides
-an atomic file store, JSON by default, without coupling the core engine to disk.
+Operators include tournament/roulette selection, uniform, N-point or block
+crossover, bounded or Gaussian perturbation, capacity-reusing slice cloning, and
+a normalized gene-spread diversity metric. The optional fitness/tracking
+packages scalarize multi-metric lifetimes, and the optional persistence package
+provides an atomic file store, JSON by default, whose files carry a caller's
+tag for what their genes fit, without coupling the core engine to disk.
 No package of the module imports anything outside the standard library.
 
 ## 4. Game genetic adapter
