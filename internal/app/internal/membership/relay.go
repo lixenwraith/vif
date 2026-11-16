@@ -239,6 +239,10 @@ func (m *Membership) newcomerDoors(port *link.SocketPort) []net.Addr {
 // host's does (relayDoorHosts), read at each step since the term moves.
 func (m *Membership) relayAcceptor(admit func(net.Addr) error, door bool) func(net.Conn) (link.PeerID, error) {
 	local := func() link.PeerID { return link.PeerID(m.localParticipant()) }
+	// A router's door builds one for each connection, on that connection's goroutine
+	m.sessionMu.Lock()
+	name := m.cfg.SessionName
+	m.sessionMu.Unlock()
 	c := network.Coordinator{
 		Preview: func(a network.Admission) (network.SessionOffer, error) {
 			if m.relayDoorHosts() {
@@ -273,7 +277,7 @@ func (m *Membership) relayAcceptor(admit func(net.Addr) error, door bool) func(n
 			return m.relayReport(local(), id, r)
 		},
 		Prepared:    m.showJoinerPrepared,
-		Name:        m.cfg.SessionName,
+		Name:        name,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
 		Scenario:    m.scenarioBody,

@@ -485,9 +485,12 @@ Libraries · Branches.
   reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
   Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
   correction loop, between ticks.
-- A handshake's goroutine reads an offer's fields under `sessionMu` alone
-  (`offerLocked`), so what one names changes under `sessionMu`, the world lock held
-  or not, as `leaveSessionLocked` clears the session's name and ceiling.
+- The session half of a run's config (`m.cfg`, `m.wiring`: addresses, name, policy,
+  ceiling) changes on the run's driving goroutine alone, under the world lock and
+  `sessionMu` together, so a reader elsewhere holds either: a handshake reads an
+  offer's fields under `sessionMu` alone (`offerLocked`), a router's door builds its
+  acceptor on each connection's goroutine (`relayAcceptor`), and a redial copies the
+  whole config under the world lock (`JoinBase`), where `persistPlay` writes too.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
