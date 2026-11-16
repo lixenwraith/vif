@@ -86,8 +86,9 @@ shield system on for itself alone, so the ping bounds have a reach to show.
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions.
 - **Centring from the map's edge**: a text or line placed from the right or the
-  bottom edge (a negative origin, as the todo's spawn-from-the-edge item asks)
-  would spare the scenario its arithmetic.
+  bottom edge, or the centre (an `origin` on the request,
+  [todo](todo.md#rework-what-armadas-first-version-worked-around)), would spare
+  the scenario its arithmetic.
 - **The magnifier**: a cursor resting on a glyph shows it large some way off, which
   a lesson could do without; the splash system has no switch for it yet.
 - **Sound**: a chime on a lesson cleared, as recall cues.

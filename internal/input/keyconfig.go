@@ -170,8 +170,10 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 			}
 		}
 	}
-	if err := drop(doc, slices.Concat(gone, refused)); err != nil {
-		return nil, nil, err
+	for _, k := range slices.Concat(gone, refused) {
+		if _, err := doc.Delete(k); err != nil {
+			return nil, nil, err
+		}
 	}
 	for _, k := range spelt {
 		if _, err := shipped.Delete(k); err != nil {
@@ -212,31 +214,6 @@ func sectionNames() string {
 		names[i] = "[" + d.name + "]"
 	}
 	return strings.Join(names, ", ")
-}
-
-// drop removes keys from doc with the comments that are their own; those in a
-// section written as an inline table go as that table is written again without
-// them, once
-func drop(doc *toml.Document, keys []toml.Key) error {
-	inline := make(map[string]map[string]any)
-	for _, key := range keys {
-		if _, err := doc.Delete(key); err != nil {
-			table, ok := doc.Tree()[key[0]].(map[string]any)
-			if !ok || len(key) != 2 {
-				return err
-			}
-			if inline[key[0]] == nil {
-				inline[key[0]] = maps.Clone(table)
-			}
-			delete(inline[key[0]], key[1])
-		}
-	}
-	for _, name := range slices.Sorted(maps.Keys(inline)) {
-		if err := doc.Set(toml.Key{name}, inline[name]); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // binding names a keymap key as a player reads it: [section] for a table, [section]

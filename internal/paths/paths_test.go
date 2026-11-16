@@ -358,20 +358,40 @@ func TestSettingsUpgradeNotesNameEachChangeOnce(t *testing.T) {
 }
 
 // TestUpgradingSettingsEditsInlineTables: a key to drop or a value to reset inside a
-// table written inline goes as that table is written again without it, its other
-// values and the comment on its line kept.
+// table written inline goes from it and each key it lacks joins it, its other
+// values as written and the comment on its line kept.
 func TestUpgradingSettingsEditsInlineTables(t *testing.T) {
-	out, notes, err := UpgradeSettings([]byte("play = { mouse = false, effects = 1, camera_edge = 99 } # mine\n"))
+	out, notes, err := UpgradeSettings([]byte("play = { mouse = false, effects = 1, camera_edge = 99, sfx_volume = 5e-1 } # mine\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(out), "play = { mouse = false } # mine\n") || len(notes) != 3 ||
-		notes[0] != `dropped unknown key "play.effects"` || !strings.HasPrefix(notes[1], "reset to the default: play.camera_edge 99") {
+	line, _, _ := strings.Cut(string(out), "\n")
+	if !strings.HasPrefix(line, "play = { mouse = false, sfx_volume = 5e-1, ") || !strings.HasSuffix(line, " } # mine") || strings.Contains(line, "effects") ||
+		len(notes) != 3 || notes[0] != `dropped unknown key "play.effects"` || !strings.HasPrefix(notes[1], "reset to the default: play.camera_edge 99") {
 		t.Errorf("notes %q:\n%s", notes, out)
 	}
 	if s, err := ParseSettings(out); err != nil || s.Play.Mouse || s.Play.CameraEdge != DefaultPlay().CameraEdge {
 		t.Errorf("reads %+v, %v", s.Play, err)
 	}
+	shipped, _ := toml.ParseDocument(asset.DefaultSettings)
+	if doc, err := toml.ParseDocument(out); err != nil || len(doc.Tree()["play"].(map[string]any)) != len(shipped.Tree()["play"].(map[string]any)) {
+		t.Errorf("the inline table holds %v, %v, not every [play] key", doc.Tree()["play"], err)
+	}
+}
+
+// valueAt is the value tree holds at key
+func valueAt(tree map[string]any, key toml.Key) (any, bool) {
+	var v any = tree
+	for _, k := range key {
+		table, ok := v.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		if v, ok = table[k]; !ok {
+			return nil, false
+		}
+	}
+	return v, true
 }
 
 // FuzzUpgradingSettingsKeepsEachValueItTakes: every settings document that parses
@@ -507,7 +527,8 @@ func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 // TestSavePlayWritesTheChangedKeysAlone: a file not there yet starts as the
 // embedded one; in a file holding [play] the line of each key that changed is
 // replaced and a key it lacks goes after its last, every other line kept, comments
-// included; a file without the table has it appended. What was written reads back.
+// included; a file without the table has it appended, and one writing it inline
+// has the keys changed inside it. What was written reads back.
 func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	isolate(t)
 	t.Setenv(SystemRootsEnv, "")
@@ -560,6 +581,16 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(file); string(got) != "[audio]\nbuffer_ms = 30\n\n[play]\nhud = false\nmouse = false\nsfx_volume = 0.25\n" {
 		t.Fatalf("appended table:\n%s", got)
+	}
+
+	if err := os.WriteFile(file, []byte("play = { sfx = true, hud = true } # mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SavePlay(store, was, now); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); string(got) != "play = { sfx = true, hud = false, mouse = false, sfx_volume = 0.25 } # mine\n" {
+		t.Fatalf("a table written inline:\n%s", got)
 	}
 }
 
