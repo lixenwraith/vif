@@ -302,7 +302,7 @@ See [Rendering](rendering.md).
 
 The audio library, `lixenwraith/audio` ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)),
 owns synthesis, pre-rendered sound caches, mixing, voices, harmony, patterns, a
-three-slot sequencer and the shipped banks. It has no gameplay or APM concept.
+four-slot sequencer and the shipped banks. It has no gameplay or APM concept.
 `internal/system.MusicSystem` maps the game's five-second APM signal to tempo
 and arrangement intensity; `AudioSystem` translates effect and mute/pause
 events.
