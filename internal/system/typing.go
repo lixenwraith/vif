@@ -247,12 +247,11 @@ func (s *TypingSystem) emitTypingError(cursor core.Entity) {
 	}
 }
 
-// moveCursorRight requests the post-typing advance; CursorSystem applies and announces it.
-//
-// The advance leaves from the cell the typist is on, which for this instance's own
-// cursor is the D-18 prediction: a run typed faster than the playout lead advances
-// once per keystroke, where reading the shared store advanced it once in total and
-// scored every keystroke after the first against a glyph already consumed.
+// moveCursorRight requests the post-typing advance, which CursorSystem applies and
+// announces. It leaves from the cell the typist is on, the D-18 prediction for this
+// instance's own cursor: a run typed faster than the playout lead advances once a
+// keystroke, where reading the shared store advanced it once in total and scored each
+// later keystroke against a glyph already consumed.
 func (s *TypingSystem) moveCursorRight(cursor core.Entity) {
 	config := s.world.Resources.Config
 

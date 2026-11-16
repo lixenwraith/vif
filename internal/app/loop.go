@@ -418,12 +418,10 @@ func pasteKeys(text string, take func(terminal.Event) bool) bool {
 }
 
 // handleResize records the terminal change and dispatches it synchronously, so the
-// orchestrator (main-loop state) resizes against dimensions the handler wrote. The
-// push takes the lock like any input: a journaled record landing mid-tick would
-// settle inside that tick, where a reproduction cannot put it. A run whose terminal
-// is its geometry publishes it for its seats to follow. A solo game waiting for its
-// start begins over at the new size, as one opened at it, rather than cropped as a
-// game in play is; its hold outlasts the reset, which ends a pause.
+// orchestrator resizes against what the handler wrote. The push takes the lock as any
+// input: a journaled record landing mid-tick would settle where no reproduction can put
+// it. A geometry-owning run publishes the size for its seats. A solo game held at its
+// start begins over at the new size, uncropped; its hold outlasts that reset.
 func (a *App) handleResize(width, height int) {
 	a.world.RunSafe(func() {
 		a.ctx.PushLocalOrigin(event.EventScreenResize,
@@ -523,12 +521,10 @@ func (a *App) takeStart(ev terminal.Event, intent *input.Intent) bool {
 }
 
 // awaitJoinPress seats this joining run at its player's press, its world built and
-// checked and its session told it is ready. Its keys go down the pipe the loop's do,
-// so the operator's work over the wait as over a held game: the command line, the
-// menu, help, mute and quit, drawn on the status bar and over the void, and seat
-// nobody. A press after the host's ready period dials again (TakeSeat); a session
-// that started another game meanwhile is joined anew by the next run, which the
-// press already seats.
+// checked and its session told it is ready. Its keys go down the loop's pipe, so the
+// operator's (command line, menu, help, mute, quit) work over the wait as over a held
+// game and seat nobody. A press past the host's ready period dials again (TakeSeat);
+// one made after the session started another game seats the run that joins it anew.
 func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) {
 	a.showJoinAsk()
 	for {
@@ -646,12 +642,11 @@ func (a *App) pushMenu(snapshot []byte) {
 	a.menuHost.Menu(snapshot)
 }
 
-// renderContext reads everything a frame draws from, in one critical section: Config
-// is mutated under updateMutex by LevelSetup and reset handlers, so it has to be read
-// with the cursor and the clock. The clock read is the continuous one — tick-written
-// stamps are quantised and show as stepped animation at a slowed rate. Everything
-// taken here is a local copy; a render never writes a tick-owned resource. The menu's
-// snapshot is built here too, after its refresh, and pushed off the lock.
+// renderContext reads everything a frame draws from in one critical section: LevelSetup
+// and reset handlers mutate Config under updateMutex, so it is read with the cursor and
+// the continuous clock, tick-written stamps being quantised and stepping a slowed
+// animation. Each is a local copy: a render writes no tick-owned resource. The menu's
+// snapshot is built here, after its refresh, and pushed off the lock.
 func (a *App) renderContext() render.RenderContext {
 	var (
 		snapTime         engine.TimeResource

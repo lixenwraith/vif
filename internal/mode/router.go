@@ -1687,12 +1687,10 @@ func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event
 	return event.OriginSystem, false
 }
 
-// moveMouseCursor moves the cursor to the pointer's cell, reporting whether it may.
-// A map cell counts only where the viewport shows it, which is all a mouse reaches;
-// a terminal cell goes through ViewportToMap, which undoes the centring of a map
-// smaller than the viewport so the cell under the pointer is the one jumped to.
-// pointerCell is the shown map cell a pointer intent names: a terminal cell, or a map
-// cell from a bot or script
+// pointerCell is the shown map cell a pointer intent names. A map cell, a bot's or a
+// script's, counts only where the viewport shows it, which is all a mouse reaches; a
+// terminal cell goes through ViewportToMap, which undoes the centring of a map
+// smaller than the viewport so the cell under the pointer is the one named.
 func (r *Router) pointerCell(intent *input.Intent) (x, y int, ok bool) {
 	config := r.ctx.World.Resources.Config
 	if intent.MapCell {
@@ -1702,6 +1700,7 @@ func (r *Router) pointerCell(intent *input.Intent) (x, y int, ok bool) {
 	return config.ViewportToMap(intent.X-r.ctx.GameXOffset, intent.Y-r.ctx.GameYOffset)
 }
 
+// moveMouseCursor moves the cursor to the pointer's cell, reporting whether it may
 func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 	gameX, gameY, ok := r.pointerCell(intent)
 	if !ok {

@@ -129,12 +129,11 @@ type NetworkConnectPayload struct {
 	PeerID uint32 `toml:"peer_id"`
 }
 
-// ParticipantJoinedPayload names the roster slot a participant arriving mid-run
-// takes. Like a departure it is a crossing rather than a local reaction: every
-// instance has to add the cursor at the same tick or their shared entity creation
-// order diverges (D-11). Key is the participant key the cursor carries for its
-// participant's return; Record is what one coming back to its Wraith brings of the
-// game it left.
+// ParticipantJoinedPayload names the roster slot a participant arriving mid-run takes:
+// a crossing, as a departure is, since every instance must add the cursor at the same
+// tick or their shared entity creation order diverges (D-11). Key is the participant
+// key the cursor carries for its participant's return; Record is what one coming back
+// to its Wraith brings of the game it left.
 type ParticipantJoinedPayload struct {
 	Record      *CursorRecord `toml:"record"`
 	Key         string        `toml:"key,omitempty"`
@@ -617,12 +616,11 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
-// KeyCapturePayload names the keys to capture, empty to release them. Entity scopes
-// it to the instance driving that cursor, every instance when zero; Modes to the
-// play modes it holds in, every one when unset; Idle leaves a key to a count,
-// operator or prefix already pending, so a find or a register still takes it.
-// Releases asks a console keyboard for releases too, switching it raw while the
-// capture holds.
+// KeyCapturePayload names the keys to capture, empty to release them. Entity scopes it
+// to the instance driving that cursor, every instance when zero; Modes to the play
+// modes it holds in, every one when unset. Idle leaves a key to a count, operator or
+// prefix already pending, so a find or a register still takes it, and Releases asks a
+// console keyboard for releases too, switching it raw while the capture holds.
 type KeyCapturePayload struct {
 	Keys     string        `toml:"keys"`
 	Entity   core.Entity   `toml:"entity"`
