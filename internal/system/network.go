@@ -1595,9 +1595,10 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link
 // discarded action is not. bySequence reports a fence decided. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
 	switch a.frame.Event {
-	// The clock is in no capture: a rate it passed still applies, and a hold lands
-	// (landLateHold) unless it has ended.
-	case event.EventGameSpeed:
+	// No capture holds the clock, nor the reset that ends the run it was read in: a
+	// rate or a reset the floor passed still applies, and a hold lands (landLateHold)
+	// unless it has ended.
+	case event.EventGameSpeed, event.EventGameResetRequest:
 		return false, false
 	case event.EventGameHold:
 		return a.applyTick <= s.snapshotFloor && s.holdEndedLocked(a), false

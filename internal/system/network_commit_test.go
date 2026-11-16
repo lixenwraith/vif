@@ -979,10 +979,10 @@ func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
 	}
 }
 
-// TestAnInstallLeavesTheClockItPassesToApply: no capture carries the hold or the
-// rate, so a world installed at or past one still scheduled leaves it to apply. A
-// hold goes only once its host has produced past it, which is that hold's end.
-func TestAnInstallLeavesTheClockItPassesToApply(t *testing.T) {
+// TestAnInstallLeavesWhatNoCaptureHoldsToApply: no capture carries the hold, the rate
+// or the reset that ends its run, so a world installed at or past one still scheduled
+// leaves it to apply. A hold goes only once its host has produced past it, its end.
+func TestAnInstallLeavesWhatNoCaptureHoldsToApply(t *testing.T) {
 	t.Parallel()
 	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
 	epoch := func(produced uint64, frames ...event.ScheduledWireFrame) {
@@ -1002,15 +1002,17 @@ func TestAnInstallLeavesTheClockItPassesToApply(t *testing.T) {
 		}
 		return out
 	}
-	epoch(100, clock(event.EventGameHold, 1), clock(event.EventGameSpeed, 2), clock(event.EventSwarmSpawnRequest, 3))
+	epoch(100, clock(event.EventGameHold, 1), clock(event.EventGameSpeed, 2), clock(event.EventGameResetRequest, 3),
+		clock(event.EventSwarmSpawnRequest, 4))
 	guest.AdoptSnapshot(101, 1, nil)
-	if got, want := scheduled(), []event.EventType{event.EventGameHold, event.EventGameSpeed}; !slices.Equal(got, want) {
-		t.Fatalf("a world installed at the held tick leaves %v scheduled, want %v", got, want)
+	kept := []event.EventType{event.EventGameHold, event.EventGameSpeed, event.EventGameResetRequest}
+	if got := scheduled(); !slices.Equal(got, kept) {
+		t.Fatalf("a world installed at the held tick leaves %v scheduled, want %v", got, kept)
 	}
 	epoch(102)
 	guest.AdoptSnapshot(102, 1, nil)
-	if got, want := scheduled(), []event.EventType{event.EventGameSpeed}; !slices.Equal(got, want) {
-		t.Fatalf("a world installed past a hold its host ran on from leaves %v scheduled, want %v", got, want)
+	if got := scheduled(); !slices.Equal(got, kept[1:]) {
+		t.Fatalf("a world installed past a hold its host ran on from leaves %v scheduled, want %v", got, kept[1:])
 	}
 }
 
