@@ -203,7 +203,7 @@ func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
 	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: scriptSource{d}, driven: true, interval: parameter.GameUpdateInterval,
 		scale: engine.ScaleNormal}
-	for _, r := range " .,+-" {
+	for _, r := range "p.,+-" {
 		p.key(terminal.Event{Key: terminal.KeyRune, Rune: r})
 	}
 	if p.paused || p.step != 0 || p.scale != engine.ScaleNormal || !p.live {
@@ -216,6 +216,39 @@ func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
 	}
 	if p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'q'}) {
 		t.Fatal("q did not quit the viewer")
+	}
+}
+
+// A watched bot's pause key in a session asks as :pause does (Bots, Pause): its run
+// hosting, the hold lands, and the next press ends it.
+func TestAWatchedBotsPauseKeyHoldsTheSessionItHosts(t *testing.T) {
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AttachTransport(network.NewMesh().Node(1))
+	p := &player{a: a, src: botSource{d}, driven: true, interactive: true, interval: parameter.GameUpdateInterval,
+		scale: engine.ScaleNormal}
+	pause := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'p'}
+	p.key(pause)
+	for range parameter.NetworkApplyHorizonTicks {
+		p.advance(parameter.GameUpdateInterval)
+	}
+	if held := a.Position().Tick; !a.ctx.TimeCtl.Holds(engine.HoldPause) || p.paused {
+		t.Fatalf("the pause key held nothing: %q", a.ctx.GetStatusMessage())
+	} else if p.advance(parameter.GameUpdateInterval); a.Position().Tick != held {
+		t.Fatalf("a held bot stepped from tick %d to %d", held, a.Position().Tick)
+	}
+	p.key(pause)
+	if a.ctx.TimeCtl.Held() {
+		t.Fatalf("the second press left the hold: %q", a.ctx.GetStatusMessage())
 	}
 }
 
@@ -259,11 +292,11 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: journalSource{d, a.log, parameter.GameUpdateInterval}, interval: parameter.GameUpdateInterval,
 		scale: engine.ScaleNormal}
-	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
+	p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'p'})
 	if !p.paused || p.live {
 		t.Fatal("recorded network participant was treated as a live bot")
 	}
-	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
+	p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'p'})
 	p.advance(40 * parameter.GameUpdateInterval)
 	if !p.done || p.err != nil || a.Position().Tick != capture.End().Tick {
 		t.Fatalf("playback end: done=%v err=%v position=%v", p.done, p.err, a.Position())

@@ -667,10 +667,13 @@ func (p *player) key(ev terminal.Event) bool {
 		p.panY += parameter.ReplayPanStep
 	case '0':
 		p.panX, p.panY = 0, 0
-	case ' ', '.', ',', '+', '=', '-', '_':
-		// Pause, step and rate are instance-local. A participant cannot stop or slow
-		// only its own copy of a live session, so the viewer keeps pan and quit.
+	case 'p', '.', ',', '+', '=', '-', '_':
+		// Step and rate are instance-local, and a session stops only as a whole: a
+		// live bot's pause key asks as :pause does, and its host's holds everyone.
 		if p.live {
+			if ev.Rune == 'p' && p.interactive {
+				return p.route(&input.Intent{Type: input.IntentPause})
+			}
 			return true
 		}
 		p.control(ev.Rune)
@@ -684,7 +687,7 @@ func (p *player) key(ev terminal.Event) bool {
 // control applies one pause, step or rate key
 func (p *player) control(r rune) {
 	switch r {
-	case ' ':
+	case 'p':
 		if p.done && p.rw != nil && p.rw.build != nil {
 			p.restart()
 			break

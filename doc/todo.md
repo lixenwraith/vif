@@ -230,18 +230,6 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Let a watched holder pause with only its own bots
-
-- Priority: P3
-- Affected files: `internal/app/play.go`, `internal/app/internal/membership/seat.go`
-
-A watched bot with seats is in a session, so the terminal watching it (`-watch`,
-the bot's own run, not a spectator's) forces it unpaused and ignores pause keys. A
-person's run pauses with only its own bots; the pause key there could start the
-session hold `:pause` starts when the holder is its session's host, which already
-stops its seats at one tick, and its spectators' runs on the same one
-([Multiplayer §5.8](multi-player.md#58-watching-a-session)).
-
 ### Train a network bot live in `cave`
 
 - Priority: P2

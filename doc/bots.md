@@ -96,7 +96,7 @@ Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:bot add`, `:bot drop` and `:player` work there.
+`:n`, `:pause`, `:bot add`, `:bot drop` and `:player` work there.
 
 ## Telling cursors apart
 
@@ -108,13 +108,15 @@ identify cursors for this session only, and a dropped player's slot may be reuse
 
 ## Pause, speed and session lifetime
 
-- A host's `:pause` stops every participant at the same tick, bots included, until
-  its next `:pause`; a bot in a held session waits with it. A menu or the command
-  line pauses a host only while every other participant is its own bot; its bots
-  stand still with it, and anyone joining ends that pause. A guest or a watched
-  bot in a session cannot pause.
-- Speed changes are refused in a live session, one only your bots share included.
-  `-speed max` is for one solo watched or headless bot.
+- A session stops only by its host: its `:pause`, or `p`, stops every participant
+  and spectator at the same tick, bots included, until the next one. A watched bot
+  whose run hosts gives it from its own terminal, by `p` as by `:pause`; a guest's
+  is refused, a bot's run included, and a `-serve` host has nobody to give one.
+- A menu or the command line pauses a person's host only while every other
+  participant is its own bot; its bots stand still with it, and anyone joining ends
+  that pause. A watched bot in a session plays on under them.
+- A session runs at its host's `:speed`, which no guest changes. `-speed max` is
+  for one solo watched or headless bot.
 - Bots count as occupancy. A `-serve` session only its own bots occupy plays on
   until a termination signal, which sends them away at once; in the fleet, also
   until the session Job's one-hour deadline. A guest's bots count only while the
@@ -357,7 +359,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
 - [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)
