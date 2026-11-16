@@ -166,7 +166,10 @@ the maze again (Trim what a tick spends outside the position index).
 
 Armada is to become a vertical scroller that keeps its three ships, likely the
 first scenario built on a painted map ([Authoring](#authoring)). Its items follow
-the editor's foundation.
+the editor's foundation. Its ships already hold and fly back to a post, leave the
+map of their own accord (`Leave`, `AtEdge`), carry their mounts, and take their
+dives from the region (`Status`, `Var`, a signal), and its ranks are maps
+([FSM reference](fsm-reference.md#behavior-programs)).
 
 ### Redesign armada as a vertical scroller
 
@@ -214,23 +217,6 @@ To settle with the design:
 
 [Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
 follow the redesign.
-
-### Rework what armada's first version worked around
-
-- Priority: P2
-- Affected files: `internal/system/behavior.go`, `internal/behavior/program.go`,
-  `internal/fsm/std/action.go`, `args.go`, `internal/event/payload.go`,
-  `internal/system/mount.go`, `wad/scenario/base/armada/scenario.toml`
-- Guide: [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs),
-  [Arithmetic Actions](fsm-reference.md#arithmetic-actions)
-
-The first version plays on what the machine had, and where that was too little the
-scenario works around it. Each workaround is a gap any authored scenario meets,
-given here with the form that retires it; the redesign is written on them.
-
-- **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
-  strobe and the reset are five states armada copies as six other scenarios do,
-  the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).
 
 ## Bots
 
@@ -2352,6 +2338,29 @@ overlay that labels each instance of a species with its state and progress, as
 `:graph` draws a route graph. A data species' per-state rows read `States` and
 `Name` (`behavior.<program>.state.<State>`); nothing reads `Flags`: build the
 overlay, or delete that read until one is wanted.
+
+### Let a program's event name its own cell
+
+- Priority: P3
+- Affected files: `internal/system/behavior.go` (`EmitEvent`),
+  `internal/fsm/std/payload.go` (`emitOrigin`)
+
+A program's `EmitEvent` payload is fixed at load, and the scenario's `origin`
+is the map's alone, so a body cannot drop loot where it stands, raise an effect
+on its post or lay a map from itself. The smallest form: an `origin` on the verb
+that also takes what `to` does (`self`, `stored`, `post`), moving the payload's
+`x` and `y` as the scenario's does, the move shared by both.
+
+### Let a data species' machine arm its mount
+
+- Priority: P3
+- Affected files: `internal/system/behavior.go`, `internal/system/mount.go`
+
+A `[prototype.mount]` fires whenever a cursor is in range, a stunned or diving
+host's included, where a storm circle's fires only while its state is flagged
+`Armed` and never while held. The smallest form: an `Armed` flag in the
+vocabulary and a `trigger = "armed"` on the mount, written to `Mount.Armed` each
+step as the circles write theirs.
 
 ### Push a data species with the wind
 

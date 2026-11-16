@@ -13,11 +13,10 @@ import (
 )
 
 // PayloadNames are the names a payload's enum fields take, each type's from its
-// own table. A species field takes a scenario's behavior programs too, which hold
-// SpeciesDataFirst onward in sorted-name order, a materialize style field their
-// styles, SpawnTypeDataFirst onward alike, a loot kind field its kinds, LootCount
-// onward alike, a signal field the signals of the program named beside it, and a
-// map field its maps.
+// own table, and what a scenario declares: its behavior programs as species from
+// SpeciesDataFirst and as materialize styles from SpawnTypeDataFirst, its loot
+// kinds from LootCount, each in sorted-name order, its maps, and for a signal
+// field the signals of the program named beside it.
 func PayloadNames(d component.Declared) *dialect.Names {
 	if len(d.Programs) == 0 && len(d.Loot) == 0 && len(d.Maps) == 0 {
 		return codeNames()

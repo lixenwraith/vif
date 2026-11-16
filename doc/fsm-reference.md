@@ -1065,7 +1065,8 @@ target = "Roam"
   ([ECS §7](ecs-and-events.md#death-effects)).
 - The mount: each spawn asks the mount system for it on its own header
   ([Combat §3](combat.md#3-drivers)), so a program copied into another scenario
-  comes armed, and with `spread_ms` no two instances fire in step.
+  comes armed, and with `spread_ms` no two instances fire in step. An empty table
+  mounts nothing, which is how a macro's default leaves a body unarmed.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.

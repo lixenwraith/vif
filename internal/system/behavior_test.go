@@ -868,6 +868,12 @@ func TestASpawnMountsItsPrototypesWeapon(t *testing.T) {
 	if len(intervals) < 3 {
 		t.Fatalf("four hosts drew %d intervals, want each its own", len(intervals))
 	}
+	bare, plain, _ := newProgramWorld(t, armed("[prototype.mount]\n\n"), wardenX+4, wardenY)
+	plain.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 40, Y: 25}})
+	if n := countEvents(bare.World.Resources.Event.Queue.Consume(), event.EventMountRequest); n != 0 {
+		t.Fatalf("an empty mount table asked for %d mounts, want a bare body", n)
+	}
 
 	for table, want := range map[string]string{
 		"[prototype.mount]\nweapon = \"turret\"\nhost = 3\n\n":                           "host is the body",

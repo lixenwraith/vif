@@ -972,6 +972,15 @@ Libraries · Branches.
 - The behavior vocabulary is built before any program compiles, so a verb whose
   arg names what programs extend (a species, a materialize style) registers with
   `Named`, whose build gets the set's payload names; `Effect` decodes without them.
+- A payload field naming what a scenario declares, a map or a program's signal, is
+  an enum `event.PayloadNames` builds from `component.Declared`, its zero naming
+  none: both `EmitEvent`s, `:emit` and a script then refuse a wrong name at load
+  with no check of their own. `:emit` builds its `Declared` from `Resources`
+  (`parseEventPayload`), so what it should name has to be readable there.
+- A unit test stepping `BehaviorSystem.Update` by hand has no composite system and
+  no scheduler: an instance a step ended stands until the test delivers its
+  `EventCompositeDestroyRequest`, so further steps end it again, and `Chance`
+  repeats one roll unless the test advances `Game.State.IncrementGameTicks`.
 - An edge into a state with a probe can fail, so the load demands a `fallback` on
   each, a global edge included. Instances spawned on one tick time out together:
   a roll on a `Timeout` sends a salvo, a `Chance` on a `Tick` edge one at a time.

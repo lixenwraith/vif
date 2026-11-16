@@ -520,8 +520,9 @@ program over one macro of states.
 ### 6.1 Program shape
 
 A program uses the fsm dialect's keys with the machine's additions: `duration_ms`,
-`flags`, `probe`, `cues`, `suspend`, `[[global]]`, a candidate list as `target`,
-`fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]` table. The
+`flags`, `probe`, `cues`, `suspend`, `signals`, `[[global]]`, a candidate list as
+`target`, `fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]`
+table. The
 scarab's lock, as the `cave` scenario's `RaiderStates` macro expands it with the
 scarab's timings:
 

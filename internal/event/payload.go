@@ -522,13 +522,12 @@ type GunAimRequestPayload struct {
 // Zero interval, range and width take the weapon's hosted defaults; zero muzzle fires
 // from the host cell. A ray's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
 // Energy and Heat are what a hit costs a cursor, and Pulse shapes a pulse kind's
-// pulse, each zero field taking the kind's. SpreadMs is how far either side of its
-// interval each host's own is drawn, so hosts mounted alike fire apart.
+// pulse, each zero field taking the kind's.
 type MountRequestPayload struct {
 	Host       core.Entity          `toml:"host"`
 	Weapon     component.WeaponType `toml:"weapon"`
 	IntervalMs int                  `toml:"interval_ms"`
-	SpreadMs   int                  `toml:"spread_ms"`
+	SpreadMs   int                  `toml:"spread_ms"` // each host's interval is drawn this far either side
 	Range      int                  `toml:"range"`
 	Muzzle     float64              `toml:"muzzle"`
 	Lane       int                  `toml:"lane"`
