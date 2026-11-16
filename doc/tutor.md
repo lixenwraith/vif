@@ -19,28 +19,35 @@ lesson is laid out the same way, top to bottom:
   on, repeated as an alert when the player stalls.
 
 A lesson ends when its state's guard sees the result: the cursor at a cell
-(`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), the practice line's
-glyphs gone (`StatusIntCompare` on a glyph count, or the deletes typed), a mode
-entered (`EventModeChanged`), or a captured key pressed (`EventInputPressed`).
-The map is laid from `map_width` and `map_height` (`ConfigToVar`, then the
-arithmetic actions): a heading centred at `(map_width - 6 * len) / 2`, lessons
-re-laid when the state is entered again.
+(`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), an edit asked for
+(`EventDeleteRequest` by its range, `EventGlyphReplaceRequest` by its text,
+`EventGlyphPutRequest`), a glyph typed (`EventCharacterTyped` by its `char` and
+cell, or a count of `EventEnergyGlyphConsumed`), a mode entered
+(`EventModeChanged`), or a captured key pressed (`EventInputPressed`)
+([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map is laid
+from `map_width` and `map_height` (`ConfigToVar`, then the arithmetic actions): a
+heading centred at `(map_width - 6 * len) / 2`, lessons re-laid when the state is
+entered again.
 
-## 2. The first round
+## 2. What it holds
 
-`wad/scenario/base/tutor` runs eleven lessons and a free practice; `vif -s tutor`
-plays it, `vif -s tutor -check` validates it with its corpus. What it stands on:
+`wad/scenario/base/tutor` runs twenty-two lessons and a free practice; `vif -s
+tutor` plays it, `vif -s tutor -check` validates it with its corpus. In order:
+`h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x dd`, `dw D`, `i` and typing,
+`A I a`, `o O`, `c cc`, `r ~`, `.` with its Insert text, `y p P`, `u` and
+Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v` and its `d`, then what a game
+makes of the keys the tutor gave back to vi. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
   six by twelve pixels, drawn two pixel rows a cell with half blocks and a cell a
   pixel on a text console ([Rendering §7](rendering.md#7-layer-inventory)).
-- `EventSplashTextRequest` writes a heading or an answer at a cell;
-  `EventGlyphLineRequest` lays a typeable or scenery line, under the cursor too;
-  `EventGlyphClearRequest` removes the glyphs in a rectangle at once, which a
-  lesson's exit uses: dust-all would turn the text into dust that orbits the
-  cursor and hides the next lesson. The glyph system lays and clears while it is
-  disabled, so no corpus line lands on a lesson ([FSM
-  reference](fsm-reference.md#splash-text-and-glyph-lines)).
+- `EventSplashTextRequest` writes a heading at a cell; `EventGlyphLineRequest` lays
+  a typeable or scenery line, under the cursor too; `EventGlyphClearRequest`
+  removes the glyphs in a rectangle at once, which a lesson's exit uses: dust-all
+  would turn the text into dust that orbits the cursor and hides the next lesson.
+  The glyph system lays and clears while it is disabled, so no corpus line lands
+  on a lesson, and a clear ends the change history, so `u` takes back nothing of
+  the lesson before.
 - A scenario carries its corpus: the entry's `[content] files` names TOML corpus
   files, in its container under its digest, which the run types in place of its
   roots'. The tutor's is code in blocks of two to five lines.
@@ -49,27 +56,32 @@ plays it, `vif -s tutor -check` validates it with its corpus. What it stands on:
   between blocks; where no slot holds it, and in every scenario that leaves the
   key unset, line by line, spread as before.
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutor captures `s` and
-  `S`, and in its last lesson `a p o O u m y` as well, in Normal and Visual with
-  nothing pending, so `fa` and `qa` still take their letter and Insert types it.
-- The entry's `[keymap.normal]` binds `a` to `mode_append` and `p` to nothing for
-  the run, over the player's keymap
+  `S` in Normal and Visual with nothing pending, so `fs` and `qs` still take
+  their letter and Insert types it.
+- The entry's `[keymap.normal]` and `[keymap.normal_keys]` bind, over the player's
+  keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
+  `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
+  `redo_change`, and `m` to `mark_set`
   ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
-A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph,
-the heading and the answer, under a white flash; the parent's exit runs only when
-the last lesson leaves) and whose entry lays its text; `s` goes to the next and
-`S` to the one before, and a lesson in two steps (`$` then `^`, `x` then `dd`, `G`
-then `gg`) nests its second step as a child, which keeps the text laid. The map
-floor is 80 by 24: the heading at row 1, the notes at rows 8 to 11, the practice
-line or block at rows 14 to 16, an answer at 18, all from column 4. The later
-lessons practise on three lines, so a count, a line delete, `%` and a search
-have somewhere to go.
+A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph
+and the heading, under a white flash; the parent's exit runs only when the last
+lesson leaves) and whose entry lays its text; `s` goes to the next and `S` to the
+one before, and a lesson in steps nests each further step as a child, which keeps
+the text laid. `Stand` places the cursor a tick after the entry, behind the step
+right that typing a lesson's last glyph still owes. The map floor is 80 by 24: the
+heading at row 1, the notes at rows 8 to 11 and the practice lines at rows 14 to
+16, all from column 4. The Visual lesson practises on five rows and turns the
+shield system on for itself alone, so the ping bounds have a reach to show.
 
 ## 3. The next round
 
-- **More lessons**: `o O [ ]`, `gl` and the colour markers, `q` and `@` macros,
-  `d` with a motion and `D`, `v`, `N` and `M m` practised rather than told, and
-  the keys vif now plays as vim does: `c cc C`, `a A I`, `r`, `* #` and `.`.
+- **More lessons**: `[ ]`, `gl` and the colour markers, `q` and `@` macros, and
+  `N`, `M`, `C`, `X`, `P` and `s S` practised rather than told (`s` and `S` skip
+  and go back here).
+- **Normal at a lesson's start**: a lesson that ends on a typed glyph leaves the
+  next one in Insert, and its prompt can only say so; the scenario cannot ask for
+  a play mode ([todo](todo.md#let-a-scenario-ask-for-a-play-mode)).
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions.
@@ -78,17 +90,19 @@ have somewhere to go.
   would spare the scenario its arithmetic.
 - **The magnifier**: a cursor resting on a glyph shows it large some way off, which
   a lesson could do without; the splash system has no switch for it yet.
-- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as recall cues.
+- **Sound**: a chime on a lesson cleared, as recall cues.
 
 ## 4. Decisions taken
 
-- The cheap vim keys are in code: `c cc C`, `A I`, `r`, `* #` and `.`, with vim's
-  `a` as `mode_append`, which no default key binds. The tutor gives `a` and `p`
-  their vim reading through a scenario keymap over the player's, rather than a
-  capture answering `a` by asking for Insert (kept in the todo). Its last lesson
-  still captures `a` and the keys vif reads its own way, `p o O u m y`, and answers
-  each press; their second round, with Visual mode's part, is a todo item.
+- A vim key whose letter a game reads its own way has an action no default key
+  binds, and the tutor binds it through its keymap, over the player's, rather
+  than through a capture answering the key.
+- A put glyph is the glyph yanked, rune, colour and level, and scores as any.
+- Visual's selection is the ping bounds, and `d`, `y`, `r` and `~` stay in
+  Visual; vim's block insert has no counterpart, since Insert lays no text, so
+  `I` and `A` leave Visual for Insert as elsewhere.
 - The practice text is the scenario's own corpus, not the run's, and block
   placement is the tutor's choice: the main scenario and `td` spread lines as
   before.
-- The tutor's cursor has no shield, so Visual mode moves as Normal does.
+- The tutor's cursor has no shield outside the Visual lesson, so Visual there
+  moves and edits as Normal does.

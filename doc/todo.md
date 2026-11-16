@@ -389,11 +389,11 @@ what is modelled and whether players see it; nothing is persisted.
 
 `TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists, which
 leaves out `armada` and `tutor`. Listed, armada passes and the tutor fails: its
-lessons step on `EventDeleteRequest` and count `EventEnergyGlyphConsumed`, both
-local events, so in a session of its up to 16 players only the authority's
-player's keys would move them (D-20). What closes it: the tutor's lessons
-advance on what every instance sees, or the tutor seats one player, and both
-scenarios listed.
+lessons step on a player's edit requests, typed glyphs and mode changes and count
+`EventEnergyGlyphConsumed`, all local events, so in a session of its up to 16
+players only the authority's player's keys would move them (D-20). What closes it:
+the tutor's lessons advance on what every instance sees, or the tutor seats one
+player, and both scenarios listed.
 
 ### Build the map and scenario editor
 
@@ -439,69 +439,46 @@ In order: reference kinds, order and provenance; a read-only graph of a scenario
 regions, states and blocks; placing and editing blocks into editor-owned files; the
 map layer and point markers; root `[[expand]]` blocks and library copies.
 
-### Give the vim keys a second round, Visual mode among them
+### Give the vim keys what their second round left
 
 - Priority: P3
-- Affected files: `internal/input/machine.go`, `actionnames.go`, `keyconfig.go`,
-  `internal/mode/router.go`, `internal/system/typing.go`,
-  `internal/asset/input/keymap.toml`, `wad/scenario/base/tutor/scenario.toml`
+- Affected files: `internal/input/machine.go`, `actionnames.go`,
+  `internal/mode/operators.go`, `router.go`
 - Guide: [Input and modes §3](input-and-modes.md#3-normal-mode-grammar),
-  [§10](input-and-modes.md#10-keymap-override-files), [Tutor](tutor.md)
+  [§10](input-and-modes.md#10-keymap-override-files)
 
-The cheap keys are in: `c cc C`, `A I`, `r`, `* #` and `.`, with vim's `a` as
-`mode_append`, which no default key binds, and a scenario `[keymap]` through which
-the tutor binds it to `a` and unbinds `p`. A vim key whose letter vif reads its own
-way gets an action of its own, bound to no default key, for a keymap or the tutor to
-attach. What is left, with the logic each needs:
+The second round is in: a register for `y` and the puts, a change undo and redo,
+marks, `o O`, `s S X ~`, counted searches, `.` with its Insert text, and Visual's
+`d c y r ~ *` over the ping bounds. A vim key whose letter vif reads its own way
+has an action no default key binds, for a keymap or a scenario to attach. What is
+left:
 
-- **`y` and `p`.** A register of what a range covers, each glyph's rune, colour and
-  level at its offset from the range's start: `y` with a motion and `yy` fill it,
-  and so does every delete, as vim's unnamed register. `put_after` and `put_before`,
-  no default key's since `p` pauses, lay it from the cursor as player glyphs through
-  a request the glyph system owns, as `EventGlyphLineRequest` lays a line, passing
-  over a cell a glyph or wall holds. Whether a put glyph scores as a spawned one
-  does, or keeps its colour, is a game rule to choose first. Named registers (`"a`)
-  would share the macros' letters but not their store.
-- **`o` and `O`.** vim opens a row below or above and enters Insert, but vif's
-  Insert types over glyphs and lays none, and `o` `O` are its column finds:
-  `mode_open_below` and `mode_open_above`, unbound, would move to the row below or
-  above at its first glyph and enter Insert, the tutor laying the line to type.
-- **`u` and Ctrl-R.** vif's `u` undoes a cursor move. A change undo keeps, per
-  player and bounded, what each change took: the glyphs a delete killed, with their
-  cell, rune, colour and level, and a replace's old runes, restored through a
-  request the glyph system owns; an entry drops when its cells change under it
-  (decay, a species, a peer's delete). `undo_change` and `redo_change` stay unbound.
-  Ctrl-R is a special key, which a scenario keymap refuses; admitting
-  `[keymap.normal_keys]` for actions that are no system one would give the tutor it.
-- **`m` and marks.** `m` is the middle column, so `mark_set` and a letter, unbound;
-  `` ` `` and `'` and a letter, free in the default keymap, jump to the mark's cell
-  and to its row's first glyph: char-wait actions and a 26-cell table the router
-  keeps beside cursor undo.
-- **`.` and the Insert text.** `.` repeats a change but not what Insert typed after
-  `c`, `C`, `A` or `I`. The parser sees those keys, so it would keep the characters
-  from a change that enters Insert to the Escape that leaves it as part of the
-  change, and `.` emit them after it; they type over whatever glyphs stand there
-  then, so a repeat scores as typing does.
-- **The other cheap ones.** `s` and `S` (vim's `cl` and `cc`; free in the default
-  keymap, and the tutor's captured skip and back keep working over them), `X`
-  (delete left of the cursor), `~` (a replace that flips case), counts for `n`, `N`,
-  `*` and `#`, and `cw` acting as `ce` as vim's does: on a row's last word `dw`
-  deletes nothing in vif, so `cw` there enters no Insert.
-- **Visual mode.** vif's Visual is Normal's grammar over the shield's ping bounds,
-  with no selection: the new keys act there as Normal's, their motions scanning the
-  bounds' rows as Visual's do, `r`, `*` and `#` reading the cursor's row alone, and
-  `c`, `C`, `A`, `I` and `a` leave it for Insert. vim's act on the selection, which
-  the bounds would be in vif: `c` and `d` on every glyph they cover, `r` retyping
-  each, `y` filling the register with them, `*` searching the selected run. `I` and
-  `A` as vim's block insert type on every row of the bounds at once, which needs an
-  Insert rule for one key typing several glyphs.
+- **Named registers.** `"a` before a yank, a delete or a put would name one of 26
+  registers beside the unnamed one, sharing the macros' letters but not their
+  store.
+- **A count on undo and redo.** Each press takes back one change: a second undo
+  in the same press reads cells the first has not restored yet, so a count needs
+  the settle between them that `.` gets for its Insert text (`Machine.Next`).
+- **Visual's other keys.** `x`, `X`, `D`, `C`, `s`, `S` and the puts act there as
+  in Normal; vim's take the selection, `p` replacing it.
+- **Stacked glyphs.** The register and an undo keep the glyph drawn in a cell,
+  where a delete also takes the layers under it
+  ([below](#decide-what-a-delete-removes-under-a-drift-stack)).
 
-The tutor's other way stays open: a capture answering `a` with a mode change the
-scenario requests. It suits a key that does what no action does, but needs the
-router to take a play-mode change from the FSM, which the journal and a session then
-carry; the keymap won for `a` and `p`, whose meanings an action names. Rewriting
-intents in the router for one scenario stays out: a second mechanism beside the key
-table and the capture.
+### Let a scenario ask for a play mode
+
+- Priority: P3
+- Affected files: `internal/mode/router.go`, `internal/system/meta.go`,
+  `wad/scenario/base/tutor/scenario.toml`
+- Guide: [Tutor §3](tutor.md#3-the-next-round)
+
+A tutor lesson that ends on a typed glyph leaves the next one in Insert, where its
+first key types, and the lesson can only say so on the status bar. A live run's
+mode changes through the router alone, which keeps the input machine in step, so a
+request from the FSM needs the router to take it, and the journal and a session to
+carry it. The same request would let a capture answer a key with a mode change,
+for a key that does what no action does. Rewriting intents in the router for one
+scenario stays out: a second mechanism beside the key table and the capture.
 
 ### Grow the tutor
 
@@ -509,12 +486,13 @@ table and the capture.
 - Affected files: `wad/scenario/base/tutor/`
 - Guide: [Tutor §3](tutor.md#3-the-next-round)
 
-The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` then
-`dd`, `i` and typing, `%`, `/ n`, `gg G`, then the taken keys and free practice;
-`s` skips and `S` goes back. The next adds the column motions, `[ ]`, the markers
-and macros, `d` with a motion, `v`, the keys vif now plays as vim does (`c cc C`,
-`a A I`, `r`, `* #`, `.`), lays a lesson again on a resize, centres from the map's
-edge, and cues a lesson cleared.
+The tutor runs twenty-two lessons: the motions, counts, `x dd`, `d` with a
+motion, `i` and typing, `A I a`, `o O`, `c cc`, `r ~`, `.`, `y p P`, `u` and
+Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
+keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
+round adds `[ ]`, the markers and macros, practises the keys it only tells
+(`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
+map's edge, and cues a lesson cleared.
 
 ## Browser sessions
 

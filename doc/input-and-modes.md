@@ -17,12 +17,13 @@ flowchart LR
 
 The terminal service polls in its own goroutine and writes to a bounded event
 channel. The application input loop passes events to `input.Machine`, which
-maintains only parsing context and the last change `.` repeats (§3). The router
-owns engine-aware interaction state: the last search and find target, command
-history, cursor undo, macros, mouse and button holds, and the fire anchors held
-buttons share with auto-fire. It drives only the roster's selected local cursor;
-`CursorSystem` applies and announces placement so live input, replay, bots, and
-remote producers share the same entity-owned path.
+maintains only parsing context and the last change `.` repeats, with the text
+Insert typed after it (§3). The router owns engine-aware interaction state: the
+last search and find target, command history, cursor undo, the register, the change
+history and the marks (§3), macros, mouse and button holds, and the fire anchors
+held buttons share with auto-fire. It drives only the roster's selected local
+cursor; `CursorSystem` applies and announces placement so live input, replay, bots,
+and remote producers share the same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
 operator, special action, target mode, scroll direction, count, optional character,
@@ -98,7 +99,7 @@ A captured key is the scenario's one input hook, whatever produces it:
 ```mermaid
 stateDiagram-v2
     [*] --> Normal
-    Normal --> Insert: i, I, A, c, C
+    Normal --> Insert: i, I, A, c, C, s, S
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
@@ -115,7 +116,7 @@ stateDiagram-v2
 | Mode | Purpose | Simulation behavior |
 |---|---|---|
 | Normal | Motions, counts, operators, find/search repeat, actions, macros. | Continues unless the game was separately paused. |
-| Visual | Normal's grammar over the shield's ping bounds: while the shield is active, `h j k l` step by the bounds radius and word, find and line motions scan every row the bounds cover. | Continues. |
+| Visual | Normal's grammar over the shield's ping bounds: while the shield is active, `h j k l` step by the bounds radius and word, find and line motions scan every row the bounds cover, and `d`, `c`, `y`, `r`, `~` and `*` take the bounds as their range (§3). | Continues. |
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
 | Search | Type a pattern; Enter jumps to the next match, wrapping round the map; `n`/`N` repeat later. | Continues. |
 | Command | Edit and execute a colon command with history. | Pauses a single-instance game unless `[play] pause_command` is off; a live network session continues. |
@@ -171,11 +172,12 @@ key sequences:
 
 ```text
 [count] motion
-[count] d|c [count] motion
-[count] d d | c c
+[count] d|c|y [count] motion
+[count] d d | c c | y y
 [count] f|F|t|T character
-[count] d|c f|F|t|T character
+[count] d|c|y f|F|t|T character
 [count] r character
+' letter, alone or after d, c or y
 [count] .
 g command
 g direction color
@@ -198,17 +200,54 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 
 - **Change.** `c` is `d`'s grammar, then Insert, entered only on a range the
   motion found, so `cfz` with no `z` on the row stays in Normal; `C` is `D`, then
-  Insert. An operator's own key doubled acts on the row: `dd`, `cc`.
-- **Append and insert.** `A` moves to the row's last glyph and `I` to its first, as `^`
-  does, and each enters Insert, staying put on a row with none. vim's `a`, a step
-  right then Insert, is `mode_append`, which no default key binds (§10).
+  Insert. An operator's own key doubled acts on the row: `dd`, `cc`, `yy`. `cw`
+  ends at its word's last glyph, as vim's does, where `dw` takes the gap after it
+  and on a row's last word nothing. `s` is `cl` and `S` is `cc`.
+- **Append, insert and open.** `A` moves to the row's last glyph and `I` to its
+  first, as `^` does, and each enters Insert, staying put on a row with none. vim's
+  `a`, a step right then Insert, is `mode_append`, and its `o` and `O` are
+  `mode_open_below` and `mode_open_above`: the row below or above at its first
+  glyph, the cursor's column on a row with none, then Insert, which types what
+  stands there, since vif opens no line. No default key binds the three (§10).
 - **Replace.** `r` and a printable character other than space retype the glyph
-  under the cursor, a count that many rightward, and the cursor stays; it reaches
-  what `x` would and scores nothing ([Gameplay §3](gameplay.md#3-typing-rules)).
+  under the cursor, a count that many rightward, and the cursor stays; `~` flips
+  the case of as many and moves past them. Both reach what `x` would and score
+  nothing ([Gameplay §3](gameplay.md#3-typing-rules)).
+- **Delete.** `x` takes the glyph under the cursor and `X` the one left of it,
+  stepping there, a count that many.
+- **Yank and put.** `y` with a motion and `yy` fill the register with the glyphs
+  the range covers, each with its rune, colour and level, and delete nothing;
+  every delete fills it too, as vim's unnamed register. `put_after` lays a span
+  from the cell right of the cursor and `put_before` one ending at the cell left
+  of it, yanked rows on the rows below and above, a count that many copies on. A
+  cell a glyph, a wall or rock holds is passed over, and the cursor goes to the
+  far end of what was put, where a repeat continues. `p` pauses, so no default key
+  binds either.
+- **Change undo.** `undo_change` takes back the last delete, retype or put and
+  `redo_change` makes it again, one a press, from the last `changeHistorySize`
+  (64); a new change ends what could be redone. A change whose cells changed
+  under it (typing, decay, a species) is dropped for the one before, and a glyph
+  clear or a new game ends the history. `u` undoes a cursor move, so no default
+  key binds either.
+- **Marks.** `mark_set` and a letter `a` to `z` name the cursor's cell. `'` and
+  the letter (`mark_jump_line`) return to its row at the row's first glyph, whole
+  rows to an operator (`d'a`); `mark_jump` returns to the cell, which an operator
+  stops short of. `m` is the middle column and the backtick the console, so no
+  default key binds `mark_set` or `mark_jump`.
 - **Repeat.** `.` completes the parser's last change again: `d` or `c` with its
-  motion or find, `dd`, `cc`, `x`, `D`, `C`, or `r` with its character. A count
-  typed before `.` replaces the change's own, for that repeat and the later ones.
-  The text typed in Insert after a `c` is no part of it.
+  motion or find, `dd`, `cc`, `x`, `X`, `D`, `C`, `s`, `S`, `r` with its
+  character, `~` or a put. A count typed before `.` replaces the change's own, for
+  that repeat and the later ones. What Insert typed after a change that entered
+  it, or after `i`, `I`, `A`, `a`, `o` or `O`, up to `insertTextMax` (64)
+  characters, is part of the change: `.` types it again over whatever glyphs stand
+  there, so a repeat scores as typing does, then returns to Normal
+  (`Machine.Next`). A yank is no change.
+- **Visual.** The ping bounds are the selection, the cursor's cell with no shield
+  up: `d`, `c` and `y` take every glyph the bounds cover at once, with no motion,
+  as one block range, `r` and `~` retype each, and `*` and `#` search for the run
+  of glyphs adjoining the cursor's on its row within the bounds, matched anywhere.
+  `d`, `y`, `r` and `~` stay in Visual; `c`, `C`, `s`, `S`, `A`, `I` and `a` leave
+  it for Insert. Every other key acts as in Normal.
 
 ## 4. Default bindings
 
@@ -247,6 +286,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 | `%` | Matching bracket. |
 | `f F t T` + character | Find/till forward or backward. |
 | `; ,` | Repeat the last find in the same or opposite direction. |
+| `'` + letter | The row of the mark the letter names, at its first glyph. |
 
 ### Prefixes, editing, and modes
 
@@ -255,15 +295,22 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   glyph that way; the direction key again (`gll`) jumps to the nearest of any colour.
 - **Editing.**
   - `d` + motion, `dd`: delete the motion's range, the current row; `c` + motion,
-    `cc`: the same, then Insert.
-  - `x`, `D`, `C`: delete the current glyph, through the row's end, through the
-    row's end then Insert.
-  - `r` + character: retype the current glyph as it. `.`: repeat the last change.
+    `cc`: the same, then Insert; `y` + motion, `yy`: yank it.
+  - `x`, `X`, `D`, `C`: delete the current glyph, the one left of it, through the
+    row's end, through the row's end then Insert; `s`, `S`: the current glyph, the
+    row, then Insert.
+  - `r` + character: retype the current glyph as it; `~`: flip its case. `.`:
+    repeat the last change.
   - `u`: cursor-motion undo.
 - **Modes.** `i`, `I`, `A` Insert at the cursor, at the row's first glyph and at
   its last; `v` Visual, `/` Search, `:` Command.
 - **Search.** `n`, `N` the last search again, the way it went and the other way;
   `*`, `#` search forward and back for the word under the cursor.
+- **No default key.** vim keys whose letter vif reads its own way have an action
+  a keymap or a scenario binds (§10): `mode_append` (`a`), `mode_open_below` and
+  `mode_open_above` (`o`, `O`), `put_after` and `put_before` (`p`, `P`),
+  `undo_change` and `redo_change` (`u`, Ctrl-R), `mark_set` (`m`) and `mark_jump`
+  (the backtick).
 
 The implementation is Vim-inspired, not an attempt to reproduce every Vim
 edge case. Commands operate on the two-dimensional game grid and delete glyph
@@ -284,10 +331,12 @@ commands their last target and direction, for `n`, `N`, `;` and `,`. `*` and `#`
 search forward and back for the word under the cursor, or else the first after it
 on its row, whole, so no word glyph adjoins a match; on a row with no word from the
 cursor on, the first run of punctuation from it, matched anywhere. Each becomes the
-search `n` and `N` repeat. Neither `n`, `N`, `*` nor `#` takes a count yet.
+search `n` and `N` repeat. A count on `n`, `N`, `*` or `#` goes that many matches
+on, round the map as often as it takes.
 
-The router retains up to 256 cursor undo positions and 256 command-history
-entries. These are session interaction structures, not persisted editor files.
+The router retains up to 256 cursor undo positions, 256 command-history entries,
+64 changes, one register and 26 marks. These are session interaction structures,
+not persisted editor files; a new game ends the change history alone.
 
 ## 6. Macros
 
@@ -611,13 +660,15 @@ m = "motion_origin"
 ```
 
 A scenario binds play keys for its run in its entry's `[keymap.normal]`,
-`[keymap.operator]` and `[keymap.prefix_g]`, merged over the default and the
-player's keymap, after the player's: an installed keymap is a full copy of the
-defaults, which would otherwise undo it (`input.ScenarioKeyTable`,
-`resource.Scenario.Keys`). It binds no system action and no other section, so the
-special keys, which quit, leave a mode and open the menu and help, stay the
-player's; a scenario breaking either rule fails to load. The tutor binds `a` to
-`mode_append` and `p` to `"none"`, having no gun to cycle and no clock to stop.
+`[keymap.operator]`, `[keymap.prefix_g]` and `[keymap.normal_keys]`, merged over
+the default and the player's keymap, after the player's: an installed keymap is a
+full copy of the defaults, which would otherwise undo it
+(`input.ScenarioKeyTable`, `resource.Scenario.Keys`). It binds no system action,
+no special key the default keymap gives one and no other section, so the keys
+that quit, leave a mode and open the menu and help stay the player's; a scenario
+breaking a rule fails to load. The tutor, with no gun to cycle, no clock to stop
+and no fight to find a column in, binds the keys of §4's last item to vim's
+actions, but for the backtick.
 
 ## 11. Change checklist
 
