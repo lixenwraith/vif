@@ -2334,13 +2334,15 @@ session.
 
 The audio library's own items are in [its todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md),
 and those of stapes (formerly soundlab), the rip's among them, in [its
-own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md).
+own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
+is vif's part of a change; a part the library or stapes makes is an item there,
+linked from it.
 
 ### Bring stapes to Android (stapes mobile)
 
 - Priority: P1
-- Affected files: `lixenwraith/stapes` (`cmd/stapes`), `android/game`,
-  `android/app`, `doc/multi-platform.md`
+- Affected files: `android/game`, `android/app`, `android/go.mod`,
+  `doc/multi-platform.md`
 
 Stapes runs on Android in-process, as the game does, over the same engine and
 the user root's `audio/` documents, so a pattern written on the phone plays in the
@@ -2349,20 +2351,17 @@ documents, verbs and TUI, `NewSession` takes the host's speakers as its sink
 (`Options.Sink`), and `RunTUI` runs over any `terminal.Terminal`, the host posting
 `EventClosed` to end it; the Android host already turns taps, drags, keys and the
 system keyboard's text into `terminal.Event`s and flushes cell frames through
-`glyph.Frames`. What remains:
+`glyph.Frames`. The TUI's side, taps and a layout a phone held portrait fits, is
+[stapes' todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#play-the-screen-by-touch).
+What remains here:
 
 1. A `terminal.Terminal` over the Android view (its grid as `Size`, its event
    queue as `PollEvent`, `glyph.Frames.Flush`) runs it, started by a second bound
    entry beside `game.Start` that hands `NewSession` the `Speaker` as its sink;
    the start screen offers stapes beside the game.
-2. Touch: the TUI reads keys alone. A tap hit-tests what was drawn: a key of the
-   keyboard plays its note, a step toggles, a tab or a pane takes the keys, a mixer
-   row mutes its slot, a browser row selects. A strip of buttons stands for the
-   keys a phone lacks (record, play, delete, save, new, edit, tempo, Tab, Esc), and
-   the system keyboard serves `:` and the prompts, as in the game.
-3. Size: the views need 60×16 cells. A phone held landscape fits at the default
-   cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
-4. Files: the verbs name paths, which reach stapes' root and the user root's
+2. The system keyboard serves `:` and the prompts, as in the game, and the pinch
+   zoom gives the views their 60×16 cells on a phone held portrait.
+3. Files: the verbs name paths, which reach stapes' root and the user root's
    `audio/` in the app's storage; a `.mid` or a `.wav` another app holds comes
    through the system's picker, copied into the user root's `audio/` first, and
    a written file goes back out through it ([Multi-platform
@@ -2371,35 +2370,16 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
 ### Rip live on Android
 
 - Priority: P2
-- Affected files: `android/game`, `android/app`, `internal/app`,
-  `lixenwraith/audio` (`RipStream`)
+- Affected files: `android/game`, `android/app`
+- Prerequisite: [Bring stapes to Android](#bring-stapes-to-android-stapes-mobile)
 
 The library rips a recording as it plays (`RipStream`: blocks of samples in,
 each bar frozen once two follow it from the sixth bar on, `Final` the whole rip
-once the recording ends). What remains is the host: the microphone's blocks
-into the stream, the frozen bars shown a few seconds behind the music and
-revised until frozen, a `Final` the player asks for, and the song saved into the
-user root's `audio/` as a rip of a file is ([Rip design
-§7](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md#7-plan)).
-The smallest close: the stream over a file first, in stapes, measured against
-the offline rip of the same recording.
-
-The live view is to show the rip being made: a scrollable stack with the
-recording's spectrum on top, each stage under it (the planes the models are
-given, the pitches, strikes and drums they hear, the instrument, what the
-decoder keeps and drops, the open bars) and the note lines at the bottom. The
-stream gives the bottom lane alone (`Bars`): its frames sit in a private window,
-the open bars' notes go after each read and the decoder's choices are never
-kept, so the view waits on three reads from the library: the frames heard since
-a frame, the open bars as last decoded, and a read's candidates with what became
-of each. Measured through the trained models on twelve recordings (stapes'
-audit of 9 November): the stream finds 95 in a hundred of the offline rip's
-notes, but reads its bar grid on three recordings only, since tempo, meter and
-phase hold from the first six bars (five read at another tempo, a rubato piano
-take keeps 5 to 38 in a hundred of the offline downbeats, the pop song's intro
-sits half a bar off); it costs three times the offline rip, each model run
-three times over where its half-second steps overlap, and its worst block took
-a second of CPU, so it runs off the audio thread.
+once the recording ends), and stapes is to show the rip being made and save the
+song ([its todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#show-a-live-rip-as-it-is-made)).
+What remains here is the microphone: read in the app (`AudioRecord`, behind the
+`RECORD_AUDIO` permission asked at first use) and handed to stapes' session as
+its source, as the `Speaker` is its sink.
 
 ### Render a conductor timeline offline
 
@@ -2428,69 +2408,25 @@ scheduled while the bar before plays.
 ### Add binaural beats to the music
 
 - Priority: P3
-- Affected files: `lixenwraith/audio` (`mixer.go`, `engine.go`, `command.go`,
-  `doc/audio.md` §2 and §6); vif `internal/parameter/music.go`,
-  `internal/system/music.go`, `internal/paths/settings.go`,
-  `internal/mode/config_menu.go`, `internal/mode/router.go`, `internal/event`,
-  `doc/audio.md`, `doc/config-menu.md`, `doc/vif.6`
-- Guide: [Audio §2](audio.md#2-adaptive-game-conductor), library
-  [§2](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#2-stream-contract)
+- Affected files: `internal/parameter/music.go`, `internal/system/music.go`,
+  `internal/paths/settings.go`, `internal/mode/config_menu.go`,
+  `internal/mode/router.go`, `internal/event`, `go.mod`, `doc/audio.md`,
+  `doc/config-menu.md`, `doc/vif.6`
+- Guide: [Audio §2](audio.md#2-adaptive-game-conductor)
+- Prerequisite: the library's bed ([its
+  todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md#give-the-mix-a-binaural-bed))
 
 The music's tempo already follows the player's pace (100 to 200 BPM off the
 five-second APM). A binaural beat would add a sensation of that pace: a tone
 of `f − Δ/2` in the left ear and `f + Δ/2` in the right, heard as a beat at
-`Δ`. No shipped pattern, test song or rip carries one. Off by default, as a
-setting with three modes:
+`Δ`, which the library is to mix under the music (`SetBinaural`), its todo
+weighing where. Off by default, as a setting with three modes:
 
 - **off**: today's output, byte for byte (L equal to R);
 - **fixed**: a preset's `Δ`, whatever the pace; presets in one table in
   `internal/parameter` (a row each), first rows `relax` 10 Hz (alpha), `focus`
   15 Hz (low beta), `hyper` 25 Hz (high beta);
 - **dynamic**: `Δ` follows the APM, by an algorithm still to choose (below).
-
-What the docs and the code say today: the stream is stereo end to end, every
-backend opens two channels (`pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, the
-WAV sink), Android's `AudioTrack` is `CHANNEL_OUT_STEREO` and the browser's
-worklet writes `left` and `right` apart. The mix is not: the music and sfx buses
-are one `float64` channel, and `floatToBytes` writes each sample to both
-(library §2, "the mix is mono, written to both"). So nothing of the hosts
-changes; the mixer's last stage does.
-
-Where the beat is made, each a choice with what it costs:
-
-1. **A stereo bed in the mixer** (recommended). A generator the mixer owns, two
-   phase-continuous sines summed into L and R after the music bus, before the
-   pause ramp and the limiter, which becomes stereo-linked (its envelope the
-   larger of the two channels). `floatToBytes` takes two inputs; nothing before
-   the mix changes: voices, tracks, the sequencer, its crossfades, reveals,
-   fills and draws stay mono and unaware. Cost: two oscillators a sample, a new
-   command (`SetBinaural{Carrier, Beat, Level}` on `AudioEngine`, slewed inside
-   the mixer so a change never clicks), the music tap written in stereo so `-mw`
-   records what plays. Smallest change, one owner, every host at once; the bed
-   is a tone under the music rather than part of it.
-2. **One more track.** A pattern track whose voice holds a note per ear. It reads
-   as one track in the bank, but a track renders into the mono music bus, so it
-   still needs option 1's stereo output and a stereo voice besides; and in a slot
-   it is redrawn on phrase downbeats, faded by crossfades, rebuilt by reveals one
-   track a bar, replaced by slot 2's fill and moved with the group every four
-   phrases, each a gap in the beat, while `Δ` changes on the step grid, not
-   continuously. Kept out of the draw it becomes a fifth slot, which is option 1
-   inside the sequencer. Its one gain: a group could author its own carrier in
-   `music.toml`.
-3. **A stereo music bus.** The sequencer renders L and R through every slot,
-   player and voice, and the beat is an ear offset of a constant `Δ` Hz on a
-   tonal voice (the pad), so every partial pair beats at `Δ` inside the music.
-   Most musical, and it brings panning per track with it, which the engine lacks
-   (`AudioEngine.PlayBuffer` takes no pan); but it
-   touches the whole pipeline, doubles the voices' render cost, the offline
-   renders (`RenderMusic`, `RenderTimeline`) and stapes' with it, and the beat
-   sounds only while the pad plays.
-
-The carrier `f`: binaural beats are heard best on carriers of a few hundred
-hertz and fade above about 1 kHz, and `Δ` blurs into roughness above about
-30 Hz. Tuning `f` to the harmony's root (default E2, 82 Hz, so E3 or E4 at 165
-or 330 Hz) keeps the bed consonant with the key; it then glides on a key change.
-A fixed `f` is simpler and may clash.
 
 Dynamic `Δ`, candidates, each glided at most about 0.5 Hz a second:
 
@@ -2506,31 +2442,22 @@ Dynamic `Δ`, candidates, each glided at most about 0.5 Hz a second:
 - **counter**: `Δ` falls as the APM rises, steadying a busy player against the
   rising tempo; the two may read as at odds.
 
-Decided with the implementation: whether the bed rides the music bit of the
-audio mask and the `music` system's gate (simplest, no new bit) or a toggle of
-its own; whether it ducks under sfx (amplitude only, `Δ` holds either way); a
-level of its own or a fixed one under the music.
-
-vif's side, wherever the beat is made: `[play] binaural = "off" | "fixed" |
-"dynamic"` and `binaural_preset`, validated in `Play.check` as `auto_fire` is and
-saved by the one settings rule; a Sound row in the configuration menu
-(`kindChoice`) and the native menu's, the preset row live under fixed; a
-command and an event pushed `OriginDevice` as the mute is, so the journal
-carries none and a replay plays the viewer's setting, dynamic following the
-replayed APM; `MusicSystem` sends the target each update and `music.binaural`
-shows the mode and `Δ` on the music card. The beat needs headphones: through
-speakers the ears share both tones and it becomes a quieter monaural beat, and a
-phone's single speaker loses it; the row's description says so, the same on
-every host. The evidence that a beat entrains anything is mixed: the manual
-describes it as a sound, not an effect.
-
-Tests, one per rule: off renders L equal to R; on, each channel's frequency
-(Goertzel) is `f ∓ Δ/2` and a change of `Δ` keeps the phase continuous; the
-linked limiter holds both channels under its ceiling; the dynamic mapping in
-`parameter`'s music test. The audio half bumps the library's minor version,
-which vif then requires; stapes could audition the bed with a verb, an item of
-its own todo. New terms (binaural beat, bed, carrier) go in both term indexes
-when they land.
+What it takes: `[play] binaural = "off" | "fixed" | "dynamic"` and
+`binaural_preset`, validated in `Play.check` as `auto_fire` is and saved by the
+one settings rule; a Sound row in the configuration menu (`kindChoice`) and the
+native menu's, the preset row live under fixed; a command and an event pushed
+`OriginDevice` as the mute is, so the journal carries none and a replay plays
+the viewer's setting, dynamic following the replayed APM; `MusicSystem` sends
+the target each update and `music.binaural` shows the mode and `Δ` on the music
+card. Decided with it: whether the bed rides the music bit of the audio mask and
+the `music` system's gate (simplest, no new bit) or a toggle of its own, and a
+level of its own or a fixed one under the music. The beat needs headphones:
+through speakers the ears share both tones and it becomes a quieter monaural
+beat, and a phone's single speaker loses it; the row's description says so, the
+same on every host. The evidence that a beat entrains anything is mixed: the
+manual describes it as a sound, not an effect. The dynamic mapping is tested in
+`parameter`'s music test. New terms (binaural beat, bed, carrier) go in both term
+indexes when they land.
 
 ## Engine
 
