@@ -77,7 +77,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/ bot/"},
 			{names: []string{"s", "config-scenario"}, arg: "<name|path>", hint: "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
-			{names: []string{"k", "config-keymap"}, arg: "<path>", hint: "Keymap TOML"},
+			{names: []string{"k", "config-keymap"}, arg: "<name|path>", hint: "Keymap TOML, or the name of one in input/ or built in, as vim"},
 			{names: []string{"config-music"}, arg: "<path>", hint: "Music pattern override TOML"},
 			{names: []string{"config-sounds"}, arg: "<path>", hint: "Sound definition override TOML"},
 		},
@@ -383,6 +383,13 @@ Scenarios, each a directory holding scenario.toml, in groups to any depth:
 base/ holds the shipped ones, downloads/ the scenarios sessions' hosts sent
 when [session] save_downloads saves them, and a player files their own as they
 like.
+.TP
+.I input/<name>.toml
+Keymaps, each read over the built-in bindings: keymap.toml unless \-k or [paths]
+keymap names another, by its name or a path. The vim keymap, which gives back to
+vim the keys vif reads its own way, is compiled in and resolves last. A keymap
+saying fill = false at its top gains none of the built-in bindings when a run
+brings it up to date.
 .TP
 .I bot/<name>.toml
 Bot graphs that \-bot and :bot add name; a path also works. The default

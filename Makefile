@@ -41,6 +41,7 @@ RELEASE_README_AWK = BEGIN { keep = 1 }; \
 # than the packer's uid. GNU tar and bsdtar name that differently.
 TAR_ROOT_OWNER != tar --version 2>/dev/null | grep -q GNU && echo '--owner=0 --group=0 --numeric-owner' || echo '--uid 0 --gid 0'
 KEYMAP_SRC := internal/asset/input/keymap.toml
+VIM_KEYMAP_SRC := internal/asset/input/vim.toml
 SETTINGS_SRC := internal/asset/vif.toml
 BOT_DIR := internal/asset/bot
 DESTDIR ?=
@@ -108,8 +109,8 @@ help:
 	@echo "           wad as $(SYSCONFDIR)/vif; build first, as in make release install. A user who"
 	@echo "           cannot write /usr/local/bin gets ~/.local and the user root"
 	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
-	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
-	@echo "           (both: a keymap or vif.toml already there is brought up to date, its lines kept;"
+	@echo "  install-config Install the wad, keymaps, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
+	@echo "           (both: a keymap.toml or vif.toml already there is brought up to date, its lines kept;"
 	@echo "           CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
@@ -267,7 +268,7 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 		elif ! command -v $(GO) >/dev/null 2>&1; then echo "keep    $$2, not brought up to date: no $(GO) on PATH"; \
 		else $(GO) run ./tool/vif-settings "$$2" || echo "keep    $$2, not brought up to date"; fi; }
 # The wad mirrors the installed layout, so a copy is the install: shipped files are
-# replaced, a player's kept, and the keymap and vif.toml already there brought up
+# replaced, a player's kept, and the keymap.toml and vif.toml already there brought up
 # to this build's (tool/vif-settings). CLEAN=1 first removes the shipped
 # categories, those two files and of scenario/ base/ and the copies an older
 # install left beside it. A variable, as make -n runs a sub-make.
@@ -282,6 +283,7 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
 	settings $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	put 0644 $(VIM_KEYMAP_SRC) "$$root/input/vim.toml"; \
 	settings $(SETTINGS_SRC) "$$root/vif.toml"; \
 	[ -d "$$root/audio" ] || install -d -m 0755 "$$root/audio"; \
 	[ -d "$$root/scenario/downloads" ] || install -d -m 0755 "$$root/scenario/downloads"

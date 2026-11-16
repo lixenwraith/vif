@@ -14,8 +14,8 @@ skip host discovery and use embedded assets.
 
 `wad/` mirrors the installed tree exactly, so installing it is a copy and
 `vif -config-dir wad` plays the repository checkout without installing
-anything. The embedded keymap, bot graphs and `vif.toml` have no `wad/` copy: they
-are installed from `internal/asset/input/keymap.toml`, `internal/asset/bot/` and
+anything. The embedded keymaps, bot graphs and `vif.toml` have no `wad/` copy: they
+are installed from `internal/asset/input/`, `internal/asset/bot/` and
 `internal/asset/vif.toml`, so the file the binary falls back to and the file a user
 edits are one source.
 
@@ -23,7 +23,7 @@ edits are one source.
 wad/                            internal/asset/
 ├── scenario/                    ├── scenario/  fallback scenario
 │   └── base/   the shipped      ├── content/   fallback corpus
-│               scenarios        ├── input/     default keymap
+│               scenarios        ├── input/     built-in and vim keymaps
 ├── content/    typing corpus    ├── bot/       shipped bot graphs
 └── image/      .aimg assets     ├── font/      cell font atlas
                                  ├── vif.toml   default settings
@@ -55,7 +55,7 @@ vif/
 │   ├── downloads/  what sessions' hosts sent, when the player saves it
 │   ├── main/    optional default override
 │   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
-├── input/       keymap.toml
+├── input/       keymap.toml, and keymaps -k names: vim.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
 ├── image/       .aimg wall assets
@@ -112,7 +112,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Resource | Path in each root | Final fallback |
 |---|---|---|
 | Scenario | `scenario/**/main/scenario.toml`, as `-s main` finds it | embedded scenario |
-| Keymap | `input/keymap.toml` | embedded keymap |
+| Keymap | `input/keymap.toml`, or `input/<name>.toml` for a name `-k` gives | the built-in keymap alone, or the embedded keymap of that name over it |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
 | Content | `content/` | embedded tutorial corpus |
@@ -170,9 +170,9 @@ follows it (`camera_edge`). It is found like any resource, from `-config-dir` do
 system roots; the first file wins whole, a key it omits keeps the embedded
 default, and the `vif.toml` inside its own `root` is not read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the
-file (a scenario name, or a path below `scenario/` such as `base/td`, stays a
-name the roots resolve, as `-s` takes it; `./` makes it a path), `~/` is the home
-directory. Music and sound overrides stay out of it, because a run that creates no
+file (a scenario name, or a path below `scenario/` such as `base/td`, and a keymap
+name such as `vim` stay names the roots resolve, as `-s` and `-k` take them; `./`
+makes one a path), `~/` is the home directory. Music and sound overrides stay out of it, because a run that creates no
 audio refuses them and a default must not break `-serve`.
 
 Every run, on every host, reads `vif.toml` as this build brings it up to date
@@ -234,11 +234,11 @@ make install DESTDIR=/pkg PREFIX=/usr                # distribution package, roo
 make uninstall                                       # what install put under PREFIX
 ```
 
-Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
-every shipped file and keeps files a player added. The keymap and `vif.toml` are
-the player's settings: one already there is brought up to this build's as a run
-brings it and written as §3 writes (`tool/vif-settings`), and the install names
-the changes. Without Go on `PATH` it keeps the file as it is, which a run reads
+Both copy `wad/`, the bot graphs, the keymaps and `vif.toml`. A reinstall replaces
+every shipped file, `input/vim.toml` among them, and keeps files a player added.
+`input/keymap.toml` and `vif.toml` are the player's settings: one already there is
+brought up to this build's as a run brings it and written as §3 writes
+(`tool/vif-settings`), and the install names the changes. Without Go on `PATH` it keeps the file as it is, which a run reads
 brought up to date and writes back only when it is the player's own (§3); one that
 does not parse it keeps for the player to fix, as a run refuses it too, and a
 special file or one no one may write it leaves as a run does. `CLEAN=1` first

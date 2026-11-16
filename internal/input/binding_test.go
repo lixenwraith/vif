@@ -3,6 +3,7 @@ package input
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"reflect"
 	"slices"
@@ -169,6 +170,40 @@ func TestUpgradingAKeymapEditsInlineSections(t *testing.T) {
 	}
 }
 
+// TestAKeymapSayingFillFalseGainsNoBinding: a keymap saying fill = false loses what
+// this build cannot read and gains no embedded binding, so it stays its player's
+// own; fill = true, or none, fills it. The embedded vim keymap says false, reads
+// over the built-in table and is up to date as it stands.
+func TestAKeymapSayingFillFalseGainsNoBinding(t *testing.T) {
+	mine := "# mine\nfill = false\n\n[normal]\nh = \"undo\" # mine\nq = \"bogus\"\n\n[later]\nx = 1\n"
+	out, notes, err := UpgradeKeymap([]byte(mine))
+	if want := "# mine\nfill = false\n\n[normal]\nh = \"undo\" # mine\n"; err != nil || string(out) != want || len(notes) != 2 {
+		t.Errorf("notes %q, %v:\n%s", notes, err, out)
+	}
+	for _, said := range []string{"fill = true\n", "", "fill = 0\n"} {
+		out, notes, err := UpgradeKeymap([]byte(said + "[normal]\nh = \"undo\"\n"))
+		if err != nil || !strings.HasSuffix(notes[len(notes)-1], " bindings") || !reflect.DeepEqual(boundIn(t, out)["overlay"], boundIn(t, asset.DefaultKeymap)["overlay"]) {
+			t.Errorf("%q: notes %q, %v", said, notes, err)
+		}
+	}
+	vim, err := fs.ReadFile(asset.Keymaps, "vim.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, notes, err := UpgradeKeymap(vim); err != nil || len(notes) > 0 || string(out) != string(vim) {
+		t.Errorf("the vim keymap is not up to date, %q, %v:\n%s", notes, err, out)
+	}
+	over, err := LoadKeyConfig(vim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kt := MergeKeyTable(DefaultKeyTable(), over)
+	appendMode, _ := ActionEntry("mode_append")
+	if _, joins := kt.NormalRunes['J']; joins || kt.NormalRunes['a'] != appendMode || kt.NormalRunes['w'] != DefaultKeyTable().NormalRunes['w'] {
+		t.Errorf("over the built-in table the vim keymap binds a %+v, J %+v", kt.NormalRunes['a'], kt.NormalRunes['J'])
+	}
+}
+
 // TestAKeySpeltTwoWaysBindsAsTheSpellingSortingLast: a section binding one key under
 // two spellings binds it as the one that sorts last binds it, before an upgrade and
 // after, which keeps both lines.
@@ -237,6 +272,7 @@ func FuzzUpgradingAKeymapBindsAsBefore(f *testing.F) {
 	f.Add("normal = { h = \"undo\", zz = \"x\", q = \"bogus\" }\n[normal_keys]\nEscape = \"none\"\nescape = \"quit\"\n")
 	f.Add("normal = { a = \"bogus\", h = \"undo\", k" + strings.Repeat(".k", 999) + " = \"x\" }\n")
 	f.Add("[normal]\nSPACE = \"fire_main\"\nspace = \"bogus\"\nZ = \"none\"\n")
+	f.Add("fill = false\n[normal]\nh = \"undo\"\nq = \"bogus\"\n[later]\nx = 1\n")
 	f.Fuzz(func(t *testing.T, doc string) {
 		out, notes, err := UpgradeKeymap([]byte(doc))
 		if _, parse := toml.ParseDocument([]byte(doc)); parse != nil || errors.Is(err, errNotKeymap) {

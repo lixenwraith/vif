@@ -47,18 +47,21 @@ func Check(o Options, w io.Writer) error {
 }
 
 func checkKeymap(o Options, w io.Writer) error {
-	path, own, err := keymap(o)
+	path, data, own, err := keymap(o)
 	if err != nil {
 		return err
 	}
-	if path == "" {
+	switch {
+	case path != "":
+		if data, err = os.ReadFile(path); err != nil {
+			return fmt.Errorf("keymap %s: %w", path, err)
+		}
+	case data == nil:
 		_ = input.DefaultKeyTable() // parse and validate the embedded document
 		fmt.Fprintln(w, "keymap ok: embedded default")
 		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("keymap %s: %w", path, err)
+	default:
+		path = "embedded " + o.Keymap
 	}
 	_, notes, err := input.UpgradeKeymap(data)
 	switch {

@@ -597,7 +597,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 	}{
 		{"s", "config-scenario", "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory", &f.Scenario},
 		{"f", "config-content", "Content directory, or a single content file", &f.Content},
-		{"k", "config-keymap", "Keymap TOML", &f.Keymap},
+		{"k", "config-keymap", "Keymap TOML, or the name of one in input/ or built in, as vim", &f.Keymap},
 	} {
 		fs.StringVar(alias.into, alias.short, "", alias.hint)
 		fs.StringVar(alias.into, alias.long, "", alias.hint)

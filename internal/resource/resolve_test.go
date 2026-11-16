@@ -2,12 +2,14 @@ package resource
 
 import (
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/paths"
 )
 
@@ -94,7 +96,7 @@ func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
 		if os.Remove(user); c.user {
 			writeKeymap(t, user, doc)
 		}
-		path, own, err := keymap(c.o)
+		path, _, own, err := keymap(c.o)
 		if err != nil || own != c.own {
 			t.Fatalf("%+v: %s is the player's own %v, %v", c.o, path, own, err)
 		}
@@ -117,6 +119,43 @@ func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(named); string(got) != settings {
 		t.Errorf("a file that is no keymap was written:\n%s", got)
+	}
+}
+
+// TestAKeymapIsNamedByItsFileOrItsName: -k and vif.toml take a file, or a name found
+// as input/<name>.toml in a root before the embedded keymap of that name, which a
+// run never writes and a directory so named where vif runs does not hide; a name
+// nothing holds and a path naming no file are refused.
+func TestAKeymapIsNamedByItsFileOrItsName(t *testing.T) {
+	dir, home := t.TempDir(), t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, home)
+	}
+	t.Setenv(paths.SystemRootsEnv, "")
+	t.Chdir(home)
+	writeKeymap(t, filepath.Join(home, "vim", "notes"), "")
+	writeKeymap(t, filepath.Join(dir, paths.SettingsFile), "[paths]\nkeymap = \"vim\"\n")
+	s, _, _, err := paths.LoadSettings(dir)
+	o := Options{Dir: dir}
+	if o.ApplySettings(s, true); err != nil || o.Keymap != "vim" {
+		t.Fatalf("vif.toml's keymap = \"vim\" names %q, %v", o.Keymap, err)
+	}
+	shipped, _ := fs.ReadFile(asset.Keymaps, "vim.toml")
+	if data, from, err := Keymap(o); err != nil || len(shipped) == 0 || string(data) != string(shipped) || from != "vim" || UpgradeKeymap(o) != "" {
+		t.Fatalf("the embedded vim keymap: %q from %q, %v", data, from, err)
+	}
+	if err := checkKeymap(o, io.Discard); err != nil {
+		t.Errorf("-check of the embedded vim keymap: %v", err)
+	}
+	mine := filepath.Join(dir, paths.InputDirName, "vim.toml")
+	writeKeymap(t, mine, "[normal]\nh = \"undo\"\n")
+	if data, from, err := Keymap(o); err != nil || string(data) != "[normal]\nh = \"undo\"\n" || from != mine {
+		t.Errorf("a root's vim keymap: %q from %q, %v", data, from, err)
+	}
+	for _, name := range []string{"nosuch", "nosuch.toml", filepath.Join(dir, "nosuch")} {
+		if data, _, err := Keymap(Options{Dir: dir, Keymap: name}); err == nil {
+			t.Errorf("%s: read %q", name, data)
+		}
 	}
 }
 
@@ -218,7 +257,7 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if got, err := ScenarioPath(o); err != nil || got != scenario {
 		t.Fatalf("scenario = %q, %v; want %q", got, err, scenario)
 	}
-	if got, err := Keymap(o); err != nil || got != keymap {
+	if _, got, err := Keymap(o); err != nil || got != keymap {
 		t.Fatalf("keymap = %q, %v; want %q", got, err, keymap)
 	}
 	if got, err := Corpus(o, Scenario{}); err != nil || got.Dir != content {
@@ -300,10 +339,10 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	file := filepath.Join(base, "file")
 	writeFixture(t, file)
 
-	if _, err := Keymap(Options{Keymap: base}); err == nil {
+	if _, _, err := Keymap(Options{Keymap: base}); err == nil {
 		t.Fatal("directory accepted as an explicit config file")
 	}
-	if _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
+	if _, _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
 		t.Fatal("missing explicit config file accepted")
 	}
 	for _, tc := range []struct {

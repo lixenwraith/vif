@@ -312,7 +312,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 - **Search.** `n`, `N` the last search again, the way it went and the other way;
   `*`, `#` search forward and back for the word under the cursor.
 - **No default key.** vim keys whose letter vif reads its own way have an action
-  a keymap or a scenario binds (§10): `mode_append` (`a`), `mode_open_below` and
+  a keymap or a scenario binds, as the vim keymap does (§10): `mode_append` (`a`), `mode_open_below` and
   `mode_open_above` (`o`, `O`), `put_after` and `put_before` (`p`, `P`),
   `undo_change` and `redo_change` (`u`, Ctrl-R), `mark_set` (`m`) and `mark_jump`
   (the backtick).
@@ -599,31 +599,35 @@ refuses a disable that a system declares required, naming the dependents.
 
 ## 10. Keymap override files
 
-Resolution order is:
+One keymap is read over the built-in table, the embedded
+`internal/asset/input/keymap.toml`, which stands alone when there is none. It is
+the first of:
 
-1. path passed with `-k` (`-config-keymap`), or `vif.toml`'s `[paths] keymap`;
+1. what `-k` (`-config-keymap`) or `vif.toml`'s `[paths] keymap` names: a file, or
+   a keymap by name, one word with no extension, found as `input/<name>.toml` in
+   the roots of 2 and 3 and then embedded (`vim`, below);
 2. `input/keymap.toml` under `-config-dir`;
 3. the same under the user root, the checkout `wad/` beside a `bin/` binary, then
-   each system root;
-4. the embedded `internal/asset/input/keymap.toml` document.
+   each system root.
 
-`make install-config` installs the embedded document, or brings one already there
-up to date. The retired action name `append` is an alias of `toggle_auto_fire`;
-vim's append is `mode_append`, which no default key binds, `a` cycling auto-fire.
+`make install-config` installs the built-in table as `input/keymap.toml`, or brings
+one already there up to date, and the embedded keymaps beside it. The retired
+action name `append` is an alias of `toggle_auto_fire`; vim's append is
+`mode_append`, which no default key binds, `a` cycling auto-fire.
 See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
-A file is merged over the embedded table, and a run fills the player's own with
-each embedded binding it lacks (below), so every binding in it is then the
-player's. Each key names one action, and an action can have any number of keys:
-the embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and `config_menu` both
-`ctrl_g` and `f10`. TOML refuses a key named twice in a section; one key in two
-spellings (`space` and `SPACE`) binds as the spelling that sorts last. Naming a key
-adds it to an action; moving an action also sets its old key to `"none"`. Help
-reads its key column from the merged table, so it shows a player's own bindings:
-every key of an action where an entry documents that action alone, the first key
-of each where it documents several (`h/j/k/l`). The accepted TOML sections, a rune
-section's keys one rune, `space`, `backslash` or `zero`, a special one's a terminal
-key name (`ctrl_g`, `f10`, `page_up`...):
+A file is merged over the built-in table, and a run fills the player's own with
+each built-in binding it lacks unless it says `fill = false` (below), so every
+binding in a filled one is then the player's. Each key names one action, and an
+action can have any number of keys: the built-in table gives `quit` both `ctrl_q`
+and `ctrl_c`, and `config_menu` both `ctrl_g` and `f10`. TOML refuses a key named
+twice in a section; one key in two spellings (`space` and `SPACE`) binds as the
+spelling that sorts last. Naming a key adds it to an action; moving an action also
+sets its old key to `"none"`. Help reads its key column from the merged table, so
+it shows a player's own bindings: every key of an action where an entry documents
+that action alone, the first key of each where it documents several (`h/j/k/l`).
+The accepted TOML sections, a rune section's keys one rune, `space`, `backslash` or
+`zero`, a special one's a terminal key name (`ctrl_g`, `f10`, `page_up`...):
 
 - Rune: `[normal]`, Normal and Visual; `[operator]`, the motions after `d`, `c` and `y`;
   `[prefix_g]`, the key after `g`; `[overlay]`, an overlay's.
@@ -635,26 +639,34 @@ Values are canonical action names from `internal/input/actionnames.go`, except
 `press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
 default. A run reads the file as this build brings it up to date
 (`input.UpgradeKeymap`), as it does `vif.toml`
-([Filesystem §3](filesystem-layout.md#3-resolution-policy)): a section it does not
-read, a key it cannot name and a binding it refuses go, each with its own comments,
-so the embedded binding stands unless another spelling of the key binds it; each
-embedded binding of a key the file binds in no spelling then comes with its
-comments. Every other binding stays, unbindings included. A section written inline
-(`normal = { h = "undo" }`) is edited where it stands, as a `vif.toml` table
-written inline is: what goes is taken from it and each binding it lacks joins
-it. A file setting something yet
-none of the sections above is no keymap: a run refuses it, as one that does not
-parse, and nothing writes it; an empty one, or one of comments alone, binds nothing
-of its own and is brought up to date as any other. Starting, vif writes the
-player's own file back so, once, and names the changes, counting the added
-bindings past five. The player's own is the file `-k` names, or the one in the
-`-config-dir` root or the user root; a `[paths] keymap` or `root` counts as `-k` or
-`-config-dir` only from the player's own `vif.toml`, and a file in the checkout's
-`wad/` or a system root, however named, or a special file such as
+([Filesystem §3](filesystem-layout.md#3-resolution-policy)):
+
+- **What goes.** A section it does not read, a key it cannot name and a binding it
+  refuses, each with its own comments, so the built-in binding stands unless
+  another spelling of the key binds it. Every other binding stays, unbindings
+  included.
+- **What comes.** Each built-in binding of a key the file binds in no spelling,
+  with its comments. A file saying `fill = false` at its top, above its first
+  section, gains none: it stays its player's own bindings alone, the built-in
+  binding of each key it leaves out standing as it would written out.
+- **Inline.** A section written inline (`normal = { h = "undo" }`) is edited where
+  it stands, as a `vif.toml` table written inline is: what goes is taken from it
+  and each binding it gains joins it.
+- **No keymap.** A file setting something yet neither `fill` nor a section above
+  is refused by a run, as one that does not parse is, and nothing writes it; an
+  empty one, or one of comments alone, binds nothing of its own and is filled.
+
+Starting, vif writes the player's own file back so, once, and names the changes,
+counting the added bindings past five. The player's own is the file `-k` names, or
+the one in the `-config-dir` root or the user root; a `[paths] keymap` or `root`
+counts as `-k` or `-config-dir` only from the player's own `vif.toml`, and a file
+in the checkout's `wad/` or a system root, however named, or a special file such as
 `-k /dev/null`, is never the player's. Any other is read up to date and left as it
-is, and `-check` names the changes and writes nothing.
+is, an embedded one among them, and `-check` names the changes and writes nothing.
 
 ```toml
+fill = false
+
 [normal]
 space = "fire_main"
 v = "none"
@@ -668,16 +680,38 @@ f2 = "help"
 m = "motion_origin"
 ```
 
+`-k vim`, or `keymap = "vim"` under `[paths]`, reads the embedded vim keymap
+(`internal/asset/input/vim.toml`), which every build holds: each key vif reads its
+own way goes back to vim wherever vif has vim's action for it, so any game plays
+on the keys the tutorial taught. It names only what differs from the built-in
+table and says `fill = false`:
+
+- **Normal.** `a`, `o`, `O`, `p`, `P`, `u`, `m` and the backtick take the actions
+  of §4's last item. `H` and `L` are the map's top and bottom rows, as `M` is its
+  middle; `J` and `K`, by which vim joins lines and looks a word up, are unbound.
+- **Control keys.** `Ctrl-R` redoes a change, `Ctrl-D` and `Ctrl-U` move half a
+  page, `Ctrl-O` undoes a cursor move and `Ctrl-Z` pauses.
+- **After an operator or `g`.** `H`, `L` and the backtick are those motions, `J`
+  and `K` none, and `gm` is the middle column.
+- **The game's.** What only a game does keeps its key: Enter, Space and Backspace
+  fire, Tab and Shift-Tab jump to the nugget and the gold, `[` and `]` find a glyph
+  in the column and `gh`, `gj`, `gk`, `gl` show the glyphs to jump to. Auto-fire
+  and the console, their keys taken, are `:auto` and `:console`.
+
+A keymap `-k` names is read in place of a root's `input/keymap.toml`, never over
+it, so a player's own changes to the vim keymap go in a copy under another name.
+
 A scenario binds play keys for its run in its entry's `[keymap.normal]`,
 `[keymap.operator]`, `[keymap.prefix_g]` and `[keymap.normal_keys]`, merged over
 the default and the player's keymap, after the player's: an installed keymap is a
 full copy of the defaults, which would otherwise undo it
-(`input.ScenarioKeyTable`, `resource.Scenario.Keys`). It binds no system action,
-no special key the default keymap gives one and no other section, so the keys
-that quit, leave a mode and open the menu and help stay the player's; a scenario
-breaking a rule fails to load. The tutorial, with no gun to cycle, no clock to stop
-and no fight to find a column in, binds the keys of §4's last item to vim's
-actions, but for the backtick.
+(`input.ScenarioKeyTable`, `resource.Scenario.Keys`). It is read as written:
+nothing fills it or writes it back. It binds no system action, no special key the
+default keymap gives one and no other section, so the keys that quit, leave a mode
+and open the menu and help stay the player's; a scenario breaking a rule fails to
+load. The tutorial, with no gun to cycle, no clock to stop and no fight to find a
+column in, binds the keys of §4's last item to vim's actions, but for the
+backtick, each as the vim keymap binds it.
 
 ## 11. Change checklist
 
