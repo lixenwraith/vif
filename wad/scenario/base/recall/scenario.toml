@@ -291,11 +291,7 @@ on_enter = [{ macro = "Say", message = "Out of time: game over at level {}" }]
 [states.PlayerBoot]
 parent = "Root"
 on_enter = [
-    { action = "ConfigToVar", payload = { field = "map_width", name = "cursor_x" } },
-    { action = "DivideVar", payload = { name = "cursor_x", delta = 2 } },
-    { action = "ConfigToVar", payload = { field = "map_height", name = "cursor_y" } },
-    { action = "DecrementVar", payload = { name = "cursor_y", delta = 3 } },
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 100, energy = 1 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "bottom", payload = { y = -2, heat = 100, energy = 1 } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },

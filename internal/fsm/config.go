@@ -66,6 +66,7 @@ type ActionConfig struct {
 	Payload      any               `toml:"payload,omitempty"`       // For EmitEvent: Event Payload (map[string]any from parser)
 	PayloadVars  map[string]string `toml:"payload_vars,omitempty"`  // Field name -> variable name for runtime injection
 	Pick         *PickConfig       `toml:"pick,omitempty"`          // For EmitEvent: a payload field's value picked from a list
+	Origin       any               `toml:"origin,omitempty"`        // For EmitEvent: the point of the map the payload's cell counts from
 	Region       string            `toml:"region,omitempty"`        // For region control actions
 	InitialState string            `toml:"initial_state,omitempty"` // For SpawnRegion
 	Guard        string            `toml:"guard,omitempty"`         // Conditional execution guard

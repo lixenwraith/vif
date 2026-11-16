@@ -422,6 +422,10 @@ const (
 	EventBehaviorSpawnRequest
 	// EventBehaviorCancelRequest (BehaviorCancelRequestPayload) [shared] removes one program's composites and entrances in flight, or every program's when it names none
 	EventBehaviorCancelRequest
+	// EventBehaviorSignalRequest (BehaviorSignalRequestPayload) [shared] raises a signal on a count of a program's instances that an edge out of their state takes it on
+	EventBehaviorSignalRequest
+	// EventMapLayRequest (MapLayRequestPayload) [shared] lays one of the scenario's maps with its top left at a cell
+	EventMapLayRequest
 
 	// --- Environment ---
 

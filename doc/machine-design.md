@@ -230,8 +230,9 @@ A host is the species system that steps a graph. Its contract:
   advanced by movement ticks). Lifetimes and one-shot deadlines stay in
   `TimerComponent` slots ([ECS and events §7](ecs-and-events.md#timers)).
 - **Observer.** Bound when the graph is built, so a host feeds status counters
-  without the runtime importing `status`. Nothing reads `Graph.Flags` or
-  `Graph.States` yet ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
+  without the runtime importing `status`. `Graph.States` and `Graph.Name` key a
+  data species' per-state rows (§6.4); nothing reads `Graph.Flags` yet
+  ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
 - **Footprint effects.** A host that clears the cells under a footprint names the
   effect each victim leaves, a `component.DeathEffect`
   ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
@@ -494,7 +495,7 @@ at load; only `Op.Holds` runs per evaluation.
 generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
 reads only `payload`, compiled to `R` at load (`fsm.Payload[A]` keeps the decoded
 payload as it is); `RegisterKeyedAction[R]` for one that reads keys of its own
-table (`EmitEvent`: `event`, `payload`, `payload_vars`, `pick`; the region actions:
+table (`EmitEvent`: `event`, `payload`, `payload_vars`, `pick`, `origin`; the region actions:
 `region`, `initial_state`); and `RefuseAction`, a name whose use fails the load
 and which the vocabulary leaves out. The loader refuses a key of an action's
 table the action does not read (`action 'Text' takes no payload_vars`) and a key
@@ -519,8 +520,9 @@ program over one macro of states.
 ### 6.1 Program shape
 
 A program uses the fsm dialect's keys with the machine's additions: `duration_ms`,
-`flags`, `probe`, `cues`, `suspend`, `[[global]]`, a candidate list as `target`,
-`fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]` table. The
+`flags`, `probe`, `cues`, `suspend`, `signals`, `[[global]]`, a candidate list as
+`target`, `fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]`
+table. The
 scarab's lock, as the `cave` scenario's `RaiderStates` macro expands it with the
 scarab's timings:
 
@@ -562,28 +564,41 @@ The registry is generic, `behavior.Vocabulary[C]`, and its generic methods
 register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
-`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`) and
-`Flag(name, bit)`, with the host's `Integrate` and `Entered` hooks. `Entries`
+`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`),
+`Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
+own, built once into what each spawn applies before its machine starts, as the
+game's `mount` pushes its `EventMountRequest`), with the host's `Integrate` and
+`Entered` hooks. `Entries`
 lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
 `BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
 per instance:
 
 - Predicates read the instance and the world: `TargetDistance`, `LineOfSight`,
-  `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `Chance`, `Param` (the
+  `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `AtEdge`, `Chance`, `Param` (the
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
+- Three read what the scenario decides, each Shared state every instance holds
+  alike, since each steps its own copy of a program: `Status`, a row of the
+  compared surface (`snapshot.SharedKey`, checked at load); `Var`, a variable of
+  the scenario machine, which the scheduler lends through
+  `Resources.Scenario` so no system reaches the machine; and `Signalled`, a bit of
+  `BehaviorComponent.Signals`. The last is the compiler's own, added by
+  `Vocabulary.Signals`: it numbers a program's declared `signals`, has the edge
+  that reads one lower it as it commits, and keeps for each state the signals its
+  edges take (`Set.Hears`).
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
-  (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
-  the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
-  lock's charge or teleport goes to the cell it stored, as the raiders in `cave` do,
-  or with `to = "home"` the cell the header spawned on (`BehaviorComponent.HomeX`,
-  `HomeY`), which armada's ships fly back to.
+  (`FindFreeAreaInside` over the footprint). A verb's `to` (`aim`) reads the live
+  target, or with `stored` the cell `StoreTarget` kept, so a lock's charge or
+  teleport goes to the cell it stored, as the raiders in `cave` do, or with `post`
+  the cell the header spawned on (`BehaviorComponent.PostX`, `PostY`), which
+  armada's ships hold and fly back to.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
   `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
-  `SpawnSpecies` (any Shared species, a program's among them, by its land request)
-  and `EmitEvent`.
+  `SpawnSpecies` (any Shared species, a program's among them, by its land request),
+  `Leave` (it marks the context, and the host ends the instance as the step
+  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`.
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
   per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
   over the in-place helpers of `pkg/vmath/physics` the code species use
@@ -602,14 +617,15 @@ system's scaffold (§6.4), not in the vocabulary.
 
 - **Programs are scenario files.** The entry lists them
   (`[behaviors] scarab = { file = "behavior/strata/scarab.toml" }`) or holds one inline.
-  `includeBehaviors` (`internal/fsm/file_loader.go`) reads, parses and expands each
+  `includeTables` (`internal/fsm/file_loader.go`) reads, parses and expands each
   file against the entry's macros through `readExpanded`, the step region files
   share, records it in `visited` and replaces the `{ file }` table; anything else
   under `behaviors` fails naming it. `ScenarioFiles` therefore lists programs, so
   `resource.ReadScenario` carries, digests and transfers them with no mechanism of
   their own. `validScenarioName` admits the subdirectory, `resource.entryKeys`
-  admits `behaviors`, `loot` and `drops`, `Scenario.Behaviors()` returns the
-  programs by name and `Scenario.Loot()` the entry's loot kinds and drop tables.
+  admits `behaviors`, `loot`, `drops` and `maps`, `Scenario.Behaviors()` returns the
+  programs by name and `Scenario.Loot()` the entry's loot kinds, drop tables and
+  maps, a map's file read as a program's is ([FSM reference: Maps](fsm-reference.md#maps)).
   `Machine.LoadScenarioFromMap` takes no part: a top-level key is its embedder's.
 - **Compiled once per run.** `App.readScenario` compiles the programs and the
   loot (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
@@ -626,8 +642,8 @@ system's scaffold (§6.4), not in the vocabulary.
   compile, then the machine load, so an unknown name or a bad argument fails
   validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
-  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok` and `drops ok`
-  the same way.
+  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok`, `drops ok` and
+  `maps ok` the same way.
 
 ### 6.4 Beyond the machine
 
@@ -646,7 +662,9 @@ smaller part of it.
   `[prototype.physics]` replacing its value), soft-collision mass, the drop table
   its kills roll (the scenario's or a code species',
   [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
-  entrance (§4.4), its look and the pattern period.
+  entrance (§4.4), its look and the pattern period. A mount of its own
+  (`[prototype.mount]`) is no part of the prototype's data: its spawn asks the mount
+  system for it (§6.2).
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;
@@ -680,7 +698,11 @@ smaller part of it.
   composite.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge, inset}` (bus,
   and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
-  cancel; an empty program cancels every data species). A program no entry
+  cancel; an empty program cancels every data species) and
+  `EventBehaviorSignalRequest{program, signal, count}` (shared: it raises the
+  signal on `count` of the instances whose state takes it, ranked by a draw from
+  the tick and each entity, so the choice is the same in any store order, D-8; a
+  payload's `signal` resolves at load among its `program`'s, `event.PayloadNames`). A program no entry
   defines fails the authored payload's load (`event.Programmed`); one arriving
   otherwise is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
   immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
@@ -688,7 +710,8 @@ smaller part of it.
   (`BehaviorSpawnRequestPayload.Cell`). A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
-- **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and the
+- **Telemetry.** `behavior.*`, and per program `behavior.<program>.count`, a
+  `behavior.<program>.state.<State>` for each of its states and the
   lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
   `kills.<program>` in `NewMetaSystem`, all before `Freeze`
   ([telemetry](telemetry-reference.md)). A spawn or an entrance counts at once
@@ -713,7 +736,7 @@ smaller part of it.
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, home cell, `Shielded`, `TeleportLine`,
+  instance, pattern frame and accumulator, stored target, post, raised signals, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
@@ -779,7 +802,8 @@ A machine adds no source of divergence and no identity of its own.
   through `vmath.MixChain` (D-8), as mount spread and soft collision do, so a
   guard's short-circuit or a predicted death moves no stream. `Chance` mixes
   `BehaviorSystem.chanceRoot` (derived from the shared domain root at `Init`,
-  carried by `SaveLocal`) with the tick, the entity and its site; the blue circle
+  carried by `SaveLocal`) with the tick, the entity and its site, and holds a rate
+  against the step's share of its mean wait in integers; the blue circle
   draws its landing's direction before it searches.
 - **Order.** Edges run in declaration or array order, no map is iterated at run
   time, and programs are sorted by name before IDs are assigned. Verbs are native

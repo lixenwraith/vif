@@ -76,6 +76,7 @@ type testCtx struct {
 	target   bool
 	stunned  bool
 	hitWall  bool
+	signals  uint8
 }
 
 func testVocabulary() *Vocabulary[*testCtx] {
@@ -303,6 +304,72 @@ func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
 	step(100*ms, func() { c.hitWall = false }, "Telegraph cyan, entered, Freeze, integrate -> Wind flags=1 suspended=false")
 	step(100*ms, func() { c.stunned = true }, "CancelTelegraph, entered -> Roam flags=0 suspended=true")
 	step(100*ms, func() {}, " -> Roam flags=0 suspended=true")
+}
+
+// TestAnEdgeLowersTheSignalItCommitsOn: Signalled passes while its program's signal
+// is raised, the edge that commits on it lowers that one alone, and a state knows
+// the signals its edges take
+func TestAnEdgeLowersTheSignalItCommitsOn(t *testing.T) {
+	head, _, _ := strings.Cut(warden, "[states.Roam]")
+	program := func(top, states string) map[string]any {
+		return parse(t, strings.Replace(head, `initial = "Roam"`, "initial = \"Hold\"\n"+top, 1)+states)
+	}
+	const states = `
+[states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", guard = "Signalled", guard_args = { name = "dive" }, target = "Dive" }]
+
+[states.Dive]
+on_update = [{ action = "Freeze" }]
+
+[[global]]
+from = ["Dive"]
+guard = "Signalled"
+guard_args = { name = "retreat" }
+target = "Hold"
+`
+	v := testVocabulary()
+	v.Signals(func(c *testCtx) *uint8 { return &c.signals })
+	set, err := Compile(v, map[string]map[string]any{"warden": program(`signals = ["dive", "retreat"]`, states)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const dive, hold component.BehaviorState = 0, 1
+	if got := set.Declared().Signals["warden"]; !slices.Equal(got, []string{"dive", "retreat"}) ||
+		set.Hears(0, hold) != 1 || set.Hears(0, dive) != 2 {
+		t.Fatalf("signals %v, Hold hears %b and Dive %b, want dive then retreat, 1 and 10", got, set.Hears(0, hold), set.Hears(0, dive))
+	}
+	g := set.Graph(0)
+	var in machine.Instance[component.BehaviorState]
+	c := &testCtx{}
+	g.Start(&in, c, set.Initial(0), 0)
+	for _, s := range []struct {
+		raise uint8
+		state component.BehaviorState
+		left  uint8
+	}{{0, hold, 0}, {3, dive, 2}, {0, hold, 0}, {2, hold, 2}} {
+		c.signals |= s.raise
+		g.Step(&in, c, 50*time.Millisecond)
+		if in.State != s.state || c.signals != s.left {
+			t.Fatalf("raising %b: state %s holding %b, want %s holding %b", s.raise, g.Name(in.State), c.signals, g.Name(s.state), s.left)
+		}
+	}
+
+	for name, c := range map[string]struct{ top, states, want string }{
+		"undeclared": {`signals = ["dive"]`, states, `signal "retreat" is not one of dive`},
+		"none":       {``, states, `signal "dive": the program declares no signals`},
+		"suspend":    {`signals = ["dive", "retreat"]`, states, "only an edge takes a signal"},
+		"twice":      {`signals = ["dive", "retreat", "dive"]`, states, `"dive" is declared twice`},
+		"too many":   {`signals = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]`, states, "9 signals, at most 8"},
+	} {
+		doc := program(c.top, c.states)
+		if name == "suspend" {
+			doc["suspend"] = map[string]any{"guard": "Signalled", "guard_args": map[string]any{"name": "dive"}}
+		}
+		if _, err := Compile(v, map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: compiled: %v, want %q", name, err, c.want)
+		}
+	}
 }
 
 // Every fault is an error that names its program, where it sits and the name or

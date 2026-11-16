@@ -234,22 +234,29 @@ func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
 	}
 }
 
-// TestCheckReportsTheProgramsAndLootItCompiled: a scenario declaring none says so
-func TestCheckReportsTheProgramsAndLootItCompiled(t *testing.T) {
+// TestCheckReportsTheProgramsLootAndMapsItCompiled: a scenario declaring none says
+// so, and a map kept in a file is a scenario file as a program's is
+func TestCheckReportsTheProgramsLootAndMapsItCompiled(t *testing.T) {
 	looted := writePrograms(t, map[string]string{"wisp": strings.Replace(wisp, "hp = 1", "hp = 1\ndrops = \"spark\"", 1)})
 	entry, err := os.OpenFile(filepath.Join(looted, "scenario.toml"), os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = entry.WriteString("[loot.ember]\nrune = \"e\"\ncolor = {}\nglow = {}\nreward = \"heat\"\ndelta = 1\n" +
-		"[drops.spark]\ntiers = [{ entries = [{ loot = \"ember\", rate = 1.0 }] }]\n")
-	if err := errors.Join(err, entry.Close()); err != nil {
+		"[drops.spark]\ntiers = [{ entries = [{ loot = \"ember\", rate = 1.0 }] }]\n" +
+		"[maps]\nrank = { file = \"rank.toml\" }\n")
+	err = errors.Join(err, entry.Close(), os.WriteFile(filepath.Join(looted, "rank.toml"),
+		[]byte("legend = { w = { program = \"wisp\" } }\nrows = [\"w w\"]\n"), 0o600))
+	if err != nil {
 		t.Fatal(err)
 	}
+	if n := read(t, looted).Files(); n != 4 {
+		t.Fatalf("the scenario holds %d files, want its map among the entry, the region and the program", n)
+	}
 	for want, dir := range map[string]string{
-		"behaviors ok: 2 (spark, wisp)\nloot ok: 0\ndrops ok: 0\n":          writePrograms(t, map[string]string{"spark": wisp, "wisp": wisp}),
-		"behaviors ok: 0\nloot ok: 0\ndrops ok: 0\n":                        writeScenario(t, filepath.Join(t.TempDir(), "scenario", "plain"), scenarioRegion),
-		"behaviors ok: 1 (wisp)\nloot ok: 1 (ember)\ndrops ok: 1 (spark)\n": looted,
+		"behaviors ok: 2 (spark, wisp)\nloot ok: 0\ndrops ok: 0\nmaps ok: 0\n":                 writePrograms(t, map[string]string{"spark": wisp, "wisp": wisp}),
+		"behaviors ok: 0\nloot ok: 0\ndrops ok: 0\nmaps ok: 0\n":                               writeScenario(t, filepath.Join(t.TempDir(), "scenario", "plain"), scenarioRegion),
+		"behaviors ok: 1 (wisp)\nloot ok: 1 (ember)\ndrops ok: 1 (spark)\nmaps ok: 1 (rank)\n": looted,
 	} {
 		var out strings.Builder
 		if _, err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {

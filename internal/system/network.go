@@ -681,10 +681,10 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 		control = component.ControlLocal
 		s.world.TakePlace()
 	}
-	heat, energy := s.world.Resources.Player.InitialResources()
+	t := s.world.Resources.Player.Template()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
-		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant, Holder: p.Holder,
-		Heat: heat, Energy: energy, Key: p.Key, Name: p.Name, Record: p.Record,
+		Slot: p.Slot, Origin: t.Origin, X: t.X, Y: t.Y, Control: uint8(control), PeerID: p.Participant, Holder: p.Holder,
+		Heat: t.Heat, Energy: t.Energy, Key: p.Key, Name: p.Name, Record: p.Record,
 	})
 	if control == component.ControlLocal {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})

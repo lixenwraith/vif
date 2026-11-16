@@ -237,7 +237,7 @@ func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 	record := event.CursorRecord{Charges: []int{0, 3}, Energy: 4321, Heat: 9, HitPoints: 37}
 	arrive := func(slot uint8, peer uint32) (failed bool) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
-			Slot: slot, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
+			Slot: slot, Origin: event.MapAnchorCenter, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
 			Name: "renamed"}})
 		for _, ev := range w.Resources.Event.Queue.Consume() {
 			failed = failed || ev.Type == event.EventCursorSpawnFailed
@@ -332,7 +332,7 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 		}
 	}
 	arrive := func(slot uint8, peer uint32, control component.ControlKind) {
-		ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Slot: slot, Center: true,
+		ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Slot: slot, Origin: event.MapAnchorCenter,
 			Control: uint8(control), PeerID: peer, Holder: 4, Key: "key", Name: "name"})
 	}
 	w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{
@@ -350,7 +350,7 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 	if n := w.Resources.Player.Count(); n != 0 {
 		t.Fatalf("%d cursor(s) spawned ahead of the boot's request", n)
 	}
-	ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+	ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Origin: event.MapAnchorCenter})
 	if failed != 0 {
 		t.Fatalf("the boot's request failed %d spawn(s), want every cursor of the roster built", failed)
 	}

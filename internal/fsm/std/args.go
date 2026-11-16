@@ -1,6 +1,7 @@
 package std
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -22,6 +23,7 @@ type EmitEventArgs struct {
 	PayloadVars map[string]string // Field name -> variable name
 	Picks       []any             // The payload with each entry of the pick in its field
 	PickVar     string            // The variable whose value, modulo len(Picks), names the entry
+	Origin      *emitOrigin       // The anchor the payload's cell counts from as it is emitted
 }
 
 // RegionControlArgs holds args for region control actions
@@ -35,7 +37,7 @@ type RegionControlArgs struct {
 type VariableArgs struct {
 	Name      string `toml:"name"`
 	Value     int64  `toml:"value"`
-	Delta     int64  `toml:"delta"`
+	Delta     *int64 `toml:"delta"`      // Absent, an increment, decrement, multiply or divide takes 1
 	SourceVar string `toml:"source_var"` // If set, use this var's value instead of Value/Delta
 	Min       *int64 `toml:"min"`        // Optional clamp lower bound
 	Max       *int64 `toml:"max"`        // Optional clamp upper bound
@@ -133,16 +135,25 @@ type (
 	}
 )
 
+// originArgs is an origin as its table writes it; a bare anchor name is its at, and
+// x and y name the payload's cell where its fields are not x and y
+type originArgs struct {
+	At event.MapAnchor `toml:"at"`
+	X  string          `toml:"x"`
+	Y  string          `toml:"y"`
+}
+
 // The keys of their own tables the keyed actions read
 var (
-	emitKeys   = []string{"event", "payload", "payload_vars", "pick"}
+	emitKeys   = []string{"event", "payload", "payload_vars", "pick", "origin"}
 	regionKeys = []string{"region"}
 	spawnKeys  = []string{"region", "initial_state"}
 )
 
 // compileEmitEvent resolves the event type and decodes its payload at load, its
-// enum fields as names spell them, and resolves the fields its payload_vars set
-func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateResolver) (*EmitEventArgs, error) {
+// enum fields as names spell them, and resolves the fields its payload_vars and its
+// origin set; mapped is whether the host can say how large its map is
+func compileEmitEvent(names *dialect.Names, mapped bool) func(fsm.ActionConfig, fsm.StateResolver) (*EmitEventArgs, error) {
 	return func(cfg fsm.ActionConfig, _ fsm.StateResolver) (*EmitEventArgs, error) {
 		if cfg.Event == "" {
 			return nil, errors.New("requires 'event' field")
@@ -151,6 +162,7 @@ func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateReso
 		if !ok {
 			return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
 		}
+		args := &EmitEventArgs{Type: et, PayloadVars: cfg.PayloadVars}
 		if cfg.Pick == nil {
 			payload, err := event.AuthoredPayload(names, et, cfg.Payload)
 			if err == nil {
@@ -159,16 +171,62 @@ func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateReso
 			if err != nil {
 				return nil, err
 			}
-			return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
+			args.Payload = payload
+		} else {
+			// The payload decodes only with an entry in its field, which may be the key
+			// a sibling's names hang on, as a sub-type's on its species
+			picks, err := compilePick(names, et, cfg)
+			if err != nil {
+				return nil, fmt.Errorf("pick: %w", err)
+			}
+			args.Picks, args.PickVar = picks, cfg.Pick.Var
 		}
-		// The payload decodes only with an entry in its field, which may be the key
-		// a sibling's names hang on, as a sub-type's on its species
-		picks, err := compilePick(names, et, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("pick: %w", err)
+		if cfg.Origin != nil {
+			origin, err := compileOrigin(names, et, cfg.Origin, mapped, append(slices.Clone(args.Picks), args.Payload))
+			if err != nil {
+				return nil, fmt.Errorf("origin: %w", err)
+			}
+			args.Origin = origin
 		}
-		return &EmitEventArgs{Type: et, PayloadVars: cfg.PayloadVars, Picks: picks, PickVar: cfg.Pick.Var}, nil
+		return args, nil
 	}
+}
+
+// compileOrigin reads an origin, an anchor's name or { at, x, y }, and checks it
+// against each payload the action may emit. A payload that keeps its own anchor is
+// handed it here and nothing is left to move at emit.
+func compileOrigin(names *dialect.Names, et event.EventType, raw any, mapped bool, payloads []any) (*emitOrigin, error) {
+	if name, ok := raw.(string); ok {
+		raw = map[string]any{"at": name}
+	}
+	var a originArgs
+	if err := names.DecodeInto(raw, &a); err != nil {
+		return nil, err
+	}
+	origin := &emitOrigin{Anchor: a.At, X: cmp.Or(a.X, "x"), Y: cmp.Or(a.Y, "y")}
+	payloads = slices.DeleteFunc(payloads, func(p any) bool { return p == nil })
+	if len(payloads) == 0 {
+		return nil, fmt.Errorf("event '%s' carries no payload", event.GetEventName(et))
+	}
+	if _, ok := payloads[0].(event.Anchored); ok {
+		if a.X != "" || a.Y != "" {
+			return nil, fmt.Errorf("event '%s' keeps its origin for its own x and y", event.GetEventName(et))
+		}
+		for _, payload := range payloads {
+			payload.(event.Anchored).SetOrigin(a.At)
+		}
+		return nil, nil
+	}
+	if !mapped {
+		return nil, errors.New("this machine has no map to count from")
+	}
+	for _, payload := range payloads {
+		if _, missed := origin.anchored(payload, 0, 0); len(missed) > 0 {
+			return nil, fmt.Errorf("event '%s' carries no number field '%s'",
+				event.GetEventName(et), strings.Join(missed, "', '"))
+		}
+	}
+	return origin, nil
 }
 
 // compilePick decodes the payload once per entry of the pick's list, the entry

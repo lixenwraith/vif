@@ -31,29 +31,84 @@ func applyPayloadVars(payload any, vars map[string]string, value func(string) in
 	if payload == nil || len(vars) == 0 {
 		return payload, nil
 	}
-
-	pv := reflect.ValueOf(payload)
-	if pv.Kind() != reflect.Ptr || pv.IsNil() || pv.Elem().Kind() != reflect.Struct {
+	edit, ok := editPayload(payload)
+	if !ok {
 		return payload, slices.Collect(maps.Keys(vars))
 	}
-
-	copied := reflect.New(pv.Elem().Type()).Elem()
-	copied.Set(pv.Elem())
-
-	// Track deep-copied slices by path prefix to avoid redundant copies
-	copiedSlices := make(map[string]bool)
-
 	var missed []string
 	for key, varName := range vars {
-		segments := strings.Split(key, ".")
-		parent := walkPayloadPath(copied, segments[:len(segments)-1], copiedSlices)
-		field := fsm.FieldByTag(parent, segments[len(segments)-1])
-		if !field.CanSet() || !setPayloadVar(field, value(varName)) {
+		if field := edit.field(key); !field.CanSet() || !setPayloadVar(field, value(varName)) {
 			missed = append(missed, key)
 		}
 	}
+	return edit.payload(), missed
+}
 
-	return copied.Addr().Interface(), missed
+// payloadEdit is a copy of a struct payload being written by dot paths; a slice on
+// a path is copied once, so the payload it was made from stays as compiled
+type payloadEdit struct {
+	copied reflect.Value
+	slices map[string]bool
+}
+
+func editPayload(payload any) (*payloadEdit, bool) {
+	pv := reflect.ValueOf(payload)
+	if pv.Kind() != reflect.Ptr || pv.IsNil() || pv.Elem().Kind() != reflect.Struct {
+		return nil, false
+	}
+	copied := reflect.New(pv.Elem().Type()).Elem()
+	copied.Set(pv.Elem())
+	return &payloadEdit{copied: copied, slices: make(map[string]bool)}, true
+}
+
+// field is the field key names, each segment a toml tag, else a Go field name, else
+// an index into a slice; invalid where the payload has none
+func (e *payloadEdit) field(key string) reflect.Value {
+	segments := strings.Split(key, ".")
+	parent := walkPayloadPath(e.copied, segments[:len(segments)-1], e.slices)
+	return fsm.FieldByTag(parent, segments[len(segments)-1])
+}
+
+func (e *payloadEdit) payload() any { return e.copied.Addr().Interface() }
+
+// emitOrigin is the anchor an emitted payload's cell counts from and the dot paths
+// of that cell's two fields
+type emitOrigin struct {
+	Anchor event.MapAnchor
+	X, Y   string
+}
+
+// anchored is payload with its origin's cell counted from the anchor on a width by
+// height map, and the coordinate paths naming no number field
+func (o *emitOrigin) anchored(payload any, width, height int) (any, []string) {
+	edit, ok := editPayload(payload)
+	if !ok {
+		return payload, []string{o.X, o.Y}
+	}
+	dx, dy := o.Anchor.Cell(0, 0, width, height)
+	var missed []string
+	for _, k := range [...]struct {
+		key string
+		by  int
+	}{{o.X, dx}, {o.Y, dy}} {
+		if field := edit.field(k.key); !field.CanSet() || !movePayloadField(field, int64(k.by)) {
+			missed = append(missed, k.key)
+		}
+	}
+	return edit.payload(), missed
+}
+
+// movePayloadField adds by to a coordinate, false for a field that is no number
+func movePayloadField(field reflect.Value, by int64) bool {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		field.SetInt(field.Int() + by)
+	case reflect.Float32, reflect.Float64:
+		field.SetFloat(field.Float() + float64(by))
+	default:
+		return false
+	}
+	return true
 }
 
 // checkPayloadVars refuses a payload_vars key naming no field of the payload that

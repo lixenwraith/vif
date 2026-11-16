@@ -598,7 +598,7 @@ func TestADepartureAResetInterruptedIsAnnouncedAgain(t *testing.T) {
 			settle(w)
 			noticed(w, net)
 		}, after: func(w *engine.World, _ *NetworkSystem) { // the boot's request rebuilds the roster
-			w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+			w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Origin: event.MapAnchorCenter})
 			settle(w)
 		}, want: []departure{plain}},
 		"scheduled, and noticed again":                   {interrupted: scheduled(plain), after: noticed, want: []departure{plain}},
@@ -671,7 +671,7 @@ func TestAnArrivalAResetInterruptedIsCrossedAgain(t *testing.T) {
 		net.noticeDeparture(7, false)
 	}
 	boot := func(w *engine.World, net *NetworkSystem) { // the boot's request rebuilds the roster
-		w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+		w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Origin: event.MapAnchorCenter})
 		settle(w, net)
 	}
 	all := func(steps ...world) world {

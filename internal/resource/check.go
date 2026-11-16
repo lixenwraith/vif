@@ -136,6 +136,7 @@ func checkScenario(o Options, w io.Writer) (Scenario, error) {
 	}
 	kinds, _ := loot["loot"].(map[string]any)
 	tables, _ := loot["drops"].(map[string]any)
+	layouts, _ := loot["maps"].(map[string]any)
 	for _, line := range []struct {
 		key   string
 		names []string
@@ -143,6 +144,7 @@ func checkScenario(o Options, w io.Writer) (Scenario, error) {
 		{"behaviors", slices.Sorted(maps.Keys(programs))},
 		{"loot", slices.Sorted(maps.Keys(kinds))},
 		{"drops", slices.Sorted(maps.Keys(tables))},
+		{"maps", slices.Sorted(maps.Keys(layouts))},
 	} {
 		fmt.Fprintf(w, "%s ok: %d", line.key, len(line.names))
 		if len(line.names) > 0 {

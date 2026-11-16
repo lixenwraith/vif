@@ -16,6 +16,8 @@ import (
 type Vocabulary[C any] struct {
 	verbs     map[string]verb[C]
 	flags     map[string]uint64
+	fittings  map[string]func(names *dialect.Names, raw any) (func(C), error)
+	signals   func(C) *uint8
 	integrate func(C)
 	entered   func(C)
 	names     func(component.Declared) *dialect.Names
@@ -34,7 +36,18 @@ type verb[C any] struct {
 }
 
 func NewVocabulary[C any]() *Vocabulary[C] {
-	return &Vocabulary[C]{verbs: make(map[string]verb[C]), flags: make(map[string]uint64)}
+	return &Vocabulary[C]{
+		verbs:    make(map[string]verb[C]),
+		flags:    make(map[string]uint64),
+		fittings: make(map[string]func(*dialect.Names, any) (func(C), error)),
+	}
+}
+
+// Fitting registers a [prototype] table of the host's own, what a body carries
+// beside what a program's file declares of it, as a mount: build reads the table
+// once at load, as names spell its enums, into what each spawn applies
+func (v *Vocabulary[C]) Fitting(key string, build func(names *dialect.Names, raw any) (func(C), error)) {
+	v.fittings[key] = build
 }
 
 // Predicate registers a read-only guard whose guard_args decode strictly into A
@@ -79,6 +92,19 @@ func (v *Vocabulary[C]) Sustained[A any](name string, build func(*A) (func(C), e
 	v.add(name, verb[C]{kind: dialect.KindSustained, keys: payloadKey[A](), args: dialect.Fields[A](), apply: payload(build)})
 }
 
+// Signals sets where an instance keeps the signals raised on it, which adds the
+// guard Signalled { name }: it passes while the program's signal of that name is
+// raised, and the edge that commits on it lowers the signal
+func (v *Vocabulary[C]) Signals(word func(C) *uint8) { v.signals = word }
+
+// signalArgs names the signal a Signalled guard reads
+type signalArgs struct {
+	Name string `toml:"name"`
+}
+
+// signalled is the guard a vocabulary with signals adds
+const signalled = "Signalled"
+
 // Emit registers an effect that reads its table's event beside its payload, as
 // the scenario dialect's EmitEvent does; build checks both, decoding the payload
 // as names, its set's, spell its enum fields
@@ -114,6 +140,9 @@ func (v *Vocabulary[C]) Entries() []dialect.Entry {
 	}
 	for name := range v.flags {
 		out = append(out, dialect.Entry{Name: name, Kind: dialect.KindFlag})
+	}
+	if v.signals != nil {
+		out = append(out, dialect.Entry{Name: signalled, Kind: dialect.KindGuard, Args: dialect.Fields[signalArgs]()})
 	}
 	dialect.Sort(out)
 	return out

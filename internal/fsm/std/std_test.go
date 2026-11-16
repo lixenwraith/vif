@@ -192,6 +192,44 @@ transitions = [{ trigger = "Tick", target = "Draw" }]
 	}
 }
 
+// TestOnlyAnAbsentDeltaMeansOne: a delta of 0 adds, takes, multiplies by and divides
+// by 0, and an action that names none steps by 1.
+func TestOnlyAnAbsentDeltaMeansOne(t *testing.T) {
+	const doc = `
+[regions.r]
+initial = "Boot"
+
+[states.Boot]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "mul", value = 7 } },
+    { action = "SetVar", payload = { name = "div", value = 7 } },
+    { action = "SetVar", payload = { name = "one", value = 7 } },
+    { action = "IncrementVar", payload = { name = "inc", delta = 0 } },
+    { action = "DecrementVar", payload = { name = "dec", delta = 0 } },
+    { action = "MultiplyVar", payload = { name = "mul", delta = 0 } },
+    { action = "DivideVar", payload = { name = "div", delta = 0 } },
+    { action = "IncrementVar", payload = { name = "up" } },
+    { action = "DecrementVar", payload = { name = "down" } },
+    { action = "MultiplyVar", payload = { name = "one" } },
+    { action = "DivideVar", payload = { name = "one" } },
+]
+`
+	m := fsm.NewMachine[struct{}]()
+	std.Register(m, std.Host[struct{}]{})
+	if err := m.LoadScenario([]byte(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Init(struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int64{"inc": 0, "dec": 0, "mul": 0, "div": 7, "up": 1, "down": -1, "one": 7} {
+		if got := m.GetVar(name); got != want {
+			t.Errorf("%s = %d, want %d", name, got, want)
+		}
+	}
+}
+
 // TestAStringPayloadVarFillsItsBraces: a message carries a variable's value where it
 // says {}, and the compiled message stays a template for the next emit.
 func TestAStringPayloadVarFillsItsBraces(t *testing.T) {
@@ -324,6 +362,67 @@ on_enter = [` + payloads + `]
 	_, _, err = load(`{ action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { species = "tower", sub_type = "flame" } },`)
 	if err == nil || !strings.Contains(err.Error(), `sub_type: "flame" is not one of cyan, gold, violet, emerald`) {
 		t.Fatalf("error %v", err)
+	}
+}
+
+// TestAnOriginCountsAPayloadsCellFromItsAnchor: an origin adds its anchor's cell on
+// the host's map to the payload's x and y, or to the fields it names, after the
+// variables; a payload that keeps its anchor is handed it, and the rest fail the load.
+func TestAnOriginCountsAPayloadsCellFromItsAnchor(t *testing.T) {
+	event.EnsureRegistry()
+	width, height := int64(80), int64(40)
+	load := func(actions string, mapped bool) (*[]any, error) {
+		var sent []any
+		m := fsm.NewMachine[struct{}]()
+		h := std.Host[struct{}]{Emit: func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) }}
+		if mapped {
+			h.ConfigInt = func(field string) (func(struct{}) int64, bool) {
+				return func(struct{}) int64 { return map[string]int64{"map_width": width, "map_height": height}[field] }, true
+			}
+		}
+		std.Register(m, h)
+		err := m.LoadScenario([]byte("[regions.r]\ninitial = \"Boot\"\n[states.Boot]\nparent = \"Root\"\non_enter = [" + actions + "]\n"))
+		if err == nil {
+			err = m.Init(struct{}{})
+		}
+		return &sent, err
+	}
+	sent, err := load(`
+    { action = "SetVar", payload = { name = "row", value = 3 } },
+    { action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "bottom", payload = { x = -2, y = -1 } },
+    { action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "top_right", payload = { x = -1 }, payload_vars = { y = "row" } },
+    { action = "EmitEvent", event = "EventSplashTextRequest", origin = { at = "center", x = "origin_x", y = "origin_y" }, payload = { text = "go", origin_y = 4 } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "bottom", payload = { y = -1 } },`, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	low, _ := (*sent)[0].(*event.SwarmSpawnRequestPayload)
+	corner, _ := (*sent)[1].(*event.SwarmSpawnRequestPayload)
+	splash, _ := (*sent)[2].(*event.SplashTextPayload)
+	cursor, _ := (*sent)[3].(*event.CursorSpawnRequestPayload)
+	if low == nil || low.X != 38 || low.Y != 38 || corner == nil || corner.X != 78 || corner.Y != 3 {
+		t.Fatalf("from the bottom %+v, from the top right %+v on an 80x40 map", low, corner)
+	}
+	if splash == nil || splash.OriginX != 40 || splash.OriginY != 24 {
+		t.Fatalf("a splash named by its own fields sits at %+v, want (40, 24)", splash)
+	}
+	if cursor == nil || cursor.Origin != event.MapAnchorBottom || cursor.X != 0 || cursor.Y != -1 {
+		t.Fatalf("the cursor request %+v, want its anchor kept and its cell unmoved", cursor)
+	}
+
+	for actions, want := range map[string]string{
+		`{ action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "middle" }`:                         `at: "middle" is not one of top_left, top`,
+		`{ action = "EmitEvent", event = "EventSplashTextRequest", origin = "top", payload = { text = "go" } }`: `carries no number field 'x', 'y'`,
+		`{ action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease", origin = "top" }`:                `carries no payload`,
+		`{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = { at = "top", x = "heat" } }`:      `keeps its origin for its own x and y`,
+	} {
+		if _, err := load(actions, true); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s loaded: %v, want %q", actions, err, want)
+		}
+	}
+	if _, err := load(`{ action = "EmitEvent", event = "EventSwarmSpawnRequest", origin = "top" }`, false); err == nil ||
+		!strings.Contains(err.Error(), "no map to count from") {
+		t.Errorf("an origin loaded on a machine with no map: %v", err)
 	}
 }
 

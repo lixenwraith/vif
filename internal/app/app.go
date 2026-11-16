@@ -401,6 +401,7 @@ func (a *App) initWorld() error {
 	// loot, soft collision and meta size their data rows by them.
 	a.world.Resources.Behaviors = a.behaviors.Prototypes()
 	a.world.Resources.Loot = *a.behaviors.Loot()
+	a.world.Resources.Maps = a.behaviors.Maps()
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}

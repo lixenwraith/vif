@@ -406,3 +406,37 @@ func mustFrame(t *testing.T, ev event.GameEvent, seq uint64) event.WireFrame {
 	frame.Seq = seq
 	return frame
 }
+
+// TestAnArrivalLandsWhereTheBootPlacedItsCursor: the boot's request is the template,
+// so an arrival takes its anchor and cell, counted on the map standing as it applies
+func TestAnArrivalLandsWhereTheBootPlacedItsCursor(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+		Origin: event.MapAnchorBottom, X: 3, Y: -1, Heat: 10, Energy: 100, Control: uint8(component.ControlLocal)}})
+	host, guest := network.NewLoopbackPair(1, 2)
+	t.Cleanup(func() { _ = host.Close(); _ = guest.Close() })
+	w.Resources.Network = engine.NewNetworkResource(host)
+	w.RunSafe(w.LatchSession)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
+	w.Resources.Event.Queue.Consume()
+
+	arrive := func(participant uint32, slot uint8) component.PositionComponent {
+		net.addParticipant(&event.ParticipantJoinedPayload{Participant: participant, Slot: slot})
+		for _, ev := range slices.Clone(w.Resources.Event.Queue.Consume()) {
+			cursors.HandleEvent(ev)
+		}
+		w.Resources.Event.Queue.Consume()
+		pos, _ := w.Positions.GetPosition(w.Resources.Player.Slot(slot))
+		return pos
+	}
+	width, height := w.Positions.Width, w.Positions.Height
+	if got, want := arrive(7, 1), (component.PositionComponent{X: width/2 + 3, Y: height - 2}); got != want {
+		t.Fatalf("an arrival stands at %+v on a %dx%d map, want the boot's cell %+v", got, width, height, want)
+	}
+	w.Resources.Config.MapHeight = height - 4
+	if got, want := arrive(8, 2), (component.PositionComponent{X: width/2 + 3, Y: height - 6}); got != want {
+		t.Fatalf("an arrival on a map four rows shorter stands at %+v, want %+v", got, want)
+	}
+}

@@ -32,7 +32,8 @@ author may replace that progression entirely with external TOML configuration.
 
 The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
 boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
-`recall` below its buttons); `CursorSystem` places it on the
+`recall` below its buttons, `armada` on the bottom row but one), and a joining
+participant's lands where that request placed its own; `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
 shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an
@@ -726,18 +727,21 @@ opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scen
 typing.
 
 `armada` is a fixed shooter of diving formations, one file with its
-three programs inline. The ship starts at the bottom of the map and its gun fires
+three programs and its ranks' maps inline. The ship starts at the bottom of the
+map (`origin = "bottom"`), as every ship that joins does, and its gun fires
 up alone, a lane more for each `U`, up to three. The armada materializes in ranks
-at the top, eight columns six cells apart about the map's middle: two ranks of
+at the top, each a map of one row laid from the map's middle column
+(`EventMapLayRequest`), eight columns six cells apart: two ranks of
 darts in the first wave, lancers over them from the second and four wardens over
-those from the third. A ship holds its slot until a roll it makes each tick sends
-it down: it turns red and marks the cell its target stands on with the charge line and
-the landing marker, dives there, then flies back to the cell it spawned on
-(`FindLanding { to = "home" }`), so a slot shot empty stays empty. A rank up has
+those from the third. A ship holds its slot until a roll sends it down, at a rate
+of one in fifty seconds for a dart, whatever the tick (`Chance { mean_ms }`): it
+turns red and marks the cell its target stands on with the charge line and
+the landing marker, dives there, then flies back to its post, the cell it spawned
+on (`FindLanding { to = "post" }`), so a slot shot empty stays empty. A rank up has
 more hit points (4, 10, 24) and a costlier touch and dives slower on a longer
-warning. Each warden takes a turret as it lands (`EventMountRequest`, the `arms`
-region) and fires an aimed bullet every three seconds or so, each on its own
-interval. A wave shot down strobes green, doubles species damage as a storm kill
+warning. Each warden carries a turret of its own (`[prototype.mount]`) and fires an
+aimed bullet every 3.2 seconds, give or take 0.6 drawn for each warden, so their
+volleys drift apart. A wave shot down strobes green, doubles species damage as a storm kill
 does in main ("Species Damage Up"), which is the ramp, and the next comes in two
 seconds on. A ship a player shoots down rolls the armada drop table for every
 player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is as in `cave`: heat
