@@ -267,15 +267,6 @@ given here with the form that retires it; the redesign is written on them.
   makes follows the run's tick (`-tick`). A `mean_ms` beside it rolls each step's
   share of that mean wait, finer than a percent and the same at any tick;
   `percent` stays for the one roll a `Timeout` candidate makes.
-- **A cell named from the map.** The ship's start is four variable actions on
-  `map_width` and `map_height` and a rank's left end three, as `dummy`, `recall`
-  and the tutorial lay themselves out, while `EventBehaviorSpawnRequest` alone
-  names an edge (`edge`, `inset`). An `origin` on `EmitEvent`, an edge, a corner
-  or the centre the payload's `x` and `y` count from, resolved from the grid,
-  gives every payload that names a cell the same and retires the arithmetic.
-- **An offset of zero.** `IncrementVar` and its kin read a `delta` of 0 as 1, so
-  a macro cannot pass 0 and `Rank` counts its columns from a cell left of the
-  first. Only an absent `delta` should mean 1.
 - **A rank in one request.** `Rank` spends three actions a ship, 84 a wave. A
   map's legend naming a program
   ([Lay a painted map](#lay-a-painted-map-a-scenario-carries)) makes a rank a few
@@ -296,10 +287,6 @@ given here with the form that retires it; the redesign is written on them.
   cancel, and `EventBehaviorCancelRequest` names a program, every instance of it.
   A ship that leaves the map past the player needs an effect that ends its own
   instance, counted apart from a kill and dropping nothing.
-- **Arrivals among the ranks.** A joiner's cursor lands on the map's centre
-  whatever the boot request asked
-  ([Place an arrival](#place-an-arrival-where-its-scenario-places-a-cursor)),
-  here under the ranks.
 - **The player's lifecycle by hand.** Boot, its retry, the defeat watch, the
   strobe and the reset are five states armada copies as six other scenarios do,
   the first blocks of the [library](#keep-a-block-library-a-scenario-copies-from).
@@ -785,7 +772,7 @@ Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
 keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
 round adds `[ ]`, the markers and macros, practises the keys it only tells
 (`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
-map's edge ([a cell named from the map](#rework-what-armadas-first-version-worked-around)),
+map's edge (`origin`, [FSM reference](fsm-reference.md#event-emission)),
 and cues a lesson cleared.
 
 ## Browser sessions
@@ -2166,20 +2153,6 @@ The record is built to be replaced: one type, made in one place
 (`ParticipantJoinedPayload.Record`). What would close it: decide which values the
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
-
-### Place an arrival where its scenario places a cursor
-
-- Priority: P2
-- Affected files: `internal/system/network.go`,
-  `internal/app/internal/membership/join.go`, `internal/engine/resource.go`
-
-A participant's cursor lands on the map centre whatever the scenario's boot request
-asked: `addParticipant` and a joiner's roster both push `Center: true` with the
-template's heat and energy, so a recall guest starts at the centre and not below the
-buttons where the boot cursor stands. Anything hostile a scenario puts at the centre
-strikes each arrival on its first ticks. Keep the boot request's placement beside
-the heat and energy template (`PlayerResource.SetInitialResources`) and spawn
-arrivals from it, or let a scenario name spawn cells by slot.
 
 ### Merge two sessions
 

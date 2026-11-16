@@ -185,11 +185,11 @@ func (m *Membership) configureSessionRoster(o network.SessionOffer, local link.P
 
 	// The boot script's cursor spawn may still be queued: the FSM enters its boot
 	// state inside New and nothing has ticked yet. Settling it is what publishes the
-	// heat and energy template every rostered cursor is then created and armed from.
+	// template every rostered cursor is then created, placed and armed from.
 	m.scheduler.Settle()
 
-	var initialHeat, initialEnergy int
-	m.world.RunSafe(func() { initialHeat, initialEnergy = m.world.Resources.Player.InitialResources() })
+	var t engine.CursorTemplate
+	m.world.RunSafe(func() { t = m.world.Resources.Player.Template() })
 
 	for _, p := range participants {
 		var exists bool
@@ -198,8 +198,8 @@ func (m *Membership) configureSessionRoster(o network.SessionOffer, local link.P
 			continue
 		}
 		m.ctx.PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
-			Slot: p.Slot, Center: true, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID), Holder: uint32(p.Holder),
-			Heat: initialHeat, Energy: initialEnergy,
+			Slot: p.Slot, Origin: t.Origin, X: t.X, Y: t.Y, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID), Holder: uint32(p.Holder),
+			Heat: t.Heat, Energy: t.Energy,
 		}, event.OriginDebug)
 		m.scheduler.Settle()
 	}
@@ -215,7 +215,7 @@ func (m *Membership) configureSessionRoster(o network.SessionOffer, local link.P
 	// Arming is a local-cursor operation; a dedicated host has none to arm.
 	if assignment, ok := o.Entry(local); ok && assignment.Slot != parameter.NoPlayerSlot {
 		m.ctx.PushLocal(event.EventCursorArmRequest,
-			&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
+			&event.CursorArmRequestPayload{Heat: t.Heat, Energy: t.Energy})
 		m.scheduler.Settle()
 	}
 	m.world.RunSafe(m.ctx.PublishMapLock)

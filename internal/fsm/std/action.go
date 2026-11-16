@@ -222,7 +222,14 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 	if refused(m, h, h.Emit == nil, "EmitEvent") {
 		return
 	}
-	m.RegisterKeyedAction("EmitEvent", emitKeys, compileEmitEvent(h.Names), func(ctx T, a *EmitEventArgs) {
+	// An origin counts from the map every instance holds alike (D-14)
+	var width, height func(T) int64
+	if h.ConfigInt != nil {
+		width, _ = h.ConfigInt("map_width")
+		height, _ = h.ConfigInt("map_height")
+	}
+	mapped := width != nil && height != nil
+	m.RegisterKeyedAction("EmitEvent", emitKeys, compileEmitEvent(h.Names, mapped), func(ctx T, a *EmitEventArgs) {
 		if h.Emit == nil {
 			return
 		}
@@ -232,6 +239,9 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 		}
 		if len(a.PayloadVars) > 0 && payload != nil {
 			payload = ApplyPayloadVars(m, payload, a.PayloadVars)
+		}
+		if a.Origin != nil && payload != nil {
+			payload, _ = a.Origin.anchored(payload, int(width(ctx)), int(height(ctx)))
 		}
 		h.Emit(ctx, a.Type, payload)
 	})

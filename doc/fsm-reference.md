@@ -298,6 +298,7 @@ same boundary.
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
 { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { edge = "right", inset = 2 }, payload_vars = { y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion"] } }
+{ action = "EmitEvent", event = "EventLootSpawnRequest", origin = "center", payload = { type = "energy", x = -12, y = 3 } }
 ```
 
 The event name and payload are compiled at load: an unknown event, a payload key
@@ -334,6 +335,18 @@ names included: a pick of `species` from `["eye", "snake"]` beside
 `sub_type = "flame"` fails on the snake, which takes no sub-types. An entry is any
 value the field takes, a table or a list among them. `payload_vars` sets the other
 fields after the pick, never the picked one.
+
+`origin` names the point of the map the payload's cell counts from, so a layout
+follows the map with no arithmetic on `map_width` and `map_height`: a corner
+(`top_left`, which a bare cell counts from, `top_right`, `bottom_left`,
+`bottom_right`), the middle of an edge (`top`, `bottom`, `left`, `right`) or
+`center`, the middle being the map's size halved. It is added to `x` and `y` as
+the event is emitted, after `payload_vars`, on the map every instance holds alike
+(D-14); a payload whose cell has other names takes
+`origin = { at = "center", x = "origin_x", y = "origin_y" }`, each a dot path as a
+`payload_vars` key is. A payload with no such number fields fails the load.
+`EventCursorSpawnRequest` keeps its anchor for the cursor system instead
+([Cursor Lifecycle](#cursor-lifecycle)).
 
 ### Region Control
 
@@ -499,14 +512,16 @@ An action guard sees no event payload, so a payload guard there is always false.
 The world spawns with no cursor. A configuration must spawn one explicitly:
 
 ```toml
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } }
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 10, y = 5, slot = 1, heat = 10, energy = 100 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 10, energy = 100 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "bottom", payload = { y = -1, slot = 1, heat = 10, energy = 100 } }
 { action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } }
 ```
 
-`center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index;
-`heat` and `energy` are the cursor's starting values, zero when omitted, and the
-first spawn's pair is what every joining participant's cursor starts with. A despawn
+`x` and `y` count from the request's `origin`, the top left when it names none;
+`auto` overrides `slot` with the lowest free index; `heat` and `energy` are the
+cursor's starting values, zero when omitted. The first request is the template:
+every joining participant's cursor starts with its pair and lands on its cell,
+counted from its anchor on the map standing as that cursor arrives. A despawn
 names `all`, an `entity` or a `slot`. `EventCursorSpawned` carries `entity`, `slot`,
 `x`, `y`; `EventCursorSpawnFailed` signals a full roster, a taken slot or a blocked
 map. A cursor-less configuration is legal.

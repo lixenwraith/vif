@@ -394,12 +394,11 @@ type PlayerResource struct {
 	view    uint8
 	follows bool
 
-	// The first scripted spawn declares the configuration's starting resources.
+	// The first scripted spawn declares the configuration's cursor template.
 	// Session admission and late arrivals reuse the declaration instead of
 	// hard-coding one game's values in app or NetworkSystem.
-	initialHeat   int
-	initialEnergy int
-	initialSet    bool
+	template    CursorTemplate
+	templateSet bool
 
 	// A full game reset clears every entity. MetaSystem snapshots the closed
 	// roster here first; CursorSystem consumes it when the reset FSM emits its
@@ -541,18 +540,25 @@ func (pr *PlayerResource) Slot(i uint8) core.Entity {
 // Count returns the number of occupied slots
 func (pr *PlayerResource) Count() int { return pr.count }
 
-// SetInitialResources records the gameplay configuration's cursor template.
-func (pr *PlayerResource) SetInitialResources(heat, energy int) {
-	if pr.initialSet {
-		return
-	}
-	pr.initialHeat, pr.initialEnergy, pr.initialSet = heat, energy, true
+// CursorTemplate is what a scenario's boot request declares for every cursor: the
+// heat and energy it starts with, and the cell it lands on, counted from an anchor
+// so each instance resolves it alike on the map standing as a cursor arrives
+type CursorTemplate struct {
+	Heat, Energy int
+	Origin       event.MapAnchor
+	X, Y         int
 }
 
-// InitialResources returns the cursor template declared by the boot script.
-func (pr *PlayerResource) InitialResources() (heat, energy int) {
-	return pr.initialHeat, pr.initialEnergy
+// SetTemplate records the cursor template, the first request's
+func (pr *PlayerResource) SetTemplate(t CursorTemplate) {
+	if pr.templateSet {
+		return
+	}
+	pr.template, pr.templateSet = t, true
 }
+
+// Template returns the cursor template declared by the boot script
+func (pr *PlayerResource) Template() CursorTemplate { return pr.template }
 
 // PrepareRestore snapshots a closed roster before World.Clear. The caller walks
 // slots in order, so consuming this fixed array recreates identical shared IDs.

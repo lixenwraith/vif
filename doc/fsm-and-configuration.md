@@ -336,7 +336,8 @@ string field takes the value in place of each `{}`, so a status message can
 carry a count. `pick = { field, var, from }` sets one field to the entry of
 `from` its variable names, modulo the list's length, each entry checked at load
 as that field's value, so a value chosen from a list is data rather than an
-edge per entry ([FSM reference](fsm-reference.md#event-emission)).
+edge per entry, and `origin` names the corner, edge or centre of the map the
+payload's cell counts from ([FSM reference](fsm-reference.md#event-emission)).
 
 `RandomVar` sets `name` to a draw in `[min, max]` from the run's shared seed, an
 optional `seed_var` and the required `index_var`, so a sequence replays from its

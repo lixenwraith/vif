@@ -119,6 +119,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[FuseEffect](fuseEffectNames[:]...).
 		Enum[WallBatchCollisionMode](collisionModeNames[:]...).
 		Enum[MapEdge](namesOf(mapEdgeSpecs[:], func(s mapEdgeSpec) string { return s.name })...).
+		Enum[MapAnchor](mapAnchorNames[:]...).
 		Enum[EventType](events...).
 		Enum[model.InstrumentType](stringsOf(model.InstrumentCount)...).
 		Enum[model.Intensity](stringsOf(model.IntensityCount)...)

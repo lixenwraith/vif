@@ -441,6 +441,7 @@ func unreadKey(cfg ActionConfig, keys []string) string {
 		{"payload", cfg.Payload != nil},
 		{"payload_vars", cfg.PayloadVars != nil},
 		{"pick", cfg.Pick != nil},
+		{"origin", cfg.Origin != nil},
 		{"region", cfg.Region != ""},
 		{"initial_state", cfg.InitialState != ""},
 	} {

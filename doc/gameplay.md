@@ -32,7 +32,8 @@ author may replace that progression entirely with external TOML configuration.
 
 The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
 boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
-`recall` below its buttons); `CursorSystem` places it on the
+`recall` below its buttons, `armada` on the bottom row but one), and a joining
+participant's lands where that request placed its own; `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
 shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an

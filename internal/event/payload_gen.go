@@ -1306,7 +1306,7 @@ var codecCursorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorSpawn
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Control), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.PeerID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Auto), kind: kindBool},
-	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Center), kind: kindBool},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Origin), kind: kindUint, size: unsafe.Sizeof(MapAnchor(0))},
 }}
 
 func (p *CursorSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {

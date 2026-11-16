@@ -382,7 +382,7 @@ func writeScenario(t *testing.T, root, name, description string) string {
 			"[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n"+
 			"[regions.player]\ninitial = \"PlayerBoot\"\nbackground = true\n"+
 			"[states.PlayerBoot]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", "+
-			"event = \"EventCursorSpawnRequest\", payload = { center = true } }]\n", description),
+			"event = \"EventCursorSpawnRequest\", origin = \"center\" }]\n", description),
 		"macros.toml": "[macros.Hold]\nparams = { next = \"string\" }\nbody = { parent = \"Root\", transitions = " +
 			"[{ trigger = \"Tick\", target = \"${next}\", guard = \"StateTimeExceeds\", guard_args = { ms = 500 } }] }\n",
 		"main.toml": "[states]\nMainStart = { macro = \"Hold\", next = \"MainRepeat\" }\n" +

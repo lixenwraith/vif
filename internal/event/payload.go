@@ -914,7 +914,7 @@ func (p *CursorStatePayload) Record(run uint64) CursorRecord {
 }
 
 // CursorSpawnRequestPayload asks for a cursor entity
-// Center overrides X/Y; Auto overrides Slot with the lowest free index. A request
+// X and Y count from Origin; Auto overrides Slot with the lowest free index. A request
 // for a slot its participant's own Wraith holds takes the Wraith back, at its cell
 // and with Record over the template where the game it names is still the one played.
 type CursorSpawnRequestPayload struct {
@@ -930,8 +930,12 @@ type CursorSpawnRequestPayload struct {
 	Control uint8         `toml:"control"` // component.ControlKind
 	PeerID  uint32        `toml:"peer_id"` // Remote owner when Control is ControlRemote
 	Auto    bool          `toml:"auto"`
-	Center  bool          `toml:"center"`
+	Origin  MapAnchor     `toml:"origin"`
 }
+
+// SetOrigin keeps the anchor for the cursor system, which places every arrival as
+// the boot's request placed its cursor, on whatever map stands then
+func (p *CursorSpawnRequestPayload) SetOrigin(a MapAnchor) { p.Origin = a }
 
 // CursorRecord is what a player brings back to its Wraith of the game it left: the
 // energy, heat, health and loadout its cursor last synced there, and the game that
@@ -1088,6 +1092,53 @@ func (p *BehaviorSpawnRequestPayload) Cell(width, height int) (int, int) {
 		return edgeLine(e.far, width), alongEdge(p.Y, p.Inset, height)
 	}
 	return alongEdge(p.X, p.Inset, width), edgeLine(e.far, height)
+}
+
+// MapAnchor is the point of the map a cell counts from: a corner, the middle of an
+// edge or the centre, the top left where none is named. Its values are a 3x3 grid in
+// reading order, which Cell reads an axis at a time.
+type MapAnchor uint8
+
+const (
+	MapAnchorTopLeft MapAnchor = iota
+	MapAnchorTop
+	MapAnchorTopRight
+	MapAnchorLeft
+	MapAnchorCenter
+	MapAnchorRight
+	MapAnchorBottomLeft
+	MapAnchorBottom
+	MapAnchorBottomRight
+	mapAnchorCount
+)
+
+var mapAnchorNames = [mapAnchorCount]string{
+	"top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right",
+}
+
+// Cell is the cell (x, y) counted from a on a width by height map
+func (a MapAnchor) Cell(x, y, width, height int) (int, int) {
+	if a >= mapAnchorCount {
+		return x, y
+	}
+	return x + anchorLine(a%3, width), y + anchorLine(a/3, height)
+}
+
+// anchorLine is the first, the middle or the last of n lines
+func anchorLine(place MapAnchor, n int) int {
+	switch place {
+	case 1:
+		return n / 2
+	case 2:
+		return n - 1
+	}
+	return 0
+}
+
+// Anchored is a payload that keeps the anchor its cell counts from and resolves it
+// as it applies, where what it places is placed again after the request
+type Anchored interface {
+	SetOrigin(MapAnchor)
 }
 
 // MapEdge anchors a cell to an edge of the map; MapEdgeNone names the cell as given

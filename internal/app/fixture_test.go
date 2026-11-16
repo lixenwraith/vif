@@ -128,7 +128,7 @@ func spawnCursor(t *testing.T, a *App) {
 	var before, after int
 	a.World().RunSafe(func() { before = a.World().Resources.Player.Count() })
 	a.Context().PushEventOrigin(event.EventCursorSpawnRequest,
-		&event.CursorSpawnRequestPayload{Auto: true, Center: true}, event.OriginDebug)
+		&event.CursorSpawnRequestPayload{Auto: true, Origin: event.MapAnchorCenter}, event.OriginDebug)
 	a.Settle()
 	a.World().RunSafe(func() { after = a.World().Resources.Player.Count() })
 	if after != before+1 {
