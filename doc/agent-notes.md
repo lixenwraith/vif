@@ -70,7 +70,10 @@ Libraries · Branches.
   `<module>/@v/<v>.zip`; `<v>.mod`, `<v>.info` and `list` beside it), listed first
   with `GONOSUMDB` naming the module and a scratch `GOMODCACHE`. `go get`, then
   `go mod tidy` and `go -C android mod tidy`, write the `go.sum` lines, which
-  verify against the tag once a squash merge keeps that tree.
+  verify against the tag once a squash merge keeps that tree. The last tag's
+  commit zipped the same way must hash (`dirhash.HashZip`) to the `h1` main's
+  `go.sum` holds, which proves the zip before the new line is trusted, and
+  `GOFLAGS=-modcacherw` lets the scratch cache be removed.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the
