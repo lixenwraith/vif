@@ -1744,14 +1744,22 @@ the file, so they wait for a pause between waves of netcode work.
 
 - Priority: P2
 - Affected files: `internal/converge/authority.go` (`driveShedding`, `peerLost`),
-  `internal/converge/correction.go` (`observeFloor`), `internal/converge/reach.go`
-  (`Reach.cutOff`), `internal/render/renderer/status_bar.go`
+  `internal/converge/correction.go` (`observeFloor`, `Apply`),
+  `internal/converge/reach.go` (`Reach.cutOff`), `internal/system/network.go`
+  (`scheduleCrossings`), `internal/render/renderer/status_bar.go`
 - Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
   [§5.1](multi-player.md#51-succession)
 
 A guest reads its host's silence from its link alone: one that stops answering is
-dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Two stalls
+dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Three states
 fall between that and a host that only slows:
+- **A guest left in the run before its host's**: a guest reaches the next run only
+  as the reset applies on it, and until then that run's worlds wait at the head of
+  `Apply`'s inbox and its epochs are refused. One whose barrier never dispatches a
+  crossed reset, its epoch refused past the schedule's caps or the apply window, or
+  gone with a relay that left, predicts alone for good over a link that answers.
+  What would close it: the floor reading below, or a next-run world that has waited
+  past the floor is adopted as a join's is.
 - **A host whose loop stalls while its transport answers**, a deadlock on the world
   lock or a pathological tick: the probe is answered on transport goroutines, so the
   link stays up and the guest predicts alone for as long as the stall lasts. Its
