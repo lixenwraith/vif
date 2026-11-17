@@ -150,8 +150,9 @@ Re-entering a region repeats its declaration, which the registry refuses as a
 duplicate, so a population persists through a run. A game reset (`:new`)
 replaces the run: every declared species is deregistered, and the FSM's next
 declaration starts a fresh population seeded from the new run's shared root.
-Nothing survives process exit; the generic persistence package is available but
-not wired into the application.
+Nothing survives process exit: the generic persistence package keeps only what a
+bot's learner evolves, a population outside the world and its captures
+([Bots](bots.md#learning)).
 
 An authoritative multiplayer capture is different from file persistence. The
 genetic D-19 carrier exports each registry engine's complete checkpoint, the

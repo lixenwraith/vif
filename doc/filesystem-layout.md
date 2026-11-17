@@ -59,7 +59,8 @@ vif/
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
 ├── image/       .aimg wall assets
-└── bot/         bot graphs, one <name>.toml each
+└── bot/         bot graphs, one <name>.toml each, and in the user root what
+                 a learning one keeps, <graph>.<scenario>.json
 ```
 
 A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies

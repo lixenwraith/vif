@@ -256,6 +256,9 @@ func main() {
 		var st bot.Stats
 		if st, err = app.RunBot(cfg, platformHost, graph); err == nil && !*flagWatch {
 			fmt.Printf("Bot stopped: %d ticks, %d actions, fitness %d\n", st.Ticks, st.Injected, st.Fitness)
+			if st.Learn.Evaluations > 0 {
+				fmt.Printf("Bot learned: rounds %d, fielding %.0f over %d\n", st.Rounds, st.Learn.Fielded, st.Learn.FieldedCount)
+			}
 		}
 	case flagSession.serve != "":
 		sayNotice()

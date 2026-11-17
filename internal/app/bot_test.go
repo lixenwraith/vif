@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
@@ -28,6 +29,7 @@ import (
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
@@ -157,6 +159,64 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 		if st.Injected == 0 || st.Dropped != 0 {
 			t.Errorf("%s: injected %d, dropped %d", name, st.Injected, st.Dropped)
 		}
+	}
+}
+
+// TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot: a learning graph alone in the
+// shipped cave is scored a round at each game its defeat ends, and its population
+// is saved under the graph's and the scenario's names beside the user root's graphs.
+func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, dir)
+	}
+	if root := paths.UserRoot(); !strings.HasPrefix(root, dir) {
+		t.Skipf("the user root %q is not in %s", root, dir)
+	}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := bot.ParseGraph("cave", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	learner, err := a.learn(d, graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rounds = 3
+	for tick := 0; d.Stats().Rounds < rounds; tick++ {
+		if more, err := d.Step(); !more || err != nil || tick > 20000 {
+			t.Fatalf("tick %d: more %v, err %v, %d rounds", tick, more, err, d.Stats().Rounds)
+		}
+	}
+	if err := learner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := persistence.NewManager(paths.PopulationDir(), nil).Load("cave.cave")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcomes := 0
+	for _, c := range kept.Candidates {
+		outcomes += c.Count
+	}
+	if outcomes != rounds || kept.Tag == "" {
+		t.Fatalf("%d outcomes kept under tag %q, want the %d rounds played out", outcomes, kept.Tag, rounds)
 	}
 }
 

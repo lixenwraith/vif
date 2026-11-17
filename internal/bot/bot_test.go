@@ -3,10 +3,12 @@ package bot
 import (
 	"fmt"
 	"io/fs"
+	"math"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -79,6 +81,12 @@ on_update = [{ action = "PointAt", payload = { target = "glyph", key = "1" } }]`
 on_update = [{ action = "PointAt", payload = { target = "button", away = true } }]`, `unknown target "button"`},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "button", key = "12" } }]`, "key must be one character"},
+		{region + `[states.A]
+on_update = [{ action = "Steer" }]`, "the graph declares no [network] to steer by"},
+		{"[bot]\nlearn = true" + region + "[states.A]", "learn needs a [network]"},
+		{"[network]\ninputs = [\"column\", \"radar\"]" + region + "[states.A]", `[network]: inputs: "radar" is no sensor`},
+		{"[network]\ninputs = [\"column\"]\ny = { energy = 1.0 }" + region + "[states.A]", `[network]: weight "energy" = 1: not an input or bias`},
+		{"[network]\ninputs = [\"column\"]\nx = { column = 4.5 }" + region + "[states.A]", `[network]: weight "column" = 4.5`},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -570,5 +578,254 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
 			t.Errorf("%s %s with the cursor %s: passes %v, want %v", c.guard, c.args,
 				map[bool]string{true: "at 35,7", false: "off the map"}[c.ctx == on], got, c.want)
 		}
+	}
+}
+
+// steering is a graph whose one state steers by a network of the given table
+func steering(network string) string {
+	return "[bot]\nactions_per_second = 20\n[network]\n" + network + `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "Steer" }]
+`
+}
+
+// TestSteerPointsAtTheCellItsNetworksOutputsName: a sensor reads an offset from the
+// cursor in view widths and heights, and Steer moves by its outputs in the same,
+// so a direct weight of one lands the pointer on what the sensor sighted.
+func TestSteerPointsAtTheCellItsNetworksOutputsName(t *testing.T) {
+	w, ctx := soloWorld(10, 2)
+	place(w, core.DomainShared, 60, 16, func(e core.Entity) {
+		w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm})
+	})
+	_, rec := botFor(t, ctx, steering(`inputs = ["species_x", "species_y"]
+hidden = 2
+x = { species_x = 1.0 }
+y = { species_y = 1.0 }`), 2)
+	want := []input.Intent{{Type: input.IntentMouseMove, X: 60, Y: 16, MapCell: true}}
+	if !slices.Equal(rec.got, want) {
+		t.Fatalf("steered %+v, want one move onto the species at 60,16, most of the view away", rec.got)
+	}
+}
+
+// TestTheSensorsReadWhatTheViewShows: each sensor is an offset from the cursor
+// scaled to the view, of the nearest of its kind the view shows, the rock's edges
+// at the cursor's column and ahead, and zero for what is not sighted.
+func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
+	w, ctx := soloWorld(16, 10)
+	cfg := w.Resources.Config
+	cfg.MapWidth, cfg.CameraX = 200, 10
+	w.Positions.Resize(cfg.MapWidth, cfg.MapHeight)
+	minX, minY, maxX, maxY, _ := cfg.VisibleMapRect()
+	width, height := maxX-minX+1, maxY-minY+1
+	own := w.Resources.Player.Entity
+	w.Components.Energy.SetComponent(own, component.EnergyComponent{Current: -energyHalf})
+
+	cols := make([]engine.RockColumn, cfg.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 2, Floor: cfg.MapHeight - 3}
+	}
+	cols[16+width/8] = engine.RockColumn{Ceil: 5, Floor: 15}
+	cols[16+width/4] = engine.RockColumn{Ceil: 8, Floor: 12}
+	w.Positions.SetRock(component.WallBlockCursor, 0, cols)
+
+	// Each kind has one at 9,10, nearer than any the view shows and left of it
+	species := func(x, y int, enraged bool) {
+		place(w, core.DomainShared, x, y, func(e core.Entity) {
+			w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, IsEnraged: enraged})
+		})
+	}
+	species(30, 10, false)
+	species(24, 12, true)
+	species(9, 10, true)
+	for i, b := range []component.BehaviorComponent{
+		{Landing: true, TargetX: 18, TargetY: 6}, {Landing: true, TargetX: 9, TargetY: 10}, {TargetX: 16, TargetY: 10},
+	} {
+		place(w, core.DomainShared, 150, i, func(e core.Entity) { w.Components.Behavior.SetComponent(e, b) })
+	}
+	for _, l := range []struct {
+		x, y  int
+		owner core.Entity
+	}{{26, 10, own}, {9, 10, own}, {16, 11, own + 1}} {
+		place(w, core.DomainPlayer, l.x, l.y, func(e core.Entity) {
+			w.Components.Loot.SetComponent(e, component.LootComponent{Owner: l.owner})
+		})
+	}
+
+	d, _ := botFor(t, ctx, steering("inputs = [\"column\"]\nhidden = 0"), 0)
+	from, _ := w.LocalCursor()
+	got := d.mind.look(from, minX, minY, maxX, maxY)
+	across := func(cells int) float64 { return float64(cells) / float64(width) }
+	down := func(cells int) float64 { return float64(cells) / float64(height) }
+	want := scene{
+		rock:    [3][2]float64{{down(1 - 10), down(cfg.MapHeight - 3 - 10)}, {down(4 - 10), down(15 - 10)}, {down(7 - 10), down(12 - 10)}},
+		landing: [2]float64{across(2), down(-4)},
+		loot:    [2]float64{across(10), 0},
+		column:  2*float64(16-minX)/float64(width-1) - 1,
+		energy:  0.5,
+	}
+	want.species[0].x, want.species[0].y, want.species[0].enraged = across(8), down(2), 1
+	want.species[1].x, want.species[1].y = across(14), 0
+	if got != want {
+		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
+	}
+}
+
+// TestANetworkAddsItsHiddenUnitsToItsDirectTerm: an output is its direct weights
+// over the inputs, its weights over the hidden units' tanh, and its bias.
+func TestANetworkAddsItsHiddenUnitsToItsDirectTerm(t *testing.T) {
+	g, err := ParseGraph("net", []byte(steering(`inputs = ["column", "energy"]
+hidden = 1
+x = { column = 2.0, bias = 0.25 }
+y = { energy = -1.0 }`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := g.net.playing()
+	copy(n.genes[n.unit(0):], []float64{1, -2, 0.5}) // the unit's two input weights and its bias
+	n.genes[n.output(0)+2], n.genes[n.output(1)+2] = 3, -1
+	x, y := n.run(&scene{column: 0.5, energy: 0.25})
+	unit := math.Tanh(1*0.5 - 2*0.25 + 0.5)
+	if wantX, wantY := 2*0.5+3*unit+0.25, -0.25-unit; math.Abs(x-wantX) > 1e-12 || math.Abs(y-wantY) > 1e-12 {
+		t.Fatalf("outputs %g, %g, want %g, %g", x, y, wantX, wantY)
+	}
+	if len(n.genes) != 1*(2+1)+2*(2+1+1) {
+		t.Fatalf("%d genes for two inputs, one hidden unit and two outputs", len(n.genes))
+	}
+}
+
+// TestARoundScoresItsTicksAndWhatItEarnedADefeatAside: a new game closes a round,
+// scored by its ticks and its events' worth, a data species' kill its hit points;
+// a crush weighs as a defeat does, on the fitness alone, as one ends every round.
+func TestARoundScoresItsTicksAndWhatItEarnedADefeatAside(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	w.Resources.Behaviors = []component.BehaviorPrototype{{HitPoints: 28}}
+	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	own := w.Resources.Player.Entity
+	rec.dispatch = []event.GameEvent{
+		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesDataFirst}},
+		{Type: event.EventCursorCrushed, Payload: &event.CursorCrushedPayload{Entity: own}},
+		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
+		{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}},
+		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own}},
+	}
+	for range 5 {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if st := d.Stats(); st.Rounds != 1 || st.Score != 4+28 || st.Fitness != 28-200+5 {
+		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks and a kill worth 28, and a fitness of %d",
+			st.Rounds, st.Score, st.Fitness, 28-200+5)
+	}
+}
+
+// memory is a population store that lasts a test
+type memory map[string]persistence.PopulationDTO
+
+func (m memory) Save(name string, dto persistence.PopulationDTO) error { m[name] = dto; return nil }
+func (m memory) Load(name string) (persistence.PopulationDTO, error) {
+	dto, ok := m[name]
+	if !ok {
+		return dto, fs.ErrNotExist
+	}
+	return dto, nil
+}
+
+// learning is a learning graph, a driver on it and the instance it plays
+func learning(t *testing.T) (*Graph, *Driver, *recorder) {
+	t.Helper()
+	doc := strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)
+	g, err := ParseGraph("net", []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ctx := soloWorld(0, 0)
+	rec := &recorder{}
+	d, err := NewDriver(rec, ctx, g, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g, d, rec
+}
+
+// TestALearnerScoresTheRoundsItsBotPlayedOutAlone: a candidate plays a round, the
+// hand-written genome first, and is scored as the game ends it. A round an operator
+// ended scores nothing, and a bot not alone plays what the learner fields.
+func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
+	g, d, rec := learning(t)
+	l, err := NewLearner(g, 1, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone := true
+	d.Learn(l, func() bool { return alone })
+	round := func(origin event.Origin) []float64 {
+		rec.dispatch = []event.GameEvent{{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}, Origin: origin}}
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+		return d.mind.net.genes
+	}
+	scored := func() int { return len(l.engine.Snapshot().Members) }
+
+	if !slices.Equal(d.mind.net.genes, g.net.genes) {
+		t.Fatal("the first round does not play the hand-written genome")
+	}
+	if next := round(event.OriginSystem); scored() != 1 || slices.Equal(next, g.net.genes) {
+		t.Fatalf("a round played out scored %d genomes and handed on %v, want the hand-written one scored and a child of it next", scored(), next)
+	}
+	if round(event.OriginCommand); scored() != 1 {
+		t.Fatalf("a round an operator ended left %d genomes scored, want it to score nothing", scored())
+	}
+	alone = false
+	if next := round(event.OriginSystem); scored() != 1 || !slices.Equal(next, g.net.genes) {
+		t.Fatalf("a bot not alone scored %d genomes and plays %v, want nothing scored and the genome fielded", scored(), next)
+	}
+}
+
+// TestALearnerKeepsItsPopulationByItsLayout: a population saved under the layout's
+// digest comes back, and its best member a second outcome confirmed is the one
+// fielded; a population of another layout starts over from the hand-written genome.
+func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
+	g, d, _ := learning(t)
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(g.net.genes)) }
+	kept := persistence.PopulationDTO{Version: persistence.SchemaVersion, Tag: g.net.digest, Candidates: []persistence.CandidateDTO{
+		{Genes: genome(0.1), Score: 50, Count: 1},
+		{Genes: genome(0.2), Score: 40, Count: 3},
+		{Genes: genome(0.3), Score: 10, Count: 2},
+	}}
+	store := memory{"kept": kept, "other": kept}
+	other := store["other"]
+	other.Tag = "another layout"
+	store["other"] = other
+	for name, want := range map[string][]float64{"kept": genome(0.2), "other": g.net.genes, "none": g.net.genes} {
+		l, err := NewLearner(g, 1, store, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.Learn(l, func() bool { return false })
+		if !slices.Equal(d.mind.net.genes, want) {
+			t.Errorf("%s: fields %v, want %v", name, d.mind.net.genes[:2], want[:2])
+		}
+	}
+
+	l, err := NewLearner(g, 1, store, "kept")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.turn(0, false, true)
+	l.turn(45, true, true)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	outcomes := 0
+	for _, c := range store["kept"].Candidates {
+		outcomes += c.Count
+	}
+	if saved := store["kept"]; saved.Tag != g.net.digest || outcomes != 1+3+2+1 {
+		t.Fatalf("saved %d outcomes under %q, want the six kept and the round scored since, under %q", outcomes, saved.Tag, g.net.digest)
 	}
 }
