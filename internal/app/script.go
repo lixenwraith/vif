@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
@@ -93,27 +93,23 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
-	// A graph plays by the shipped auto-fire and pointer, as a seat's does, so what
-	// it scores is its own and not its player's settings'
-	shipped := paths.DefaultPlay()
-	if cfg.Play.AutoFire == "" {
-		cfg.Play = shipped
-	}
-	cfg.Play.AutoFire, cfg.Play.Mouse, cfg.Play.FollowMouse = shipped.AutoFire, shipped.Mouse, shipped.FollowMouse
+	cfg.Play = botPlay(cfg.Play, graph)
 	run := runConfig{Config: cfg, host: host}
 	if run.Width == 0 && run.Height == 0 {
-		run.wiring.terminalGeometry = run.Mode == ModeScript
+		// A learning graph plays a bot's own screen watched or not, so the rounds its
+		// population is scored by are one game's
+		run.wiring.terminalGeometry = run.Mode == ModeScript && !graph.Settings.Learn
 		run.Width, run.Height = BotWidth, BotHeight
 	}
 	var (
-		driver  *bot.Driver
-		learner *bot.Learner
-		played  *App
+		driver   *bot.Driver
+		learners []*bot.Learner
+		played   *App
 	)
 	quit, err := runDriven(run, "bot", name, func(a *App) (pacedSource, error) {
 		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
 		if err == nil {
-			learner, err = a.learn(d, graph)
+			learners, err = a.learn(d, graph)
 		}
 		driver, played = d, a
 		return botSource{d}, err
@@ -121,35 +117,73 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	if driver == nil {
 		return bot.Stats{}, err
 	}
-	if learner != nil {
-		err = errors.Join(err, learner.Close())
+	for _, l := range learners {
+		err = errors.Join(err, l.Close())
 	}
 	stats := driver.Stats()
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,
-		"rounds", stats.Rounds, "score", stats.Score, "fielded", stats.Learn.Fielded, "evaluations", stats.Learn.Evaluations,
+		"rounds", stats.Rounds, "score", stats.Score,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
 }
 
+// botPlay is the [play] g's run starts on: the shipped pointer and the auto-fire
+// g's [bot] names, else the shipped one, so what a graph scores is its own and not
+// its player's settings'
+func botPlay(play paths.Play, g *bot.Graph) paths.Play {
+	shipped := paths.DefaultPlay()
+	if play.AutoFire == "" {
+		play = shipped
+	}
+	play.AutoFire, play.Mouse, play.FollowMouse = shipped.AutoFire, shipped.Mouse, shipped.FollowMouse
+	if g.Settings.AutoFire != "" {
+		play.AutoFire = g.Settings.AutoFire
+	}
+	return play
+}
+
 // learn has d play what this player's runs have learned for g in this run's
-// scenario, a learning graph's population in the user root, and learn on while the
-// run is in no session, whose rounds are not its bot's alone. Nil for any other graph.
-func (a *App) learn(d *bot.Driver, g *bot.Graph) (*bot.Learner, error) {
+// scenario, a population a network in the user root, and learn on while the run
+// is in no session, whose rounds are not its bot's alone. None for a graph that
+// does not learn.
+func (a *App) learn(d *bot.Driver, g *bot.Graph) ([]*bot.Learner, error) {
 	if !g.Settings.Learn {
 		return nil, nil
 	}
-	var store persistence.Store
-	if dir := paths.PopulationDir(); dir != "" {
-		store = persistence.NewManager(dir, nil)
+	var learners []*bot.Learner
+	for _, network := range g.Networks() {
+		var store bot.Store
+		if dir := paths.PopulationDir(); dir != "" {
+			store = paths.PlaceFile{Path: filepath.Join(dir, g.Name+"."+a.scenario.Shown()+"."+network+".json")}
+		}
+		l, err := bot.NewLearner(g, network, a.Seed(), store)
+		if err != nil {
+			return nil, err
+		}
+		l.Saved = func(st bot.LearnStats) {
+			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "rounds", st.Rounds,
+				"recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
+		}
+		learners = append(learners, l)
 	}
-	l, err := bot.NewLearner(g, a.Seed(), store, g.Name+"."+a.scenario.Shown())
-	if err != nil {
-		return nil, err
+	d.Learn(func() bool { return a.membership.SessionTransport() == nil }, learners...)
+	// A run somebody watches says what each round came to as it closes
+	if a.cfg.Mode.Presents() {
+		d.Round = func(n uint64, score float64) {
+			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", n, score, learnLine(d.Stats())), parameter.StatusNotice)
+		}
 	}
-	d.Learn(l, func() bool { return a.membership.SessionTransport() == nil })
-	return l, nil
+	return learners, nil
+}
+
+// learnLine says how far each of a bot's learners is, a bar's part a network
+func learnLine(st bot.Stats) (line string) {
+	for _, l := range st.Learn {
+		line += fmt.Sprintf(" | %s recent %.0f, fielding %.0f over %d", l.Network, l.Recent, l.Fielded, l.FieldedRounds)
+	}
+	return line
 }
 
 // runDriven plays one driven participant, a script or a bot, until it finishes or
@@ -276,8 +310,8 @@ func (s botSource) Step() (bool, error) { return s.d.Step() }
 func (s botSource) progress() string {
 	st := s.d.Stats()
 	line := fmt.Sprintf("tick %d | %s | %d intents, %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
-	if st.Learning {
-		line += fmt.Sprintf(" | round %d, fields %.0f", st.Rounds+1, st.Learn.Fielded)
+	if len(st.Learn) > 0 {
+		line += fmt.Sprintf(" | round %d%s", st.Rounds+1, learnLine(st))
 	}
 	return line
 }
