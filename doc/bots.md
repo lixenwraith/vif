@@ -505,38 +505,34 @@ population not kept`) and on a watched run's bar:
 
 A run that ends without keeping what it learned ends with that error.
 
-What a run learns from nothing in `cave`, where a core plays 7,000 ticks a
-second: after three million ticks of one game, seven minutes, two runs field
-members that score 2,906 and 3,654 over 40 rounds of four seeds neither learned
-on, where a ship that holds still scores 165, and meet the first Kraken in one
-round in five. A round snowballs, since a ship that outlives the first cave has
-its gun raised and its energy deep, so a few long rounds carry the mean and the
-median is 1,030 and 1,555. A watched run at speed 1 shows the play, and a
-headless one flat out fills the files.
-
-What a game on every core adds was read before that, while the graph wrote its
-weights by hand and a round scored its ticks. Over 60 rounds of four seeds no
-run learned on, each closed at the graph's limit, those weights scored 10,033,
-and what each of four runs fielded after 22 minutes of learning on four cores
-scored
+What a run learns from nothing in `cave`, held out over 60 rounds of four seeds
+no run learned on, each closed at the graph's limit, where the weights last
+written by hand score 11,896 and a ship that holds still 165: after 22 minutes
+on four cores, five games' 25 million ticks or one game's 6 million beside three
+others, the runs field
 
 ```
-seed              1       2        3       4
-one game      37621   16003    12617   13876
-five games    35177   65154   201735   60530
+seed                1       2       3       4
+five games       3720    5464    6141    5891
+  its median     1277    1070    2320    1344
+one game         3887    4556    4753    3159
+  its median     1105    1057    1382    1198
 ```
 
-- One game is a core's nine million ticks and 1,200 to 1,500 rounds, 3,300 to
-  4,100 an hour; five games are 35 million ticks and 2,700 to 5,100 rounds,
-  8,000 to 12,600 an hour, the fewer the longer its members last.
-- Every five-game run fielded members that shot five Krakens or more down in
-  most rounds, and seeds 3 and 4 played three rounds in four to the limit. Of
-  the one-game runs only seed 1's did, 38 rounds of 60 to the limit.
-- A Kraken's hit points double a cave and its pay with them, so a score about
-  doubles with each Kraken more: seed 3's rounds at the limit were worth
-  320,000 on eight.
-- A seed moves the outcome as much as the count of games does: read a setting
-  over several.
+- Half the rounds or more are lost in the first cave, where the hand weights
+  lose a quarter, and what five games field after two million ticks is about
+  what they field after 25: a game on every core gets there sooner, no further.
+- It finds the special attack and leans on it, about ten blasts in the first
+  cave, the first as the raiders close, and held off it loses every round
+  there; it holds no heat back
+  ([todo](todo.md#train-a-network-bot-live-in-cave)).
+- A round snowballs, since a ship that outlives the first cave has its gun
+  raised and its energy deep, so a few long rounds carry the mean: read the
+  median, and several seeds.
+
+A watched run at speed 1 shows the play, and a headless one flat out fills the
+files. What a game on every core added while the graph wrote its weights by
+hand and a round scored its ticks, on that score, is in the same todo item.
 
 ## Recording and replaying
 
