@@ -139,10 +139,11 @@ botfitness)
 		[ -f "$graph" ] || fail "no graph file $graph"
 		{ cat "$graph"; stop $((secs * 1000)); } >"$dir/graph.toml"
 	fi
-	# fitness plays one graph on one scenario and seed and prints its fitness
+	# fitness plays one graph on one scenario and seed, in one game where the graph
+	# learns, and prints its fitness
 	fitness() {
 		# shellcheck disable=SC2086 # $2 is a flag list
-		"$BIN" -headless -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
+		"$BIN" -headless -games 1 -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
 			>"$dir/run.log" 2>&1 || fail "$1 did not end cleanly on $2 seed $3: $dir/run.log"
 		v=$(botstat "$dir/run.log" fitness)
 		[ -n "$v" ] || fail "$1 left no fitness on $2 seed $3: $dir/run.log"

@@ -8,6 +8,8 @@ import (
 	"math"
 	"math/rand/v2"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/genetic"
@@ -71,7 +73,8 @@ type member struct {
 // Learner evolves the weights of one network of a graph, a round an evaluation: a
 // steady-state archive of scored genomes, bred a hidden unit or an output at a
 // time, its members played again in turn so a score is the mean of its rounds. It
-// lives beside the driver, outside the world, and keeps its archive in a store.
+// lives beside the drivers of the games it learns from, outside their worlds, and
+// keeps its archive in a store.
 type Learner struct {
 	engine *genetic.StreamingEngine[[]float64, float64]
 	store  Store
@@ -79,9 +82,7 @@ type Learner struct {
 	layout string
 	seed   []float64
 
-	genes  []float64      // the genome in play
-	id     genetic.EvalID // its evaluation, zero while it plays unscored
-	fresh  bool           // it is a new candidate's first round, which only qualifies it
+	slots  []slot         // what each game has in play
 	drawn  int            // candidates taken
 	seeded bool           // the hand-written genome has played this run
 	scored int            // rounds scored this run
@@ -89,13 +90,25 @@ type Learner struct {
 	recent float64        // their mean, the latest learnRecent weighing most
 	step   float64        // the mutation step in force
 	born   map[uint64]int // the round each archive member entered at, by its genes
-	stats  LearnStats
 	saved  time.Time
 	dirty  bool
 	failed error // the last save's failure, which Close reports
 
+	// stats is the progress as the last round left it, which any goroutine reads
+	// while the games play
+	stats atomic.Pointer[LearnStats]
+
 	// Saved, when set, is told the progress each time the population is kept
 	Saved func(LearnStats)
+}
+
+// slot is the genome one game has in play: its evaluation, zero while it plays
+// unscored, and whether this is a new candidate's first round, which only
+// qualifies it
+type slot struct {
+	genes []float64
+	id    genetic.EvalID
+	fresh bool
 }
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
@@ -114,18 +127,20 @@ type LearnStats struct {
 	FieldedRounds int
 }
 
-// NewLearner builds the learner of g's network name, its stream drawn from seed, on
-// the population store keeps; a nil store keeps it for the run. A population of
-// another layout is started over, and the weights g wrote by hand are the first
-// candidate of every run, so an edit to them meets what the store kept.
-func NewLearner(g *Graph, name string, seed uint64, store Store) (*Learner, error) {
+// NewLearner builds the learner of g's network name for games games at once, its
+// stream drawn from seed, on the population store keeps; a nil store keeps it for
+// the run. A population of another layout is started over, and the weights g
+// wrote by hand are the first candidate of every run, so an edit to them meets
+// what the store kept.
+func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Learner, error) {
 	i := slices.IndexFunc(g.nets, func(n *network) bool { return n.name == name })
 	if i < 0 {
 		return nil, fmt.Errorf("bot %s: no [network.%s] to learn", g.Name, name)
 	}
 	n := g.nets[i]
 	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
-		born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
+		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
+	l.stats.Store(&LearnStats{Network: name})
 	var kept population
 	if store != nil {
 		data, err := store.Load()
@@ -154,7 +169,8 @@ func NewLearner(g *Graph, name string, seed uint64, store Store) (*Learner, erro
 	}
 	perturb := &genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}
 	cfg := genetic.DefaultStreamingConfig()
-	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, 8
+	// Four slots a game, as the engine asks, so no evaluation in flight is evicted for a newer
+	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, 4*games)
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, l.step
 	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
@@ -193,66 +209,83 @@ func genomeKey(genes []float64) uint64 {
 	return h.Sum64()
 }
 
-// settle closes the evaluation in flight with the round its candidate played,
-// scored when it was played to its own end, and reports whether it is over. A
-// candidate whose first round would enter a full archive is held for another and
-// scored by that round alone, the first being picked for its luck.
-func (l *Learner) settle(score float64, played bool) bool {
-	if l.id != 0 && played {
+// settle closes the evaluation game has in flight with the round its candidate
+// played, scored when it was played to its own end, and reports whether it is
+// over. A candidate whose first round would enter a full archive is held for
+// another and scored by that round alone, the first being picked for its luck.
+func (l *Learner) settle(game int, score float64, played bool) bool {
+	s := &l.slots[game]
+	if s.id != 0 && played {
 		l.scored++
 		l.rounds++
 		l.recent += (score - l.recent) / float64(min(l.rounds, learnRecent))
-		if st := l.engine.Stats(); l.fresh && st.Size == learnPool && score > st.WorstScore {
-			l.fresh, l.stats.Scored, l.stats.Rounds, l.stats.Recent = false, l.scored, l.rounds, l.recent
+		if st := l.engine.Stats(); s.fresh && st.Size == learnPool && score > st.WorstScore {
+			s.fresh = false
+			held := l.Stats()
+			held.Scored, held.Rounds, held.Recent = l.scored, l.rounds, l.recent
+			l.stats.Store(&held)
 			return false
 		}
-		l.engine.CompleteEvaluation(l.id, score)
+		l.engine.CompleteEvaluation(s.id, score)
 		l.seeded, l.dirty = true, true
-	} else if l.id != 0 {
-		l.engine.AbandonEvaluation(l.id)
+	} else if s.id != 0 {
+		l.engine.AbandonEvaluation(s.id)
 	}
-	l.id = 0
+	s.id = 0
 	return true
 }
 
-// take is the genome the next round plays. Exploring, it is the candidate in
-// flight until that is settled, then the next: the hand-written genome first, and
-// every learnRepeat-th the best member short of learnProven rounds again, so what
-// tops the archive is proved or falls. Otherwise it is the member fielded, and a
-// candidate in flight goes unscored.
-func (l *Learner) take(explore bool) []float64 {
-	if l.id != 0 && explore {
-		return l.genes
+// take is the genome game's next round plays. Exploring, it is the candidate the
+// game has in flight until that is settled, then the next: the hand-written
+// genome until a round has scored it, and every learnRepeat-th the best member
+// short of learnProven rounds again, those in flight counted, so what tops the
+// archive is proved or falls. Otherwise it is the member fielded.
+func (l *Learner) take(game int, explore bool) []float64 {
+	s := &l.slots[game]
+	if s.id != 0 && explore {
+		return s.genes
 	}
-	l.settle(0, false)
+	l.settle(game, 0, false)
 	members := l.engine.Snapshot().Members
-	l.genes, l.fresh = l.field(members), explore
+	s.genes, s.fresh = l.field(members), explore
 	if explore {
 		l.drawn++
 		var genes []float64
 		switch {
 		case !l.seeded:
-			genes, l.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
+			genes, s.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
 		case l.drawn%learnRepeat == 0:
-			unproved := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool { return c.Count < learnProven })
+			unproved := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool {
+				return c.Count+l.playing(c.Data) < learnProven
+			})
 			if unproved >= 0 {
-				genes, l.id = members[unproved].Data, l.engine.BeginEvaluation(members[unproved].Data)
+				genes, s.id = members[unproved].Data, l.engine.BeginEvaluation(members[unproved].Data)
 			} else {
-				genes, l.id = l.engine.Reevaluate()
+				genes, s.id = l.engine.Reevaluate()
 			}
-			l.fresh = l.id == 0
+			s.fresh = s.id == 0
 		}
-		if l.id == 0 {
-			genes, l.id = l.engine.Propose()
+		if s.id == 0 {
+			genes, s.id = l.engine.Propose()
 		}
-		if l.id != 0 {
-			l.genes = genes
+		if s.id != 0 {
+			s.genes = genes
 		}
 	}
 	if l.dirty && time.Since(l.saved) >= learnSaveEvery { // [wall]
 		l.save()
 	}
-	return l.genes
+	return s.genes
+}
+
+// playing counts the games with genes in flight, each a round toward its proof
+func (l *Learner) playing(genes []float64) (n int) {
+	for i := range l.slots {
+		if l.slots[i].id != 0 && slices.Equal(l.slots[i].genes, genes) {
+			n++
+		}
+	}
+	return n
 }
 
 // field is the genome a round plays where no candidate does, of the archive's
@@ -260,7 +293,7 @@ func (l *Learner) take(explore bool) []float64 {
 // and the top of an archive is its luckiest, or the hand-written one. It brings
 // the stats, and the round each member entered at, up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
-	l.stats = LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
+	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
 	born := make(map[uint64]int, len(members))
 	fielded := slices.Clone(l.seed)
 	for i, c := range members {
@@ -271,13 +304,14 @@ func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float
 		}
 		born[key] = at
 		if i == 0 {
-			l.stats.Best = c.Score
+			st.Best = c.Score
 		}
-		if l.stats.FieldedRounds == 0 && c.Count >= learnProven {
-			l.stats.Fielded, l.stats.FieldedRounds, fielded = c.Score, c.Count, c.Data
+		if st.FieldedRounds == 0 && c.Count >= learnProven {
+			st.Fielded, st.FieldedRounds, fielded = c.Score, c.Count, c.Data
 		}
 	}
 	l.born = born
+	l.stats.Store(&st)
 	return fielded
 }
 
@@ -302,7 +336,7 @@ func (l *Learner) save() {
 	l.failed = err
 	l.saved, l.dirty = time.Now(), false // [wall]
 	if l.Saved != nil && err == nil {
-		l.Saved(l.stats)
+		l.Saved(l.Stats())
 	}
 }
 
@@ -315,4 +349,85 @@ func (l *Learner) Close() error {
 }
 
 // Stats is the learner's progress as its last round left it
-func (l *Learner) Stats() LearnStats { return l.stats }
+func (l *Learner) Stats() LearnStats { return *l.stats.Load() }
+
+// games is the order the rounds of the drivers that learn together close in, a
+// game each: by the tick a round closed at, then by its game, as if the games
+// took turns a tick at a time. So one seed and one count of games search alike
+// however their cores run them.
+type games struct {
+	mu    sync.Mutex
+	moved *sync.Cond
+	// next is the first tick each game's next round can close at, one past those it
+	// has played and gone once it has left; wanted is the earliest tick a game
+	// waits its turn at, gone with none waiting; end is the last tick a round
+	// closes into the learners at, gone until the run ends
+	next   []atomic.Uint64
+	wanted atomic.Uint64
+	end    atomic.Uint64
+}
+
+// gone is where a game that has left stands: past every tick
+const gone = math.MaxUint64
+
+func newGames(n int) *games {
+	g := &games{next: make([]atomic.Uint64, n)}
+	g.moved = sync.NewCond(&g.mu)
+	g.wanted.Store(gone)
+	g.end.Store(gone)
+	for i := range g.next {
+		g.next[i].Store(1)
+	}
+	return g
+}
+
+// reach says game's next round can close no earlier than tick, and wakes the
+// game waiting its turn where that may be what it waits on
+func (g *games) reach(game int, tick uint64) {
+	before := g.next[game].Swap(tick)
+	if w := g.wanted.Load(); before <= w && tick >= w {
+		g.wake()
+	}
+}
+
+func (g *games) wake() {
+	g.mu.Lock()
+	g.moved.Broadcast()
+	g.mu.Unlock()
+}
+
+// enter waits for the turn of the round game closed at tick, which comes once no
+// other game can close one before it, and holds the learners until exit; false
+// for a round that closed past the run's end. The games still waiting then name
+// the earliest tick among them again.
+func (g *games) enter(game int, tick uint64) bool {
+	g.mu.Lock()
+	for tick <= g.end.Load() {
+		if tick < g.wanted.Load() {
+			g.wanted.Store(tick)
+		}
+		if g.due(game, tick) {
+			break
+		}
+		g.moved.Wait()
+	}
+	g.wanted.Store(gone)
+	g.moved.Broadcast()
+	if tick > g.end.Load() {
+		g.mu.Unlock()
+		return false
+	}
+	return true
+}
+
+func (g *games) exit() { g.mu.Unlock() }
+
+// due reports whether every other game's next round closes after game's at tick
+func (g *games) due(game int, tick uint64) bool {
+	for other := range g.next {
+		if at := g.next[other].Load(); other != game && (at < tick || at == tick && other < game) {
+			return false
+		}
+	}
+	return true
+}

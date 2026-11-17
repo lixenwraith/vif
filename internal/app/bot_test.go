@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -216,7 +217,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	learners, err := a.learn(d, graph)
+	learners, err := a.learn(graph, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,11 +283,11 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raid, err := bot.NewLearner(graph, "raid", a.Seed(), nil)
+	raid, err := bot.NewLearner(graph, "raid", a.Seed(), 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.Learn(func() bool { return true }, raid)
+	bot.Learn(func() bool { return true }, []*bot.Learner{raid}, d)
 	const rounds = 3
 	for d.Stats().Rounds < rounds {
 		if more, err := d.Step(); !more || err != nil || d.Stats().Ticks > 400 {
@@ -297,6 +298,103 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	if st := d.Stats(); st.Ticks < rounds*uint64(limit) || st.Ticks > rounds*uint64(limit+3) || raid.Stats().Scored != rounds {
 		t.Fatalf("%d rounds took %d ticks and scored %d candidates, want each closed within three ticks of its %d and scored",
 			rounds, st.Ticks, raid.Stats().Scored, limit)
+	}
+}
+
+// TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame: a headless bot whose
+// graph learns plays the games it is asked for, one more than the cores where it
+// names none; a graph that does not learn, a watched, paced or session run plays
+// one, and refuses a count above it.
+func TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame(t *testing.T) {
+	const states = "[regions.play]\ninitial = \"A\"\n[states.A]\n"
+	learns, err := bot.ParseGraph("g", []byte("[bot]\nlearn = true\n[network.a]\ninputs = [\"column\"]\n"+states))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plays, err := bot.ParseGraph("g", []byte(states))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tt := range map[string]struct {
+		graph *bot.Graph
+		cfg   Config
+		want  int
+	}{
+		"asked":      {learns, Config{Games: 3}, 3},
+		"unasked":    {learns, Config{TimeScaleSpec: ScriptPaceMax}, runtime.GOMAXPROCS(0) + 1},
+		"no learner": {plays, Config{}, 1},
+		"watched":    {learns, Config{Mode: ModeScript}, 1},
+		"paced":      {learns, Config{TimeScaleSpec: "2"}, 1},
+		"hosting":    {learns, Config{Membership: Membership{HostAddress: ":7777"}}, 1},
+		"seating":    {learns, Config{Membership: Membership{Bots: []string{"default"}}}, 1},
+	} {
+		if got, err := botGames(tt.cfg, tt.graph); got != tt.want || err != nil {
+			t.Errorf("%s: %d games, err %v, want %d", name, got, err, tt.want)
+		}
+		if tt.cfg.Games = 2; tt.want == 1 {
+			if _, err := botGames(tt.cfg, tt.graph); err == nil {
+				t.Errorf("%s: two games were not refused", name)
+			}
+		}
+	}
+}
+
+// TestALearningRunsGamesKeepWhatFollowsFromItsSeed: the games of a headless
+// learning run, each a run of its own on a seed drawn from the run's, teach one
+// population a network, and one seed and one count of games keep the same
+// populations however the cores ran them, to the tick the graph ended the run at.
+func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, dir)
+	}
+	if root := paths.UserRoot(); !strings.HasPrefix(root, dir) {
+		t.Skipf("the user root %q is not in %s", root, dir)
+	}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rounds of fifteen seconds, eight a game before the graph quits at two minutes
+	const games, ticks = 3, 2 * time.Minute / parameter.GameUpdateInterval
+	graph := strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 15", 1) + `
+[regions.stop]
+initial = "Wait"
+
+[states.Wait]
+transitions = [{ trigger = "Tick", target = "Quit", guard = "StateTimeExceeds", guard_args = { ms = 120000 } }]
+
+[states.Quit]
+on_enter = [{ action = "Intent", payload = { name = "quit" } }]
+`
+	kept := func(name string) (bot.Stats, string) {
+		path := filepath.Join(dir, name+".toml")
+		if err := os.WriteFile(path, []byte(graph), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		st, err := RunBot(Config{Seed: fixtureSeed, Games: games, Resources: opts}, Host{}, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// No round so short reaches the Kraken, so raid's population is all they keep
+		doc, err := os.ReadFile(filepath.Join(paths.PopulationDir(), name+".cave.raid.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st, string(doc)
+	}
+	st, first := kept("first")
+	raid := st.Learn[slices.IndexFunc(st.Learn, func(l bot.LearnStats) bool { return l.Network == "raid" })]
+	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks%games != 0 || raid.Scored < games {
+		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d the run's own quit at, and a round of each scored",
+			st.Games, st.Ticks, raid.Scored, games, ticks)
+	}
+	if _, second := kept("second"); second != first {
+		t.Fatal("two runs of one seed and one count of games kept populations that differ")
 	}
 }
 

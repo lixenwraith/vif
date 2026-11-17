@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/vlog"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ScriptPaceMax is the -speed token that removes wall pacing from a script run.
@@ -82,10 +86,14 @@ func RunScript(cfg Config, host Host, path string) (journal.ScriptStats, error) 
 
 // RunBot plays this instance's own seat with a bot graph: a name or a path, which
 // cfg.Resources resolves. It is otherwise a script run, and presented, it keeps real
-// time unless -speed says otherwise. It reports its counters however it stops;
-// quit says the graph ended the run itself.
+// time unless -speed says otherwise. It reports its counters however it stops,
+// summed over the games a learning run played (BotGames).
 func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	graph, err := membership.LoadBotGraph(cfg.Resources, spec)
+	if err != nil {
+		return bot.Stats{}, err
+	}
+	games, err := botGames(cfg, graph)
 	if err != nil {
 		return bot.Stats{}, err
 	}
@@ -105,28 +113,144 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 		driver   *bot.Driver
 		learners []*bot.Learner
 		played   *App
+		beside   *sideGames
 	)
 	quit, err := runDriven(run, "bot", name, func(a *App) (pacedSource, error) {
 		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
-		if err == nil {
-			learners, err = a.learn(d, graph)
-		}
 		driver, played = d, a
+		if err == nil {
+			beside, err = a.playBeside(graph, games-1)
+		}
+		if err == nil {
+			learners, err = a.learn(graph, append([]*bot.Driver{d}, beside.drivers...)...)
+		}
+		if err == nil {
+			beside.start()
+		}
 		return botSource{d}, err
 	})
 	if driver == nil {
 		return bot.Stats{}, err
 	}
+	stats := driver.Stats()
+	stats.Games = games
+	// Where the graph ended the run, the games beside play to the tick its own
+	// reached, so what the run kept follows from its seed
+	end := uint64(0)
+	if quit {
+		end = stats.Ticks
+	}
+	driver.End(end)
+	err = errors.Join(err, beside.close(&stats))
 	for _, l := range learners {
 		err = errors.Join(err, l.Close())
 	}
-	stats := driver.Stats()
 	reg := played.world.Resources.Status
-	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
+	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "games", games, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,
 		"rounds", stats.Rounds, "score", stats.Score,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
+}
+
+// BotGames is how many games RunBot plays spec's graph in at once
+func BotGames(cfg Config, spec string) (int, error) {
+	graph, err := membership.LoadBotGraph(cfg.Resources, spec)
+	if err != nil {
+		return 0, err
+	}
+	return botGames(cfg, graph)
+}
+
+// botGames is how many games a bot's run plays at once: one, but for a headless
+// run alone and flat out whose graph learns, which plays cfg.Games, all teaching
+// the graph's learners. Where it names none that is one more than the cores,
+// as a game waiting its turn to close a round leaves its core to another.
+func botGames(cfg Config, g *bot.Graph) (int, error) {
+	paced, err := scriptPacing(cfg)
+	if err != nil {
+		return 0, err
+	}
+	m := cfg.Membership
+	switch {
+	case !g.Settings.Learn || cfg.Mode == ModeScript || paced || m.HostAddress != "" || m.JoinAddress != "" || len(m.Bots) > 0:
+		if cfg.Games > 1 {
+			return 0, fmt.Errorf("-games %d: only a -headless bot alone and flat out whose graph learns plays more than one game", cfg.Games)
+		}
+		return 1, nil
+	case cfg.Games > 0:
+		return cfg.Games, nil
+	}
+	return runtime.GOMAXPROCS(0) + 1, nil
+}
+
+// sideGames are the games a learning run plays beside its own, each a headless run
+// of its own on a seed drawn from the run's, stepped flat out on its own goroutine
+// until the run's driver ends the learning or its own graph quits
+type sideGames struct {
+	apps    []*App
+	drivers []*bot.Driver
+	done    sync.WaitGroup
+	mu      sync.Mutex
+	err     error
+}
+
+// playBeside builds n further games of this run's graph, none yet started
+func (a *App) playBeside(g *bot.Graph, n int) (*sideGames, error) {
+	s := &sideGames{}
+	for i := 1; i <= n; i++ {
+		cfg := a.cfg.Config
+		cfg.Seed = vmath.DeriveSeed(a.Seed(), "bot.game."+strconv.Itoa(i))
+		cfg.Membership, cfg.Journal, cfg.JournalSink = Membership{}, false, nil
+		cfg.StatTicks, cfg.RecTicks, cfg.Settings, cfg.Notice = -1, -1, nil, ""
+		game, err := newDriven(runConfig{Config: cfg, wiring: wiring{log: vlog.NewLog("game " + strconv.Itoa(i+1)), scriptedSession: true}})
+		if err != nil {
+			return nil, errors.Join(err, s.close(nil))
+		}
+		s.apps = append(s.apps, game)
+		d, err := bot.NewDriver(game, game.ctx, g, game.Seed(), game.membership.LocalParticipant())
+		if err != nil {
+			return nil, errors.Join(err, s.close(nil))
+		}
+		s.drivers = append(s.drivers, d)
+	}
+	return s, nil
+}
+
+// start steps each game for as long as its driver has more to play
+func (s *sideGames) start() {
+	for _, d := range s.drivers {
+		s.done.Add(1)
+		core.Go(func() {
+			defer s.done.Done()
+			for {
+				if more, err := d.Step(); err != nil || !more {
+					s.mu.Lock()
+					s.err = errors.Join(s.err, err)
+					s.mu.Unlock()
+					return
+				}
+			}
+		})
+	}
+}
+
+// close waits for the games to stop, which the run's driver ending the learning
+// has them do, closes them and adds what they played to st
+func (s *sideGames) close(st *bot.Stats) error {
+	if s == nil {
+		return nil
+	}
+	s.done.Wait()
+	for i, game := range s.apps {
+		if i < len(s.drivers) && st != nil {
+			played := s.drivers[i].Stats()
+			st.Ticks, st.Injected, st.Dropped = st.Ticks+played.Ticks, st.Injected+played.Injected, st.Dropped+played.Dropped
+			st.Fitness, st.Rounds, st.Score = st.Fitness+played.Fitness, st.Rounds+played.Rounds, st.Score+played.Score
+		}
+		game.Close()
+	}
+	return s.err
 }
 
 // botPlay is the [play] g's run starts on: the shipped pointer and the auto-fire
@@ -144,11 +268,11 @@ func botPlay(play paths.Play, g *bot.Graph) paths.Play {
 	return play
 }
 
-// learn has d play what this player's runs have learned for g in this run's
-// scenario, a population a network in the user root, and learn on while the run
-// is in no session, whose rounds are not its bot's alone. None for a graph that
-// does not learn.
-func (a *App) learn(d *bot.Driver, g *bot.Graph) ([]*bot.Learner, error) {
+// learn has drivers, this run's own first, each play a game of what this player's
+// runs have learned for g in this run's scenario, a population a network in the
+// user root, and learn on while the run is in no session, whose rounds are not
+// its bot's alone. None for a graph that does not learn.
+func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error) {
 	if !g.Settings.Learn {
 		return nil, nil
 	}
@@ -158,19 +282,20 @@ func (a *App) learn(d *bot.Driver, g *bot.Graph) ([]*bot.Learner, error) {
 		if dir := paths.PopulationDir(); dir != "" {
 			store = paths.PlaceFile{Path: filepath.Join(dir, g.Name+"."+a.scenario.Shown()+"."+network+".json")}
 		}
-		l, err := bot.NewLearner(g, network, a.Seed(), store)
+		l, err := bot.NewLearner(g, network, a.Seed(), len(drivers), store)
 		if err != nil {
 			return nil, err
 		}
 		l.Saved = func(st bot.LearnStats) {
-			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "rounds", st.Rounds,
-				"recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
+			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "games", len(drivers),
+				"rounds", st.Rounds, "recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
 		}
 		learners = append(learners, l)
 	}
-	d.Learn(func() bool { return a.membership.SessionTransport() == nil }, learners...)
+	// Games beside its own are played only by a run alone, which a headless one stays
+	bot.Learn(func() bool { return len(drivers) > 1 || a.membership.SessionTransport() == nil }, learners, drivers...)
 	// A run somebody watches says what each round came to as it closes
-	if a.cfg.Mode.Presents() {
+	if d := drivers[0]; a.cfg.Mode.Presents() {
 		d.Round = func(n uint64, score float64) {
 			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", n, score, learnLine(d.Stats())), parameter.StatusNotice)
 		}

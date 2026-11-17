@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -840,12 +842,12 @@ func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 // ended scores nothing, and a bot not alone plays what the learner fields.
 func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	g, d, rec := learning(t)
-	l, err := NewLearner(g, "fly", 1, nil)
+	l, err := NewLearner(g, "fly", 1, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	alone := true
-	d.Learn(func() bool { return alone }, l)
+	Learn(func() bool { return alone }, []*Learner{l}, d)
 	// A round is two ticks: the network steers in the first and the game ends the next
 	round := func(origin event.Origin) []float64 {
 		rec.dispatch = []event.GameEvent{{}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}, Origin: origin}}
@@ -896,23 +898,23 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		"another": {kept("another layout"), net.genes},
 		"none":    {&memory{}, net.genes},
 	} {
-		l, err := NewLearner(g, "fly", 1, c.store)
+		l, err := NewLearner(g, "fly", 1, 1, c.store)
 		if err != nil {
 			t.Fatal(err)
 		}
-		d.Learn(func() bool { return false }, l)
+		Learn(func() bool { return false }, []*Learner{l}, d)
 		if got := d.mind.nets[0].genes; !slices.Equal(got, c.want) {
 			t.Errorf("%s: fields %v, want %v", name, got[:2], c.want[:2])
 		}
 	}
 
 	store := kept(net.digest)
-	l, err := NewLearner(g, "fly", 1, store)
+	l, err := NewLearner(g, "fly", 1, 1, store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.take(true)
-	l.settle(45, true)
+	l.take(0, true)
+	l.settle(0, 45, true)
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -935,25 +937,25 @@ func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
-	l, err := NewLearner(g, "fly", 1, keeping(t, net.digest,
+	l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest,
 		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
 		member{Genes: genome(0.2), Score: 40, Rounds: learnProven},
 		member{Genes: genome(0.3), Score: 30, Rounds: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fielded := l.take(false); !slices.Equal(fielded, genome(0.2)) {
+	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.2)) {
 		t.Fatalf("fields %v, want the member its rounds have proved", fielded[:1])
 	}
 	// Two repeats bring the best member's rounds to learnProven, or one and a child
 	// bred its copy
 	for i := range 2 * learnRepeat {
-		if candidate := l.take(true); i+1 == learnRepeat && !slices.Equal(candidate, genome(0.1)) {
+		if candidate := l.take(0, true); i+1 == learnRepeat && !slices.Equal(candidate, genome(0.1)) {
 			t.Fatalf("candidate %d is %v, want the best member short of its rounds", i+1, candidate[:1])
 		}
-		l.settle(20, true)
+		l.settle(0, 20, true)
 	}
-	if fielded := l.take(false); !slices.Equal(fielded, genome(0.1)) {
+	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.1)) {
 		t.Fatalf("with those rounds fields %v, want the member they proved, still the best", fielded[:1])
 	}
 }
@@ -972,14 +974,14 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 		for i := range learnPool {
 			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(200 - i), Rounds: 1})
 		}
-		l, err := NewLearner(g, "fly", 1, keeping(t, net.digest, full...))
+		l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
 		if err != nil {
 			t.Fatal(err)
 		}
-		first = l.take(true)
+		first = l.take(0, true)
 		for _, score := range scores {
-			l.settle(score, true)
-			last = l.take(true)
+			l.settle(0, score, true)
+			last = l.take(0, true)
 		}
 		if st := l.Stats(); st.Scored != len(scores) {
 			t.Fatalf("%d rounds scored of %d played", st.Scored, len(scores))
@@ -1004,6 +1006,192 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 	}
 	if _, next, held := played(100); slices.Equal(next, first) || held(100) {
 		t.Fatal("a first round under the archive's worst did not close its evaluation unentered")
+	}
+}
+
+// TestARoundInFlightCountsTowardAMembersProof: games that learn together draw from
+// one count of candidates, and a repeat goes to the best member whose rounds,
+// those other games are playing among them, are short of its proof.
+func TestARoundInFlightCountsTowardAMembersProof(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	l, err := NewLearner(g, "fly", 1, learnRepeat+1, keeping(t, net.digest,
+		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 1},
+		member{Genes: genome(0.2), Score: 40, Rounds: 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take(0, true)
+	l.settle(0, 1, true) // the hand-written genome, scored under both
+	l.drawn = learnRepeat - 1
+	first := l.take(0, true)
+	for game := 1; game < learnRepeat; game++ {
+		l.take(game, true)
+	}
+	if next := l.take(learnRepeat, true); !slices.Equal(first, genome(0.1)) || !slices.Equal(next, genome(0.2)) {
+		t.Fatalf("the repeats are %v and %v, want the best member, a round short of its proof, and then the next best, as that round is in play",
+			first[:1], next[:1])
+	}
+}
+
+// TestEachGameSettlesItsOwnCandidate: a learner holds a candidate a game, so a
+// round scores the genome its own game played, in whatever order the games' rounds
+// close.
+func TestEachGameSettlesItsOwnCandidate(t *testing.T) {
+	g, _, _ := learning(t)
+	l, err := NewLearner(g, "fly", 1, 3, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	written := l.take(0, true)
+	l.settle(0, 10, true)
+	// The third candidate drawn is the hand-written genome again, its only member
+	first, again, second := l.take(0, true), l.take(1, true), l.take(2, true)
+	if slices.Equal(first, second) || !slices.Equal(again, written) {
+		t.Fatal("three games were not handed a candidate each, the second the member to prove")
+	}
+	l.settle(2, 7, true)
+	l.settle(0, 9, true)
+	l.settle(1, 30, true)
+	for score, genes := range map[float64][]float64{9: first, 7: second, 20: written} {
+		if !slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool {
+			return c.Score == score && slices.Equal(c.Data, genes)
+		}) {
+			t.Errorf("no genome is held at %g: want each round under the genome its game played, the member's two as their mean", score)
+		}
+	}
+}
+
+// paced is an instance whose rounds last by the genome its driver has in play, so
+// what a learner hands a game decides when that game next closes a round; its
+// graph quits once it has played quit ticks, never for none
+type paced struct {
+	recorder
+	d    *Driver
+	left uint64
+	quit int
+}
+
+func (p *paced) InputTick() bool { return p.quit == 0 || p.ticks < p.quit }
+
+func (p *paced) Tick(int) {
+	if p.ticks++; p.left == 0 {
+		p.left = 2 + genomeKey(p.d.mind.nets[0].genes)%5
+	}
+	if p.left--; p.left == 0 {
+		p.tap(event.GameEvent{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}})
+	}
+}
+
+// together has games paced games learn from one learner as play steps them, each
+// quitting at the tick quit gives it, and returns the population they kept and
+// its rounds
+func together(t *testing.T, games int, quit func(game int) int, play func(drivers []*Driver)) (string, int) {
+	t.Helper()
+	g, _, _ := learning(t)
+	store := &memory{}
+	l, err := NewLearner(g, "fly", 1, games, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drivers := make([]*Driver, games)
+	for i := range drivers {
+		_, ctx := soloWorld(0, 0)
+		inst := &paced{quit: quit(i)}
+		if inst.d, err = NewDriver(inst, ctx, g, 1, 0); err != nil {
+			t.Fatal(err)
+		}
+		drivers[i] = inst.d
+	}
+	Learn(func() bool { return true }, []*Learner{l}, drivers...)
+	play(drivers)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var doc population
+	if err := json.Unmarshal(store.doc, &doc); err != nil {
+		t.Fatal(err)
+	}
+	return string(store.doc), doc.Rounds
+}
+
+// inTurn steps drivers a tick each in turn, each until it has no more to play or
+// has played ticks, for ticks above zero
+func inTurn(ticks int) func(drivers []*Driver) {
+	return func(drivers []*Driver) {
+		for playing := true; playing; {
+			playing = false
+			for _, d := range drivers {
+				if ticks > 0 && d.stats.Ticks >= uint64(ticks) {
+					continue
+				}
+				if more, _ := d.Step(); more {
+					playing = true
+				}
+			}
+		}
+	}
+}
+
+// TestGamesThatLearnTogetherSearchAsIfTheyTookTurns: rounds close into a learner
+// in the order of their ticks and then of their games, so games stepped side by
+// side, each as its core runs it, keep the population they keep stepped in turn,
+// and a game whose graph quits holds none of the rest back.
+func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
+	const games = 4
+	quit := func(game int) int { return 400 - 40*game }
+	turns, rounds := together(t, games, quit, inTurn(0))
+	if rounds < 200 {
+		t.Fatalf("the games scored %d rounds in turn, too few to tell one order from another", rounds)
+	}
+	for range 20 {
+		beside, scored := together(t, games, quit, func(drivers []*Driver) {
+			var wg sync.WaitGroup
+			for i, d := range drivers {
+				wg.Go(func() {
+					for more := true; more; more, _ = d.Step() {
+						if i%2 == 1 {
+							runtime.Gosched()
+						}
+					}
+				})
+			}
+			wg.Wait()
+		})
+		if beside != turns {
+			t.Fatalf("side by side the games kept %d rounds and a population that differs from the %d rounds kept in turn", scored, rounds)
+		}
+	}
+}
+
+// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game
+// reached, and the games beside it, which play on as their cores allow, stop at
+// that tick and score no round past it, so what the run kept follows from its seed.
+func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
+	const games, ticks = 4, 300
+	never := func(int) int { return 0 }
+	turns, rounds := together(t, games, never, inTurn(ticks))
+	for range 20 {
+		beside, scored := together(t, games, never, func(drivers []*Driver) {
+			var wg sync.WaitGroup
+			for _, d := range drivers[1:] {
+				wg.Go(func() {
+					for more := true; more; more, _ = d.Step() {
+					}
+				})
+			}
+			for range ticks {
+				drivers[0].Step()
+				runtime.Gosched()
+			}
+			drivers[0].End(ticks)
+			wg.Wait()
+		})
+		if beside != turns {
+			t.Fatalf("a run ended at tick %d kept %d rounds and a population that differs from the %d rounds its games keep stepped in turn to that tick",
+				ticks, scored, rounds)
+		}
 	}
 }
 
@@ -1045,13 +1233,13 @@ on_update = [
 	}
 	var learners []*Learner
 	for _, name := range g.Networks() {
-		l, err := NewLearner(g, name, 1, nil)
+		l, err := NewLearner(g, name, 1, 1, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		learners = append(learners, l)
 	}
-	d.Learn(func() bool { return true }, learners...)
+	Learn(func() bool { return true }, learners, d)
 	if _, err := d.Step(); err != nil { // the step that starts the graph steers nothing
 		t.Fatal(err)
 	}

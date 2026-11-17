@@ -47,6 +47,7 @@ complete -c vif -o speed -x -d 'Simulation rate 1/8 1/4 1/2 1 2 4 8; with -scrip
 complete -c vif -o tick -x -d 'Game time one tick advances, 10ms to 100ms; a host\'s is its session\'s, which joiners take (default 50ms)'
 complete -c vif -o script -r -F -d 'Run an authored deterministic TOML tick script'
 complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal\'s digests unattended'
+complete -c vif -o games -x -d 'With -headless, how many games a bot alone whose graph learns plays at once, all teaching its learners (default one more than the cores)'
 complete -c vif -o watch -d 'Watch the first bot or a script on this terminal, with no human player'
 complete -c vif -o r -o replay -r -F -d 'Replay a recorded journal instead of playing'
 complete -c vif -o check -d 'Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit'

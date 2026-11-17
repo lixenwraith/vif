@@ -114,7 +114,7 @@ func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membersh
 	finished, err = drive(cfg, "bot", p.Graph.Name, p.Stop, p.Hold, func(b *App) (pacedSource, error) {
 		d, err := bot.NewDriver(b, b.ctx, p.Graph, b.Seed(), b.membership.LocalParticipant())
 		if err == nil {
-			_, err = b.learn(d, p.Graph)
+			_, err = b.learn(p.Graph, d)
 		}
 		if err != nil {
 			return nil, err
