@@ -1,0 +1,33 @@
+# Fly the cave scenario by a small network: the sensors of [network] through six
+# hidden units and a direct term, to the cell Steer points at each update. A solo
+# run learns the weights, a round an evaluation; any other fields the best it kept.
+[bot]
+actions_per_second = 20
+learn = true
+
+[network]
+hidden = 6
+inputs = [
+    "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
+    "species_x", "species_y", "species_enraged",
+    "species2_x", "species2_y", "species2_enraged",
+    "landing_x", "landing_y", "loot_x", "loot_y", "column", "energy",
+]
+
+# The weights written by hand, which learning starts from: hold a column a quarter
+# of the view from its left edge, where the gun covers what comes in
+[network.x]
+column = -0.4
+bias = -0.2
+
+# and keep to the nearest raider's row, to shoot it, a little toward the gap's middle
+[network.y]
+species_y = 0.9
+ceiling = 0.05
+floor = 0.05
+
+[regions.play]
+initial = "Fly"
+
+[states.Fly]
+on_update = [{ action = "Steer" }]

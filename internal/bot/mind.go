@@ -22,6 +22,7 @@ type mind struct {
 	ctx   *engine.GameContext
 	rng   *vmath.FastRand
 	queue *intentQueue
+	net   *network // the graph's policy, which Steer runs; nil for a graph with none
 
 	// room is how many more intents this step releases before its tick. An action
 	// that reads the world acts only when all it queues fits, or it would land on a
@@ -404,8 +405,8 @@ type (
 
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
-// bot's own view, and the bot's actions and guards.
-func register(m *fsm.Machine[*mind]) {
+// bot's own view, and the bot's actions and guards; Steer is refused without net.
+func register(m *fsm.Machine[*mind], net *network) {
 	std.Register(m, std.Host[*mind]{
 		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
@@ -454,6 +455,7 @@ func register(m *fsm.Machine[*mind]) {
 		m.push(input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
 	})
 	m.RegisterAction("PointAt", compilePointAt, (*mind).pointAt)
+	m.RegisterAction("Steer", compileSteer(net), func(m *mind, _ struct{}) { m.steer() })
 
 	m.RegisterGuard("HasTarget", func(a *hasTargetArgs) (fsm.GuardFunc[*mind], error) {
 		t, key, err := guardTarget(a.Target, a.Key)
