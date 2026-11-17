@@ -16,13 +16,15 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// What the learner searches by. A step is a share of a weight's range: a new
-// population starts at learnStep and settles at learnStepFloor. Every
-// learnRepeat-th candidate is an archive member again, a member with
-// learnProven rounds behind its score is one a run fields, and learnRecent rounds
-// are what the recent score looks back over.
+// What the learner searches by. A population's first learnPool rounds play genomes
+// drawn at random, each weight learnSpread of its bound about the one written by
+// hand, zero where none is. A step is a share of a weight's range: a new population starts at
+// learnStep and settles at learnStepFloor. Every learnRepeat-th candidate is an
+// archive member again, a member with learnProven rounds behind its score is one a
+// run fields, and learnRecent rounds are what the recent score looks back over.
 const (
 	learnPool      = 32
+	learnSpread    = 0.03
 	learnRate      = 0.03
 	learnStep      = 0.1
 	learnStepFloor = 0.03
@@ -83,8 +85,9 @@ type Learner struct {
 	seed   []float64
 
 	slots  []slot         // what each game has in play
+	rng    *rand.Rand     // what a population's first genomes are drawn from
 	drawn  int            // candidates taken
-	seeded bool           // the hand-written genome has played this run
+	seeded bool           // the hand-written genome has played this run, or holds no weight to try
 	scored int            // rounds scored this run
 	rounds int            // and since the population began
 	recent float64        // their mean, the latest learnRecent weighing most
@@ -135,7 +138,7 @@ type LearnStats struct {
 // NewLearner builds the learner of g's network name for games games at once, its
 // stream drawn from seed, on the population store keeps; a nil store keeps it for
 // the run. A population of another layout or one that cannot be parsed is started
-// over, one that cannot be read is left alone and the run keeps none, and the
+// over, one that cannot be read is left alone and the run keeps none, and any
 // weights g wrote by hand are the first candidate of every run.
 func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Learner, error) {
 	i := slices.IndexFunc(g.nets, func(n *network) bool { return n.name == name })
@@ -145,6 +148,8 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	n := g.nets[i]
 	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
 		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
+	l.rng = rand.New(rand.NewPCG(vmath.DeriveSeed(seed, "bot.learner."+name), vmath.DeriveSeed(seed, "bot.learner.draw")))
+	l.seeded = !slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
 	l.stats.Store(&LearnStats{Network: name})
 	var kept population
 	if store != nil {
@@ -180,13 +185,8 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, l.step
 	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
-		// Until two members are scored, a child is the hand-written genome with every
-		// weight a settled step off
-		func(rng *rand.Rand) []float64 {
-			child := slices.Clone(l.seed)
-			perturb.Perturb(&child, 1, learnStepFloor, rng)
-			return child
-		},
+		// The engine draws its own only while it holds under two members, which take fills first
+		func(*rand.Rand) []float64 { return l.draw() },
 		&genetic.TournamentSelector[[]float64, float64]{TournamentSize: genetic.DefaultTournamentSize},
 		&genetic.BlockCombiner[[]float64, float64, float64]{Blocks: n.blocks(), MixProbability: learnKeep},
 		perturb, genetic.SliceCloner[[]float64, float64]{}, cfg)
@@ -201,6 +201,15 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l.engine.Inject(members, 0)
 	l.engine.Start()
 	return l, nil
+}
+
+// draw is a genome drawn at random about the hand-written one
+func (l *Learner) draw() []float64 {
+	genes := slices.Clone(l.seed)
+	for i := range genes {
+		genes[i] = min(max(genes[i]+l.rng.NormFloat64()*learnSpread*weightBound, -weightBound), weightBound)
+	}
+	return genes
 }
 
 // genomeKey names a genome by its genes' bits, which is how an archive member is
@@ -242,10 +251,11 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 }
 
 // take is the genome game's next round plays. Exploring, it is the candidate the
-// game has in flight until that is settled, then the next: the hand-written
-// genome until a round has scored it, and every learnRepeat-th the best member
-// short of learnProven rounds again, those in flight counted, so what tops the
-// archive is proved or falls. Otherwise it is the member fielded.
+// game has in flight until that is settled, then the next: a hand-written genome
+// until a round has scored it, one drawn at random while the population is new,
+// and every learnRepeat-th the best member short of learnProven rounds again,
+// those in flight counted, so what tops the archive is proved or falls. Otherwise
+// it is the member fielded.
 func (l *Learner) take(game int, explore bool) []float64 {
 	l.tell()
 	s := &l.slots[game]
@@ -261,6 +271,9 @@ func (l *Learner) take(game int, explore bool) []float64 {
 		switch {
 		case !l.seeded:
 			genes, s.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
+		case l.rounds+l.flying() < learnPool:
+			genes = l.draw()
+			s.id = l.engine.BeginEvaluation(genes)
 		case l.drawn%learnRepeat == 0:
 			unproved := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool {
 				return c.Count+l.playing(c.Data) < learnProven
@@ -283,6 +296,16 @@ func (l *Learner) take(game int, explore bool) []float64 {
 		l.save()
 	}
 	return s.genes
+}
+
+// flying counts the games with a candidate in flight
+func (l *Learner) flying() (n int) {
+	for i := range l.slots {
+		if l.slots[i].id != 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // playing counts the games with genes in flight, each a round toward its proof
