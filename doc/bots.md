@@ -14,6 +14,7 @@ vif -host :7777 -bot 2                # host with two bots; others may join
 vif -join 127.0.0.1:7777              #   joining it from another terminal
 vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
 vif -bot -watch                       # watch one bot play; no player of yours
+vif -bot -watch -size fit             #   on a map the size of this terminal
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -s cave -bot cave -watch          # watch a network bot learn the cave
 vif -s cave -bot cave -headless -speed max   # the same flat out on every core, kept at each Ctrl-C
@@ -31,7 +32,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given or its graph learns. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
+| `-size <WxH\|fit>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. `fit` takes the screen's as the run starts, the terminal, window or page that shows it or, headless, the terminal it was started in, and 120x40 with none. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise, as with `fit`, the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |
@@ -440,9 +441,9 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 - A run in a session does not learn, since any participant's defeat ends every
   round there: its bots, seats among them, play what is fielded. A round an
   operator ends (`:n`) scores nothing.
-- A learning run plays a bot's own screen, 120x40, watched or not, unless `-size`
-  names another, so one population is scored by one game: stop a headless run,
-  start a watched one, and it goes on from the same files.
+- A bot alone plays `-size`, else 120x40, watched or not, so one population is
+  scored by one game: stop a headless run, start a watched one, and it goes on
+  from the same files.
 - A headless run alone and flat out plays its graph in several games at once,
   `-games` of them, each a run of its own on a seed drawn from the run's, and all
   teach the one learner a network and keep the one file. Each game carries one
@@ -489,6 +490,16 @@ over, as does a change of layout (`inputs` or `hidden`), which the file's
 
 What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
+
+A run whose disk fails learns on in memory and says so once, in the log (`bot
+population not kept`) and on a watched run's bar:
+
+- a file that cannot be read is left as it is, and the run keeps nothing;
+- a file that cannot be parsed starts that population over, and the next save
+  replaces it;
+- a save that fails is tried again each half minute, and only the first is said.
+
+A run that ends without keeping what it learned ends with that error.
 
 The weights written by hand are most of what the bot knows at first. In `cave`,
 where a core plays one of their rounds a second, they score 10,600 a round:

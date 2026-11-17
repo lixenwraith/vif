@@ -102,6 +102,7 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 		aspect = vmath.RefAspect
 	}
 	if !a.cfg.Mode.Presents() {
+		width, height = a.fitTerminal(width, height)
 		return width, height, colorMode, aspect
 	}
 	if a.cfg.CellAspect == 0 {
@@ -116,7 +117,7 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if colorMode = a.pres.Surface().ColorMode(); colorMode == terminal.ColorMode16 {
 		colorMode = terminal.ColorMode256
 	}
-	if a.cfg.Mode.OwnsGeometry() || a.cfg.wiring.terminalGeometry {
+	if a.cfg.Mode.OwnsGeometry() || a.cfg.fit() {
 		width, height = a.pres.Size()
 	}
 	return width, height, colorMode, aspect

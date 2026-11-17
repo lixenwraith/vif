@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math"
@@ -927,6 +928,87 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		saved.Members[entered].Born != 1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
 		t.Fatalf("saved %+v: want the three kept with their births, the genome scored 45 born at round 1, and the proved member fielded",
 			saved)
+	}
+}
+
+// failing is a population store whose load or save fails with the error it is
+// given, counting the saves asked of it
+type failing struct {
+	memory
+	load, save error
+	saves      int
+}
+
+func (f *failing) Load() ([]byte, error) {
+	if f.load != nil {
+		return nil, f.load
+	}
+	return f.memory.Load()
+}
+
+func (f *failing) Store(doc []byte) error {
+	if f.saves++; f.save != nil {
+		return f.save
+	}
+	return f.memory.Store(doc)
+}
+
+// TestALearnerItsFileFailsLearnsOnAndSaysSoOnce: a population that cannot be read
+// is left as it is and the run keeps none, which its end reports; one that cannot
+// be parsed starts over and the next save replaces it. Either is said once.
+func TestALearnerItsFileFailsLearnsOnAndSaysSoOnce(t *testing.T) {
+	g, _, _ := learning(t)
+	for name, c := range map[string]struct {
+		store *failing
+		kept  bool
+	}{
+		"unreadable": {&failing{load: errors.New("denied")}, false},
+		"unparsable": {&failing{memory: memory{doc: []byte("{")}}, true},
+	} {
+		l, err := NewLearner(g, "fly", 1, 1, c.store)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		said := 0
+		l.Lost = func(error) { said++ }
+		for range 3 {
+			l.take(0, true)
+			l.settle(0, 45, true)
+		}
+		err = l.Close()
+		var saved population
+		replaced := json.Unmarshal(c.store.doc, &saved) == nil && saved.Rounds == 3
+		if said != 1 || l.rounds != 3 || (err == nil) != c.kept || replaced != c.kept || (c.store.saves > 0) != c.kept {
+			t.Errorf("%s: said %d times, %d rounds scored, %d saves, replaced %t, closing with %v: want it said once, three rounds, and kept %t",
+				name, said, l.rounds, c.store.saves, replaced, err, c.kept)
+		}
+	}
+}
+
+// TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce: a save that fails is said once, not
+// those failing after it, the rounds go on being scored, and the run's end reports
+// it unless a later save kept the population.
+func TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce(t *testing.T) {
+	g, _, _ := learning(t)
+	store := &failing{save: errors.New("full")}
+	l, err := NewLearner(g, "fly", 1, 1, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	said := 0
+	l.Lost = func(error) { said++ }
+	for range 3 {
+		l.take(0, true)
+		l.settle(0, 45, true)
+		l.save()
+	}
+	if err := l.Close(); said != 1 || l.rounds != 3 || store.saves != 4 || err == nil {
+		t.Fatalf("said %d times over %d failed saves, %d rounds scored, closing with %v: want it said once, three rounds and the failure reported",
+			said, store.saves, l.rounds, err)
+	}
+	store.save = nil
+	if err := l.Close(); err != nil || len(store.doc) == 0 {
+		t.Fatalf("a save that works again closes with %v and keeps %d bytes, want the population kept", err, len(store.doc))
 	}
 }
 

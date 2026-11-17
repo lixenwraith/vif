@@ -109,6 +109,25 @@ payload = "width = 100\nheight = 30"
 	}
 }
 
+// TestAScriptNamingNoSizePlaysABotsScreen: a script that names no width and height
+// plays a bot's screen, which its journal's anchor records.
+func TestAScriptNamingNoSizePlaysABotsScreen(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "unsized.toml")
+	if err := os.WriteFile(path, []byte("schema = 1\nticks = 1\n"), 0o600); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	capture := journal.NewCapture()
+	if _, err := RunScript(Config{Resources: resource.Options{Embedded: true}, Seed: 0x5C71,
+		Journal: true, JournalSink: capture}, Host{}, path); err != nil {
+		t.Fatalf("script: %v", err)
+	}
+	anchors := capture.Anchors()
+	if len(anchors) == 0 || anchors[0].Width != BotWidth || anchors[0].Height != BotHeight {
+		t.Fatalf("anchors = %+v, want one of a bot's %dx%d", anchors, BotWidth, BotHeight)
+	}
+}
+
 // TestScriptPacingSelectsTheWallRate covers the whole pacing policy: the default
 // is a property of the run rather than of the flags, and -speed overrides it.
 func TestScriptPacingSelectsTheWallRate(t *testing.T) {
@@ -140,14 +159,14 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 	// A script that outran its peers would produce epochs faster than the barrier
 	// delivers them, so the one combination that cannot mean anything is refused.
 	unpacedSession := runConfig{Config: Config{
-		Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight,
+		Mode: ModeHeadless, Width: BotWidth, Height: BotHeight,
 		Membership: Membership{HostAddress: ":0"}, TimeScaleSpec: ScriptPaceMax,
 	}, wiring: wiring{scriptedSession: true}}
 	if err := unpacedSession.Validate(); err == nil {
 		t.Fatal("-speed max was accepted for a session")
 	}
 	// The same rate on a driven run that is not a script is still meaningless.
-	harness := runConfig{Config: Config{Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight, TimeScaleSpec: "2"}}
+	harness := runConfig{Config: Config{Mode: ModeHeadless, Width: BotWidth, Height: BotHeight, TimeScaleSpec: "2"}}
 	if err := harness.Validate(); err == nil {
 		t.Fatal("a manual-clock harness accepted a simulation rate")
 	}

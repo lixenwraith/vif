@@ -21,7 +21,7 @@ complete -c vif -o slow-bytes -x -d '...and at least this many bytes per second 
 complete -c vif -o shed-window -x -d 'Window the host\'s own tick keeping is judged over; past 10% of its ticks dropped, it drops its newest bot, then player; host only, 0 never sheds (default 10s)'
 complete -c vif -o listen -x -d 'Listen here so this run can take a migrate session over, whatever [play] takeover says; -join only, and the session shares the address'
 complete -c vif -o relay -x -d 'Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only'
-complete -c vif -o size -x -d 'Terminal-equivalent size for a run that has no terminal'
+complete -c vif -o size -x -d 'Size of a run no player sits at, or fit for its screen\'s; without it 120x40, and a -serve session its first player\'s'
 complete -c vif -o probe -x -d 'Health and metrics endpoint; -serve only'
 complete -c vif -o first-join -x -d 'Exit if no guest connects within this; -serve only, 0 waits forever'
 complete -c vif -o empty -x -d 'Exit this long after the last guest leaves; -serve only, 0 keeps the session'

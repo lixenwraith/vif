@@ -443,12 +443,10 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `bot.Learn`'s `alone` is the seam, and its stores need one writer.
-- **The watched map** and **the operator's side**, its `:bot clear`, `export`
-  and `import`, are items of their own:
-  [Size a bot's own run alike, watched or not](#size-a-bots-own-run-alike-watched-or-not)
-  and
+- **The operator's side**, its `:bot clear`, `export` and `import`, is an item of
+  its own:
   [Clear, export and import a bot's populations](#clear-export-and-import-a-bots-populations).
-  Beside them, the `:bot` list and the menu's Bots page name no population; a
+  Beside it, the `:bot` list and the menu's Bots page name no population; a
   watched run's menu still turns auto-fire or the pointer off under the bot,
   which its rounds then score, and writes that back as the player's own; and
   two runs learning one graph in one scenario each save over the other's files.
@@ -518,30 +516,20 @@ Decide whether a headless run takes the same three as flags, since a trainer has
 no command line, and what `:bot` lists of a population: its rounds, its recent
 mean and the member it fields.
 
-### Size a bot's own run alike, watched or not
+### Start a window's run at the size it opens to
 
-- Priority: P2
-- Affected files: `internal/app/script.go`, `internal/app/internal/config/config.go`
-- Guide: [Runtime §1](runtime.md#1-process-modes), [Bots](bots.md#flags)
+- Priority: P3
+- Affected files: `pkg/window/window.go`, `cmd/vif/gui.go`
+- Guide: [Runtime §1](runtime.md#1-process-modes),
+  [Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
 
-Watching is a probe and should set nothing in the world, and a bot alone needs a
-map of its own where nothing names one. Today a run's map comes from:
-
-```
-a person playing                        the terminal, as it resizes
-a bot alone, -headless                  -size, else 120x40
-a bot alone, -watch                     the watching terminal, or -size
-  its graph learning                    -size, else 120x40
-bots beside a person or on a server     the session's; a server's own alone, 120x40
-a script with no size                   80x24
-the desktop window                      opens at 120x40
-```
-
-So a watch sets a bot's map unless its graph learns, where it shows a small map
-in a large terminal, and it sets no script's; and the fallbacks are two. Decide
-whether every bot alone plays `-size` or 120x40 whoever watches, the terminal a
-view of it, which is `RunBot`'s `terminalGeometry` gone, and whether a script
-with no size takes the same 120x40.
+`-size fit` reads the screen once, as the run is built. A terminal and a page give
+their size then, `browser.Open` waiting for the page's `fitted`; a window gives the
+120x40 it opens at, and `-maximized`, `-fullscreen` or the window manager's own
+placement arrive after as a resize, which a person's held first game starts over
+at and a bot's or a script's run only pans over. Have `window.Open` wait for the
+size the window manager settles, a second at most as the page does, so every run
+starts at the grid on screen.
 
 ### Train bot graphs offline
 
