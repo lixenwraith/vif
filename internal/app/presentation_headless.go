@@ -24,6 +24,7 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if aspect == 0 {
 		aspect = vmath.RefAspect
 	}
+	width, height = a.fitTerminal(width, height)
 	return width, height, fallbackColorMode, aspect
 }
 

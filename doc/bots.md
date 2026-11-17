@@ -14,6 +14,7 @@ vif -host :7777 -bot 2                # host with two bots; others may join
 vif -join 127.0.0.1:7777              #   joining it from another terminal
 vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
 vif -bot -watch                       # watch one bot play; no player of yours
+vif -bot -watch -size fit             #   on a map the size of this terminal
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -s cave -bot cave -watch          # watch a network bot learn the cave
 vif -s cave -bot cave -headless -speed max   # the same flat out on every core, kept at each Ctrl-C
@@ -31,7 +32,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
+| `-size <WxH\|fit>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. `fit` takes the screen's as the run starts, the terminal, window or page that shows it or, headless, the terminal it was started in, and 120x40 with none. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise, as with `fit`, the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |

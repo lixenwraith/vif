@@ -33,9 +33,15 @@ a person playing    the terminal, as it resizes
 a replay            its journal's
 a script            its own width and height, else as a bot alone
 a bot alone         -size, else 120x40, watched or headless
+  with -size fit    its screen's, else 120x40
 a server            -size, else its first person's, or 120x40 for its own bots (§1.2)
 a seat              its holder's screen (§4, Bot seats)
 ```
+
+`-size fit` reads the screen once, as the run is built (`runConfig.fit`): the
+terminal, window or page that shows it, or for a run that shows nothing the
+terminal it was started in. A later resize moves the view and not the world, and
+on a server it is no size at all, so the first person's stands.
 
 Those predicates describe a full native build. Compile-time capabilities refine
 them: `vif_headless` makes presenting modes unavailable and omits renderers;
@@ -161,7 +167,8 @@ through the mid-run gate. An interactive `-host` is `:host` given at startup.
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
-Without it the server takes that geometry from its **first person**. Otherwise it
+Without it, or with `-size fit`, the server takes that geometry from its **first
+person**. Otherwise it
 would serve a bot's screen (120x40, a 119x36 map), and because the joiner adopts the
 host's latch, every participant would play on it however large its own terminal is.
 The joiner's acceptance therefore

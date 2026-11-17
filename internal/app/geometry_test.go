@@ -149,6 +149,51 @@ func TestABotAlonePlaysOneMapWatchedOrNot(t *testing.T) {
 	}
 }
 
+// TestSizeFitTakesTheRunsOwnScreen: a run asked to fit takes the screen that shows
+// it, or the terminal it was started in, and a bot's screen with neither, and its
+// seats play in what it took; a size it names stands, and a server asked to fit
+// still waits for its first person's.
+func TestSizeFitTakesTheRunsOwnScreen(t *testing.T) {
+	// Not parallel: it stands in for the process's terminal and binds a socket.
+	real := startedIn
+	t.Cleanup(func() { startedIn = real })
+	sized := errors.New("sized")
+	shown := Host{Presentation: &framePresentation{w: 200, h: 60}}
+	for name, c := range map[string]struct {
+		run            runConfig
+		terminal, want screen
+	}{
+		"watched":                {runConfig{Config: Config{Mode: ModeScript}, host: shown}, screen{150, 50}, screen{200, 60}},
+		"headless in a terminal": {runConfig{}, screen{150, 50}, screen{150, 50}},
+		"headless with none":     {runConfig{}, screen{}, screen{BotWidth, BotHeight}},
+		"a size named":           {runConfig{Config: Config{Width: 90, Height: 28}}, screen{150, 50}, screen{90, 28}},
+	} {
+		startedIn = func() (int, int, bool) { return c.terminal.w, c.terminal.h, c.terminal != screen{} }
+		c.run.FitSize, c.run.Resources, c.run.Seed = true, resource.Options{Embedded: true}, fixtureSeed
+		var got, seat screen
+		if _, err := drive(c.run, "bot", name, nil, nil, func(a *App) (pacedSource, error) {
+			got = screen{a.ctx.Width, a.ctx.Height}
+			a.world.RunSafe(func() { seat.w, seat.h = membershipRun{a}.SeatScreenLocked() })
+			return nil, sized
+		}); !errors.Is(err, sized) {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got != c.want || seat != c.want {
+			t.Errorf("%s plays %v and seats its bots on %v, want %v", name, got, seat, c.want)
+		}
+	}
+
+	startedIn = func() (int, int, bool) { return 150, 50, true }
+	server, addr, _ := lobbyHost(t, Config{Mode: ModeServer, FitSize: true, Resources: resource.Options{Embedded: true}, Seed: 0x6E01})
+	if w := server.Context().Width; w != BotWidth {
+		t.Fatalf("a server asked to fit starts %d wide, want a bot's %d until its first person", w, BotWidth)
+	}
+	sizedBy(t, addr, network.JoinerReport{Width: 160, Height: 45})
+	if w, h := server.Context().Width, server.Context().Height; w != 160 || h != 45 {
+		t.Fatalf("a server asked to fit plays %dx%d, want its first person's 160x45", w, h)
+	}
+}
+
 // framePresentation is a screen of a fixed size that keeps every frame flushed to it.
 type framePresentation struct {
 	w, h   int

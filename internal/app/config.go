@@ -94,8 +94,8 @@ type wiring struct {
 
 	// geometryDefaulted records that Normalize supplied Width or Height, which is
 	// how a dedicated host tells "size me from the session" apart from "serve
-	// exactly this". Normalize runs more than once on the way to a session, so only
-	// the pass that fills a zero sets it.
+	// exactly this", and a run asked to fit a size its screen may give (fit).
+	// Normalize runs more than once, so only the pass that fills a zero sets it.
 	geometryDefaulted bool
 
 	// membership is the wiring's session half, which the membership holds.
@@ -252,6 +252,12 @@ func (c *runConfig) Normalize() {
 	if c.Config.Normalize(); c.Width != width || c.Height != height {
 		c.wiring.geometryDefaulted = true
 	}
+}
+
+// fit reports whether this run takes the size nothing named from its own screen
+// (Config.FitSize); a dedicated host takes its first person's (adoptLobbyGeometry)
+func (c runConfig) fit() bool {
+	return c.FitSize && c.wiring.geometryDefaulted && !c.Mode.Serves()
 }
 
 // Validate is Config's with the wiring's rules: what a script's or bot's run may do

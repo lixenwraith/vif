@@ -185,6 +185,10 @@ type Config struct {
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects BotWidth and BotHeight.
 	Width, Height int
+	// FitSize takes a size those leave unset from the run's own screen, -size fit:
+	// what shows it, or the terminal a run that shows nothing was started in. A
+	// dedicated host takes its first person's instead, asked or not.
+	FitSize bool
 
 	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
 	// adopts instead of deriving from its terminal. Applied before the FSM boots:

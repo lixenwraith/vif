@@ -539,7 +539,7 @@ func buildConfig() app.Config {
 	cfg.Membership.Migrate = flagSession.authority == authorityMigrate
 	cfg.Membership.SlowPolicy = &flagSession.slow
 	cfg.Membership.ShedPolicy = &flagSession.shed
-	if flagSession.size != "" {
+	if cfg.FitSize = flagSession.size == sizeFit; flagSession.size != "" && !cfg.FitSize {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
 	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
@@ -693,7 +693,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.passphrase, "passphrase", "", "The passphrase this run's doors take (Argon2-SCRAM), or new for one made and printed; with -join, the one shown to a door that asks")
 	fs.StringVar(&f.admit, "admit", "", "What a -host or -serve door admits beside a pass: open (default), or ticket:<key>[,<key>], the site's tickets under the router's public key(s) and no bare key")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
-	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
+	fs.StringVar(&f.size, "size", "", "Size WxH of a run no player sits at, or fit for its screen's")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,
 		"With -serve, exit if no guest has connected within this duration, e.g. 90s; 0 waits forever")
 	fs.DurationVar(&f.empty, "empty", 0,
@@ -831,7 +831,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if err := f.lifetime().Validate(); err != nil {
 		return err
 	}
-	if f.size != "" {
+	if f.size != "" && f.size != sizeFit {
 		if _, _, err := parseSize(f.size); err != nil {
 			return err
 		}
@@ -925,11 +925,14 @@ func validSessionName(name string) error {
 	return nil
 }
 
+// sizeFit is the -size that takes a run's size from its screen (app.Config.FitSize)
+const sizeFit = "fit"
+
 // parseSize reads a WxH geometry for a run that derives none from a terminal.
 func parseSize(spec string) (width, height int, err error) {
 	w, h, ok := strings.Cut(spec, "x")
 	if !ok {
-		return 0, 0, fmt.Errorf("-size %q is not WxH, for example 120x40", spec)
+		return 0, 0, fmt.Errorf("-size %q is not WxH, for example 120x40, or %s", spec, sizeFit)
 	}
 	if width, err = strconv.Atoi(w); err != nil || width <= 0 {
 		return 0, 0, fmt.Errorf("-size %q has no usable width", spec)
