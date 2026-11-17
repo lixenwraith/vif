@@ -170,8 +170,10 @@ type Instance interface {
 }
 
 // Stats reports one bot's progress. A round is a game, from its start to the new
-// game its own play brought on.
+// game its own play brought on. Games is how many games played at once it sums,
+// zero for a driver's own.
 type Stats struct {
+	Games    int
 	Ticks    uint64
 	Injected uint64
 	Dropped  uint64
@@ -241,23 +243,30 @@ type Driver struct {
 
 	// earned is fitness without its defeats, and unpaid the ticks a network steered
 	// whose ticks count for nothing. The round in play began at roundTick with
-	// roundEarned and roundUnpaid; ended is how a new game was asked for since, which any
-	// dispatch may write. Each network's learner, nil for none, has a genome play
-	// a round; while the bot plays alone one of them at a time, explorer, plays a
-	// candidate, scored from where its network first steered in the round (from).
-	// A round that outlasts limit is one the driver asked the game to end (asked).
+	// roundEarned and roundUnpaid; ended is how a new game was asked for since,
+	// which any dispatch may write.
 	earned      int64
 	unpaid      uint64
 	roundTick   uint64
 	roundEarned int64
 	roundUnpaid uint64
 	ended       atomic.Uint32
-	learners    []*Learner
-	from        []roundMark
-	explorer    int
-	alone       func() bool
-	limit       time.Duration
-	asked       bool
+
+	// Each network's learner, nil for none, has a genome play a round; while the
+	// bot plays alone one of them at a time, explorer, plays a candidate, scored
+	// from where its network first steered in the round (from). A round that
+	// outlasts limit is one the driver asked the game to end (asked).
+	learners []*Learner
+	from     []roundMark
+	explorer int
+	alone    func() bool
+	limit    time.Duration
+	asked    bool
+
+	// game is the driver's place among those that learn together, and games the
+	// order their rounds close in, nil for a driver that learns by itself
+	game  int
+	games *games
 
 	// Round, when set, is told each round as it closes: its number and its score
 	Round func(n uint64, score float64)
@@ -368,13 +377,23 @@ func (m *mind) killWorth(payload any, weight int64) int64 {
 
 // Step updates the graph at the completed tick, after the events the last step
 // dispatched, then lets go of the keys whose holds are up, sends what the rate
-// allows, advances input-driven work and ticks once. False means an intent quit the
-// game. Credit left idle is capped at one second's worth, so a quiet bot bursts no
-// further.
-func (d *Driver) Step() (bool, error) {
+// allows, advances input-driven work and ticks once. False means an intent quit
+// the game, or the games it learns with have ended. Credit left idle is capped
+// at one second's worth, so a quiet bot bursts no further.
+func (d *Driver) Step() (more bool, err error) {
+	if g := d.games; g != nil {
+		if d.stats.Ticks >= g.end.Load() {
+			return false, nil
+		}
+		// A game that plays no further holds none of the rest back
+		defer func() {
+			if !more || err != nil {
+				g.reach(d.game, gone)
+			}
+		}()
+	}
 	tick := d.ctx.World.TickInterval()
 	d.credit = min(d.credit+d.rate*tick.Milliseconds(), d.rate*1000)
-	var err error
 	d.ctx.World.RunSafe(func() {
 		d.mind.fresh = [targetCount]bool{}
 		d.mind.room, d.mind.tick, d.mind.steering = int(d.credit/1000)-d.queue.n, d.stats.Ticks, -1
@@ -416,23 +435,41 @@ func (d *Driver) Step() (bool, error) {
 		d.asked = true
 		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 	}
+	if d.games != nil {
+		d.games.reach(d.game, d.stats.Ticks+1)
+	}
 	return true, nil
 }
 
-// Learn has the driver play each learner's genomes on its network, a round each.
-// While alone reports the bot plays by itself the learners explore in turn: one
-// plays a candidate and the rest the members they field, so a candidate's score
-// follows from its own change. Otherwise, as in a session, whose rounds any
-// participant ends, each plays what it fields.
-func (d *Driver) Learn(alone func() bool, learners ...*Learner) {
-	d.alone = alone
-	for _, l := range learners {
-		if i := slices.IndexFunc(d.mind.nets, func(n *network) bool { return n.name == l.name }); i >= 0 {
-			d.learners[i] = l
-		}
+// Learn has each driver play the learners' genomes on its networks, a round each,
+// as one of the games that learn from them together. While alone reports the
+// bots play by themselves a game's learners explore in turn: one plays a
+// candidate and the rest the members they field, so a candidate's score follows
+// from its own change. Otherwise, as in a session, each plays what it fields.
+func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
+	var order *games
+	if len(drivers) > 1 {
+		order = newGames(len(drivers))
 	}
-	d.explorer = slices.IndexFunc(d.learners, func(l *Learner) bool { return l != nil })
-	d.deal()
+	for game, d := range drivers {
+		d.alone, d.game, d.games = alone, game, order
+		for _, l := range learners {
+			if i := slices.IndexFunc(d.mind.nets, func(n *network) bool { return n.name == l.name }); i >= 0 {
+				d.learners[i] = l
+			}
+		}
+		d.explorer = slices.IndexFunc(d.learners, func(l *Learner) bool { return l != nil })
+		d.deal()
+	}
+}
+
+// End closes the learning d takes part in at tick: no round a game closes past it
+// reaches the learners, and none of the games steps further than it
+func (d *Driver) End(tick uint64) {
+	if d.games != nil {
+		d.games.end.Store(tick)
+		d.games.wake()
+	}
 }
 
 // deal hands each learner's network the genome its next round plays
@@ -440,17 +477,16 @@ func (d *Driver) deal() {
 	alone := d.alone()
 	for i, l := range d.learners {
 		if l != nil {
-			d.mind.nets[i].genes = l.take(alone && i == d.explorer)
+			d.mind.nets[i].genes = l.take(d.game, alone && i == d.explorer)
 		}
 	}
 }
 
 // closeRound ends the round a new game closed. Its score is its ticks, those an
 // unpaid network steered aside, and what its events earned, a defeat aside since
-// one ends every round. The explorer takes
-// the part from where its network first steered, when the game or the run's limit
-// ended the round, and its turn passes once its candidate is settled, or at once
-// where the round never reached its network, so no learner waits on another.
+// one ends every round. The explorer takes the part from where its network first
+// steered, when the game or the run's limit ended the round, and its turn passes
+// once its candidate is settled, or at once where the round never reached it.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
 	d.ctx.World.RunSafe(func() { earned = d.earned })
@@ -458,15 +494,18 @@ func (d *Driver) closeRound(played bool) {
 	d.roundTick, d.roundEarned, d.roundUnpaid = d.stats.Ticks, earned, d.unpaid
 	d.stats.Rounds++
 	d.stats.Score += score
-	if d.explorer >= 0 {
+	if d.explorer >= 0 && (d.games == nil || d.games.enter(d.game, d.stats.Ticks)) {
 		from := d.from[d.explorer]
 		part := float64(d.stats.Ticks-from.tick) - float64(d.unpaid-from.unpaid) + float64(earned-from.earned)
-		if !from.steered || d.learners[d.explorer].settle(part, played && d.alone()) {
+		if !from.steered || d.learners[d.explorer].settle(d.game, part, played && d.alone()) {
 			for d.explorer = (d.explorer + 1) % len(d.learners); d.learners[d.explorer] == nil; {
 				d.explorer = (d.explorer + 1) % len(d.learners)
 			}
 		}
 		d.deal()
+		if d.games != nil {
+			d.games.exit()
+		}
 	}
 	clear(d.from)
 	clear(d.mind.steered)

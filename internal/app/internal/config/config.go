@@ -164,6 +164,10 @@ type Config struct {
 	// System seed for RNG
 	Seed uint64
 
+	// Games is how many games a headless bot alone, whose graph learns, plays at
+	// once, each on a seed drawn from Seed; zero is one more than the cores
+	Games int
+
 	// Session is the RNG session a run reproduces rather than counts to: the seed
 	// names the family of streams, this names the game in it. Zero counts from one;
 	// a join and a replay adopt the anchor's number, because a restarted session is

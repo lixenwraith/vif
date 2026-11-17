@@ -219,6 +219,7 @@ and the audio buffer; a flag on the command line wins
 | `-tick <dur>` | Game time one tick advances, 10 to 100 ms, default 50 ms. A host's is its session's, which every joiner adopts; tick-counted rules play faster at a shorter tick. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
 | `-headless` | With bots, run without a human or terminal; solo runs are unpaced. With `-replay`, verify the journal's digests unattended. |
+| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, one more than the cores unless given ([Bots](bots.md#learning)). |
 | `-watch` | Present a script or the first bot, with no human player. |
 | `-r`, `-replay <path>` | Present a recorded journal instead of starting interactive play. |
 | `-check` | Resolve and validate `vif.toml`, the scenario and its behavior programs, keymap, audio, content and bot graphs; print the result and exit. |
