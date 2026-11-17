@@ -172,6 +172,9 @@ Run an authored deterministic TOML tick script
 .B \-headless
 With \-bot, run bots without a human player or terminal; solo runs are unpaced. With \-replay, verify the journal's digests unattended
 .TP
+.B \-games <n>
+With \-headless, how many games a bot alone whose graph learns plays at once, all teaching its learners (default one more than the cores)
+.TP
 .B \-watch
 Watch the first bot or a script on this terminal, with no human player
 .TP

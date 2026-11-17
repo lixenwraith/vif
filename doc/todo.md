@@ -256,6 +256,10 @@ root ([Bots](bots.md#networks-and-learning)). Decided, and built so:
   kill pays the ticks its hit points take at four a second, less for a slower
   kill, a quarter at least, as later Krakens take long whatever is flown.
 - **`cave` starts with 10 heat**, which a person's first seconds use too.
+- **A game on every core.** A headless run alone plays `-games` games at once,
+  each its own instance on a seed drawn from the run's, all feeding one learner
+  a network and its one file. Rounds close into the learners by tick and then
+  by game, so one seed and one count of games keep one population.
 
 Taken as defaults where the item said decide, each to confirm or change:
 
@@ -272,6 +276,12 @@ Taken as defaults where the item said decide, each to confirm or change:
   unscored: scored too, a fielded member is read beside the other network's
   candidates and a candidate beside its best, which favours whatever is new.
 - The switch is `[bot] learn`.
+- A run plays one game more than its cores: a game that closes a round ahead of
+  the others' ticks waits for them, which with a game a core left a fifth of
+  four cores idle.
+- Every game's first candidate is the hand-written genome until a round has
+  scored it, and a repeat counts the rounds a member has in flight toward its
+  eight.
 
 What was measured, at 120x40 headless and flat out. A tick costs 127 µs with no
 bot and 137 to 147 with a network steering, 138 when every goal it names is

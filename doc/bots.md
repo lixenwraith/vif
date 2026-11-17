@@ -16,7 +16,7 @@ vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
 vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -s cave -bot cave -watch          # watch a network bot learn the cave
-vif -s cave -bot cave -headless -speed max   # the same flat out, kept at each Ctrl-C
+vif -s cave -bot cave -headless -speed max   # the same flat out on every core, kept at each Ctrl-C
 vif -replay <journal>                 # replay what it recorded
 vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room for people
 vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, in no seat
@@ -28,7 +28,8 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 |---|---|
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
-| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
+| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
+| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given or its graph learns. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
@@ -442,12 +443,27 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 - A learning run plays a bot's own screen, 120x40, watched or not, unless `-size`
   names another, so one population is scored by one game: stop a headless run,
   start a watched one, and it goes on from the same files.
+- A headless run alone and flat out plays its graph in several games at once,
+  `-games` of them, each a run of its own on a seed drawn from the run's, and all
+  teach the one learner a network and keep the one file. Each game carries one
+  candidate of one network beside the members the rest field, as a lone game
+  does, and the hand-written genome is every game's first candidate until a
+  round has scored it.
+  - A round closes into the learners in the order of the tick it closed at and
+    then of its game, as if the games took turns a tick at a time, so one seed
+    and one count of games search alike however the cores run them.
+  - A game whose round closes ahead of the others' ticks waits for them, and its
+    core stands free meanwhile: the count is one more than the cores unless
+    `-games` names it, which keeps each core playing.
+  - A run its graph quits ends every game at the tick its own reached, and
+    `-games 1` learns as a watched run does, round for round.
 - A watched run's bar says what each round came to as it closes and how far each
   learner is, `Round 12 scored 5480 | kraken recent 2210, fielding 2790 over 9 |
   raid recent 4100, fielding 5300 over 31`; a headless run prints `Bot learned
   raid: rounds R of T, recent M, fielding S over C` for each as it stops, and
-  each save writes a `bot population kept` log record. `recent` is the mean of
-  the learner's last rounds, candidates and all, which no luck picked.
+  each save writes a `bot population kept` log record, a learner's each
+  however many games play. `recent` is the mean of the learner's last rounds,
+  candidates and all, which no luck picked.
 
 #### The population file
 
@@ -515,9 +531,10 @@ unattended.
 - It reaches only what its view shows. A seat's view is its holder's screen, so a
   person's bots see what that person sees and play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
-- A solo bot run is reproducible from its seed, and a learning one from its seed
-  and the population it started with. In a session only a journal reproduces a
-  run: the front instance's, or a seat's this process journals.
+- A solo bot run is reproducible from its seed, and a learning one from its
+  seed, its count of games and the population it started with. In a session only
+  a journal reproduces a run: the front instance's, or a seat's this process
+  journals; of a learning run's games, the run's own.
 - Graph state is in no capture: a correction or a reset reaches a graph only
   through the world it reads next.
 - A guest's bot has no link of its own, so it shows no throughput and is not
@@ -534,6 +551,7 @@ unattended.
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
 | `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
 | `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
+| `-games N: only a -headless bot alone and flat out whose graph learns plays more than one game` | Run the graph alone, with no session, further bots or `-speed` but `max`, and with `learn = true` in its `[bot]`; or leave the count out. |
 | `Bot <graph>: …` on the status bar | The seat failed to join; the log has `bot not seated` with the error. |
 
 The holder logs `bot seated`, `bot left` and `bot not seated` for each seat, whose

@@ -103,6 +103,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 				parameter.TickIntervalMin, parameter.TickIntervalMax, parameter.GameUpdateInterval)},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
 			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal's digests unattended"},
+			{names: []string{"games"}, arg: "<n>", hint: "With -headless, how many games a bot alone whose graph learns plays at once, all teaching its learners (default one more than the cores)"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
 			{names: []string{"r", "replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
 			{names: []string{"check"}, hint: "Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit"},

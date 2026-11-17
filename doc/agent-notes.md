@@ -821,12 +821,33 @@ Libraries · Branches.
   `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
 - A network graph and its learners are compared in rounds ([Bots](bots.md#learning)):
   a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
-  and a `bot.NewLearner` a network on a `NewHeadless` `cave`, its `Play` from
-  `botPlay`, and steps until `Stats().Rounds` reaches its count. A core plays
-  7,000 to 8,000 ticks a second whatever steers, so fifty rounds of weights that
-  fall at the first charge and one of the shipped ones, whose rounds run 6,900
-  ticks. The binary learns as the harness does, a seed's rounds the same in
+  on a `NewHeadless` `cave`, its `Play` from `botPlay`, and has it learn as
+  `RunBot` does: `App.playBeside` builds the further games, `App.learn` the
+  learners over every driver, `sideGames.start` steps them and the test the
+  run's own, then `Driver.End` at its tick and `sideGames.close`. A graph parsed
+  under another name (`bot.ParseGraph`) keeps its populations apart, in the user
+  root the test's environment names. A core plays 7,000 ticks a second whatever
+  steers. The binary learns as the harness does, a seed's rounds the same in
   both. `Driver.Stats` takes the world lock: called inside `RunSafe` it hangs.
+- Games that learn together are read by ticks a second, and only against a run
+  whose rounds are alike: a tick costs by where its game stands, 64 µs in the
+  twenty after a new game and 149 in the mean, and no count of dispatched events
+  predicts it. Games side by side so drift hundreds of ticks apart, which is
+  what a round's close waits on.
+- Whether a change leaves the search alone is read by bytes: one seed and one
+  count of ticks leave the same population files, between two runs of one count
+  of games and, for one game, between main's test binary built in a worktree and
+  the branch's (`sha256sum`).
+- What a population fields is played held out by learners attached not alone
+  (`bot.Learn`, `alone` false), which field and never save. `App.Reset(false)`
+  closes a round at the graph's limit, `Driver.Round` reads its score, and an
+  `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap ahead
+  of the driver's, counts what ended it: `EventKrakenSpawnRequest` for a Kraken
+  met, its `EventSpeciesKilled` for one shot down.
+- A scratch run past ten minutes takes `-test.timeout 0`. A mutation that
+  deadlocks the games' order, or never ends them, hangs where it should fail:
+  run it under `timeout`, whose 124 is the test holding. The commands of a cloud
+  session share one memory limit, which games that never end fill in a minute.
 - A learner is read three ways and only two hold. Its candidates' mean over the
   last 500 rounds is picked by no luck and tells two settings apart on six
   seeds (1,160 to 1,283 against 918 to 1,178). The fielded member's mean over

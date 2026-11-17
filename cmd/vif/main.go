@@ -65,6 +65,7 @@ var (
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal, or verify a -replay")
+	flagGames    = flag.Int("games", 0, "With -headless, how many games a bot alone whose graph learns plays at once; 0 is one more than the cores")
 	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
 	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
 	flagVer      = flag.Bool("version", false, "Print the build version and exit")
@@ -177,6 +178,9 @@ func main() {
 	if sessionErr == nil && *flagHeadless && (*flagWatch || bots == 0 && *flagReplay == "" || flagSession.serve != "") {
 		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
 	}
+	if sessionErr == nil && (*flagGames < 0 || *flagGames != 0 && !(*flagHeadless && bots > 0)) {
+		sessionErr = errors.New("-games is how many games a -headless -bot run learns from at once, 1 or more")
+	}
 	if sessionErr == nil && flagSession.cert != "" {
 		sessionTLS, sessionErr = link.LoadTLS(flagSession.cert, flagSession.key)
 	}
@@ -255,7 +259,11 @@ func main() {
 		}
 		var st bot.Stats
 		if st, err = app.RunBot(cfg, platformHost, graph); err == nil && !*flagWatch {
-			fmt.Printf("Bot stopped: %d ticks, %d actions, fitness %d\n", st.Ticks, st.Injected, st.Fitness)
+			games := ""
+			if st.Games > 1 {
+				games = fmt.Sprintf("%d games, ", st.Games)
+			}
+			fmt.Printf("Bot stopped: %s%d ticks, %d actions, fitness %d\n", games, st.Ticks, st.Injected, st.Fitness)
 			for _, l := range st.Learn {
 				if l.Scored > 0 {
 					fmt.Printf("Bot learned %s: rounds %d of %d, recent %.0f, fielding %.0f over %d\n",
@@ -326,13 +334,18 @@ func sayNotice() {
 }
 
 // botNotice says what a headless bot run is doing, since it draws nothing: solo it
-// plays until its graph quits, and hosting it waits in the lobby for players.
+// plays until its graph quits, in as many games as it learns from at once, and
+// hosting it waits in the lobby for players.
 func botNotice(cfg app.Config, spec string) {
+	games, err := app.BotGames(cfg, spec)
 	switch {
+	case err != nil: // RunBot refuses the graph or the count, and says so
 	case cfg.Membership.HostAddress != "":
 		fmt.Printf("Bot %s hosting %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.HostAddress)
 	case cfg.Membership.JoinAddress != "":
 		fmt.Printf("Bot %s joining %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.JoinAddress)
+	case games > 1:
+		fmt.Printf("Bot %s running headless in %d games; Ctrl-C stops it\n", spec, games)
 	default:
 		fmt.Printf("Bot %s running headless; Ctrl-C stops it\n", spec)
 	}
@@ -490,6 +503,7 @@ func buildConfig() app.Config {
 		TimeScaleSpec: *flagSpeed,
 		TickInterval:  *flagTick,
 		Seed:          *flagSeed,
+		Games:         *flagGames,
 		Journal:       flagJournal.set,
 		Membership: app.Membership{
 			SessionName:  flagSession.name,
