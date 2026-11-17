@@ -35,9 +35,10 @@ buffer_ms = 50
 window = false
 maximized = false
 fullscreen = false
-# A cell's height in dp, a CSS pixel in a browser, as a pinch on Android or a zoom
-# in a browser left it, from 4 to 40, written back like [play]; 0 is the screen's
-# own size. The terminal and the desktop window ignore it.
+# A cell's height in dp, a CSS pixel in a browser and -scale pixels in the desktop
+# window, as a pinch on Android or a zoom in a browser or the window (Ctrl with =
+# or -, or with the wheel) left it, from 4 to 40, written back like [play]; 0 is
+# the screen's own size. The terminal ignores it: its emulator zooms it.
 cell = 0
 # Inside tmux or screen, draw at most 24 frames a second: past that they drop the
 # output and repaint about 10 a second. false draws at full rate; max_fps wins.

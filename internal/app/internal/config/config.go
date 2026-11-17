@@ -182,13 +182,18 @@ type Config struct {
 	Membership Membership
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
-	// assumes; margins apply as usual, so the viewport is smaller than these.
-	// Ignored when the terminal owns geometry; zero selects BotWidth and BotHeight.
+	// assumes; margins apply as usual, so the viewport is smaller than these. Zero
+	// selects BotWidth and BotHeight. A run whose terminal owns its geometry keeps
+	// the terminal's, and plays a map fixed at these where they are set (FixMap).
 	Width, Height int
 	// FitSize takes a size those leave unset from the run's own screen, -size fit:
 	// what shows it, or the terminal a run that shows nothing was started in. A
 	// dedicated host takes its first person's instead, asked or not.
 	FitSize bool
+	// FixMap fixes the map at MapWidth by MapHeight, or as it stands where those
+	// are unset: no resize crops it and a new game keeps it. A person's run that
+	// names its size sets it as it is built, and a run reproducing one, its anchor.
+	FixMap bool
 
 	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
 	// adopts instead of deriving from its terminal. Applied before the FSM boots:
@@ -344,6 +349,9 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.Mode.OwnsGeometry() {
+		if (c.Width != 0 || c.Height != 0) && !engine.ViewportFits(c.Width, c.Height) {
+			return fmt.Errorf("%s: %dx%d leaves no game area", c.Mode, c.Width, c.Height)
+		}
 		return nil
 	}
 	return c.validateDriven()

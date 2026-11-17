@@ -18,8 +18,8 @@ const (
 	LeftMargin = 1
 )
 
-// WindowCols and WindowRows are the grid a desktop window opens at; the player
-// resizes it by whole cells from there
+// WindowCols and WindowRows are the grid a desktop window opens at where -size
+// names none; the player resizes it by whole cells from there
 const (
 	WindowCols  = 120
 	WindowRows  = 40
@@ -27,8 +27,8 @@ const (
 )
 
 // CellLeast and CellMost bound the cell a zoom reaches, its height in dp (a CSS
-// pixel in a browser), in steps of CellStep: the range of Android's pinch and the
-// page's alike, and of vif.toml's [presentation] cell
+// pixel in a browser), in steps of CellStep: the range of Android's pinch, the
+// page's zoom and the desktop window's alike, and of vif.toml's [presentation] cell
 const (
 	CellLeast = 4.0
 	CellMost  = 40.0

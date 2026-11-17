@@ -30,6 +30,7 @@ A run's size comes from one place, and a watch shows a run without sizing it:
 
 ```
 a person playing    the terminal, as it resizes
+  with -size        a map fixed at it, or with fit at the terminal's as the run starts
 a replay            its journal's
 a script            its own width and height, else as a bot alone
 a bot alone         -size, else 120x40, watched or headless
@@ -40,8 +41,32 @@ a seat              its holder's screen (§4, Bot seats)
 
 `-size fit` reads the screen once, as the run is built (`runConfig.fit`): the
 terminal, window or page that shows it, or for a run that shows nothing the
-terminal it was started in. A later resize moves the view and not the world, and
-on a server it is no size at all, so the first person's stands.
+terminal it was started in; a screen that leaves no game area gives none. A later
+resize moves the view and not the world, while the run waits in a lobby as while
+it plays, and on a server it is no size at all, so the first person's stands.
+
+Three things read a screen's size once and keep it: a run under `-size fit`, the
+map a hosting run's door locks as it opens (D-14), and the size a joiner reports at
+its seat, which a dedicated host sizes its session by. So a presentation holds its
+settled size before a run is built on it and posts no resize for it: a terminal's
+is its own, `browser.Open` waits for the page's fit, and `window.Open` for the
+window manager to place the window
+([Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+
+A person's run under `-size` plays a map fixed at that size, or under `-size fit`
+at their screen's as the run is built (`applyMapLatch`, `World.FixMap`). The screen
+still sizes all else, the status bar, the overlays and the view, which shows a
+smaller map centred and follows the cursor over a larger one. No resize crops
+the map or starts a waiting game over, a new game keeps its bounds and a level
+reset to the viewport leaves them, as in a session
+([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)), with nothing
+else of a session's: the barrier `LockMap` engages stays off. Such a host's
+guests play on that map, a joiner who is a dedicated host's first person reports
+the size named in place of their screen's, a desktop window opens at it, and a
+journal's anchor says so (`MapFixed`), so its replay keeps the bounds. A scenario
+that sets up its own map keeps it, the run that replaces one that fitted, for
+another scenario or a session left, keeps the size fitted (`restartRequest.Fitted`),
+and a spectator and a replay, which play no map of their own, refuse `-size`.
 
 Those predicates describe a full native build. Compile-time capabilities refine
 them: `vif_headless` makes presenting modes unavailable and omits renderers;

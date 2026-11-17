@@ -1368,6 +1368,7 @@ func (s *Scheduler) anchorLive(session uint64) event.AnchorLive {
 		CropOnResize:  cfg.CropOnResize,
 		CellAspect:    float64(cfg.CellAspect),
 		SessionShared: s.world.SessionShared(),
+		MapFixed:      s.world.MapFixed(),
 		Slot:          s.world.Resources.Player.LocalSlot(),
 	}
 }
@@ -1588,6 +1589,7 @@ func (s *Scheduler) processTick() {
 			CropOnResize:  cropOnResize,
 			CellAspect:    aspect,
 			SessionShared: sessionShared,
+			MapFixed:      s.world.MapFixed(),
 			Slot:          slot,
 		})
 	}

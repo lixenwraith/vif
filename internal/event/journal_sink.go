@@ -79,6 +79,7 @@ func (s vlogSink) Anchor(a JournalAnchor) {
 		"crop_on_resize", a.CropOnResize,
 		"cell_aspect", a.CellAspect,
 		"session_shared", a.SessionShared,
+		"map_fixed", a.MapFixed,
 		"slot", a.Slot,
 		"speed", a.Speed)
 }

@@ -10,7 +10,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 82
+const JournalSchema = 83
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each settle group that closes:
@@ -94,6 +94,11 @@ type JournalAnchor struct {
 	// and a mid-run catch-up hold no transport and no second cursor of their own, yet
 	// must reach the same bounds as the run they reproduce.
 	SessionShared bool
+
+	// MapFixed reports that the run's player fixed its map's size (-size), which
+	// closes the crop path as SessionShared does with nothing of a session's: a
+	// replay keeps the bounds across a resize and a new game as the run did.
+	MapFixed bool
 }
 
 // JournalCapture is a world this instance wrote rather than simulated: the one a
@@ -164,6 +169,7 @@ type AnchorLive struct {
 	CropOnResize  bool
 	CellAspect    float64
 	SessionShared bool
+	MapFixed      bool
 	Slot          uint8
 }
 
@@ -228,7 +234,7 @@ func (j *Journal) SetAnchor(a JournalAnchor, start Stamp) {
 	j.Anchor(start, AnchorLive{
 		Speed: a.Speed, Session: a.Session, Width: a.Width, Height: a.Height,
 		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize, CellAspect: a.CellAspect,
-		SessionShared: a.SessionShared, Slot: uint8(a.Slot),
+		SessionShared: a.SessionShared, MapFixed: a.MapFixed, Slot: uint8(a.Slot),
 	})
 }
 
@@ -251,6 +257,7 @@ func (j *Journal) Anchor(st Stamp, live AnchorLive) {
 	a.CropOnResize = live.CropOnResize
 	a.CellAspect = live.CellAspect
 	a.SessionShared = live.SessionShared
+	a.MapFixed = live.MapFixed
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -86,6 +87,27 @@ func (a *Atlas) Runes() []rune { return slices.Sorted(maps.Keys(a.glyphs)) }
 // Aspect is the cell's width over its height: what a host drawing with this atlas
 // reports as its cell aspect
 func (a *Atlas) Aspect() vmath.Aspect { return vmath.Aspect(float64(a.Width) / float64(a.Height)) }
+
+// Cell is the pixels a cell dp tall takes on a screen of density pixels to a dp:
+// whole ones at the atlas's aspect, never under its own
+func (a *Atlas) Cell(density, dp float64) (width, height int) {
+	width = max(a.Width, int(math.Round(density*dp*float64(a.Width)/float64(a.Height))))
+	return width, width * a.Height / a.Width
+}
+
+// Zoom is the range a host keeps a cell's height to as its player zooms, in dp:
+// Least to Most in steps of Step
+type Zoom struct{ Least, Most, Step float64 }
+
+// Scale is a cell dp tall scaled by a zoom's factor: a step of the range, within it
+// and never under a's own pixels at the density; a range of no step keeps the cell
+func (z Zoom) Scale(a *Atlas, density, dp, by float64) float64 {
+	if z.Step <= 0 {
+		return dp
+	}
+	least := max(z.Least, math.Ceil(float64(a.Height)/density/z.Step)*z.Step)
+	return min(max(math.Round(dp*by/z.Step)*z.Step, least), z.Most)
+}
 
 // Texture is the atlas as a cell drawer takes it: every glyph with a set bit as one
 // slot of a mask, one byte a pixel, and the slot of each rune. A blank glyph has no

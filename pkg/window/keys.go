@@ -72,6 +72,41 @@ func keyEvent(keysym uint64, state uint32) (terminal.Event, bool) {
 	return ev, true
 }
 
+// zoomStep is the factor one press or wheel step zooms the cell by, as on a page
+const zoomStep = 1.1
+
+// zoomKey is the zoom step of a key press: Ctrl with = or + in, with - out and with
+// 0 back to the atlas's own, the keypad's too, as a factor, 0 for the last. A
+// terminal emulator and a browser keep these chords for their own zoom, and no
+// terminal reports them, so no game key is taken.
+func zoomKey(keysym uint64, state uint32) (by float64, ok bool) {
+	if state&stateControl == 0 || state&stateMod1 != 0 {
+		return 0, false
+	}
+	switch keysym {
+	case '=', '+', 0xffab:
+		return zoomStep, true
+	case '-', 0xffad:
+		return 1 / zoomStep, true
+	case '0', 0xffb0:
+		return 0, true
+	}
+	return 0, false
+}
+
+// zoomWheel is the zoom step of a wheel step with Ctrl held, as on a page, whose
+// pointer mode it takes no part in
+func zoomWheel(button int32, state uint32) (by float64, ok bool) {
+	switch {
+	case state&stateControl == 0:
+	case button == 4:
+		return zoomStep, true
+	case button == 5:
+		return 1 / zoomStep, true
+	}
+	return 0, false
+}
+
 // keysymRune is the character of a printing keysym: Latin-1 keysyms are their
 // code points and the Unicode block is offset by 0x01000000
 func keysymRune(keysym uint64) rune {

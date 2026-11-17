@@ -3,13 +3,19 @@
 package window
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"slices"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
+	"github.com/ebitengine/purego"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/glyph"
@@ -75,6 +81,69 @@ func TestAPixelMapsToTheCellDrawnUnderIt(t *testing.T) {
 	}
 }
 
+// TestAZoomStepScalesTheWindowsCell: Ctrl with =, + or the wheel up zooms in a step
+// and with - or the wheel down out, the keypad's keys too, within the range and
+// never under the atlas, the grid the window's pixels hold following; Ctrl+0 puts
+// the atlas's own cell back, and no other key or wheel step zooms.
+func TestAZoomStepScalesTheWindowsCell(t *testing.T) {
+	const ctrl, in, out = stateControl, zoomStep, 1 / zoomStep
+	for _, c := range []struct {
+		keysym uint64
+		state  uint32
+		by     float64
+		ok     bool
+	}{
+		{'=', ctrl, in, true}, {'+', ctrl | stateShift, in, true}, {0xffab, ctrl, in, true},
+		{'-', ctrl, out, true}, {0xffad, ctrl, out, true}, {'0', ctrl, 0, true}, {0xffb0, ctrl, 0, true},
+		{'=', 0, 0, false}, {'=', ctrl | stateMod1, 0, false}, {'a', ctrl, 0, false},
+	} {
+		if by, ok := zoomKey(c.keysym, c.state); by != c.by || ok != c.ok {
+			t.Errorf("keysym %#x state %#x zooms by %v %v, want %v %v", c.keysym, c.state, by, ok, c.by, c.ok)
+		}
+	}
+	for _, c := range []struct {
+		button int32
+		state  uint32
+		by     float64
+		ok     bool
+	}{{4, ctrl, in, true}, {5, ctrl, out, true}, {4, 0, 0, false}, {1, ctrl, 0, false}} {
+		if by, ok := zoomWheel(c.button, c.state); by != c.by || ok != c.ok {
+			t.Errorf("button %d state %#x zooms by %v %v, want %v %v", c.button, c.state, by, ok, c.by, c.ok)
+		}
+	}
+
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newWindow(Config{Atlas: atlas, Cols: 40, Rows: 20, Scale: 2, Zoom: glyph.Zoom{Least: 4, Most: 40, Step: 0.5}})
+	w.winW, w.winH = 40*8, 20*16
+	for _, c := range []struct {
+		by         float64
+		moved      bool
+		dp         float64
+		cw, ch     int
+		cols, rows int
+	}{
+		{in, true, 9, 9, 18, 35, 17},    // from the atlas's own, 8 dp at this scale
+		{100, true, 40, 40, 80, 8, 4},   // to the most
+		{in, false, 40, 40, 80, 8, 4},   // and no further
+		{0.01, true, 4, 4, 8, 80, 40},   // to the atlas's pixels, the least
+		{out, false, 4, 4, 8, 80, 40},   // and never under them
+		{0, true, 0, 8, 16, 40, 20},     // back to the atlas's own
+		{0, false, 0, 8, 16, 40, 20},    // where it already is
+		{out, true, 7.5, 8, 16, 40, 20}, // a step out, the same whole pixels
+	} {
+		moved := w.rescale(c.by)
+		w.regrid()
+		cols, rows := w.Size()
+		if moved != c.moved || w.Cell() != c.dp || w.cw != c.cw || w.ch != c.ch || cols != c.cols || rows != c.rows {
+			t.Fatalf("a step of %v: moved %v to %v dp, a %dx%d cell, a %dx%d grid; want %v, %v dp, %dx%d, %dx%d",
+				c.by, moved, w.Cell(), w.cw, w.ch, cols, rows, c.moved, c.dp, c.cw, c.ch, c.cols, c.rows)
+		}
+	}
+}
+
 // TestAButtonReportsWhatATerminalReports: X's buttons 1 to 9 become the buttons SGR
 // mouse reporting names; a wheel step reports its press alone, any other button
 // its press and its release
@@ -108,6 +177,162 @@ func TestAButtonReportsWhatATerminalReports(t *testing.T) {
 	if ev, ok := w.mouseEvent(event(xButtonPress, 10)); ok {
 		t.Errorf("button 10 reported %+v", ev)
 	}
+}
+
+// TestAWindowOpensAtTheSizeItsManagerGivesIt: a window settles on the grid of the
+// last size its manager gave and posts no resize for it, whether the manager sizes
+// it before mapping it, after, or late for a state asked of it, and Open returns
+// settled. The test is the manager, on an X server of its own.
+func TestAWindowOpensAtTheSizeItsManagerGivesIt(t *testing.T) {
+	xvfb(t)
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := purego.Dlopen(libX11, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	if err != nil {
+		t.Skip(err)
+	}
+	var xResizeWindow func(dpy, win uintptr, w, h uint32) int32
+	var xSync func(dpy uintptr, discard int32) int32
+	purego.RegisterLibFunc(&xResizeWindow, lib, "XResizeWindow")
+	purego.RegisterLibFunc(&xSync, lib, "XSync")
+	const xMapRequest, substructureRedirect = 20, 1 << 20
+	// manage takes the next window that asks to be mapped and runs steps on it, those
+	// past | once the caller has heard of the first; it holds the redirect on return
+	manage := func(steps string) (acted, done chan struct{}) {
+		ready := make(chan bool)
+		acted, done = make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(done)
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+			dpy := xOpenDisplay(0)
+			if ready <- dpy != 0; dpy == 0 {
+				return
+			}
+			defer xCloseDisplay(dpy)
+			xSelectInput(dpy, xRootWindow(dpy, xDefaultScreen(dpy)), substructureRedirect)
+			xSync(dpy, 0) // the server redirects from here
+			ready <- true
+			var ev xEvent
+			for ev.int32At(0) != xMapRequest {
+				xNextEvent(dpy, &ev)
+			}
+			win := uintptr(ev.uint64At(40))
+			act := func(steps string) {
+				for _, step := range strings.Fields(steps) {
+					switch step {
+					case "map":
+						xMapWindow(dpy, win)
+					case "half":
+						xResizeWindow(dpy, win, 120, 120)
+					default:
+						xResizeWindow(dpy, win, 160, 160)
+					}
+				}
+				xSync(dpy, 0) // the server has sent the window its events
+			}
+			first, late, _ := strings.Cut(steps, "|")
+			act(first)
+			close(acted)
+			if late != "" {
+				time.Sleep(2 * settleQuiet)
+				act(late)
+			}
+		}()
+		if !<-ready || !<-ready {
+			t.Fatal("the manager reached no display")
+		}
+		return acted, done
+	}
+	given := func(name string, w *Window) {
+		t.Helper()
+		if cols, rows := w.Size(); cols != 40 || rows != 20 {
+			t.Errorf("%s: settled at %dx%d, want the 40x20 its manager gave", name, cols, rows)
+		}
+		select {
+		case ev := <-w.events:
+			t.Errorf("%s: posted %+v for the size it opened at", name, ev)
+		default:
+		}
+	}
+	cfg := Config{Title: "test", Atlas: atlas, Cols: 20, Rows: 10}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	for name, c := range map[string]struct {
+		asked bool
+		steps string
+	}{
+		"sized before it is mapped":    {false, "size map"},
+		"sized after it is mapped":     {false, "map size"},
+		"sized again and mapped late":  {false, "half | size map"},
+		"sized late for a state asked": {true, "map | size"},
+	} {
+		acted, done := manage(c.steps)
+		cfg.Maximized = c.asked
+		w := newWindow(cfg)
+		if err := w.open(cfg); err != nil {
+			t.Skip(err)
+		}
+		xFlush(w.dpy)
+		<-acted // its events are sent before settle reads, so no clock decides the order
+		start := time.Now()
+		w.settle(c.asked)
+		if took := time.Since(start); took < settleQuiet {
+			t.Errorf("%s: settled in %v, before its size had held %v", name, took, settleQuiet)
+		}
+		given(name, w)
+		<-done // before the window goes, which the manager may still be sizing
+		w.release()
+	}
+
+	_, done := manage("size map")
+	cfg.Maximized = false
+	w, err := Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	given("opened", w)
+	<-done
+	w.Close()
+}
+
+// xvfb starts an X server of the test's own, with no window manager, and makes it
+// the display; a machine with none to start, or no libraries to draw with, skips
+func xvfb(t *testing.T) {
+	t.Helper()
+	path, err := exec.LookPath("Xvfb")
+	if err != nil {
+		t.Skip("no Xvfb to open a window on")
+	}
+	if err := load(); err != nil {
+		t.Skip(err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	// -noreset: a server that starts over as its last client goes refuses the next
+	cmd := exec.Command(path, "-displayfd", "3", "-noreset", "-screen", "0", "640x480x24", "-nolisten", "tcp")
+	cmd.ExtraFiles = []*os.File{w}
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Signal(syscall.SIGTERM) // it removes its socket and lock as it goes
+		cmd.Wait()
+	})
+	r.SetReadDeadline(time.Now().Add(10 * time.Second))
+	number, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil {
+		t.Skipf("Xvfb named no display: %v", err)
+	}
+	t.Setenv("DISPLAY", ":"+strings.TrimSpace(number))
+	t.Setenv("LIBGL_ALWAYS_SOFTWARE", "1")
 }
 
 // BenchmarkPresent times a frame through the window: copy, raster, whole-texture
