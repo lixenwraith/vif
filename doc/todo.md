@@ -298,9 +298,62 @@ fielded, held out 2906    3654        974    1339
   met a Kraken       6      10          5       7
 ```
 
-While a round still scored its ticks and weights were written by hand, those
-weights scored 10,600 a round, and a learner starting from them fielded 12,600
-to 37,600 after nine million ticks of one game.
+The rest was read while the graph wrote its weights by hand and a round scored
+its ticks, a Kraken's fight aside. Games that learn together, in ticks a second
+on a four-core machine by the cores they were given, where one game plays
+6,900:
+
+```
+cores   games   ticks a second
+2       2       12600
+2       3       13500
+2       4       12400
+3       3       18700
+3       4       18300
+3       5       19800
+4       4       21400 to 22500
+4       5       27000 to 27400
+4       6       26300 to 26500
+4       8       27000
+```
+
+- Four games on four cores waited at 222 of 302 round closes, 20 of their 187
+  game-seconds, where the same games closing in any order play 27,000; the
+  learners' lock was held 0.06 s of them.
+- Two runs of one seed and five games keep the same files, 87,142 bytes after
+  two million ticks, and one game keeps what a lone learner does, byte for byte.
+
+What a run fielded after 22 minutes on four cores, over 60 rounds of four seeds
+it never played, 101 to 104, each closed at the limit, where the weights written
+by hand scored 10,033, lost 16 rounds before the first Kraken and shot five
+Krakens down in 1. One game is nine million ticks of a core, four such runs
+side by side, and five games 35 million on the four:
+
+```
+seed                              1       2        3       4
+one game
+  rounds learned on            1237    1358     1539    1493
+  fielded, held out           37621   16003    12617   13876
+  lost before the Kraken         11       4        5       6
+  five Krakens or more down      49      12        1       3
+  rounds at the limit            38       0        0       0
+five games
+  rounds learned on            5057    3326     2703    3609
+  fielded, held out           35177   65154   201735   60530
+  lost before the Kraken          6      11       13       6
+  five Krakens or more down      33      47       47      54
+  rounds at the limit             5      12       47      46
+```
+
+- The four average 20,029 with one game and 90,649 with five. Seed 1 is level:
+  60 rounds place a mean within 2,400 to 3,500 there.
+- Five games play four times one game's ticks and two to four times its
+  rounds, 8,000 to 12,600 an hour for 3,300 to 4,100, as their members last
+  longer; a new population's first two million ticks ran 20,900 an hour.
+- A Kraken's pay doubles a cave with its hit points: seed 4's rounds at the
+  limit were worth 48,000 and seed 3's 320,000, on six and eight Krakens.
+- What they lost was still the first cave, as often as the weights they began
+  from.
 
 What remains:
 
@@ -310,19 +363,70 @@ What remains:
   learner so. Read whether a population comes to it: the blasts a round its
   fielded member sets off, the rounds it loses in the first cave, and how long
   that takes.
-- **How fast it learns.** One game plays on one core at 7,000 ticks a second,
-  and a round that outlives the first cave runs thousands of ticks. `kraken`'s
-  learner is scored only by rounds that reach it: a scenario that opens on the
-  Kraken, with the gun and the energy a ship arrives with, would score it every
-  round. With [Train bot graphs offline](#train-bot-graphs-offline).
+- **How fast it learns.** A game on every core multiplies the ticks, four times
+  on four cores. A game whose round closes ahead of the others' ticks waits for
+  them, which is what makes a seed's search one search, and a game more than
+  the cores takes up the core it frees: that count is read on two to four
+  cores, and three did better with two more, so read it on more, where the
+  learners' one lock may bind first. With
+  [Train bot graphs offline](#train-bot-graphs-offline).
+- **A scenario that opens on the Kraken** scores `kraken` every round and
+  fielded nothing better on four seeds, so none is built. A ship arrives there
+  with 43,000 to 69,000 energy (the quartiles of 44 fights, the median 50,000),
+  20 heat and the gun seven levels up; a copy of `cave` starting so, its ramp
+  skipped, meets the Kraken at tick 134, and the weights then written by hand
+  won 15 first fights of 16 there, as in the game. `kraken` learning alone for
+  nine million ticks of five games, then held out in `cave` beside those `raid`
+  weights:
+
+  ```
+  seed                          1       2       3       4
+  learned in cave           27383   34211   23074   51120
+    its rounds scored        1021     883    1064     698
+  learned in the copy       20666   21433   32686   50244
+    its rounds scored        1393    1477    1227    1018
+  ```
+
+  The copy's first fight starts from one state where `cave`'s vary; a learner
+  fed by both scenarios is not tried.
 - **What a round can still be paid for.** The first cave scrolls for as long as
   its tier is not shot down, so a ship that kills no twelfth raider travels on
-  at the slowest pace: watch for a population that settles there.
-- **The search.** Its settings want twelve seeds a row, as the library read its
-  own: the spread a first genome is drawn with (0.03 against 0.1, two seeds
-  each, read 2,162 and 1,284 against 727 and 1,114 over a thousand rounds after
-  two million ticks), the share of weights stepped, the step's floor, and both
-  learners exploring at once against in turn.
+  at the slowest pace: watch for a population that settles there. Whether
+  what a run fields hops about the Kraken or keeps the gun on it is not read.
+  And two five-game runs of four fielded members that reached the limit three
+  rounds in four: decide whether it grows as they do.
+- **The search.** Of the settings read so far only the rate is told from the
+  shipped one, and that from weights written by hand. Twelve seeds a row, as
+  the library read its own, each five million ticks of five games and what it
+  fielded held out for 40 rounds, from those weights, which scored 10,033 and
+  2.2 Krakens a round:
+
+  ```
+                            fielded  geometric  Krakens     lost   five   at the
+                               mean       mean  a round    early   down    limit
+  as shipped                  29241      23065  3.73±0.33   0.20   0.45     0.24
+  ranked by the mean log      23939      21040  3.44±0.26   0.25   0.42     0.24
+  a repeat every second       26917      23147  3.91±0.34   0.17   0.49     0.17
+  a repeat every fifth        24300      21704  3.70±0.27   0.17   0.45     0.17
+  a step floor of 0.06        24304      22411  3.58±0.27   0.23   0.48     0.18
+  a step floor of 0.015       20613      18437  3.28±0.31   0.25   0.43     0.12
+  a rate of 0.1               14690      13606  2.72±0.25   0.32   0.24     0.05
+  a rate of 0.01              17100      15372  2.98±0.23   0.23   0.25     0.09
+  ```
+
+  - Only the rate is told from the shipped 0.03. At 0.1 a run fields 0.6 times
+    as much and a Kraken a round less, 2.4 standard errors, its candidates
+    falling early enough to double its rounds to 1,806; at 0.01, 0.67 times,
+    1.8 standard errors. The other rows lie within one.
+  - The shipped row's seeds fielded 8,721 to 105,159, so twelve carry a
+    geometric mean within a factor of 1.2 and a setting is read only once it
+    moves what is fielded 1.7 times, or a Kraken a round. A row's runs learned
+    on 800 to 1,010 rounds, a seventh of the ticks of the equal-time runs
+    above.
+  - Not read: a rank by the median; both learners exploring at once against in
+    turn; any row at the equal-time runs' 35 million ticks, where what a run
+    fields reaches the limit; and any row from nothing, where only the spread a
+    first genome is drawn with was tried, on two seeds (the table above).
 - **A page's store.** A browser keeps no population: `bot.Store` is a document's
   bytes, so one kept in the page's storage as its settings are
   (`browser.KeepSettings`), for each graph, scenario and network, handed over at
@@ -330,7 +434,7 @@ What remains:
 - **Sessions.** A run in a session fields and does not learn. The first widening
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
-  `Learn`'s `alone` is the seam, and its stores need one writer.
+  `bot.Learn`'s `alone` is the seam, and its stores need one writer.
 - **The operator's side**, its `:bot clear`, `export` and `import`, is an item of
   its own:
   [Clear, export and import a bot's populations](#clear-export-and-import-a-bots-populations).
@@ -422,10 +526,8 @@ starts at the grid on screen.
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 The genome is a live learner's network, and the result its population file,
-`bot/<graph>.<scenario>.<network>.json`. A solo `-headless -speed max` run
-already learns on one core, a round of the shipped `cave` weights a second, each
-a new game of its seed; a game on every core feeding those learners comes first
-here.
+`bot/<graph>.<scenario>.<network>.json`. A solo `-headless` run already
+learns with a game on every core, each round a new game of its seed.
 `lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
 scenarios and seeds, fixed for the run since the batch engine never scores an
 elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run
