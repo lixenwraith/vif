@@ -103,12 +103,6 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	}
 	cfg.Play = botPlay(cfg.Play, graph)
 	run := runConfig{Config: cfg, host: host}
-	if run.Width == 0 && run.Height == 0 {
-		// A learning graph plays a bot's own screen watched or not, so the rounds its
-		// population is scored by are one game's
-		run.wiring.terminalGeometry = run.Mode == ModeScript && !graph.Settings.Learn
-		run.Width, run.Height = BotWidth, BotHeight
-	}
 	var (
 		driver   *bot.Driver
 		learners []*bot.Learner
@@ -289,6 +283,10 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 		l.Saved = func(st bot.LearnStats) {
 			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "games", len(drivers),
 				"rounds", st.Rounds, "recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
+		}
+		l.Lost = func(err error) {
+			a.log.Warn("app", "msg", "bot population not kept", "name", g.Name, "error", err.Error())
+			a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusAlert)
 		}
 		learners = append(learners, l)
 	}

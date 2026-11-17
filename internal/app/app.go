@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -150,6 +151,30 @@ type App struct {
 	corrections *converge.Corrections
 	authority   *converge.Authority
 	reach       *converge.Reach
+}
+
+// startedIn is the size of the terminal this process was started in, read off the
+// first standard stream still on it, since a run that shows nothing often has its
+// output sent elsewhere; none for a process with no terminal
+var startedIn = func() (int, int, bool) {
+	for _, f := range []*os.File{os.Stdout, os.Stderr, os.Stdin} {
+		if w, h, ok := terminal.WindowSize(f); ok {
+			return w, h, true
+		}
+	}
+	return 0, 0, false
+}
+
+// fitTerminal is the size of a run that shows nothing: the terminal it was started
+// in where it fits (runConfig.fit) and that leaves a game area, else width by height
+func (a *App) fitTerminal(width, height int) (int, int) {
+	if !a.cfg.fit() {
+		return width, height
+	}
+	if w, h, ok := startedIn(); ok && engine.ViewportFits(w, h) {
+		return w, h
+	}
+	return width, height
 }
 
 // newApp wires the runtime for a run built with its wiring, releasing anything
@@ -318,6 +343,10 @@ func (a *App) initWorld() error {
 	// The terminal supplies color whenever one exists, but dimensions only when the
 	// mode says so; a replay's come from the journal, via config
 	width, height, colorMode, aspect := a.presentationGeometry(a.cfg.Width, a.cfg.Height)
+	if a.cfg.fit() {
+		// What its screen gave is the run's size: its seats' and the games' beside it
+		a.cfg.Width, a.cfg.Height, a.cfg.wiring.geometryDefaulted = width, height, false
+	}
 
 	// GameContext initializes the remaining world resources.
 	// A driven run uses the manual clock: game time is a pure function of ticks.

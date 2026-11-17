@@ -321,6 +321,30 @@ func TestSpectateFlags(t *testing.T) {
 	}
 }
 
+// TestSizeNamesAScreenOrAsksToFit: -size WxH is the run's size, fit asks for its
+// screen's and names none, and any other word is refused.
+func TestSizeNamesAScreenOrAsksToFit(t *testing.T) {
+	saved := flagSession
+	t.Cleanup(func() { flagSession = saved })
+	for size, want := range map[string]struct {
+		w, h int
+		fit  bool
+	}{"": {}, "100x30": {w: 100, h: 30}, "fit": {fit: true}} {
+		flagSession = sessionFlags{size: size}
+		if err := flagSession.validateInvocation(false, false, ""); err != nil {
+			t.Errorf("-size %q is refused: %v", size, err)
+		}
+		if cfg := buildConfig(); cfg.Width != want.w || cfg.Height != want.h || cfg.FitSize != want.fit {
+			t.Errorf("-size %q is %dx%d, fit %t; want %dx%d, fit %t", size, cfg.Width, cfg.Height, cfg.FitSize, want.w, want.h, want.fit)
+		}
+	}
+	for _, size := range []string{"big", "0x40", "fit80"} {
+		if err := (sessionFlags{size: size}).validateInvocation(false, false, ""); err == nil {
+			t.Errorf("-size %q is taken", size)
+		}
+	}
+}
+
 // TestASessionMigratesOnlyWhereItsHostAskedForIt: -authority migrate is the one word
 // that lets a session move to a guest, whatever shape the run hosts in; with none,
 // a session ends with its host, a dedicated one's and a person's alike.

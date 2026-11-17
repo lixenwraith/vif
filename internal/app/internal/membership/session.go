@@ -299,7 +299,7 @@ func (m *Membership) noteJoinerReport(id link.PeerID, report network.JoinerRepor
 }
 
 // adoptLobbyGeometry sizes a dedicated host's map from the first person to join, as a
-// server has no terminal of its own and would serve Normalize's 80x24, or from a bot's
+// server has no terminal of its own and would serve a bot's screen, or from that
 // screen when its own bots start its game. An operator's -size, or a scenario fixing
 // its own map (crop off), wins. It runs before the roster closes, so these bounds are
 // the ones the offer names and every later guest adopts.

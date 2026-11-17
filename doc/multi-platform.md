@@ -471,7 +471,10 @@ The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBS
 build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
 asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does by
 default and `-cli` refuses; it opens maximized or full screen on `-maximized` or
-`-fullscreen` (`_NET_WM_STATE` set before the map); the window draws each frame with
+`-fullscreen` (`_NET_WM_STATE` set before the map), a size that reaches a run as a
+resize after it was built at 120x40, which a person's held first game starts over at
+and a run under `-size fit` does not
+([TODO](todo.md#start-a-windows-run-at-the-size-it-opens-to)); the window draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
 pointer as the events a terminal reports, each key's release too once a run asks
 (`hostkey.Report`, which the page and Android share): XKB's detectable autorepeat

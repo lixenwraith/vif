@@ -92,7 +92,8 @@ type Learner struct {
 	born   map[uint64]int // the round each archive member entered at, by its genes
 	saved  time.Time
 	dirty  bool
-	failed error // the last save's failure, which Close reports
+	failed error // what keeps the population from its store, which Close reports
+	untold error // what Lost has yet to hear
 
 	// stats is the progress as the last round left it, which any goroutine reads
 	// while the games play
@@ -100,6 +101,10 @@ type Learner struct {
 
 	// Saved, when set, is told the progress each time the population is kept
 	Saved func(LearnStats)
+	// Lost, when set, is told once what keeps the population from its store: a file
+	// that cannot be read or parsed, as the first round is taken, and a save that
+	// fails, not those failing after it
+	Lost func(error)
 }
 
 // slot is the genome one game has in play: its evaluation, zero while it plays
@@ -129,9 +134,9 @@ type LearnStats struct {
 
 // NewLearner builds the learner of g's network name for games games at once, its
 // stream drawn from seed, on the population store keeps; a nil store keeps it for
-// the run. A population of another layout is started over, and the weights g
-// wrote by hand are the first candidate of every run, so an edit to them meets
-// what the store kept.
+// the run. A population of another layout or one that cannot be parsed is started
+// over, one that cannot be read is left alone and the run keeps none, and the
+// weights g wrote by hand are the first candidate of every run.
 func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Learner, error) {
 	i := slices.IndexFunc(g.nets, func(n *network) bool { return n.name == name })
 	if i < 0 {
@@ -144,11 +149,12 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	var kept population
 	if store != nil {
 		data, err := store.Load()
-		if err == nil && len(data) > 0 {
-			err = json.Unmarshal(data, &kept)
-		}
 		if err != nil {
-			return nil, fmt.Errorf("bot %s: %s population: %w", g.Name, name, err)
+			// The file may be a good one, so nothing this run learns replaces it
+			l.store, l.failed = nil, fmt.Errorf("%s population could not be read and is left as it is: %w", name, err)
+			l.untold = l.failed
+		} else if err := json.Unmarshal(data, &kept); len(data) > 0 && err != nil {
+			kept, l.untold = population{}, fmt.Errorf("%s population could not be parsed and starts over: %w", name, err)
 		}
 	}
 	var members []genetic.Candidate[[]float64, float64]
@@ -241,6 +247,7 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 // short of learnProven rounds again, those in flight counted, so what tops the
 // archive is proved or falls. Otherwise it is the member fielded.
 func (l *Learner) take(game int, explore bool) []float64 {
+	l.tell()
 	s := &l.slots[game]
 	if s.id != 0 && explore {
 		return s.genes
@@ -333,19 +340,39 @@ func (l *Learner) save() {
 	if err == nil {
 		err = l.store.Store(data)
 	}
-	l.failed = err
-	l.saved, l.dirty = time.Now(), false // [wall]
-	if l.Saved != nil && err == nil {
+	l.saved = time.Now() // [wall]
+	if err != nil {
+		err = fmt.Errorf("%s population could not be saved: %w", l.name, err)
+		if l.failed == nil {
+			l.untold = err
+		}
+		l.failed = err
+		l.tell()
+		return
+	}
+	l.failed, l.dirty = nil, false
+	if l.Saved != nil {
 		l.Saved(l.Stats())
 	}
 }
 
-// Close saves what the run learned and reports the last save that failed
+// tell has Lost hear what it has yet to
+func (l *Learner) tell() {
+	if l.untold != nil && l.Lost != nil {
+		l.Lost(l.untold)
+		l.untold = nil
+	}
+}
+
+// Close saves what the run learned and reports what kept it from its store
 func (l *Learner) Close() error {
 	if l.dirty {
 		l.save()
 	}
-	return l.failed
+	if l.dirty {
+		return l.failed
+	}
+	return nil
 }
 
 // Stats is the learner's progress as its last round left it
