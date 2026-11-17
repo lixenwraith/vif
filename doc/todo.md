@@ -2505,21 +2505,6 @@ each with the smallest change that would answer it:
     stands and a ploughed trail's flashes go out as text drifts under them.
     Worth building if the letter under a flash misleads typing.
 
-### Choose the Kraken's landing look
-
-- Priority: P1
-- Affected files: `internal/render/renderer/landing.go` (`krakenLandingLooks`,
-  `markCharge`), `internal/parameter/visual/kraken.go` (`KrakenLanding*`)
-- Design: [Rendering §7](rendering.md#7-layer-inventory)
-
-A Kraken's charge marks where it ends in one of four looks, picked by
-`visual.KrakenLandingStyle` so each can be played: a glow rising through the spin,
-the landing marker's blink over the mark, its outline round a landing marker, and
-a ring closing on that outline as the spin ends. Keep one. The other three, the
-selector and `LandingRenderer.style` go, `markCharge` loops the mark's own radius
-unless the closing ring stays, the look's shares of `KrakenLandingAlpha` become
-its constants, and a test holds the rule.
-
 ### Show a species' machine state in a debug overlay
 
 - Priority: P3

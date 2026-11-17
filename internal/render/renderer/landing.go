@@ -23,14 +23,13 @@ type LandingRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell landingCellRenderer
 	palette    bool
-	style      int // the look a Kraken's charge marks in, of krakenLandingLooks
 }
 
 // landingCellRenderer draws the marker at step of its colour cycle
 type landingCellRenderer func(buf *render.RenderBuffer, screenX, screenY, step int)
 
 func NewLandingRenderer(ctx *engine.GameContext) *LandingRenderer {
-	r := &LandingRenderer{gameCtx: ctx, style: visual.KrakenLandingStyle}
+	r := &LandingRenderer{gameCtx: ctx}
 	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderCell, r.palette = r.cell256, true
 	} else {
@@ -89,71 +88,44 @@ func (r *LandingRenderer) mark(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// krakenLandingLooks is each look's color and share of KrakenLandingAlpha for a
-// cell d of the mark's radius from the charge's end, soon of the way through the
-// spin and at step of the blink
-var krakenLandingLooks = [...]func(d, soon float64, step int) (color.RGB, float64){
-	visual.KrakenLandingGlow: func(d, soon float64, _ int) (color.RGB, float64) {
-		return visual.RgbKrakenAttack, (0.3 + 0.4*soon) * d * d * landingEdge((1-d)/visual.KrakenLandingFeather)
-	},
-	visual.KrakenLandingBlink: func(d, _ float64, step int) (color.RGB, float64) {
-		return visual.RgbLandingBlink[step%len(visual.RgbLandingBlink)], 0.4 * landingEdge((1-d)/visual.KrakenLandingFeather)
-	},
-	visual.KrakenLandingRing: func(d, _ float64, _ int) (color.RGB, float64) {
-		return visual.RgbKrakenAttack, landingRing(d, 1)
-	},
-	visual.KrakenLandingClose: func(d, soon float64, _ int) (color.RGB, float64) {
-		return visual.RgbKrakenAttack, max(landingRing(d, 2-soon), 0.3*soon*landingEdge((1-d)/visual.KrakenLandingFeather))
-	},
-}
-
-// landingEdge eases t from nothing at 0 to all at 1
-func landingEdge(t float64) float64 {
-	t = min(max(t, 0), 1)
-	return t * t * (3 - 2*t)
-}
-
-// landingRing is a band KrakenLandingBand wide whose outer edge is radius
-func landingRing(d, radius float64) float64 {
-	return landingEdge(1 - math.Abs(d-radius+visual.KrakenLandingBand/2)/(visual.KrakenLandingBand/2))
-}
-
-// markCharge marks where a Kraken's charge ends, KrakenLandingReach body radii
-// round, from its spin's first tick until the body arrives
+// markCharge marks where a Kraken's charge ends, from its spin's first tick until
+// the body arrives: an outline KrakenLandingReach body radii round, over a glow
+// that rises through the spin and fades toward the centre
 func (r *LandingRenderer) markCharge(ctx render.RenderContext, buf *render.RenderBuffer, k *component.KrakenComponent) {
-	soon := 1.0
+	glow := visual.KrakenLandingGlowMax
 	if k.State == component.KrakenSpin {
-		soon = min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
+		spun := min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
+		glow = visual.KrakenLandingGlowMin + (visual.KrakenLandingGlowMax-visual.KrakenLandingGlowMin)*spun
 	}
-	look := krakenLandingLooks[r.style]
-	step := int(time.Duration(k.Time*float64(time.Second)) / visual.LandingBlinkStep)
 	x, y := k.TargetX, k.TargetY
 	ry := parameter.KrakenBodyRadius * visual.KrakenLandingReach
 	rx := ry * parameter.KrakenRowSquash
-	// A closing ring starts at twice the mark's radius
-	for cy := int(math.Ceil(y - 2*ry - vmath.CellCenter)); cy <= int(y+2*ry-vmath.CellCenter); cy++ {
-		for cx := int(math.Ceil(x - 2*rx - vmath.CellCenter)); cx <= int(x+2*rx-vmath.CellCenter); cx++ {
+	half := visual.KrakenLandingBand / 2
+	for cy := int(math.Ceil(y - ry - vmath.CellCenter)); cy <= int(y+ry-vmath.CellCenter); cy++ {
+		for cx := int(math.Ceil(x - rx - vmath.CellCenter)); cx <= int(x+rx-vmath.CellCenter); cx++ {
 			d := math.Hypot((float64(cx)+vmath.CellCenter-x)/rx, (float64(cy)+vmath.CellCenter-y)/ry)
-			c, alpha := look(d, soon, step)
-			// A console cannot blend a filled mark, so it draws the outline, as a shield's
-			if r.palette && r.style == visual.KrakenLandingClose {
-				alpha = landingRing(d, 2-soon)
-			} else if r.palette {
-				alpha = landingRing(d, 1)
-			}
 			sx, sy, visible := ctx.MapToScreen(cx, cy)
-			if !visible || alpha <= 0 {
+			if d > 1 || !visible {
 				continue
 			}
-			if !r.palette {
-				buf.Set(sx, sy, 0, visual.RgbBlack, c, render.BlendAlphaBg, alpha*visual.KrakenLandingAlpha, terminal.AttrNone)
-			} else if alpha >= visual.Effect256Threshold {
-				buf.SetBg256(sx, sy, visual.Kraken256Landing)
+			// The outline eases in and out across its band, whose outer edge is the mark's
+			ring := max(1-math.Abs(d-1+half)/half, 0)
+			ring *= ring * (3 - 2*ring)
+			if r.palette {
+				// A console cannot blend the glow, so it draws the outline, as a shield's
+				if ring >= visual.Effect256Threshold {
+					buf.SetBg256(sx, sy, visual.Kraken256Landing)
+				}
+				continue
+			}
+			alpha := visual.KrakenLandingAlpha * ring
+			if inner := d / (1 - half); inner < 1 {
+				alpha = max(alpha, glow*inner*inner)
+			}
+			if alpha > 0 {
+				buf.Set(sx, sy, 0, visual.RgbBlack, visual.RgbKrakenAttack, render.BlendAlphaBg, alpha, terminal.AttrNone)
 			}
 		}
-	}
-	if r.style == visual.KrakenLandingRing {
-		r.mark(ctx, buf, vmath.Area{X: int(x), Y: int(y), Width: 1, Height: 1}, time.Duration(step)*visual.LandingBlinkStep)
 	}
 }
 
