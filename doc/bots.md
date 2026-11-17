@@ -493,22 +493,31 @@ stream, so a run resumes the archive and not the exact search.
 The weights written by hand are most of what the bot knows at first. In `cave`,
 where a core plays one of their rounds a second, they score 10,600 a round:
 three rounds in four meet the first Kraken, and most of those shoot down three
-or four. A learner adds to that within minutes. Before a Kraken's kill paid by
-its pace, while a round scored its ticks alone and `raid` read the two nearest
-raiders, those weights scored 8,920 over 60 rounds of four seeds no run learned
-on, and what each of four runs fielded after nine million ticks of learning,
-twenty minutes of a core, scored
+or four. A learner adds to that within minutes. Over 60 rounds of four seeds no
+run learned on, each closed at the graph's limit, those weights score 10,033,
+and what each of four runs fielded after 22 minutes of learning on four cores
+scored
 
 ```
-seed         1       2       3       4
-score    20662   10181   23770   11638
+seed              1       2        3       4
+one game      37621   16003    12617   13876
+five games    35177   65154   201735   60530
 ```
 
-The two that doubled it had found how to outlast the Kraken, hopping from the
-edge its charge heads for to the far one and hitting it now and then, which is
-what the Kraken's pay now discourages; it is not measured again yet. A watched
-run at speed 1 plays some ten of the hand-written weights' rounds an hour, so it
-shows the play and a headless one flat out fills the files.
+- One game is a core's nine million ticks and 1,200 to 1,500 rounds, 3,300 to
+  4,100 an hour; five games are 35 million ticks and 2,700 to 5,100 rounds,
+  8,000 to 12,600 an hour, the fewer the longer its members last.
+- Every five-game run fields members that shoot five Krakens or more down in
+  most rounds, and seeds 3 and 4 play three rounds in four to the limit. Of the
+  one-game runs only seed 1's do, 38 rounds of 60 to the limit.
+- A Kraken's hit points double a cave and its pay with them, so a score about
+  doubles with each Kraken more: seed 3's rounds at the limit are worth
+  320,000 on eight.
+- A seed moves the outcome as much as the count of games does: read a setting
+  over several.
+
+A watched run at speed 1 plays some ten of the hand-written weights' rounds an
+hour, so it shows the play and a headless one flat out fills the files.
 
 ## Recording and replaying
 

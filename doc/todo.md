@@ -328,53 +328,88 @@ leave its nearest cell and its charge's end      42 of 301   2646
   (held out, 1,652 to 1,850 for 1,334 to 1,799 by two rounds, the weights it
   began from 1,674).
 
-What a run fields after nine million ticks of learning, twenty minutes of a
-core, over 60 rounds of four seeds it never played, each closed at the limit,
-where the weights written by hand score 8,920, lose 93 rounds of 400 in the
-first cave and shoot five Krakens down in 9. It was taken while a round scored
-its ticks alone and `raid` read the two nearest raiders, one landing and its
-loot, 23 inputs, and `kraken` 16:
+Games that learn together, in ticks a second on a four-core machine by the
+cores they were given, where one game plays 6,900:
 
 ```
-seed                                    1       2       3       4
-rounds learned on                     900    1500    1200    1600
-its last 100, candidates and all    15068    7515   14227    8382
-fielded, held out                   20662   10181   23770   11638
-  lost in the first cave               15       7      23       9
-  five Krakens or more down            38       0      37      10
+cores   games   ticks a second
+2       2       12600
+2       3       13500
+2       4       12400
+3       3       18700
+3       4       18300
+3       5       19800
+4       4       21400 to 22500
+4       5       27000 to 27400
+4       6       26300 to 26500
+4       8       27000
 ```
 
-- Seeds 1 and 3 field a `kraken` member that hops from the edge the Kraken's
-  charge heads for to the far one, found within a hundred of its learner's
-  candidates. Before the limit what seed 1 fielded scored 69,485, a round
-  66,900 ticks long.
-- What they lose is the first cave, as often as the weights they began from.
+- Four games on four cores waited at 222 of 302 round closes, 20 of their 187
+  game-seconds, where the same games closing in any order play 27,000; the
+  learners' lock was held 0.06 s of them.
+- Two runs of one seed and five games keep the same files, 87,142 bytes after
+  two million ticks, and one game keeps what main's does, byte for byte.
+
+What a run fields after 22 minutes on four cores, over 60 rounds of four seeds
+it never played, 101 to 104, each closed at the limit, where the weights
+written by hand score 10,033, lose 16 rounds before the first Kraken and shoot
+five Krakens down in 1. One game is nine million ticks of a core, four such
+runs side by side, and five games 35 million on the four:
+
+```
+seed                              1       2        3       4
+one game
+  rounds learned on            1237    1358     1539    1493
+  fielded, held out           37621   16003    12617   13876
+  lost before the Kraken         11       4        5       6
+  five Krakens or more down      49      12        1       3
+  rounds at the limit            38       0        0       0
+five games
+  rounds learned on            5057    3326     2703    3609
+  fielded, held out           35177   65154   201735   60530
+  lost before the Kraken          6      11       13       6
+  five Krakens or more down      33      47       47      54
+  rounds at the limit             5      12       47      46
+```
+
+- The four average 20,029 with one game and 90,649 with five. Seed 1 is level:
+  60 rounds place a mean within 2,400 to 3,500 there.
+- Five games play four times one game's ticks and two to four times its
+  rounds, 8,000 to 12,600 an hour for 3,300 to 4,100, as their members last
+  longer; a new population's first two million ticks ran 20,900 an hour.
+- A round at the limit scores by its kills, and a Kraken's pay doubles a cave
+  with its hit points: seed 4's rounds there are worth 48,000 and seed 3's
+  320,000, on six and eight Krakens a round.
+- What they lose is still the first cave, as often as the weights they began
+  from.
 
 What remains:
 
-- **The inputs.** `raid` now reads all three raiders and every landing, three
-  at most, and no loot, which homes on the ship: 36 inputs, and `kraken` 14. The
-  weights written by hand play as they did, round for round; what a run fields
-  with them is to measure again. What a player also reads and no sensor does:
-  how soon a landing lands, a raider's size, and which cave it is.
-- **Rounds an hour.** One game plays on one core, and the shipped weights'
-  rounds last 7,300 ticks: a round a second flat out, and some ten an hour
-  watched at speed 1. A learner that outlasts the Kraken plays rounds up to the
-  graph's `round_seconds`, 36,000 ticks, five seconds a core and half an hour
-  watched; unbounded, one ran 520,000. What multiplies the
-  rounds is a game on every core, each its own instance and all feeding the
-  learners: the engine takes many evaluations in flight and a `Learner` holds
-  one. `kraken`'s learner is scored only by rounds that reach it; a scenario
-  that opens on the Kraken would score it every round. With
-  [Train bot graphs offline](#train-bot-graphs-offline).
-- **Measure it again.** What a run fields was read before the Kraken's kill paid
-  by its pace and before `raid` read every raider and landing: the edge hop it
-  found then hit the Kraken now and then and took its time, which the pay now
-  discourages. Read it anew, and what the hop's fights now earn beside one that
-  keeps the gun on it.
+- **The inputs.** `raid` reads all three raiders and every landing, three at
+  most, and no loot, which homes on the ship: 36 inputs, and `kraken` 14. What
+  a player also reads and no sensor does: how soon a landing lands, a raider's
+  size, and which cave it is.
+- **The wait at a round's close.** A game whose round closes ahead of the
+  others' ticks waits for them, which is what makes a seed's search one
+  search, and a game more than the cores takes up the core it frees. That
+  count is read on two to four cores, and three did better with two more: read
+  it on more cores, where the learners' one lock may bind first.
+- **A scenario that opens on the Kraken.** `kraken`'s learner is scored only by
+  rounds that reach it, three in four of the hand-written weights'. A ship
+  arrives at the first Kraken with 43,000 to 69,000 energy (the quartiles of
+  44 fights, the median 50,000), 20 heat and the gun seven levels up; a copy of
+  `cave` starting so, its ramp skipped, meets the Kraken at tick 134 of every
+  round and the hand-written weights win 15 first fights of 16 there, as in the
+  game.
+- **What the fielded members fly.** A run once found the edge hop, from the
+  side the Kraken's charge heads for to the far one, hitting it now and then,
+  which its kill's pay by pace now discourages: whether what a run fields
+  hops or keeps the gun on the Kraken is not read.
 - **The score past the limit.** A round closed at its limit scores the limit's
   ticks and what it earned, so candidates that all reach it differ by their
-  kills alone: decide whether the limit grows as the fielded members reach it.
+  kills alone, and two five-game runs of four field members that reach it
+  three rounds in four: decide whether the limit grows as they do.
   And a member's score is the mean of rounds that run from 400 to the limit:
   decide whether it ranks by a mean one long round moves that far.
 - **What ends its rounds.** Of the 800, a quarter end in the first cave, a
@@ -407,7 +442,7 @@ What remains:
 - **Sessions.** A run in a session fields and does not learn. The first widening
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
-  `Driver.Learn`'s `alone` is the seam, and its stores need one writer.
+  `bot.Learn`'s `alone` is the seam, and its stores need one writer.
 - **The watched map** and **the operator's side**, its `:bot clear`, `export`
   and `import`, are items of their own:
   [Size a bot's own run alike, watched or not](#size-a-bots-own-run-alike-watched-or-not)
@@ -517,10 +552,9 @@ with no size takes the same 120x40.
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 The genome is a live learner's network, and the result its population file,
-`bot/<graph>.<scenario>.<network>.json`. A solo `-headless -speed max` run
-already learns on one core, a round of the shipped `cave` weights a second, each
-a new game of its seed; a game on every core feeding those learners comes first
-here.
+`bot/<graph>.<scenario>.<network>.json`. A solo `-headless` run already
+learns with a game on every core, each round a new game of its seed, four of
+the shipped `cave` weights' rounds a second on four cores.
 `lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
 scenarios and seeds, fixed for the run since the batch engine never scores an
 elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run
