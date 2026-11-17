@@ -854,6 +854,17 @@ Libraries · Branches.
   `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap ahead
   of the driver's, counts what ended it: `EventKrakenSpawnRequest` for a Kraken
   met, its `EventSpeciesKilled` for one shot down.
+- A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
+  doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
+  median of 48,271, of another 201,735 and 319,994. Read the median and what
+  ended the rounds beside it, and several seeds: four runs of one setting
+  fielded 35,177 to 201,735. A build or a probe run beside a timed run takes a
+  tenth off its rate (24,160 ticks a second for 27,000).
+- A learner's setting is read over twelve seeds, four minutes a seed on four
+  cores at five million ticks of five games and 40 held-out rounds, and then
+  only if it moves what is fielded 1.7 times: read the seeds' geometric mean
+  and Krakens down a round. A copy of the tree whose `learner.go` constants
+  read the environment makes one frozen test binary serve every row.
 - A scratch run past ten minutes takes `-test.timeout 0`. A mutation that
   deadlocks the games' order, or never ends them, hangs where it should fail:
   run it under `timeout`, whose 124 is the test holding. The commands of a cloud
