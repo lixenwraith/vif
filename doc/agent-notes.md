@@ -862,9 +862,10 @@ Libraries · Branches.
   learners over every driver, `sideGames.start` steps them and the test the
   run's own, then `Driver.End` at its tick and `sideGames.close`. A graph parsed
   under another name (`bot.ParseGraph`) keeps its populations apart, in the user
-  root the test's environment names. A core plays 7,000 ticks a second whatever
-  steers. The binary learns as the harness does, a seed's rounds the same in
-  both. `Driver.Stats` takes the world lock: called inside `RunSafe` it hangs.
+  root the test's environment names. A core plays 4,700 to 7,000 ticks a
+  second, by the machine, whatever steers. The binary learns as the harness
+  does, a seed's rounds the same in both. `Driver.Stats` takes the world lock:
+  called inside `RunSafe` it hangs.
 - Games that learn together are read by ticks a second, and only against a run
   whose rounds are alike: a tick costs by where its game stands, 64 µs in the
   twenty after a new game and 149 in the mean, and no count of dispatched events
@@ -875,11 +876,24 @@ Libraries · Branches.
   of games and, for one game, between main's test binary built in a worktree and
   the branch's (`sha256sum`).
 - What a population fields is played held out by learners attached not alone
-  (`bot.Learn`, `alone` false), which field and never save. `App.Reset(false)`
-  closes a round at the graph's limit, `Driver.Round` reads its score, and an
-  `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap ahead
-  of the driver's, counts what ended it: `EventKrakenSpawnRequest` for a Kraken
-  met, its `EventSpeciesKilled` for one shot down.
+  (`bot.Learn`, `alone` false), which field and never save, each on its file's
+  path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at an
+  empty directory. `App.Reset(false)` closes a round at the graph's limit,
+  `Driver.Round` reads its score, and an `Instance` wrapping the App, whose
+  `SetDispatchTap` calls the test's tap ahead of the driver's, counts what ended
+  it: `EventKrakenSpawnRequest` for a Kraken met, its `EventSpeciesKilled` for
+  one shot down, `EventFireSpecialRequest` for a special asked for and
+  `EventHeatSpendRequest`, which only the special's blast pushes, for one spent.
+- An output is held off in a copy of a population: its weights zeroed and its
+  bias negative in every member, the genes each hidden unit's inputs and bias,
+  then `x`, `y` and `special`, each its inputs, hidden units and bias. `Inject`
+  merges members whose genes then match, so check that the member fielded keeps
+  its score and rounds.
+- A learning run's ticks at a save are in nothing the binary prints: run it with
+  `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game whose `tick`
+  is the length of the run it ended, at about 1.5% of the rate, and sum those by
+  the log's time to each save. Copy the population files as their mtime moves to
+  keep what the run fielded along the way.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what
@@ -918,7 +932,13 @@ Libraries · Branches.
 - Heat is what stands between an empty shield and a defeat in `cave`, a touch
   taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
   the 10 a game starts with in its first seconds, on blasts wherever dust lies.
-  The same weights score 1,644 a round with it and 2,406 on `main`.
+  The same weights score 1,644 a round with it and 2,406 on `main`. A special
+  costs its heat only where it blasts, and it turns the scenery's dark glyphs to
+  dust first, so in the first cave nearly every one blasts 200 to 240 cells of
+  the 256 a blast holds. `explosion.triggered` counts those cells and a
+  missile's explosions, reset each game. A defeat is energy and heat both at
+  nothing, so a lost round ends at heat 0: read what blasts left by what a
+  round had, 10 and its loot, less its blasts.
 - `cave`'s Kraken covers its body and its legs, 30 cells long at rest, 42 on a
   charge and 70 striking, rows counted twice, and its touch takes 10,000 energy a
   tick: weights that hold a raider's standoff, 28 cells, lose 50,000 in six
