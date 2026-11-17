@@ -205,7 +205,7 @@ and the audio buffer; a flag on the command line wins
 | `-g`, `-gui[=false]` | Open the game in a desktop window (Xlib, EGL and GLES 2 loaded at run time; Linux and FreeBSD) instead of the terminal. The default of a `vif-gui` build or with `vif.toml`'s `[presentation] window = true`, which `-g=false` turns off; a `vif_nogui` build refuses it. |
 | `-cli` | Play in the terminal whatever `vif.toml` or a `vif-gui` build says; wins over `-g`. |
 | `-maximized[=false]`, `-fullscreen[=false]` | The state the desktop window opens in, asked of the window manager (`_NET_WM_STATE`); `vif.toml`'s `[presentation] maximized` and `fullscreen` set the default, and a terminal run ignores both. |
-| `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
+| `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. Ctrl with `=` or `-`, or with the wheel, zooms the window from there and Ctrl-0 puts its font back ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)). |
 | `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, sound on by default. |
 | `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
 

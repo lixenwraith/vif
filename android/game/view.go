@@ -2,7 +2,6 @@ package game
 
 import (
 	"cmp"
-	"math"
 	"sync"
 	"sync/atomic"
 
@@ -68,17 +67,14 @@ func newView(tex *glyph.Texture, raster bool, density float32, cell float64) *vi
 
 // setCell sizes a cell by the density and the zoom; the UI thread's, as setGrid is
 func (v *view) setCell() {
-	a := v.tex.Atlas()
-	w := max(a.Width, int(math.Round(float64(v.density)*cmp.Or(v.Cell(), cellDP)*float64(a.Width)/float64(a.Height))))
-	v.cellW, v.cellH = w, w*a.Height/a.Width
+	v.cellW, v.cellH = v.tex.Atlas().Cell(float64(v.density), cmp.Or(v.Cell(), cellDP))
 }
 
 // zoom scales the cell by a pinch's scale, in parameter.CellStep steps within the
 // range every host shares, and never under the atlas; the UI thread's
 func (v *view) zoom(scale float64) {
-	step := parameter.CellStep
-	least := max(parameter.CellLeast, math.Ceil(float64(v.tex.Atlas().Height)/float64(v.density)/step)*step)
-	cell := min(max(math.Round(cmp.Or(v.Cell(), cellDP)*scale/step)*step, least), parameter.CellMost)
+	keeps := glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep}
+	cell := keeps.Scale(v.tex.Atlas(), float64(v.density), cmp.Or(v.Cell(), cellDP), scale)
 	v.mu.Lock()
 	v.cell = cell
 	v.mu.Unlock()

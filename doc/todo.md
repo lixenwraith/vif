@@ -2604,6 +2604,19 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
+### Zoom the window and Android out under the atlas
+
+- Priority: P3
+- Affected files: `tool/font-atlas/font-atlas.py`, `internal/asset/font`,
+  `pkg/glyph/atlas.go` (`Atlas.Cell`, `Zoom.Scale`), `pkg/window`, `android/game`
+- Guide: [Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+
+The desktop window and Android draw one 12x24 atlas, stretched up and never
+down, so their zoom stops at it: a window at `-scale 1` only zooms in, 24 to 40,
+where a page, which draws its glyphs at any size, goes down to 4. Ship the atlas
+at smaller cells too, the generator taking a size, and draw a zoom from the
+largest one its cell holds, so a zoom out shows more map with whole glyphs.
+
 ### Console follow-ups
 
 - Priority: P3

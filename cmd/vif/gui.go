@@ -43,6 +43,8 @@ func (h *windowHost) Init() error {
 	h.aspect = atlas.Aspect()
 	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
 		Cols: parameter.WindowCols, Rows: parameter.WindowRows, Scale: *flagScale,
+		Cell:      settings.Presentation.Cell,
+		Zoom:      glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep},
 		Maximized: windowMaximized, Fullscreen: windowFullscreen})
 	if err != nil {
 		return fmt.Errorf("%w (-cli plays in the terminal)", err)
@@ -54,6 +56,7 @@ func (h *windowHost) Surface() render.Surface             { return h.win }
 func (h *windowHost) Size() (int, int)                    { return h.win.Size() }
 func (h *windowHost) Blocked() time.Duration              { return h.win.Blocked() }
 func (h *windowHost) CellAspect() vmath.Aspect            { return h.aspect }
+func (h *windowHost) Cell() float64                       { return h.win.Cell() }
 func (h *windowHost) Events() <-chan terminal.Event       { return h.win.Events() }
 func (h *windowHost) SetPointerMode(enabled, motion bool) { h.win.SetPointerMode(enabled, motion) }
 

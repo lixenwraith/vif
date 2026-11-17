@@ -81,6 +81,69 @@ func TestAPixelMapsToTheCellDrawnUnderIt(t *testing.T) {
 	}
 }
 
+// TestAZoomStepScalesTheWindowsCell: Ctrl with =, + or the wheel up zooms in a step
+// and with - or the wheel down out, the keypad's keys too, within the range and
+// never under the atlas, the grid the window's pixels hold following; Ctrl+0 puts
+// the atlas's own cell back, and no other key or wheel step zooms.
+func TestAZoomStepScalesTheWindowsCell(t *testing.T) {
+	const ctrl, in, out = stateControl, zoomStep, 1 / zoomStep
+	for _, c := range []struct {
+		keysym uint64
+		state  uint32
+		by     float64
+		ok     bool
+	}{
+		{'=', ctrl, in, true}, {'+', ctrl | stateShift, in, true}, {0xffab, ctrl, in, true},
+		{'-', ctrl, out, true}, {0xffad, ctrl, out, true}, {'0', ctrl, 0, true}, {0xffb0, ctrl, 0, true},
+		{'=', 0, 0, false}, {'=', ctrl | stateMod1, 0, false}, {'a', ctrl, 0, false},
+	} {
+		if by, ok := zoomKey(c.keysym, c.state); by != c.by || ok != c.ok {
+			t.Errorf("keysym %#x state %#x zooms by %v %v, want %v %v", c.keysym, c.state, by, ok, c.by, c.ok)
+		}
+	}
+	for _, c := range []struct {
+		button int32
+		state  uint32
+		by     float64
+		ok     bool
+	}{{4, ctrl, in, true}, {5, ctrl, out, true}, {4, 0, 0, false}, {1, ctrl, 0, false}} {
+		if by, ok := zoomWheel(c.button, c.state); by != c.by || ok != c.ok {
+			t.Errorf("button %d state %#x zooms by %v %v, want %v %v", c.button, c.state, by, ok, c.by, c.ok)
+		}
+	}
+
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newWindow(Config{Atlas: atlas, Cols: 40, Rows: 20, Scale: 2, Zoom: glyph.Zoom{Least: 4, Most: 40, Step: 0.5}})
+	w.winW, w.winH = 40*8, 20*16
+	for _, c := range []struct {
+		by         float64
+		moved      bool
+		dp         float64
+		cw, ch     int
+		cols, rows int
+	}{
+		{in, true, 9, 9, 18, 35, 17},    // from the atlas's own, 8 dp at this scale
+		{100, true, 40, 40, 80, 8, 4},   // to the most
+		{in, false, 40, 40, 80, 8, 4},   // and no further
+		{0.01, true, 4, 4, 8, 80, 40},   // to the atlas's pixels, the least
+		{out, false, 4, 4, 8, 80, 40},   // and never under them
+		{0, true, 0, 8, 16, 40, 20},     // back to the atlas's own
+		{0, false, 0, 8, 16, 40, 20},    // where it already is
+		{out, true, 7.5, 8, 16, 40, 20}, // a step out, the same whole pixels
+	} {
+		moved := w.rescale(c.by)
+		w.regrid()
+		cols, rows := w.Size()
+		if moved != c.moved || w.Cell() != c.dp || w.cw != c.cw || w.ch != c.ch || cols != c.cols || rows != c.rows {
+			t.Fatalf("a step of %v: moved %v to %v dp, a %dx%d cell, a %dx%d grid; want %v, %v dp, %dx%d, %dx%d",
+				c.by, moved, w.Cell(), w.cw, w.ch, cols, rows, c.moved, c.dp, c.cw, c.ch, c.cols, c.rows)
+		}
+	}
+}
+
 // TestAButtonReportsWhatATerminalReports: X's buttons 1 to 9 become the buttons SGR
 // mouse reporting names; a wheel step reports its press alone, any other button
 // its press and its release

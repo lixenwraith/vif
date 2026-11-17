@@ -38,7 +38,7 @@ complete -c vif -o g -o gui -d 'Open the game in a desktop window (Xlib, EGL, GL
 complete -c vif -o cli -d 'Play in the terminal whatever vif.toml\'s [presentation] or a vif-gui build says; wins over -g'
 complete -c vif -o maximized -d 'Open the desktop window maximized; vif.toml\'s [presentation] maximized is the default, and a terminal run ignores it'
 complete -c vif -o fullscreen -d 'Open the desktop window full screen; vif.toml\'s [presentation] fullscreen is the default, and a terminal run ignores it'
-complete -c vif -o scale -x -d 'Draw the desktop window\'s font n times its pixels, for a HiDPI screen; with -g (default 1)'
+complete -c vif -o scale -x -d 'Draw the desktop window\'s font n times its pixels, for a HiDPI screen; with -g (default 1). Ctrl with = or -, or with the wheel, zooms the window from there, as a terminal\'s own keys zoom a terminal, and Ctrl-0 puts its font back'
 complete -c vif -o mute -d 'Start muted, or with sound as -mute=false; unset, vif.toml\'s [play] channels stand, sound on by default'
 complete -c vif -o ab -o audio-backend -x -d 'Force an audio backend instead of detecting one'
 complete -c vif -o nw -o no-wait -d 'Start each new game and seat each join at once, or at a key, click or tap as -nw=false; unset, vif.toml\'s [play] wait stands, waiting by default'

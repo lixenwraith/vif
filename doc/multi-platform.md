@@ -483,7 +483,16 @@ pointer as the events a terminal reports, each key's release too once a run asks
 (`hostkey.Report`, which the page and Android share): XKB's detectable autorepeat
 tells a held key's repeats from releases, a server without it reports presses
 alone, and focus leaving ends every hold; `-scale n` draws the texture `n` times
-its size with nearest filtering, for a HiDPI screen. Its libraries
+its size with nearest filtering, for a HiDPI screen. Ctrl with `=` or `+` zooms
+its cell in, with `-` out and with `0` back to the atlas's own, the keypad's keys
+too, and so does Ctrl and the wheel, as the page's: the chords a terminal emulator
+and a browser keep for their own zoom, so a terminal's zoom is its emulator's and
+a page's keys its browser's, and `pkg/window` takes them itself (`zoomKey`), no
+terminal reporting them and no game key bound to them. A step is the page's wheel
+notch within Android's range (`glyph.Zoom`, `-scale` the density, never under the
+atlas), the frame stretched over the cell, filtered where that is no whole
+multiple of the atlas's; the grid the window holds follows as a resize, and the
+run keeps the cell in `[presentation] cell` and opens at it. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
 the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
 as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
