@@ -276,15 +276,15 @@ built so:
   its store a JSON document of the bot package's own.
 
 What was measured, at 120x40 headless and flat out, and still holds. A core
-plays 7,000 ticks a second whatever steers. A round is mostly luck, and it
-snowballs: a ship that outlives the first cave has its gun raised and 50,000
-energy, so a round's score runs from 150 to 10,000 before anything is learned,
-and weights drawn at random have shot down three Krakens within a population's
-first thousand rounds. An archive's own score for a member runs well over what
-it holds on rounds it never played, as only members whose luck held are still
-there, which is why a candidate enters on a second round and eight prove a
-member. Auto-fire's special attack spent in a game's first seconds the heat
-that is the ship's last buffer.
+plays 4,700 to 7,000 ticks a second, by the machine, whatever steers. A round
+is mostly luck, and it snowballs: a ship that outlives the first cave has its
+gun raised and 50,000 energy, so a round's score runs from 150 to 10,000 before
+anything is learned, and weights drawn at random have shot down three Krakens
+within a population's first thousand rounds. An archive's own score for a
+member runs well over what it holds on rounds it never played, as only members
+whose luck held are still there, which is why a candidate enters on a second
+round and eight prove a member. Auto-fire's special attack spent in a game's
+first seconds the heat that is the ship's last buffer.
 
 From nothing, what one game fields after three million ticks, seven minutes of
 a core, over 40 rounds of four seeds it never played, each closed at the limit,
@@ -297,6 +297,123 @@ fielded, held out 2906    3654        974    1339
   its median      1030    1555        795     541
   met a Kraken       6      10          5       7
 ```
+
+After 22 minutes on four cores, what each run from nothing fielded over 60
+rounds of seeds 101 to 104, each closed at the limit, beside its learners' own
+lines; on this score the weights last written by hand field 11,896 there, their
+median 13,525, lose 16 rounds before the first Kraken, shoot five down in 1 and
+reach the limit in none:
+
+```
+                                seed 1       2       3       4
+five games, 24.9 to 25.3 million ticks
+  raid: rounds                    8395    8855    5788    6595
+    recent                        2480    4272    4327    4232
+    fielding                      8677   11615   12787    9919
+      over                          16       8       9      18
+  kraken: rounds                  2306    2927    1811    1808
+    recent                        6798    7037    7876    8536
+    fielding                     14741   14142   15013   16869
+      over                           8       8       9       8
+  fielded, held out               3720    5464    6141    5891
+    its median                    1277    1070    2320    1344
+  lost before the Kraken            37      36      30      42
+  five Krakens or more down          0       0       0       0
+  rounds at the limit                0       0       0       0
+one game, 6.2 to 6.4 million ticks
+  raid: rounds                    2406    3230    1632    3051
+    recent                        2196    3362    4326    2202
+    fielding                      8012    7655   12378    9557
+      over                          11       8       8      10
+  kraken: rounds                   358     595     551     577
+    recent                        5826    5480    5347    4889
+    fielding                     16262   13443   15144   10631
+      over                           8       8       8       8
+  fielded, held out               3887    4556    4753    3159
+    its median                    1105    1057    1382    1198
+  lost before the Kraken            49      43      37      46
+  five Krakens or more down          0       0       0       0
+  rounds at the limit                0       0       0       0
+```
+
+- Five games play 19,000 ticks a second here and one game 4,700 to 4,800
+  beside three others: four times the ticks, two to three and a half times the
+  rounds.
+- Every run loses half its rounds or more before the first Kraken, most to a
+  defeat in the first cave's raid and the rest crushed by its rock. A ship
+  that gets past it mostly shoots that Kraken down and falls to a later cave's,
+  the second to the fifth. Five games lose fewer there on every seed, 30 to 42
+  against 37 to 49, and field more on three.
+- `fielding S over C` is 1.7 to 3 times what the member holds out. The member
+  a five-game run fields changes a dozen times in 22 minutes, and in two runs
+  of four one born in the first three minutes was fielded again in the last ten.
+
+What each member does with the special in those rounds, a blast being one that
+detonated and spent its heat, and the same members with `special` held off, its
+weights zeroed and its bias negative in a copy of the files:
+
+```
+                                    seed 1       2       3       4
+five games
+  blasts before the Kraken, median      10      10    12.5      10
+  the first's tick, median             188     114     196     178
+    the tenth's                       1019     513    1066     946
+  rounds they left no heat              14      39      24      26
+  heat as the Kraken rises, median      11      10    14.5      10
+  special held off: fielded           1005     252    1475     840
+    lost before the Kraken              60      60      60      60
+one game
+  blasts before the Kraken, median      10      10      10      10
+  the first's tick, median             112     139     193     131
+    the tenth's                        898     750     980    1014
+  rounds they left no heat              29      18      21      18
+  heat as the Kraken rises, median      13      10      10    11.5
+  special held off: fielded            946     443     670     627
+    lost before the Kraken              60      60      60      60
+```
+
+- Every member blasts in the first cave in 53 to 60 rounds of 60, and 27 of
+  the 5,047 blasts there fell in a round's first 100 ticks: the first comes as
+  the raiders close and the tenth 26 to 53 seconds in, where a round that
+  reaches the Kraken meets it at a median tick of 1,100 to 2,900.
+- Held off, every member loses all 60 rounds before the first Kraken, some
+  scoring little more than a ship that holds still.
+- None reached the limit, and a defeat ends at heat 0 by its rule, energy and
+  heat both at nothing, so no lost round ends with heat left. In 14 to 39
+  rounds of 60 the blasts alone spent every heat the round had, its 10 and its
+  loot's; a ship that reaches the Kraken has a median 10 to 15.
+- So, per seed: every run fires in the first cave and not all in its first
+  seconds, and the ablation costs every run the first cave; no run ends its
+  rounds with heat left.
+
+What five games fielded as they learned, their files as saved nearest 2, 5, 10
+and 20 million ticks (1.8 to 2.3, 5.0 to 5.2, 9.8 to 10.3, 19.8 to 20.2), when
+`raid` had scored 900 to 1,550, 1,560 to 2,760, 2,560 to 4,290 and 4,780 to
+7,290 rounds, each held out over 40 rounds of the same seeds:
+
+```
+millions of ticks              2       5      10      20
+fielded, held out
+  seed 1                    1483    4030    2211    3240
+  seed 2                    1995    1817    2949    3639
+  seed 3                    4994    4539    4002    3884
+  seed 4                    3371    4640    3552    6557
+its median
+  seed 1                    1102    1168    1001    1327
+  seed 2                    1029    1043    1035    1007
+  seed 3                    2027    2143    1962    1717
+  seed 4                    1282    1701    1255    1702
+lost before the Kraken, of 40
+  seed 1                      30      24      26      26
+  seed 2                      26      32      26      24
+  seed 3                      25      21      32      30
+  seed 4                      31      25      29      28
+```
+
+- The medians hold from two million ticks, two minutes, as do the rounds lost
+  before the Kraken; the means move with a few long rounds. Every copy blasts
+  about ten times before the Kraken and loses all 40 rounds there with the
+  special held off.
 
 The rest was read while the graph wrote its weights by hand and a round scored
 its ticks, a Kraken's fight aside. Games that learn together, in ticks a second
@@ -359,16 +476,19 @@ What remains:
 
 - **Whether it finds the heat.** A person gets through the first cave, where
   the gun has no upgrade and a touch finds no shield, by blasting the raiders
-  that crowd the ship, once or twice, and holding a heat back. Nothing tells a
-  learner so. Read whether a population comes to it: the blasts a round its
-  fielded member sets off, the rounds it loses in the first cave, and how long
-  that takes.
-- **How fast it learns.** A game on every core multiplies the ticks, four times
-  on four cores. A game whose round closes ahead of the others' ticks waits for
-  them, which is what makes a seed's search one search, and a game more than
-  the cores takes up the core it frees: that count is read on two to four
-  cores, and three did better with two more, so read it on more, where the
-  learners' one lock may bind first. With
+  that crowd the ship, once or twice, and holding a heat back. From nothing a
+  run finds the blast and leans on it, about ten in the first cave, and holds
+  none back (above). Unread: whether one that first learns to fly that cave, as
+  the hand weights do, then learns to blast once or twice.
+- **How fast it learns.** From nothing, what five games field after two
+  million ticks, two minutes on four cores, is what they field after 25, and
+  one game fields after 22 minutes, six million ticks, about what five games
+  did at five million: a game on every core multiplies the ticks four times and
+  gets to that level sooner, no further. A game whose round closes ahead of the others'
+  ticks waits for them, which is what makes a seed's search one search, and a
+  game more than the cores takes up the core it frees: that count is read on
+  two to four cores, and three did better with two more, so read it on more,
+  where the learners' one lock may bind first. With
   [Train bot graphs offline](#train-bot-graphs-offline).
 - **A scenario that opens on the Kraken** scores `kraken` every round and
   fielded nothing better on four seeds, so none is built. A ship arrives there
@@ -446,8 +566,15 @@ What remains:
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs
   5, the Kraken's aside: its hit points want a table.
-- **If the archive stalls** in `cave` at this size: an evolution strategy with a
-  step per gene, an engine of its own in `lixenwraith/genetic`. Measure first.
+- **The archive stalls from nothing** in the first cave (above): its raid ends
+  half the rounds or more, most by a defeat and often with the heat blasted
+  away, while `raid`'s recent mean holds and its fielded member turns over. The next
+  experiment, before any other: learn `raid` from nothing with `special` held
+  off in every candidate, 22 minutes on four cores over seeds 1 to 4, and hold
+  out what it fields beside the table above. Fewer rounds lost before the
+  Kraken would say the blast's early pay is what holds the search there; as
+  many, that the flying is past this search, and then an evolution strategy
+  with a step per gene, an engine of its own in `lixenwraith/genetic`.
 
 What `lixenwraith/genetic` measured on a stand-in, a 148-weight network of this
 shape on a noisy scrolling game, twelve seeds a row and 12,000 rounds each, read
