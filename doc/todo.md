@@ -398,30 +398,15 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `Driver.Learn`'s `alone` is the seam, and its stores need one writer.
-- **The watched map.** A bot alone has no terminal, so headless it plays `-size`
-  or 120x40. Watched, a bot's run is sized from the terminal that watches it, as
-  play is, so there the watch sets the map; a learning graph alone keeps the
-  120x40 watched too, so one population is scored by one game, and shows as a
-  small map in a large terminal. Decide whether every bot alone plays `-size` or
-  120x40, watched or not, the terminal only a view of it. Beside it a run a
-  caller drives with no size, a script's, takes 80x24, and the desktop window
-  opens at 120x40.
-- **The operator's side.** A watched run's bar, a headless run's summary and the
-  log show the learners; the `:bot` list and the menu's Bots page name no
-  population, and nothing starts one over but removing the file. To build, a
-  population named `<graph>.<scenario>.<network>`, a shorter name taking all
-  under it:
-  - `:bot clear cave.cave.kraken`, `cave.cave` or `cave` starts those
-    populations over, a learner of this run with them.
-  - `:bot export <name>` writes them as one TOML document, each with its graph,
-    scenario, network, layout, inputs and hidden count, and its members.
-  - `:bot import <file> [name]` patches the files with all the document holds
-    or the part named. A population is refused unless its layout is the
-    network's the graph has now; its scenario need not be one this player has,
-    so a bot trained elsewhere can be taken in. A watched run's
-  menu still turns auto-fire or the pointer off under the bot, which its rounds
-  then score, and writes that back as the player's own. Two runs learning one
-  graph in one scenario each save over the other's files.
+- **The watched map** and **the operator's side**, its `:bot clear`, `export`
+  and `import`, are items of their own:
+  [Size a bot's own run alike, watched or not](#size-a-bots-own-run-alike-watched-or-not)
+  and
+  [Clear, export and import a bot's populations](#clear-export-and-import-a-bots-populations).
+  Beside them, the `:bot` list and the menu's Bots page name no population; a
+  watched run's menu still turns auto-fire or the pointer off under the bot,
+  which its rounds then score, and writes that back as the player's own; and
+  two runs learning one graph in one scenario each save over the other's files.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). And fitness takes a defeat's 100
@@ -453,6 +438,65 @@ separable CMA-ES on the mean of three          3290
 - `AdaptiveStrength` falls to its `lo` within a few hundred noisy evaluations, so
   `lo` is the step it runs at: 0.02 ended level with the best fixed step and 0.005
   stalled.
+
+### Clear, export and import a bot's populations
+
+- Priority: P2
+- Affected files: `internal/mode/commands.go`, `internal/app`,
+  `internal/bot/learner.go`, `internal/paths`
+- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
+- Guide: [Bots](bots.md#the-population-file), [Bots](bots.md#commands-and-the-menu)
+
+A population is one network's of one graph in one scenario, kept as
+`bot/<graph>.<scenario>.<network>.json`, and nothing starts one over or moves one
+between players but handling the file. Three `:bot` commands name populations as
+the files do, `cave.cave.kraken` for one, and a shorter name for all under it:
+`cave.cave` a graph's in a scenario, `cave` a graph's everywhere.
+
+- `:bot clear <name>` starts those populations over: their files go, and a
+  learner of this run on one of them begins again from the weights written by
+  hand, or its next save brings the file back.
+- `:bot export <name>` writes them as one TOML document: for each its graph,
+  scenario and network, its layout with the `inputs` and `hidden` count it stands
+  for, and its rounds, step and members as the file holds them.
+  `lixenwraith/toml` marshals a struct by its tags. Decide where it lands: not
+  `bot/<name>.toml` of a root, which resolves as a graph and `-check` refuses.
+- `:bot import <file> [name]` patches the files with all the document holds, or
+  the part `name` picks. A population is refused, by name, unless the graph is
+  one this player has, the graph has that network, and its layout is that
+  network's now, as `network.digest` gives it; one that is refused leaves the
+  rest to be taken. Its scenario need not be one this player has or has played,
+  so a bot trained elsewhere patches one's own. A learner of this run takes the
+  import as it would the file at its start.
+
+Decide whether a headless run takes the same three as flags, since a trainer has
+no command line, and what `:bot` lists of a population: its rounds, its recent
+mean and the member it fields.
+
+### Size a bot's own run alike, watched or not
+
+- Priority: P2
+- Affected files: `internal/app/script.go`, `internal/app/internal/config/config.go`
+- Guide: [Runtime §1](runtime.md#1-process-modes), [Bots](bots.md#flags)
+
+Watching is a probe and should set nothing in the world, and a bot alone needs a
+map of its own where nothing names one. Today a run's map comes from:
+
+```
+a person playing                        the terminal, as it resizes
+a bot alone, -headless                  -size, else 120x40
+a bot alone, -watch                     the watching terminal, or -size
+  its graph learning                    -size, else 120x40
+bots beside a person or on a server     the session's; a server's own alone, 120x40
+a script with no size                   80x24
+the desktop window                      opens at 120x40
+```
+
+So a watch sets a bot's map unless its graph learns, where it shows a small map
+in a large terminal, and it sets no script's; and the fallbacks are two. Decide
+whether every bot alone plays `-size` or 120x40 whoever watches, the terminal a
+view of it, which is `RunBot`'s `terminalGeometry` gone, and whether a script
+with no size takes the same 120x40.
 
 ### Train bot graphs offline
 
