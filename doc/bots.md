@@ -465,11 +465,23 @@ over, as does a change of layout (`inputs` or `hidden`), which the file's
 What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
 
-The weights written by hand are most of what the bot knows. In `cave`, where a
-core plays one of their rounds a second, they score 8,737 a round: three rounds
-in four meet the first Kraken, and most of those shoot down three or four. A
-watched run at speed 1 plays some ten rounds an hour, so it shows the play and a
-headless one flat out fills the files.
+The weights written by hand are most of what the bot knows at first. In `cave`,
+where a core plays one of their rounds a second, they score 8,737 a round: three
+rounds in four meet the first Kraken, and most of those shoot down three or
+four. What a run adds, by what each of four fields after nine million ticks of
+learning, twenty minutes of a core, over 60 rounds of four seeds no run learned
+on, where the hand-written weights score 8,920:
+
+```
+seed         1       2       3       4
+score    20662   10181   23770   11638
+```
+
+The two that doubled it found how to outlast the Kraken, hopping from the edge
+its charge heads for to the far one, and play most of their rounds to the half
+hour's limit; before that limit, what the first fielded scored 69,485. A watched
+run at speed 1 plays some ten of the hand-written weights' rounds an hour, so it
+shows the play and a headless one flat out fills the files.
 
 ## Recording and replaying
 

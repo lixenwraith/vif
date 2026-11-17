@@ -313,6 +313,26 @@ leave its nearest cell and its charge's end      42 of 301   2646
   (held out, 1,652 to 1,850 for 1,334 to 1,799 by two rounds, the weights it
   began from 1,674).
 
+What a run fields after nine million ticks of learning, twenty minutes of a
+core, over 60 rounds of four seeds it never played, each closed at the limit,
+where the weights written by hand score 8,920, lose 93 rounds of 400 in the
+first cave and shoot five Krakens down in 9:
+
+```
+seed                                    1       2       3       4
+rounds learned on                     900    1500    1200    1600
+its last 100, candidates and all    15068    7515   14227    8382
+fielded, held out                   20662   10181   23770   11638
+  lost in the first cave               15       7      23       9
+  five Krakens or more down            38       0      37      10
+```
+
+- Seeds 1 and 3 field a `kraken` member that hops from the edge the Kraken's
+  charge heads for to the far one, found within a hundred of its learner's
+  candidates. Before the limit what seed 1 fielded scored 69,485, a round
+  66,900 ticks long.
+- What they lose is the first cave, as often as the weights they began from.
+
 What remains:
 
 - **Rounds an hour.** One game plays on one core, and the shipped weights'

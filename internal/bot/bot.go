@@ -425,9 +425,9 @@ func (d *Driver) deal() {
 
 // closeRound ends the round a new game closed. Its score is its ticks and what its
 // events earned, a defeat aside since one ends every round. The explorer takes
-// the part from where its network first steered, when the game itself ended the
-// round, and its turn passes once its candidate is settled, or at once where the
-// round never reached its network, so no learner waits on another.
+// the part from where its network first steered, when the game or the run's limit
+// ended the round, and its turn passes once its candidate is settled, or at once
+// where the round never reached its network, so no learner waits on another.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
 	d.ctx.World.RunSafe(func() { earned = d.earned })
