@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/color"
@@ -8,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -15,10 +17,12 @@ import (
 
 // LandingRenderer blinks the centre cell of the footprint an attack lands on: the
 // swarm's from its lock through its charge or teleport, a data species' while its
-// state is flagged Landing. The lines show the path; this shows where to keep clear.
+// state is flagged Landing. A Kraken's charge marks where its body ends, far larger.
+// The lines show the path; this shows where to keep clear.
 type LandingRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell landingCellRenderer
+	palette    bool
 }
 
 // landingCellRenderer draws the marker at step of its colour cycle
@@ -27,7 +31,7 @@ type landingCellRenderer func(buf *render.RenderBuffer, screenX, screenY, step i
 func NewLandingRenderer(ctx *engine.GameContext) *LandingRenderer {
 	r := &LandingRenderer{gameCtx: ctx}
 	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderCell = r.cell256
+		r.renderCell, r.palette = r.cell256, true
 	} else {
 		r.renderCell = r.cellTrueColor
 	}
@@ -36,12 +40,19 @@ func NewLandingRenderer(ctx *engine.GameContext) *LandingRenderer {
 
 func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
-	swarms, behaviors := world.Components.Swarm, world.Components.Behavior
-	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 {
+	swarms, behaviors, krakens := world.Components.Swarm, world.Components.Behavior, world.Components.Kraken
+	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 && krakens.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
+
+	krakens.Each(func(_ core.Entity, k *component.KrakenComponent) bool {
+		if k.State == component.KrakenSpin || k.State == component.KrakenMove {
+			r.markCharge(ctx, buf, k)
+		}
+		return true
+	})
 
 	swarms.Each(func(_ core.Entity, sw *component.SwarmComponent) bool {
 		var x, y int
@@ -74,6 +85,47 @@ func (r *LandingRenderer) mark(ctx render.RenderContext, buf *render.RenderBuffe
 	c := footprint.Center()
 	if screenX, screenY, visible := ctx.MapToScreen(c.X, c.Y); visible {
 		r.renderCell(buf, screenX, screenY, int(elapsed/visual.LandingBlinkStep))
+	}
+}
+
+// markCharge marks where a Kraken's charge ends, from its spin's first tick until
+// the body arrives: an outline KrakenLandingReach body radii round, over a glow
+// that rises through the spin and fades toward the centre
+func (r *LandingRenderer) markCharge(ctx render.RenderContext, buf *render.RenderBuffer, k *component.KrakenComponent) {
+	glow := visual.KrakenLandingGlowMax
+	if k.State == component.KrakenSpin {
+		spun := min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
+		glow = visual.KrakenLandingGlowMin + (visual.KrakenLandingGlowMax-visual.KrakenLandingGlowMin)*spun
+	}
+	x, y := k.TargetX, k.TargetY
+	ry := parameter.KrakenBodyRadius * visual.KrakenLandingReach
+	rx := ry * parameter.KrakenRowSquash
+	half := visual.KrakenLandingBand / 2
+	for cy := int(math.Ceil(y - ry - vmath.CellCenter)); cy <= int(y+ry-vmath.CellCenter); cy++ {
+		for cx := int(math.Ceil(x - rx - vmath.CellCenter)); cx <= int(x+rx-vmath.CellCenter); cx++ {
+			d := math.Hypot((float64(cx)+vmath.CellCenter-x)/rx, (float64(cy)+vmath.CellCenter-y)/ry)
+			sx, sy, visible := ctx.MapToScreen(cx, cy)
+			if d > 1 || !visible {
+				continue
+			}
+			// The outline eases in and out across its band, whose outer edge is the mark's
+			ring := max(1-math.Abs(d-1+half)/half, 0)
+			ring *= ring * (3 - 2*ring)
+			if r.palette {
+				// A console cannot blend the glow, so it draws the outline, as a shield's
+				if ring >= visual.Effect256Threshold {
+					buf.SetBg256(sx, sy, visual.Kraken256Landing)
+				}
+				continue
+			}
+			alpha := visual.KrakenLandingAlpha * ring
+			if inner := d / (1 - half); inner < 1 {
+				alpha = max(alpha, glow*inner*inner)
+			}
+			if alpha > 0 {
+				buf.Set(sx, sy, 0, visual.RgbBlack, visual.RgbKrakenAttack, render.BlendAlphaBg, alpha, terminal.AttrNone)
+			}
+		}
 	}
 }
 
