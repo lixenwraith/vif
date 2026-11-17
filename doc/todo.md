@@ -457,15 +457,17 @@ What remains:
   ranked by the mean log      23939      21040  3.44±0.26   0.25   0.42     0.24
   a repeat every second       26917      23147  3.91±0.34   0.17   0.49     0.17
   a repeat every fifth        24300      21704  3.70±0.27   0.17   0.45     0.17
+  a step floor of 0.06        24304      22411  3.58±0.27   0.23   0.48     0.18
+  a step floor of 0.015       20613      18437  3.28±0.31   0.25   0.43     0.12
   ```
 
   - No row is told from the shipped one. Its seeds field 8,721 to 105,159, so
     twelve carry a geometric mean within a factor of 1.2 and a setting is read
     only once it moves what is fielded 1.7 times, or a Kraken a round.
   - The hand-written weights score 10,033 and 2.2 Krakens a round; a row's
-    runs learn on 880 to 990 rounds, a seventh of the ticks of the equal-time
+    runs learn on 880 to 1,010 rounds, a seventh of the ticks of the equal-time
     runs above.
-  - The rate and the step floor are not read.
+  - The rate is not read.
 - **A page's store.** A browser keeps no population: `bot.Store` is a document's
   bytes, so one kept in the page's storage as its settings are
   (`browser.KeepSettings`), for each graph, scenario and network, handed over at
