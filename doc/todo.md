@@ -256,8 +256,6 @@ root ([Bots](bots.md#networks-and-learning)). Decided, and built so:
   kill pays the ticks its hit points take at four a second, less for a slower
   kill, a quarter at least, as later Krakens take long whatever is flown.
 - **`cave` starts with 10 heat**, which a person's first seconds use too.
-- **Watching changes nothing**: a watched run plays its terminal's size, as any
-  watched bot does.
 
 Taken as defaults where the item said decide, each to confirm or change:
 
@@ -400,6 +398,14 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `Driver.Learn`'s `alone` is the seam, and its stores need one writer.
+- **The watched map.** A bot alone has no terminal, so headless it plays `-size`
+  or 120x40. Watched, a bot's run is sized from the terminal that watches it, as
+  play is, so there the watch sets the map; a learning graph alone keeps the
+  120x40 watched too, so one population is scored by one game, and shows as a
+  small map in a large terminal. Decide whether every bot alone plays `-size` or
+  120x40, watched or not, the terminal only a view of it. Beside it a run a
+  caller drives with no size, a script's, takes 80x24, and the desktop window
+  opens at 120x40.
 - **The operator's side.** A watched run's bar, a headless run's summary and the
   log show the learners; the `:bot` list and the menu's Bots page name no
   population, and nothing starts one over but removing the file. To build, a
