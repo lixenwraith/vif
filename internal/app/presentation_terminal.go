@@ -10,6 +10,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -117,7 +118,8 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if colorMode = a.pres.Surface().ColorMode(); colorMode == terminal.ColorMode16 {
 		colorMode = terminal.ColorMode256
 	}
-	if a.cfg.Mode.OwnsGeometry() || a.cfg.fit() {
+	// A screen leaving no game area sizes no run asked to fit it, as fitTerminal's
+	if a.cfg.Mode.OwnsGeometry() || a.cfg.fit() && engine.ViewportFits(a.pres.Size()) {
 		width, height = a.pres.Size()
 	}
 	return width, height, colorMode, aspect
@@ -154,6 +156,11 @@ func (a *App) lobbyEventCancels(ev terminal.Event) bool {
 	case terminal.EventClosed, terminal.EventError:
 		return true
 	case terminal.EventResize:
+		// A screen that only shows its run sizes nothing of it, waiting as playing
+		if !a.cfg.Mode.OwnsGeometry() {
+			a.orchestrator.Resize(ev.Width, ev.Height)
+			break
+		}
 		a.handleResize(ev.Width, ev.Height)
 	case terminal.EventKey:
 		return ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ

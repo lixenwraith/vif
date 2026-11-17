@@ -150,9 +150,9 @@ func TestABotAlonePlaysOneMapWatchedOrNot(t *testing.T) {
 }
 
 // TestSizeFitTakesTheRunsOwnScreen: a run asked to fit takes the screen that shows
-// it, or the terminal it was started in, and a bot's screen with neither, and its
-// seats play in what it took; a size it names stands, and a server asked to fit
-// still waits for its first person's.
+// it, or the terminal it was started in, and a bot's screen with neither or with one
+// that leaves no game area, and its seats play in what it took; a size it names
+// stands, and a server asked to fit still waits for its first person's.
 func TestSizeFitTakesTheRunsOwnScreen(t *testing.T) {
 	// Not parallel: it stands in for the process's terminal and binds a socket.
 	real := startedIn
@@ -164,6 +164,7 @@ func TestSizeFitTakesTheRunsOwnScreen(t *testing.T) {
 		terminal, want screen
 	}{
 		"watched":                {runConfig{Config: Config{Mode: ModeScript}, host: shown}, screen{150, 50}, screen{200, 60}},
+		"watched with no area":   {runConfig{Config: Config{Mode: ModeScript}, host: Host{Presentation: &framePresentation{w: 10, h: 3}}}, screen{150, 50}, screen{BotWidth, BotHeight}},
 		"headless in a terminal": {runConfig{}, screen{150, 50}, screen{150, 50}},
 		"headless with none":     {runConfig{}, screen{}, screen{BotWidth, BotHeight}},
 		"a size named":           {runConfig{Config: Config{Width: 90, Height: 28}}, screen{150, 50}, screen{90, 28}},
@@ -191,6 +192,37 @@ func TestSizeFitTakesTheRunsOwnScreen(t *testing.T) {
 	sizedBy(t, addr, network.JoinerReport{Width: 160, Height: 45})
 	if w, h := server.Context().Width, server.Context().Height; w != 160 || h != 45 {
 		t.Fatalf("a server asked to fit plays %dx%d, want its first person's 160x45", w, h)
+	}
+}
+
+// TestAWaitingRunTakesAResizeAsItWouldPlaying: a resize that reaches a run waiting
+// in its lobby sizes a person's run, whose screen is its size, and only the view of a
+// watched one, whose screen shows it.
+func TestAWaitingRunTakesAResizeAsItWouldPlaying(t *testing.T) {
+	// Not parallel: a presenting run is built on a presentation of its own.
+	for name, c := range map[string]struct {
+		mode Mode
+		want screen
+	}{
+		"a person's": {ModePlay, screen{150, 50}},
+		"a watched":  {ModeScript, screen{BotWidth, BotHeight}},
+	} {
+		a, err := newApp(runConfig{Config: Config{Mode: c.mode, Resources: resource.Options{Embedded: true}, Seed: fixtureSeed},
+			host: Host{Presentation: &framePresentation{w: 200, h: 60}}})
+		if err != nil {
+			t.Fatalf("%s run: %v", name, err)
+		}
+		t.Cleanup(a.Close)
+		a.scheduler.Prepare()
+		if a.lobbyEventCancels(terminal.Event{Type: terminal.EventResize, Width: 150, Height: 50}) {
+			t.Fatalf("%s run's resize ended its wait", name)
+		}
+		if got := (screen{a.ctx.Width, a.ctx.Height}); got != c.want {
+			t.Errorf("%s run plays %v after its screen became 150x50, want %v", name, got, c.want)
+		}
+		if w, h := a.orchestrator.Size(); w != 150 || h != 50 {
+			t.Errorf("%s run draws on %dx%d, want its screen's 150x50", name, w, h)
+		}
 	}
 }
 

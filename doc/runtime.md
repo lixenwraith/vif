@@ -40,8 +40,17 @@ a seat              its holder's screen (§4, Bot seats)
 
 `-size fit` reads the screen once, as the run is built (`runConfig.fit`): the
 terminal, window or page that shows it, or for a run that shows nothing the
-terminal it was started in. A later resize moves the view and not the world, and
-on a server it is no size at all, so the first person's stands.
+terminal it was started in; a screen that leaves no game area gives none. A later
+resize moves the view and not the world, while the run waits in a lobby as while
+it plays, and on a server it is no size at all, so the first person's stands.
+
+Three things read a screen's size once and keep it: a run under `-size fit`, the
+map a hosting run's door locks as it opens (D-14), and the size a joiner reports at
+its seat, which a dedicated host sizes its session by. So a presentation holds its
+settled size before a run is built on it and posts no resize for it: a terminal's
+is its own, `browser.Open` waits for the page's fit, and `window.Open` for the
+window manager to place the window
+([Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
 Those predicates describe a full native build. Compile-time capabilities refine
 them: `vif_headless` makes presenting modes unavailable and omits renderers;
