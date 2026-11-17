@@ -60,7 +60,7 @@ vif/
 ├── content/     .txt and .toml typing corpus
 ├── image/       .aimg wall assets
 └── bot/         bot graphs, one <name>.toml each, and in the user root what
-                 a learning one keeps, <graph>.<scenario>.json
+                 a learning one keeps, <graph>.<scenario>.<network>.json
 ```
 
 A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies

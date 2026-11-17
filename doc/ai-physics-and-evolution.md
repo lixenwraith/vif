@@ -151,9 +151,10 @@ duplicate, so a population persists through a run. A game reset (`:new`)
 replaces the run: every declared species is deregistered, and the FSM's next
 declaration starts a fresh population seeded from the new run's shared root.
 Nothing survives process exit; the generic persistence package is not wired into
-the application. A bot's learner is apart from all this: an engine of its own
-beside the driver, whose population is a document the bot package keeps outside
-the world and its captures ([Bots](bots.md#the-population-file)).
+the application. A bot's learners are apart from all this: an engine for each
+network of its graph beside the driver, whose population is a document the bot
+package keeps outside the world and its captures
+([Bots](bots.md#the-population-file)).
 
 An authoritative multiplayer capture is different from file persistence. The
 genetic D-19 carrier exports each registry engine's complete checkpoint, the

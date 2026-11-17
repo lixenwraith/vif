@@ -16,7 +16,7 @@ import (
 
 // What the learner searches by. A step is a share of a weight's range: a new
 // population starts at learnStep and settles at learnStepFloor. Every
-// learnRepeat-th evaluation plays an archive member again, a member with
+// learnRepeat-th candidate is an archive member again, a member with
 // learnProven rounds behind its score is one a run fields, and learnRecent rounds
 // are what the recent score looks back over.
 const (
@@ -68,20 +68,21 @@ type member struct {
 	Genes  []float64 `json:"genes"`
 }
 
-// Learner evolves the weights of one graph's network, a round an evaluation: a
+// Learner evolves the weights of one network of a graph, a round an evaluation: a
 // steady-state archive of scored genomes, bred a hidden unit or an output at a
 // time, its members played again in turn so a score is the mean of its rounds. It
 // lives beside the driver, outside the world, and keeps its archive in a store.
 type Learner struct {
 	engine *genetic.StreamingEngine[[]float64, float64]
 	store  Store
+	name   string // the network it learns
 	layout string
 	seed   []float64
 
 	genes  []float64      // the genome in play
 	id     genetic.EvalID // its evaluation, zero while it plays unscored
 	fresh  bool           // it is a new candidate's first round, which only qualifies it
-	drawn  int            // evaluations begun
+	drawn  int            // candidates taken
 	seeded bool           // the hand-written genome has played this run
 	scored int            // rounds scored this run
 	rounds int            // and since the population began
@@ -97,11 +98,12 @@ type Learner struct {
 	Saved func(LearnStats)
 }
 
-// LearnStats is a learner's progress: the rounds it scored this run and since its
-// population began, their recent mean, which no luck picked, the step in force,
-// its archive's size and best score, and the score and rounds of the member it
-// fields, zero while none is proven.
+// LearnStats is a learner's progress: its network, the rounds it scored this run
+// and since its population began, their recent mean, which no luck picked, the
+// step in force, its archive's size and best score, and the score and rounds of
+// the member it fields, zero while none is proven.
 type LearnStats struct {
+	Network       string
 	Scored        int
 	Rounds        int
 	Recent        float64
@@ -112,16 +114,17 @@ type LearnStats struct {
 	FieldedRounds int
 }
 
-// NewLearner builds the learner of g's network, its stream drawn from seed, on the
-// population store keeps; a nil store keeps it for the run. A population of
-// another layout is started over, and the weights g wrote by hand play the first
-// round of every run, so an edit to them meets what the store kept.
-func NewLearner(g *Graph, seed uint64, store Store) (*Learner, error) {
-	if g.net == nil {
-		return nil, fmt.Errorf("bot %s: no [network] to learn", g.Name)
+// NewLearner builds the learner of g's network name, its stream drawn from seed, on
+// the population store keeps; a nil store keeps it for the run. A population of
+// another layout is started over, and the weights g wrote by hand are the first
+// candidate of every run, so an edit to them meets what the store kept.
+func NewLearner(g *Graph, name string, seed uint64, store Store) (*Learner, error) {
+	i := slices.IndexFunc(g.nets, func(n *network) bool { return n.name == name })
+	if i < 0 {
+		return nil, fmt.Errorf("bot %s: no [network.%s] to learn", g.Name, name)
 	}
-	n := g.net
-	l := &Learner{store: store, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
+	n := g.nets[i]
+	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
 		born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
 	var kept population
 	if store != nil {
@@ -130,7 +133,7 @@ func NewLearner(g *Graph, seed uint64, store Store) (*Learner, error) {
 			err = json.Unmarshal(data, &kept)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("bot %s: population: %w", g.Name, err)
+			return nil, fmt.Errorf("bot %s: %s population: %w", g.Name, name, err)
 		}
 	}
 	var members []genetic.Candidate[[]float64, float64]
@@ -153,7 +156,7 @@ func NewLearner(g *Graph, seed uint64, store Store) (*Learner, error) {
 	cfg := genetic.DefaultStreamingConfig()
 	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, 8
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, l.step
-	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner")
+	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
 		// Until two members are scored, a child is the hand-written genome with every
 		// weight a settled step off
@@ -190,19 +193,18 @@ func genomeKey(genes []float64) uint64 {
 	return h.Sum64()
 }
 
-// turn closes the round a genome played, scored when it was played to its own
-// end, and returns the next round's. Learning, a candidate whose first round would
-// enter a full archive plays again and is scored by that round, the first being
-// picked for its luck; else the next candidate plays, every learnRepeat-th an
-// archive member again. Not learning, the member it fields plays.
-func (l *Learner) turn(score float64, played, learning bool) []float64 {
+// settle closes the evaluation in flight with the round its candidate played,
+// scored when it was played to its own end, and reports whether it is over. A
+// candidate whose first round would enter a full archive is held for another and
+// scored by that round alone, the first being picked for its luck.
+func (l *Learner) settle(score float64, played bool) bool {
 	if l.id != 0 && played {
 		l.scored++
 		l.rounds++
 		l.recent += (score - l.recent) / float64(min(l.rounds, learnRecent))
 		if st := l.engine.Stats(); l.fresh && st.Size == learnPool && score > st.WorstScore {
 			l.fresh, l.stats.Scored, l.stats.Rounds, l.stats.Recent = false, l.scored, l.rounds, l.recent
-			return l.genes
+			return false
 		}
 		l.engine.CompleteEvaluation(l.id, score)
 		l.seeded, l.dirty = true, true
@@ -210,25 +212,42 @@ func (l *Learner) turn(score float64, played, learning bool) []float64 {
 		l.engine.AbandonEvaluation(l.id)
 	}
 	l.id = 0
-	fielded := l.field(l.engine.Snapshot().Members)
-	if !learning {
-		return fielded
+	return true
+}
+
+// take is the genome the next round plays. Exploring, it is the candidate in
+// flight until that is settled, then the next: the hand-written genome first, and
+// every learnRepeat-th the best member short of learnProven rounds again, so what
+// tops the archive is proved or falls. Otherwise it is the member fielded, and a
+// candidate in flight goes unscored.
+func (l *Learner) take(explore bool) []float64 {
+	if l.id != 0 && explore {
+		return l.genes
 	}
-	l.drawn++
-	l.genes, l.fresh = nil, true
-	switch {
-	case !l.seeded:
-		l.genes, l.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
-	case l.drawn%learnRepeat == 0:
-		l.genes, l.id = l.engine.Reevaluate()
-		l.fresh = false
-	}
-	if l.id == 0 {
-		l.genes, l.id = l.engine.Propose()
-		l.fresh = true
-	}
-	if l.id == 0 {
-		l.genes = fielded
+	l.settle(0, false)
+	members := l.engine.Snapshot().Members
+	l.genes, l.fresh = l.field(members), explore
+	if explore {
+		l.drawn++
+		var genes []float64
+		switch {
+		case !l.seeded:
+			genes, l.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
+		case l.drawn%learnRepeat == 0:
+			unproved := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool { return c.Count < learnProven })
+			if unproved >= 0 {
+				genes, l.id = members[unproved].Data, l.engine.BeginEvaluation(members[unproved].Data)
+			} else {
+				genes, l.id = l.engine.Reevaluate()
+			}
+			l.fresh = l.id == 0
+		}
+		if l.id == 0 {
+			genes, l.id = l.engine.Propose()
+		}
+		if l.id != 0 {
+			l.genes = genes
+		}
 	}
 	if l.dirty && time.Since(l.saved) >= learnSaveEvery { // [wall]
 		l.save()
@@ -236,12 +255,12 @@ func (l *Learner) turn(score float64, played, learning bool) []float64 {
 	return l.genes
 }
 
-// field is the genome a run that is not learning plays, of the archive's members
-// best first: the best its rounds have proved, since one enters on a round or two
+// field is the genome a round plays where no candidate does, of the archive's
+// members best first: the best its rounds have proved, since one enters on a round or two
 // and the top of an archive is its luckiest, or the hand-written one. It brings
 // the stats, and the round each member entered at, up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
-	l.stats = LearnStats{Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
+	l.stats = LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
 	born := make(map[uint64]int, len(members))
 	fielded := slices.Clone(l.seed)
 	for i, c := range members {
@@ -268,7 +287,9 @@ func (l *Learner) save() {
 		return
 	}
 	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: l.step, Fielded: -1}
-	for i, c := range l.engine.Snapshot().Members {
+	members := l.engine.Snapshot().Members
+	l.field(members)
+	for i, c := range members {
 		if doc.Fielded < 0 && c.Count >= learnProven {
 			doc.Fielded = i
 		}

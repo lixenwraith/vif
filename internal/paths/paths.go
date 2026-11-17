@@ -102,8 +102,8 @@ func DefaultDownloadsDir() string {
 	return filepath.Join(user, ScenarioDirName, DownloadsDirName)
 }
 
-// PopulationDir is where a run keeps what its bots learn, a file for each graph and
-// scenario beside the user root's graphs; "" without a user root.
+// PopulationDir is where a run keeps what its bots learn, a file for each network of
+// a graph in a scenario beside the user root's graphs; "" without a user root.
 func PopulationDir() string {
 	user := UserRoot()
 	if user == "" {

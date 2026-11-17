@@ -82,12 +82,19 @@ on_update = [{ action = "PointAt", payload = { target = "glyph", key = "1" } }]`
 on_update = [{ action = "PointAt", payload = { target = "button", away = true } }]`, `unknown target "button"`},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "button", key = "12" } }]`, "key must be one character"},
+		{"[bot]\nauto_fire = \"both\"" + region + "[states.A]", `auto_fire "both" is not off, main or on`},
 		{region + `[states.A]
-on_update = [{ action = "Steer" }]`, "the graph declares no [network] to steer by"},
-		{"[bot]\nlearn = true" + region + "[states.A]", "learn needs a [network]"},
-		{"[network]\ninputs = [\"column\", \"radar\"]" + region + "[states.A]", `[network]: inputs: "radar" is no sensor`},
-		{"[network]\ninputs = [\"column\"]\ny = { energy = 1.0 }" + region + "[states.A]", `[network]: weight "energy" = 1: not an input or bias`},
-		{"[network]\ninputs = [\"column\"]\nx = { column = 4.5 }" + region + "[states.A]", `[network]: weight "column" = 4.5`},
+on_update = [{ action = "Steer" }]`, `network "" is none of the graph's [network.<name>] tables`},
+		{"[network.a]\ninputs = [\"column\"]\n[network.b]\ninputs = [\"column\"]" + region + `[states.A]
+on_update = [{ action = "Steer" }]`, `network "" is none of the graph's`},
+		{"[network.a]\ninputs = [\"column\"]" + region + `[states.A]
+on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" is none of the graph's`},
+		{"[bot]\nlearn = true" + region + "[states.A]", "learn needs a [network.<name>]"},
+		{"[network]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: "inputs" is no table: a network is named`},
+		{"[network.\"../a\"]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: name "../a" is not lowercase letters`},
+		{"[network.a]\ninputs = [\"column\", \"radar\"]" + region + "[states.A]", `[network]: a: inputs: "radar" is no sensor`},
+		{"[network.a]\ninputs = [\"column\"]\ny = { energy = 1.0 }" + region + "[states.A]", `[network]: a: weight "energy" = 1: not an input or bias`},
+		{"[network.a]\ninputs = [\"column\"]\nspecial = { column = 4.5 }" + region + "[states.A]", `[network]: a: weight "column" = 4.5`},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -582,9 +589,10 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
 	}
 }
 
-// steering is a graph whose one state steers by a network of the given table
+// steering is a graph whose one state steers by its one network, fly, of the given
+// table
 func steering(network string) string {
-	return "[bot]\nactions_per_second = 20\n[network]\n" + network + `
+	return "[bot]\nactions_per_second = 20\n[network.fly]\n" + network + `
 [regions.play]
 initial = "A"
 
@@ -623,6 +631,7 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	width, height := maxX-minX+1, maxY-minY+1
 	own := w.Resources.Player.Entity
 	w.Components.Energy.SetComponent(own, component.EnergyComponent{Current: -energyHalf})
+	w.Components.Heat.SetComponent(own, component.HeatComponent{Current: heatHalf})
 
 	cols := make([]engine.RockColumn, cfg.MapWidth)
 	for x := range cols {
@@ -655,6 +664,18 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		})
 	}
 
+	// A Kraken's body at 40,14 covers the cells its members stand on: of those the
+	// view shows 22,12 is the nearest, 9,10 lying left of it
+	kraken := place(w, core.DomainShared, 40, 14, func(e core.Entity) {
+		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25})
+		var header component.HeaderComponent
+		for _, cell := range [][2]int{{30, 14}, {22, 12}, {9, 10}} {
+			member := place(w, core.DomainShared, cell[0], cell[1], func(core.Entity) {})
+			header.MemberEntries = append(header.MemberEntries, component.MemberEntry{Entity: member})
+		}
+		w.Components.Header.SetComponent(e, header)
+	})
+
 	d, _ := botFor(t, ctx, steering("inputs = [\"column\"]\nhidden = 0"), 0)
 	from, _ := w.LocalCursor()
 	got := d.mind.look(from, minX, minY, maxX, maxY)
@@ -670,17 +691,29 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	want := scene{
 		rock:    [3][2]float64{{down(1 - 10), down(cfg.MapHeight - 3 - 10)}, {down(4 - 10), down(15 - 10)}, {down(7 - 10), down(12 - 10)}},
 		landing: sighted{x: across(2), y: down(-4)},
+		kraken:  sighted{x: across(40 - 16), y: down(14 - 10)},
+		reach:   0.25,
 		loot:    [2]float64{across(10), 0},
 		column:  2*float64(16-minX)/float64(width-1) - 1,
 		energy:  0.5,
+		heat:    0.5,
 	}
 	want.species[0] = sighted{x: across(8), y: down(2), enraged: 1}
 	want.species[1] = sighted{x: across(14)}
 	want.species[0].nearX, want.species[0].nearY = near(8, 2)
 	want.species[1].nearX, want.species[1].nearY = near(14, 0)
 	want.landing.nearX, want.landing.nearY = near(2, -4)
+	want.kraken.nearX, want.kraken.nearY = near(22-16, 12-10)
 	if got != want {
 		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
+	}
+	// A Kraken spinning up its charge, or on it, lands where the charge ends
+	charging, _ := w.Components.Kraken.GetPtr(kraken)
+	charging.State = component.KrakenSpin
+	want.landing = sighted{x: across(1), y: down(-1)}
+	want.landing.nearX, want.landing.nearY = near(1, -1)
+	if got := d.mind.look(from, minX, minY, maxX, maxY); got != want {
+		t.Fatalf("with a Kraken charging the sensors read\n%+v, want\n%+v", got, want)
 	}
 	if on := sight(0, 0, float64(width), float64(height), false); on.nearX != 1 || on.nearY != 0 {
 		t.Fatalf("a thing on the cursor's cell reads a nearness of %g, %g, want it beside the cursor on the right", on.nearX, on.nearY)
@@ -693,20 +726,54 @@ func TestANetworkAddsItsHiddenUnitsToItsDirectTerm(t *testing.T) {
 	g, err := ParseGraph("net", []byte(steering(`inputs = ["column", "energy"]
 hidden = 1
 x = { column = 2.0, bias = 0.25 }
-y = { energy = -1.0 }`)))
+y = { energy = -1.0 }
+special = { column = 1.0, bias = -0.5 }`)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := g.net.playing()
+	n := g.nets[0].playing()
 	copy(n.genes[n.unit(0):], []float64{1, -2, 0.5}) // the unit's two input weights and its bias
-	n.genes[n.output(0)+2], n.genes[n.output(1)+2] = 3, -1
-	x, y := n.run(&scene{column: 0.5, energy: 0.25})
+	n.genes[n.output(outputX)+2], n.genes[n.output(outputY)+2], n.genes[n.output(outputSpecial)+2] = 3, -1, 2
+	out := n.run(&scene{column: 0.5, energy: 0.25})
 	unit := math.Tanh(1*0.5 - 2*0.25 + 0.5)
-	if wantX, wantY := 2*0.5+3*unit+0.25, -0.25-unit; math.Abs(x-wantX) > 1e-12 || math.Abs(y-wantY) > 1e-12 {
-		t.Fatalf("outputs %g, %g, want %g, %g", x, y, wantX, wantY)
+	for o, want := range [outputCount]float64{2*0.5 + 3*unit + 0.25, -0.25 - unit, 0.5 + 2*unit - 0.5} {
+		if math.Abs(out[o]-want) > 1e-12 {
+			t.Fatalf("output %d is %g, want %g", o, out[o], want)
+		}
 	}
-	if len(n.genes) != 1*(2+1)+2*(2+1+1) {
-		t.Fatalf("%d genes for two inputs, one hidden unit and two outputs", len(n.genes))
+	if len(n.genes) != 1*(2+1)+outputCount*(2+1+1) {
+		t.Fatalf("%d genes for two inputs, one hidden unit and three outputs", len(n.genes))
+	}
+}
+
+// TestANetworkAsksForTheSpecialAttackWhileItsOutputIsOverOne: special over one asks
+// for the special attack ahead of the move, as often as auto-fire would, and takes
+// the update's one intent where the rate leaves no second; at one it asks for none.
+func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsOverOne(t *testing.T) {
+	for _, c := range []struct {
+		rate  int
+		bias  float64
+		asked []int // the ticks the special attack was asked for at
+		moves int
+	}{{40, 1.5, []int{1, 6}, 6}, {20, 1.5, []int{1, 6}, 5}, {40, 1.0, nil, 6}} {
+		_, ctx := soloWorld(10, 2)
+		doc := strings.Replace(steering(fmt.Sprintf("inputs = [\"column\"]\nx = { bias = 0.1 }\nspecial = { bias = %g }", c.bias)),
+			"actions_per_second = 20", fmt.Sprintf("actions_per_second = %d", c.rate), 1)
+		_, rec := botFor(t, ctx, doc, 7) // the first step starts the graph and steers nothing
+		var asked []int
+		moves := 0
+		for i, intent := range rec.got {
+			switch intent.Type {
+			case input.IntentFireSpecial:
+				asked = append(asked, rec.at[i])
+			case input.IntentMouseMove:
+				moves++
+			}
+		}
+		if !slices.Equal(asked, c.asked) || moves != c.moves {
+			t.Errorf("at %d a second with special at %g: asked at ticks %v with %d moves, want %v and %d",
+				c.rate, c.bias, asked, moves, c.asked, c.moves)
+		}
 	}
 }
 
@@ -774,32 +841,36 @@ func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 // ended scores nothing, and a bot not alone plays what the learner fields.
 func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	g, d, rec := learning(t)
-	l, err := NewLearner(g, 1, nil)
+	l, err := NewLearner(g, "fly", 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	alone := true
-	d.Learn(l, func() bool { return alone })
+	d.Learn(func() bool { return alone }, l)
+	// A round is two ticks: the network steers in the first and the game ends the next
 	round := func(origin event.Origin) []float64 {
-		rec.dispatch = []event.GameEvent{{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}, Origin: origin}}
-		if _, err := d.Step(); err != nil {
-			t.Fatal(err)
+		rec.dispatch = []event.GameEvent{{}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}, Origin: origin}}
+		for range 2 {
+			if _, err := d.Step(); err != nil {
+				t.Fatal(err)
+			}
 		}
-		return d.mind.net.genes
+		return d.mind.nets[0].genes
 	}
 	scored := func() int { return len(l.engine.Snapshot().Members) }
+	written := g.nets[0].genes
 
-	if !slices.Equal(d.mind.net.genes, g.net.genes) {
+	if !slices.Equal(d.mind.nets[0].genes, written) {
 		t.Fatal("the first round does not play the hand-written genome")
 	}
-	if next := round(event.OriginSystem); scored() != 1 || slices.Equal(next, g.net.genes) {
+	if next := round(event.OriginSystem); scored() != 1 || slices.Equal(next, written) {
 		t.Fatalf("a round played out scored %d genomes and handed on %v, want the hand-written one scored and a child of it next", scored(), next)
 	}
 	if round(event.OriginCommand); scored() != 1 {
 		t.Fatalf("a round an operator ended left %d genomes scored, want it to score nothing", scored())
 	}
 	alone = false
-	if next := round(event.OriginSystem); scored() != 1 || !slices.Equal(next, g.net.genes) {
+	if next := round(event.OriginSystem); scored() != 1 || !slices.Equal(next, written) {
 		t.Fatalf("a bot not alone scored %d genomes and plays %v, want nothing scored and the genome fielded", scored(), next)
 	}
 }
@@ -810,7 +881,8 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 // over from the hand-written genome. A save says each member's rounds and birth.
 func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	g, d, _ := learning(t)
-	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(g.net.genes)) }
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	kept := func(layout string) *memory {
 		return keeping(t, layout,
 			member{Genes: genome(0.1), Score: 50, Rounds: learnProven - 1, Born: 3},
@@ -821,27 +893,27 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		store Store
 		want  []float64
 	}{
-		"kept":    {kept(g.net.digest), genome(0.2)},
-		"another": {kept("another layout"), g.net.genes},
-		"none":    {&memory{}, g.net.genes},
+		"kept":    {kept(net.digest), genome(0.2)},
+		"another": {kept("another layout"), net.genes},
+		"none":    {&memory{}, net.genes},
 	} {
-		l, err := NewLearner(g, 1, c.store)
+		l, err := NewLearner(g, "fly", 1, c.store)
 		if err != nil {
 			t.Fatal(err)
 		}
-		d.Learn(l, func() bool { return false })
-		if !slices.Equal(d.mind.net.genes, c.want) {
-			t.Errorf("%s: fields %v, want %v", name, d.mind.net.genes[:2], c.want[:2])
+		d.Learn(func() bool { return false }, l)
+		if got := d.mind.nets[0].genes; !slices.Equal(got, c.want) {
+			t.Errorf("%s: fields %v, want %v", name, got[:2], c.want[:2])
 		}
 	}
 
-	store := kept(g.net.digest)
-	l, err := NewLearner(g, 1, store)
+	store := kept(net.digest)
+	l, err := NewLearner(g, "fly", 1, store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.turn(0, false, true)
-	l.turn(45, true, true)
+	l.take(true)
+	l.settle(45, true)
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -850,10 +922,40 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
-	if saved.Layout != g.net.digest || saved.Rounds != 1 || len(saved.Members) != 4 || entered < 0 ||
+	if saved.Layout != net.digest || saved.Rounds != 1 || len(saved.Members) != 4 || entered < 0 ||
 		saved.Members[entered].Born != 1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
 		t.Fatalf("saved %+v: want the three kept with their births, the genome scored 45 born at round 1, and the proved member fielded",
 			saved)
+	}
+}
+
+// TestEveryThirdCandidateIsTheBestMemberYetToBeProved: a member's score is a guess
+// until its rounds prove it, so the repeats go to the best one short of them,
+// which a run fields once it has them.
+func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	l, err := NewLearner(g, "fly", 1, keeping(t, net.digest,
+		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
+		member{Genes: genome(0.2), Score: 40, Rounds: learnProven},
+		member{Genes: genome(0.3), Score: 30, Rounds: 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fielded := l.take(false); !slices.Equal(fielded, genome(0.2)) {
+		t.Fatalf("fields %v, want the member its rounds have proved", fielded[:1])
+	}
+	// Two repeats bring the best member's rounds to learnProven, or one and a child
+	// bred its copy
+	for i := range 2 * learnRepeat {
+		if candidate := l.take(true); i+1 == learnRepeat && !slices.Equal(candidate, genome(0.1)) {
+			t.Fatalf("candidate %d is %v, want the best member short of its rounds", i+1, candidate[:1])
+		}
+		l.settle(20, true)
+	}
+	if fielded := l.take(false); !slices.Equal(fielded, genome(0.1)) {
+		t.Fatalf("with those rounds fields %v, want the member they proved, still the best", fielded[:1])
 	}
 }
 
@@ -863,20 +965,22 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 // hand-written genome plays first, whatever the store kept.
 func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T) {
 	g, _, _ := learning(t)
+	net := g.nets[0]
 	// played is the archive after the hand-written genome's rounds score as given,
 	// on a store whose population fills it
 	played := func(scores ...float64) (first, last []float64, held func(float64) bool) {
 		var full []member
 		for i := range learnPool {
-			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(g.net.genes)), Score: float64(200 - i), Rounds: 1})
+			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(200 - i), Rounds: 1})
 		}
-		l, err := NewLearner(g, 1, keeping(t, g.net.digest, full...))
+		l, err := NewLearner(g, "fly", 1, keeping(t, net.digest, full...))
 		if err != nil {
 			t.Fatal(err)
 		}
-		first = l.turn(0, false, true)
+		first = l.take(true)
 		for _, score := range scores {
-			last = l.turn(score, true, true)
+			l.settle(score, true)
+			last = l.take(true)
 		}
 		if st := l.Stats(); st.Scored != len(scores) {
 			t.Fatalf("%d rounds scored of %d played", st.Scored, len(scores))
@@ -887,7 +991,7 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 	}
 
 	first, again, held := played(500)
-	if !slices.Equal(first, g.net.genes) {
+	if !slices.Equal(first, net.genes) {
 		t.Fatal("the run's first round does not play the hand-written genome")
 	}
 	if !slices.Equal(again, first) || held(500) {
@@ -901,5 +1005,127 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 	}
 	if _, next, held := played(100); slices.Equal(next, first) || held(100) {
 		t.Fatal("a first round under the archive's worst did not close its evaluation unentered")
+	}
+}
+
+// twoNetworks is a learning graph of two networks, fly steering while no Kraken is
+// up and kraken while one is, a driver on it and each network's learner
+func twoNetworks(t *testing.T) (*engine.World, *Driver, *recorder, []*Learner) {
+	t.Helper()
+	w, ctx := soloWorld(10, 2)
+	g, err := ParseGraph("net", []byte(`[bot]
+actions_per_second = 20
+learn = true
+
+[network.fly]
+inputs = ["column"]
+x = { bias = 0.1 }
+
+[network.kraken]
+inputs = ["column"]
+x = { bias = -0.1 }
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "fly" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	d, err := NewDriver(rec, ctx, g, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var learners []*Learner
+	for _, name := range g.Networks() {
+		l, err := NewLearner(g, name, 1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		learners = append(learners, l)
+	}
+	d.Learn(func() bool { return true }, learners...)
+	if _, err := d.Step(); err != nil { // the step that starts the graph steers nothing
+		t.Fatal(err)
+	}
+	return w, d, rec, learners
+}
+
+// rounds plays a round for each count of ticks, which the game ends on its last
+func (r *recorder) rounds(t *testing.T, d *Driver, ticks ...int) {
+	t.Helper()
+	for _, n := range ticks {
+		r.dispatch = append(make([]event.GameEvent, n-1), event.GameEvent{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}})
+		for range n {
+			if _, err := d.Step(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// TestALearnerIsScoredFromWhereItsNetworkFirstSteered: the learner trying a
+// candidate takes the round from the tick its network first steered in it, the
+// ticks and what they earned since; the others' fielded members are not scored.
+func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
+	w, d, rec, learners := twoNetworks(t)
+	fly, kraken := learners[0], learners[1]
+	rec.rounds(t, d, 4)
+	if got := fly.Stats().Recent; got != 4 || kraken.Stats().Scored != 0 {
+		t.Fatalf("four ticks steered with no Kraken: fly scored %g and kraken %d rounds, want 4 and none", got, kraken.Stats().Scored)
+	}
+	// Kraken's turn. A kill is worth 5: one lands before the Kraken rises, two
+	// ticks in, and one after
+	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
+	rec.dispatch = []event.GameEvent{kill, {}}
+	for range 2 {
+		d.Step()
+	}
+	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
+	for range 3 {
+		d.Step()
+	}
+	if st := kraken.Stats(); st.Scored != 1 || st.Recent != 3+5 || fly.Stats().Scored != 1 {
+		t.Fatalf("kraken scored %d rounds at %g and fly %d: want one of 8, the three ticks from the Kraken's rise and the kill after it, and fly's fielded member unscored",
+			st.Scored, st.Recent, fly.Stats().Scored)
+	}
+}
+
+// TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField: one learner plays a
+// candidate, the hand-written genome first, and the rest the members they field.
+// The turn passes as a round settles the candidate, and at once where the round
+// never reached the explorer's network, whose candidate goes unscored.
+func TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField(t *testing.T) {
+	w, d, rec, learners := twoNetworks(t)
+	fly, kraken := learners[0], learners[1]
+	written := func(i int) bool { return slices.Equal(d.mind.nets[i].genes, d.learners[i].seed) }
+
+	rec.rounds(t, d, 2)
+	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
+		t.Fatalf("after fly's hand-written genome is scored: explorer %d, fly scored %d: want kraken's turn on its own hand-written genome and fly fielding",
+			d.explorer, fly.Stats().Scored)
+	}
+	rec.rounds(t, d, 2)
+	if d.explorer != 0 || fly.Stats().Scored != 1 || kraken.Stats().Scored != 0 || written(0) {
+		t.Fatalf("a round with no Kraken: explorer %d, fly scored %d, kraken %d: want neither scored and fly's turn again, on a candidate",
+			d.explorer, fly.Stats().Scored, kraken.Stats().Scored)
+	}
+	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	rec.rounds(t, d, 2)
+	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
+		t.Fatalf("a round at the Kraken: explorer %d, fly scored %d: want fly's candidate dropped unscored and kraken's turn on its hand-written genome",
+			d.explorer, fly.Stats().Scored)
+	}
+	rec.rounds(t, d, 2)
+	if d.explorer != 0 || kraken.Stats().Scored != 1 || fly.Stats().Scored != 1 {
+		t.Fatalf("a second round at the Kraken: explorer %d, kraken scored %d, fly %d: want kraken's candidate scored and fly's turn",
+			d.explorer, kraken.Stats().Scored, fly.Stats().Scored)
 	}
 }

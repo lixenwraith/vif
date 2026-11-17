@@ -819,13 +819,14 @@ Libraries · Branches.
   carries a tick that restarts with the game, so `cave`'s `"to":"PlayerCrushed"`
   and `"to":"PlayerDied"` lines are round lengths. A scenario copied to
   `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
-- A network graph and its learner are compared in rounds ([Bots](bots.md#learning)):
+- A network graph and its learners are compared in rounds ([Bots](bots.md#learning)):
   a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
-  and `bot.NewLearner` on a `NewHeadless` `cave` and steps until `Stats().Rounds`
-  reaches its count. A core plays 7,000 to 8,000 ticks a second whatever steers,
-  so fifty rounds of weights that fall at the first charge and five of the
-  shipped ones: 4,000 rounds of those are four million ticks, nine minutes.
-  The binary learns as the harness does, a seed's rounds the same in both.
+  and a `bot.NewLearner` a network on a `NewHeadless` `cave`, its `Play` from
+  `botPlay`, and steps until `Stats().Rounds` reaches its count. A core plays
+  7,000 to 8,000 ticks a second whatever steers, so fifty rounds of weights that
+  fall at the first charge and one of the shipped ones, whose rounds run 6,900
+  ticks. The binary learns as the harness does, a seed's rounds the same in
+  both. `Driver.Stats` takes the world lock: called inside `RunSafe` it hangs.
 - A learner is read three ways and only two hold. Its candidates' mean over the
   last 500 rounds is picked by no luck and tells two settings apart on six
   seeds (1,160 to 1,283 against 918 to 1,178). The fielded member's mean over
@@ -846,6 +847,17 @@ Libraries · Branches.
   them. `EventCursorDefeatState` can cross `defeated` twice in one game, a hit's
   energy lifting it inside the 250 ms before the reset, and fitness weighs each:
   read a round by `Stats.Score`.
+- Heat is what stands between an empty shield and a defeat in `cave`, a touch
+  taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
+  the 10 a game starts with in its first seconds, on blasts wherever dust lies.
+  The same weights score 1,644 a round with it and 2,406 on `main`.
+- `cave`'s Kraken covers its body and its legs, 30 cells long at rest, 42 on a
+  charge and 70 striking, rows counted twice, and its touch takes 10,000 energy a
+  tick: weights that hold a raider's standoff, 28 cells, lose 50,000 in six
+  ticks. Its charge ends on the cell the ship stood on as it began to spin, so
+  weights that leave that cell leave where the ship already is. A Kraken policy
+  is read by fights won of those met, 300 of them in 400 rounds over four seeds,
+  three points either way.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's

@@ -1,36 +1,63 @@
-# Fly the cave scenario by a small network: the sensors of [network] through six
-# hidden units and a direct term, to the cell Steer points at each update. A solo
-# run learns the weights, a round an evaluation; any other fields the best it kept.
+# Fly the cave scenario by two small networks, each its sensors through six hidden
+# units and a direct term: raid steers while the cave's raiders fly and kraken
+# while its Kraken is up. A solo run learns each one's weights, a round an
+# evaluation; any other fields the best it kept.
 [bot]
 actions_per_second = 20
+# The gun fires by itself and the special attack only where a network asks: fired
+# unasked it spends the heat that outlasts the energy
+auto_fire = "main"
 learn = true
 
-[network]
+[network.raid]
 hidden = 6
 inputs = [
     "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
     "species_x", "species_y", "species_enraged", "species_near_x", "species_near_y",
     "species2_x", "species2_y", "species2_enraged", "species2_near_x", "species2_near_y",
-    "landing_near_x", "landing_near_y", "loot_x", "loot_y", "column", "energy",
+    "landing_near_x", "landing_near_y", "loot_x", "loot_y", "column", "energy", "heat",
 ]
 
 # The weights written by hand, which learning starts from: drift to a column just
 # right of the middle, close a fifth of the way on the nearest raider, and back off
 # it across the row once it is near, so the gun keeps it at arm's length
-[network.x]
+[network.raid.x]
 column = -0.1
 bias = 0.01
 species_x = 0.2
 species_near_x = -0.25
 
 # and keep to that raider's row, to shoot it, a little toward the gap's middle
-[network.y]
+[network.raid.y]
 species_y = 0.9
 ceiling = 0.05
 floor = 0.05
+
+[network.kraken]
+hidden = 6
+inputs = [
+    "ceiling", "floor", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "loot_x", "loot_y",
+    "column", "energy", "heat",
+]
+
+# By hand: leave the nearest cell the Kraken covers, legs and all, and hold a
+# little toward the map's middle, as a ship it pins to an edge has no way out;
+# the gun finds it on any row
+[network.kraken.x]
+kraken_near_x = -1.0
+column = -0.1
+
+[network.kraken.y]
+kraken_near_y = -1.0
+ceiling = 0.1
+floor = 0.1
 
 [regions.play]
 initial = "Fly"
 
 [states.Fly]
-on_update = [{ action = "Steer" }]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "raid" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]

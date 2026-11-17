@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 const (
@@ -26,29 +27,46 @@ const (
 
 	// layoutVersion is in every layout digest: a change to what a sensor reads or to
 	// the pass through the network takes the next, and populations start over
-	layoutVersion = 1
+	layoutVersion = 2
 
-	// energyHalf is the energy the energy sensor reads as a half
+	// energyHalf and heatHalf are the energy and the heat their sensors read as a half
 	energyHalf = 1000
+	heatHalf   = 10
 
 	// biasName names an output's bias among its hand-written weights
 	biasName = "bias"
+
+	// specialOver is what a network's special output passes to ask for the special
+	// attack, so one with no weights never asks
+	specialOver = 1.0
 )
 
-// networkTable is a graph's [network] table: the sensors its network reads, in the
-// order its weights take them, its hidden units, and the weights written by hand,
-// each output's from the inputs it names and its bias. Every other weight is zero.
+// The outputs of a network: the offset Steer points at, across and down, and
+// special, which asks for the special attack while it is over specialOver
+const (
+	outputX = iota
+	outputY
+	outputSpecial
+	outputCount
+)
+
+// networkTable is one of a graph's [network.<name>] tables: the sensors the
+// network reads, in the order its weights take them, its hidden units, and the
+// weights written by hand, each output's from the inputs it names and its bias.
+// Every other weight is zero.
 type networkTable struct {
-	Inputs []string           `toml:"inputs"`
-	Hidden int                `toml:"hidden"`
-	X      map[string]float64 `toml:"x"`
-	Y      map[string]float64 `toml:"y"`
+	Inputs  []string           `toml:"inputs"`
+	Hidden  int                `toml:"hidden"`
+	X       map[string]float64 `toml:"x"`
+	Y       map[string]float64 `toml:"y"`
+	Special map[string]float64 `toml:"special"`
 }
 
-// network is a graph's policy: tanh hidden units and a direct term from the inputs
-// to its two outputs, the offset Steer points at. Its genes are each hidden unit's
-// input weights and bias, then each output's direct weights, hidden weights and bias.
+// network is one policy of a graph: tanh hidden units and a direct term from the
+// inputs to its outputs. Its genes are each hidden unit's input weights and bias,
+// then each output's direct weights, hidden weights and bias.
 type network struct {
+	name   string
 	inputs []sensor
 	hidden int
 	genes  []float64
@@ -56,11 +74,33 @@ type network struct {
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
 }
 
-// parseNetwork reads a [network] table, nil for a graph with none
-func parseNetwork(raw any) (*network, error) {
-	if raw == nil {
-		return nil, nil
+// parseNetworks reads a graph's [network] table, a network a name, in name order;
+// a name is part of a population's file name, so it is lowercase letters, digits
+// and underscores
+func parseNetworks(raw any) ([]*network, error) {
+	tables, ok := raw.(map[string]any)
+	if raw != nil && !ok {
+		return nil, errors.New("holds a [network.<name>] table a network")
 	}
+	var nets []*network
+	for _, name := range slices.Sorted(maps.Keys(tables)) {
+		if name == "" || strings.Trim(name, "abcdefghijklmnopqrstuvwxyz0123456789_") != "" {
+			return nil, fmt.Errorf("name %q is not lowercase letters, digits and underscores", name)
+		}
+		if _, ok := tables[name].(map[string]any); !ok {
+			return nil, fmt.Errorf("%q is no table: a network is named, [network.<name>]", name)
+		}
+		n, err := parseNetwork(name, tables[name])
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		nets = append(nets, n)
+	}
+	return nets, nil
+}
+
+// parseNetwork reads one [network.<name>] table
+func parseNetwork(name string, raw any) (*network, error) {
 	var t networkTable
 	if err := dialect.DecodeInto(raw, &t); err != nil {
 		return nil, err
@@ -68,7 +108,7 @@ func parseNetwork(raw any) (*network, error) {
 	if len(t.Inputs) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(t.Inputs), t.Hidden)
 	}
-	n := &network{hidden: t.Hidden}
+	n := &network{name: name, hidden: t.Hidden}
 	for _, name := range t.Inputs {
 		s := slices.IndexFunc(sensors[:], func(row sensorRow) bool { return row.name == name })
 		if s < 0 || slices.Contains(n.inputs, sensor(s)) {
@@ -78,7 +118,7 @@ func parseNetwork(raw any) (*network, error) {
 	}
 	n.genes = make([]float64, n.geneCount())
 	n.in = make([]float64, len(n.inputs)+n.hidden)
-	for o, weights := range [...]map[string]float64{t.X, t.Y} {
+	for o, weights := range [outputCount]map[string]float64{outputX: t.X, outputY: t.Y, outputSpecial: t.Special} {
 		for _, name := range slices.Sorted(maps.Keys(weights)) {
 			i := slices.Index(t.Inputs, name)
 			if name == biasName {
@@ -96,7 +136,7 @@ func parseNetwork(raw any) (*network, error) {
 }
 
 // geneCount is how many weights the layout holds
-func (n *network) geneCount() int { return n.output(2) }
+func (n *network) geneCount() int { return n.output(outputCount) }
 
 // unit is where hidden unit h's genes start: its input weights, then its bias
 func (n *network) unit(h int) int { return h * (len(n.inputs) + 1) }
@@ -109,15 +149,18 @@ func (n *network) output(o int) int { return n.unit(n.hidden) + o*(len(n.inputs)
 // weights the outputs give it, and each output's direct weights with its bias
 func (n *network) blocks() [][]int {
 	width := len(n.inputs)
-	blocks := make([][]int, 0, n.hidden+2)
+	blocks := make([][]int, 0, n.hidden+outputCount)
 	for h := range n.hidden {
-		block := []int{n.output(0) + width + h, n.output(1) + width + h}
+		var block []int
+		for o := range outputCount {
+			block = append(block, n.output(o)+width+h)
+		}
 		for i := range width + 1 {
 			block = append(block, n.unit(h)+i)
 		}
 		blocks = append(blocks, block)
 	}
-	for o := range 2 {
+	for o := range outputCount {
 		block := []int{n.output(o) + width + n.hidden}
 		for i := range width {
 			block = append(block, n.output(o)+i)
@@ -129,16 +172,13 @@ func (n *network) blocks() [][]int {
 
 // playing is a network of its own for one driver, whose weights a learner replaces
 func (n *network) playing() *network {
-	if n == nil {
-		return nil
-	}
 	c := *n
 	c.genes, c.in = slices.Clone(n.genes), make([]float64, len(n.in))
 	return &c
 }
 
-// run reads the scene through the network and returns its two outputs
-func (n *network) run(s *scene) (x, y float64) {
+// run reads the scene through the network and returns its outputs
+func (n *network) run(s *scene) (out [outputCount]float64) {
 	width := len(n.inputs)
 	in, hid := n.in[:width], n.in[width:]
 	for i, kind := range n.inputs {
@@ -152,7 +192,6 @@ func (n *network) run(s *scene) (x, y float64) {
 		}
 		hid[h] = math.Tanh(sum)
 	}
-	var out [2]float64
 	for o := range out {
 		row := n.genes[n.output(o):]
 		sum := row[width+n.hidden]
@@ -161,7 +200,7 @@ func (n *network) run(s *scene) (x, y float64) {
 		}
 		out[o] = sum
 	}
-	return out[0], out[1]
+	return out
 }
 
 // scene is what the sensors read, taken once an update from the cells the view
@@ -172,10 +211,13 @@ type scene struct {
 	// of the view ahead and a quarter ahead
 	rock    [3][2]float64
 	species [2]sighted
-	landing sighted
+	landing sighted // the nearest cell a raider is about to land on, or a Kraken to charge to
+	kraken  sighted // the Kraken's body, its nearness that of the nearest cell it covers
+	reach   float64 // how far out its striking legs are, 0 to 1
 	loot    [2]float64
 	column  float64 // -1 at the view's left edge, 1 at its right
 	energy  float64 // 0 with none, a half at energyHalf, toward 1
+	heat    float64 // 0 with none, a half at heatHalf, toward 1
 }
 
 // sighted is one thing a scene holds: its offset, whether it is enraged, and its
@@ -226,10 +268,16 @@ const (
 	sensorLandingY
 	sensorLandingNearX
 	sensorLandingNearY
+	sensorKrakenX
+	sensorKrakenY
+	sensorKrakenNearX
+	sensorKrakenNearY
+	sensorKrakenReach
 	sensorLootX
 	sensorLootY
 	sensorColumn
 	sensorEnergy
+	sensorHeat
 	sensorCount
 )
 
@@ -260,10 +308,16 @@ var sensors = [sensorCount]sensorRow{
 	sensorLandingY:        {"landing_y", func(s *scene) float64 { return s.landing.y }},
 	sensorLandingNearX:    {"landing_near_x", func(s *scene) float64 { return s.landing.nearX }},
 	sensorLandingNearY:    {"landing_near_y", func(s *scene) float64 { return s.landing.nearY }},
+	sensorKrakenX:         {"kraken_x", func(s *scene) float64 { return s.kraken.x }},
+	sensorKrakenY:         {"kraken_y", func(s *scene) float64 { return s.kraken.y }},
+	sensorKrakenNearX:     {"kraken_near_x", func(s *scene) float64 { return s.kraken.nearX }},
+	sensorKrakenNearY:     {"kraken_near_y", func(s *scene) float64 { return s.kraken.nearY }},
+	sensorKrakenReach:     {"kraken_reach", func(s *scene) float64 { return s.reach }},
 	sensorLootX:           {"loot_x", func(s *scene) float64 { return s.loot[0] }},
 	sensorLootY:           {"loot_y", func(s *scene) float64 { return s.loot[1] }},
 	sensorColumn:          {"column", func(s *scene) float64 { return s.column }},
 	sensorEnergy:          {"energy", func(s *scene) float64 { return s.energy }},
+	sensorHeat:            {"heat", func(s *scene) float64 { return s.heat }},
 }
 
 // look reads the scene around the cursor at from, of the cells minX, minY to maxX,
@@ -311,6 +365,28 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 		return true
 	})
 
+	near[0] = -1
+	w.Components.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
+		tx, ty := int(k.TargetX), int(k.TargetY)
+		if d := dist2(tx-from.X, ty-from.Y); (k.State == component.KrakenSpin || k.State == component.KrakenMove) && shown(tx, ty) && (best < 0 || d < best) {
+			best, s.landing = d, sight(tx-from.X, ty-from.Y, width, height, false)
+		}
+		header, _ := w.Components.Header.GetPtr(e)
+		body, ok := w.Positions.GetPosition(e)
+		if !ok || header == nil {
+			return true
+		}
+		for i := range header.MemberEntries {
+			pos, ok := w.Positions.GetPosition(header.MemberEntries[i].Entity)
+			if d := dist2(pos.X-from.X, pos.Y-from.Y); ok && shown(pos.X, pos.Y) && (near[0] < 0 || d < near[0]) {
+				cell := sight(pos.X-from.X, pos.Y-from.Y, width, height, false)
+				near[0], s.kraken, s.reach = d, sight(body.X-from.X, body.Y-from.Y, width, height, false), k.AttackT
+				s.kraken.nearX, s.kraken.nearY = cell.nearX, cell.nearY
+			}
+		}
+		return true
+	})
+
 	own := w.Resources.Player.Entity
 	best = -1
 	w.Components.Loot.Each(func(e core.Entity, l *component.LootComponent) bool {
@@ -326,22 +402,36 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 		level := math.Abs(float64(e.Current))
 		s.energy = level / (level + energyHalf)
 	}
+	if h, ok := w.Components.Heat.GetComponent(own); ok {
+		s.heat = float64(h.Current) / float64(h.Current+heatHalf)
+	}
 	return s
 }
 
-// steer points at the cell the network's outputs name: an offset from the cursor's
-// in view widths and heights, kept to the cells the view shows, as a mouse reaches
-// no further, and landed as PointAt lands
-func (m *mind) steer() {
+// specialIntent is how a network asks for the special attack, as a key does
+var specialIntent, _ = input.IntentFor("fire_special", 1, "")
+
+// steer plays network i for an update. It points at the cell the outputs name: an
+// offset from the cursor's in view widths and heights, kept to the cells the view
+// shows, as a mouse reaches no further, and landed as PointAt lands. Before that it
+// asks for the special attack where special says to, as often as auto-fire would.
+func (m *mind) steer(i int) {
 	from, cursor := m.ctx.World.LocalCursor()
 	minX, minY, maxX, maxY, ok := m.ctx.World.Resources.Config.VisibleMapRect()
 	if !cursor || !ok || m.room < 1 {
 		return
 	}
+	m.steered[i] = true
 	s := m.look(from, minX, minY, maxX, maxY)
-	outX, outY := m.net.run(&s)
-	goalX := from.X + int(math.Round(min(max(outX, -1), 1)*float64(maxX-minX+1)))
-	goalY := from.Y + int(math.Round(min(max(outY, -1), 1)*float64(maxY-minY+1)))
+	out := m.nets[i].run(&s)
+	if out[outputSpecial] > specialOver && m.tick >= m.special {
+		m.special = m.tick + uint64(max(parameter.AutoFireInterval/m.ctx.World.TickInterval(), 1))
+		if m.push(specialIntent); m.room < 1 {
+			return
+		}
+	}
+	goalX := from.X + int(math.Round(min(max(out[outputX], -1), 1)*float64(maxX-minX+1)))
+	goalY := from.Y + int(math.Round(min(max(out[outputY], -1), 1)*float64(maxY-minY+1)))
 	x, y, ok := m.land(min(max(goalX, minX), maxX), min(max(goalY, minY), maxY), goalX, goalY)
 	if !ok || x == from.X && y == from.Y {
 		return
@@ -349,12 +439,17 @@ func (m *mind) steer() {
 	m.push(input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true})
 }
 
-// compileSteer refuses Steer in a graph that declares no network to steer by
-func compileSteer(net *network) func(*struct{}) (struct{}, error) {
-	return func(*struct{}) (struct{}, error) {
-		if net == nil {
-			return struct{}{}, errors.New("the graph declares no [network] to steer by")
+// compileSteer resolves the network a Steer names among the graph's, which a graph
+// declaring one may leave out
+func compileSteer(nets []*network) func(*steerPayload) (int, error) {
+	return func(p *steerPayload) (int, error) {
+		i := slices.IndexFunc(nets, func(n *network) bool { return n.name == p.Network })
+		if p.Network == "" && len(nets) == 1 {
+			i = 0
 		}
-		return struct{}{}, nil
+		if i < 0 {
+			return 0, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", p.Network)
+		}
+		return i, nil
 	}
 }

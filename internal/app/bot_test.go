@@ -162,9 +162,31 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 	}
 }
 
+// TestABotsRunStartsOnTheAutoFireItsGraphNames: a graph's run starts on the shipped
+// pointer whatever its player's settings say, and on the auto-fire its [bot] names,
+// the shipped one where it names none.
+func TestABotsRunStartsOnTheAutoFireItsGraphNames(t *testing.T) {
+	shipped := paths.DefaultPlay()
+	own := shipped
+	own.AutoFire, own.Mouse, own.FollowMouse = "off", !shipped.Mouse, !shipped.FollowMouse
+	for table, want := range map[string]string{"": shipped.AutoFire, "[bot]\nauto_fire = \"main\"\n": "main"} {
+		graph, err := bot.ParseGraph("g", []byte(table+"[regions.play]\ninitial = \"A\"\n[states.A]\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, play := range []paths.Play{own, {}} {
+			if got := botPlay(play, graph); got.AutoFire != want || got.Mouse != shipped.Mouse || got.FollowMouse != shipped.FollowMouse {
+				t.Errorf("graph %q on %+v starts on auto-fire %q, mouse %v and follow %v, want %q and the shipped pointer",
+					table, play, got.AutoFire, got.Mouse, got.FollowMouse, want)
+			}
+		}
+	}
+}
+
 // TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot: a learning graph alone in the
-// shipped cave is scored a round at each game its defeat ends, and its population
-// is saved under the graph's and the scenario's names beside the user root's graphs.
+// shipped cave is scored a round at each game its defeat ends, and a network's
+// population is saved under the graph's, the scenario's and its own names beside
+// the user root's graphs.
 func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
@@ -185,7 +207,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Play: botPlay(paths.Play{}, graph), Resources: opts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,20 +216,26 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	learner, err := a.learn(d, graph)
+	learners, err := a.learn(d, graph)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const rounds = 3
-	for tick := 0; d.Stats().Rounds < rounds; tick++ {
-		if more, err := d.Step(); !more || err != nil || tick > 20000 {
+	// The learners explore in turn, so raid's candidate is scored within two rounds
+	raid := func() bot.LearnStats {
+		st := d.Stats().Learn
+		return st[slices.IndexFunc(st, func(l bot.LearnStats) bool { return l.Network == "raid" })]
+	}
+	for tick := 0; raid().Scored == 0; tick++ {
+		if more, err := d.Step(); !more || err != nil || tick > 200000 {
 			t.Fatalf("tick %d: more %v, err %v, %d rounds", tick, more, err, d.Stats().Rounds)
 		}
 	}
-	if err := learner.Close(); err != nil {
-		t.Fatal(err)
+	for _, l := range learners {
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	doc, err := os.ReadFile(filepath.Join(paths.PopulationDir(), "cave.cave.json"))
+	doc, err := os.ReadFile(filepath.Join(paths.PopulationDir(), "cave.cave.raid.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,8 +251,8 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	for _, m := range kept.Members {
 		outcomes += m.Rounds
 	}
-	if outcomes != rounds || kept.Rounds != rounds || kept.Layout == "" {
-		t.Fatalf("%d outcomes kept of %d rounds under layout %q, want the %d rounds played out", outcomes, kept.Rounds, kept.Layout, rounds)
+	if scored := raid().Scored; outcomes != scored || kept.Rounds != scored || kept.Layout == "" {
+		t.Fatalf("%d outcomes kept of %d rounds under layout %q, want the %d its candidates played out", outcomes, kept.Rounds, kept.Layout, scored)
 	}
 }
 
