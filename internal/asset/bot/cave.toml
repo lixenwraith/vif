@@ -1,7 +1,8 @@
 # Fly the cave scenario by two small networks, each its sensors through six hidden
 # units and a direct term: raid steers while the cave's raiders fly and kraken
-# while its Kraken is up. A solo run learns each one's weights, a round an
-# evaluation; any other fields the best it kept.
+# while its Kraken is up. No weight is written by hand: a solo run learns each
+# network's from genomes drawn at random, a round an evaluation, and any other
+# fields the best it kept, or none and the ship holds still.
 [bot]
 actions_per_second = 20
 # The gun fires by itself and the special attack only where a network asks: fired
@@ -13,7 +14,7 @@ learn = true
 round_seconds = 1800
 
 # raid reads the rock, every raider, as three fly at most, and every cell one is
-# about to land on: what it leaves out it cannot learn from
+# about to land on with how soon: what it leaves out it cannot learn from
 [network.raid]
 hidden = 6
 inputs = [
@@ -21,49 +22,21 @@ inputs = [
     "species_x", "species_y", "species_enraged", "species_near_x", "species_near_y",
     "species2_x", "species2_y", "species2_enraged", "species2_near_x", "species2_near_y",
     "species3_x", "species3_y", "species3_enraged", "species3_near_x", "species3_near_y",
-    "landing_x", "landing_y", "landing_near_x", "landing_near_y",
-    "landing2_x", "landing2_y", "landing2_near_x", "landing2_near_y",
-    "landing3_x", "landing3_y", "landing3_near_x", "landing3_near_y",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon",
+    "landing2_x", "landing2_y", "landing2_near_x", "landing2_near_y", "landing2_soon",
+    "landing3_x", "landing3_y", "landing3_near_x", "landing3_near_y", "landing3_soon",
     "column", "energy", "heat",
 ]
 
-# The weights written by hand, which learning starts from: drift to a column just
-# right of the middle, close a fifth of the way on the nearest raider, and back off
-# it across the row once it is near, so the gun keeps it at arm's length
-[network.raid.x]
-column = -0.1
-bias = 0.01
-species_x = 0.2
-species_near_x = -0.25
-
-# and keep to that raider's row, to shoot it, a little toward the gap's middle
-[network.raid.y]
-species_y = 0.9
-ceiling = 0.05
-floor = 0.05
-
 # kraken reads the map's edges, which ceiling and floor are once the rock is gone
-# and column across, the Kraken, and where its charge will end, a landing. Its
-# ticks earn nothing: a fight pays by the Kraken shot down, more the sooner
+# and column across, the Kraken, and where its charge will end and how soon, a
+# landing
 [network.kraken]
 hidden = 6
-ticks = false
 inputs = [
     "ceiling", "floor", "column", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
-    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "energy", "heat",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon", "energy", "heat",
 ]
-
-# By hand: leave the nearest cell the Kraken covers, legs and all, and hold a
-# little toward the map's middle, as a ship it pins to an edge has no way out;
-# the gun finds it on any row
-[network.kraken.x]
-kraken_near_x = -1.0
-column = -0.1
-
-[network.kraken.y]
-kraken_near_y = -1.0
-ceiling = 0.1
-floor = 0.1
 
 [regions.play]
 initial = "Fly"

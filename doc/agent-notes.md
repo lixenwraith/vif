@@ -911,6 +911,12 @@ Libraries · Branches.
   double each time. Give a learning run ticks, not rounds,
   cap its held-out rounds at the graph's limit as the run would, and read the
   spread with the mean, which a few long rounds carry.
+- A round in `cave` snowballs: a ship that outlives the first cave has its gun
+  raised and 50,000 energy, so weights drawn at random have shot down three
+  Krakens within a population's first thousand rounds and a round's score runs
+  from 150 to 10,000 before anything is learned. `Resources.Cave.Steps` is the
+  columns a tick scrolled, one in the first cave, one or two in a rush and none
+  while a Kraken is up, which is the distance a round scores.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's

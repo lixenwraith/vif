@@ -35,14 +35,10 @@ const (
 
 	// biasName names an output's bias among its hand-written weights
 	biasName = "bias"
-
-	// specialOver is what a network's special output passes to ask for the special
-	// attack, so one with no weights never asks
-	specialOver = 1.0
 )
 
 // The outputs of a network: the offset Steer points at, across and down, and
-// special, which asks for the special attack while it is over specialOver
+// special, which asks for the special attack while it is positive
 const (
 	outputX = iota
 	outputY
@@ -51,14 +47,12 @@ const (
 )
 
 // networkTable is one of a graph's [network.<name>] tables: the sensors the
-// network reads, in the order its weights take them, its hidden units, whether
-// the ticks it steers count toward a round's score, as they do unless it says no,
-// and the weights written by hand, each output's from the inputs it names and its
-// bias. Every other weight is zero.
+// network reads, in the order its weights take them, its hidden units, and any
+// weights written by hand, each output's from the inputs it names and its bias.
+// Every other weight is zero, and a network that learns needs none written.
 type networkTable struct {
 	Inputs  []string           `toml:"inputs"`
 	Hidden  int                `toml:"hidden"`
-	Ticks   *bool              `toml:"ticks"`
 	X       map[string]float64 `toml:"x"`
 	Y       map[string]float64 `toml:"y"`
 	Special map[string]float64 `toml:"special"`
@@ -71,7 +65,6 @@ type network struct {
 	name   string
 	inputs []sensor
 	hidden int
-	unpaid bool // the ticks it steers add nothing to a round's score
 	genes  []float64
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
@@ -111,7 +104,7 @@ func parseNetwork(name string, raw any) (*network, error) {
 	if len(t.Inputs) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(t.Inputs), t.Hidden)
 	}
-	n := &network{name: name, hidden: t.Hidden, unpaid: t.Ticks != nil && !*t.Ticks}
+	n := &network{name: name, hidden: t.Hidden}
 	for _, name := range t.Inputs {
 		s := slices.IndexFunc(sensors[:], func(row sensorRow) bool { return row.name == name })
 		if s < 0 || slices.Contains(n.inputs, sensor(s)) {
@@ -228,9 +221,10 @@ const slots = 3
 
 // sighted is one thing a scene holds: its offset, whether it is enraged, and its
 // nearness, a vector toward it that is 1 long beside the cursor and falls to
-// nothing a quarter of the view's width away, rows counted twice
+// nothing a quarter of the view's width away, rows counted twice. A landing's
+// soon runs from 0 as its warning starts to 1 as the body leaves for it.
 type sighted struct {
-	x, y, enraged, nearX, nearY float64
+	x, y, enraged, nearX, nearY, soon float64
 }
 
 // sight is the thing at dx, dy cells from the cursor in a view width cells wide
@@ -298,6 +292,7 @@ var sensors = func() (rows []sensorRow) {
 		add("landing"+place+"_y", func(s *scene) float64 { return s.landing[i].y })
 		add("landing"+place+"_near_x", func(s *scene) float64 { return s.landing[i].nearX })
 		add("landing"+place+"_near_y", func(s *scene) float64 { return s.landing[i].nearY })
+		add("landing"+place+"_soon", func(s *scene) float64 { return s.landing[i].soon })
 	}
 	add("kraken_x", func(s *scene) float64 { return s.kraken.x })
 	add("kraken_y", func(s *scene) float64 { return s.kraken.y })
@@ -339,7 +334,9 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 	})
 	w.Components.Behavior.Each(func(_ core.Entity, b *component.BehaviorComponent) bool {
 		if b.Landing && shown(b.TargetX, b.TargetY) {
-			landings.add(dist2(b.TargetX-from.X, b.TargetY-from.Y), sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false))
+			landing := sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false)
+			landing.soon = b.Machine.Progress()
+			landings.add(dist2(b.TargetX-from.X, b.TargetY-from.Y), landing)
 		}
 		return true
 	})
@@ -347,7 +344,11 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 	covered := -1
 	w.Components.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
 		if tx, ty := int(k.TargetX), int(k.TargetY); (k.State == component.KrakenSpin || k.State == component.KrakenMove) && shown(tx, ty) {
-			landings.add(dist2(tx-from.X, ty-from.Y), sight(tx-from.X, ty-from.Y, width, height, false))
+			landing := sight(tx-from.X, ty-from.Y, width, height, false)
+			if landing.soon = 1; k.State == component.KrakenSpin {
+				landing.soon = min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
+			}
+			landings.add(dist2(tx-from.X, ty-from.Y), landing)
 		}
 		header, _ := w.Components.Header.GetPtr(e)
 		body, ok := w.Positions.GetPosition(e)
@@ -386,7 +387,7 @@ var specialIntent, _ = input.IntentFor("fire_special", 1, "")
 // shows, as a mouse reaches no further, and landed as PointAt lands. Before that it
 // asks for the special attack where special says to, as often as auto-fire would.
 func (m *mind) steer(i int) {
-	m.steered[i], m.steering = true, i
+	m.steered[i] = true
 	from, cursor := m.ctx.World.LocalCursor()
 	minX, minY, maxX, maxY, ok := m.ctx.World.Resources.Config.VisibleMapRect()
 	if !cursor || !ok || m.room < 1 {
@@ -394,7 +395,7 @@ func (m *mind) steer(i int) {
 	}
 	s := m.look(from, minX, minY, maxX, maxY)
 	out := m.nets[i].run(&s)
-	if out[outputSpecial] > specialOver && m.tick >= m.special {
+	if out[outputSpecial] > 0 && m.tick >= m.special {
 		m.special = m.tick + uint64(max(parameter.AutoFireInterval/m.ctx.World.TickInterval(), 1))
 		if m.push(specialIntent); m.room < 1 {
 			return
