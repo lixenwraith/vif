@@ -48,7 +48,7 @@ process (§4, Bot seats). See [Bots](bots.md).
 | Export schema | `manifest.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Verify replay | `app.VerifyJournal` | No | `-r <file> -headless`: replay a journal flat out and fail at the first world digest it does not reproduce; a `jseq` gap fails before it plays. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the session's start gate. |
-| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1); a watched one defaults to the terminal's size and real time. Ordinary `-bot` uses `app.Run` with a human. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1); a watched one defaults to real time and the terminal's size, or 120x40 where its graph learns ([Bots](bots.md#learning)). Ordinary `-bot` uses `app.Run` with a human. |
 
 ### 1.0 The four session flags
 

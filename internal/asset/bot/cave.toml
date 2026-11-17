@@ -9,18 +9,21 @@ learn = true
 hidden = 6
 inputs = [
     "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
-    "species_x", "species_y", "species_enraged",
-    "species2_x", "species2_y", "species2_enraged",
-    "landing_x", "landing_y", "loot_x", "loot_y", "column", "energy",
+    "species_x", "species_y", "species_enraged", "species_near_x", "species_near_y",
+    "species2_x", "species2_y", "species2_enraged", "species2_near_x", "species2_near_y",
+    "landing_near_x", "landing_near_y", "loot_x", "loot_y", "column", "energy",
 ]
 
-# The weights written by hand, which learning starts from: hold a column a quarter
-# of the view from its left edge, where the gun covers what comes in
+# The weights written by hand, which learning starts from: drift to a column just
+# right of the middle, close a fifth of the way on the nearest raider, and back off
+# it across the row once it is near, so the gun keeps it at arm's length
 [network.x]
-column = -0.4
-bias = -0.2
+column = -0.1
+bias = 0.01
+species_x = 0.2
+species_near_x = -0.25
 
-# and keep to the nearest raider's row, to shoot it, a little toward the gap's middle
+# and keep to that raider's row, to shoot it, a little toward the gap's middle
 [network.y]
 species_y = 0.9
 ceiling = 0.05

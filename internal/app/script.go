@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
@@ -102,7 +102,9 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	cfg.Play.AutoFire, cfg.Play.Mouse, cfg.Play.FollowMouse = shipped.AutoFire, shipped.Mouse, shipped.FollowMouse
 	run := runConfig{Config: cfg, host: host}
 	if run.Width == 0 && run.Height == 0 {
-		run.wiring.terminalGeometry = run.Mode == ModeScript
+		// A learning graph plays a bot's own screen watched or not, so the rounds its
+		// population is scored by are one game's
+		run.wiring.terminalGeometry = run.Mode == ModeScript && !graph.Settings.Learn
 		run.Width, run.Height = BotWidth, BotHeight
 	}
 	var (
@@ -128,7 +130,8 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,
-		"rounds", stats.Rounds, "score", stats.Score, "fielded", stats.Learn.Fielded, "evaluations", stats.Learn.Evaluations,
+		"rounds", stats.Rounds, "score", stats.Score, "learned", stats.Learn.Scored, "recent", stats.Learn.Recent,
+		"fielded", stats.Learn.Fielded, "fielded_rounds", stats.Learn.FieldedRounds,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
 }
@@ -140,15 +143,27 @@ func (a *App) learn(d *bot.Driver, g *bot.Graph) (*bot.Learner, error) {
 	if !g.Settings.Learn {
 		return nil, nil
 	}
-	var store persistence.Store
+	var store bot.Store
 	if dir := paths.PopulationDir(); dir != "" {
-		store = persistence.NewManager(dir, nil)
+		store = paths.PlaceFile{Path: filepath.Join(dir, g.Name+"."+a.scenario.Shown()+".json")}
 	}
-	l, err := bot.NewLearner(g, a.Seed(), store, g.Name+"."+a.scenario.Shown())
+	l, err := bot.NewLearner(g, a.Seed(), store)
 	if err != nil {
 		return nil, err
 	}
+	l.Saved = func(st bot.LearnStats) {
+		a.log.Info("app", "msg", "bot population kept", "name", g.Name, "rounds", st.Rounds, "recent", st.Recent,
+			"step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
+	}
 	d.Learn(l, func() bool { return a.membership.SessionTransport() == nil })
+	// A run somebody watches says what each round came to as it closes
+	if a.cfg.Mode.Presents() {
+		d.Round = func(n uint64, score float64) {
+			st := l.Stats()
+			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f | recent %.0f | fielding %.0f over %d",
+				n, score, st.Recent, st.Fielded, st.FieldedRounds), parameter.StatusNotice)
+		}
+	}
 	return l, nil
 }
 
@@ -277,7 +292,7 @@ func (s botSource) progress() string {
 	st := s.d.Stats()
 	line := fmt.Sprintf("tick %d | %s | %d intents, %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
 	if st.Learning {
-		line += fmt.Sprintf(" | round %d, fields %.0f", st.Rounds+1, st.Learn.Fielded)
+		line += fmt.Sprintf(" | round %d, recent %.0f, fielding %.0f", st.Rounds+1, st.Learn.Recent, st.Learn.Fielded)
 	}
 	return line
 }

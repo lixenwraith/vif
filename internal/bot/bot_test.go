@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"math"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/genetic/persistence"
+	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -659,17 +660,30 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	got := d.mind.look(from, minX, minY, maxX, maxY)
 	across := func(cells int) float64 { return float64(cells) / float64(width) }
 	down := func(cells int) float64 { return float64(cells) / float64(height) }
+	// Nearness points at the thing, rows counted twice, and falls from 1 beside the
+	// cursor to nothing a quarter of the view's width away
+	near := func(dx, dy int) (float64, float64) {
+		r := math.Sqrt(float64(dx*dx + 4*dy*dy))
+		pull := max(1-r/(float64(width)/4), 0)
+		return pull * float64(dx) / r, pull * float64(2*dy) / r
+	}
 	want := scene{
 		rock:    [3][2]float64{{down(1 - 10), down(cfg.MapHeight - 3 - 10)}, {down(4 - 10), down(15 - 10)}, {down(7 - 10), down(12 - 10)}},
-		landing: [2]float64{across(2), down(-4)},
+		landing: sighted{x: across(2), y: down(-4)},
 		loot:    [2]float64{across(10), 0},
 		column:  2*float64(16-minX)/float64(width-1) - 1,
 		energy:  0.5,
 	}
-	want.species[0].x, want.species[0].y, want.species[0].enraged = across(8), down(2), 1
-	want.species[1].x, want.species[1].y = across(14), 0
+	want.species[0] = sighted{x: across(8), y: down(2), enraged: 1}
+	want.species[1] = sighted{x: across(14)}
+	want.species[0].nearX, want.species[0].nearY = near(8, 2)
+	want.species[1].nearX, want.species[1].nearY = near(14, 0)
+	want.landing.nearX, want.landing.nearY = near(2, -4)
 	if got != want {
 		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
+	}
+	if on := sight(0, 0, float64(width), float64(height), false); on.nearX != 1 || on.nearY != 0 {
+		t.Fatalf("a thing on the cursor's cell reads a nearness of %g, %g, want it beside the cursor on the right", on.nearX, on.nearY)
 	}
 }
 
@@ -723,15 +737,19 @@ func TestARoundScoresItsTicksAndWhatItEarnedADefeatAside(t *testing.T) {
 }
 
 // memory is a population store that lasts a test
-type memory map[string]persistence.PopulationDTO
+type memory struct{ doc []byte }
 
-func (m memory) Save(name string, dto persistence.PopulationDTO) error { m[name] = dto; return nil }
-func (m memory) Load(name string) (persistence.PopulationDTO, error) {
-	dto, ok := m[name]
-	if !ok {
-		return dto, fs.ErrNotExist
+func (m *memory) Load() ([]byte, error)  { return m.doc, nil }
+func (m *memory) Store(doc []byte) error { m.doc = doc; return nil }
+
+// keeping is a store holding members as a population of layout
+func keeping(t *testing.T, layout string, members ...member) *memory {
+	t.Helper()
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: layout, Members: members})
+	if err != nil {
+		t.Fatal(err)
 	}
-	return dto, nil
+	return &memory{doc: doc}
 }
 
 // learning is a learning graph, a driver on it and the instance it plays
@@ -756,7 +774,7 @@ func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 // ended scores nothing, and a bot not alone plays what the learner fields.
 func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	g, d, rec := learning(t)
-	l, err := NewLearner(g, 1, nil, "")
+	l, err := NewLearner(g, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,33 +804,39 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	}
 }
 
-// TestALearnerKeepsItsPopulationByItsLayout: a population saved under the layout's
-// digest comes back, and its best member a second outcome confirmed is the one
-// fielded; a population of another layout starts over from the hand-written genome.
+// TestALearnerKeepsItsPopulationByItsLayout: a population kept under the layout's
+// digest comes back with its rounds, and the best member its rounds have proved is
+// the one fielded, not the best scored; one of another layout, or none, starts
+// over from the hand-written genome. A save says each member's rounds and birth.
 func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	g, d, _ := learning(t)
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(g.net.genes)) }
-	kept := persistence.PopulationDTO{Version: persistence.SchemaVersion, Tag: g.net.digest, Candidates: []persistence.CandidateDTO{
-		{Genes: genome(0.1), Score: 50, Count: 1},
-		{Genes: genome(0.2), Score: 40, Count: 3},
-		{Genes: genome(0.3), Score: 10, Count: 2},
-	}}
-	store := memory{"kept": kept, "other": kept}
-	other := store["other"]
-	other.Tag = "another layout"
-	store["other"] = other
-	for name, want := range map[string][]float64{"kept": genome(0.2), "other": g.net.genes, "none": g.net.genes} {
-		l, err := NewLearner(g, 1, store, name)
+	kept := func(layout string) *memory {
+		return keeping(t, layout,
+			member{Genes: genome(0.1), Score: 50, Rounds: learnProven - 1, Born: 3},
+			member{Genes: genome(0.2), Score: 40, Rounds: learnProven, Born: 5},
+			member{Genes: genome(0.3), Score: 10, Rounds: learnProven + 4, Born: 7})
+	}
+	for name, c := range map[string]struct {
+		store Store
+		want  []float64
+	}{
+		"kept":    {kept(g.net.digest), genome(0.2)},
+		"another": {kept("another layout"), g.net.genes},
+		"none":    {&memory{}, g.net.genes},
+	} {
+		l, err := NewLearner(g, 1, c.store)
 		if err != nil {
 			t.Fatal(err)
 		}
 		d.Learn(l, func() bool { return false })
-		if !slices.Equal(d.mind.net.genes, want) {
-			t.Errorf("%s: fields %v, want %v", name, d.mind.net.genes[:2], want[:2])
+		if !slices.Equal(d.mind.net.genes, c.want) {
+			t.Errorf("%s: fields %v, want %v", name, d.mind.net.genes[:2], c.want[:2])
 		}
 	}
 
-	l, err := NewLearner(g, 1, store, "kept")
+	store := kept(g.net.digest)
+	l, err := NewLearner(g, 1, store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,11 +845,61 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	outcomes := 0
-	for _, c := range store["kept"].Candidates {
-		outcomes += c.Count
+	var saved population
+	if err := json.Unmarshal(store.doc, &saved); err != nil {
+		t.Fatal(err)
 	}
-	if saved := store["kept"]; saved.Tag != g.net.digest || outcomes != 1+3+2+1 {
-		t.Fatalf("saved %d outcomes under %q, want the six kept and the round scored since, under %q", outcomes, saved.Tag, g.net.digest)
+	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
+	if saved.Layout != g.net.digest || saved.Rounds != 1 || len(saved.Members) != 4 || entered < 0 ||
+		saved.Members[entered].Born != 1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
+		t.Fatalf("saved %+v: want the three kept with their births, the genome scored 45 born at round 1, and the proved member fielded",
+			saved)
+	}
+}
+
+// TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound: a first round
+// good enough to enter only qualifies its genome, which plays again and enters,
+// or not, on that round alone, as the first was picked for its luck. The
+// hand-written genome plays first, whatever the store kept.
+func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T) {
+	g, _, _ := learning(t)
+	// played is the archive after the hand-written genome's rounds score as given,
+	// on a store whose population fills it
+	played := func(scores ...float64) (first, last []float64, held func(float64) bool) {
+		var full []member
+		for i := range learnPool {
+			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(g.net.genes)), Score: float64(200 - i), Rounds: 1})
+		}
+		l, err := NewLearner(g, 1, keeping(t, g.net.digest, full...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		first = l.turn(0, false, true)
+		for _, score := range scores {
+			last = l.turn(score, true, true)
+		}
+		if st := l.Stats(); st.Scored != len(scores) {
+			t.Fatalf("%d rounds scored of %d played", st.Scored, len(scores))
+		}
+		return first, last, func(score float64) bool {
+			return slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool { return c.Score == score })
+		}
+	}
+
+	first, again, held := played(500)
+	if !slices.Equal(first, g.net.genes) {
+		t.Fatal("the run's first round does not play the hand-written genome")
+	}
+	if !slices.Equal(again, first) || held(500) {
+		t.Fatal("a first round of 500 against an archive of 169 to 200 entered at once: it only qualifies its genome for another round")
+	}
+	if _, next, held := played(500, 300); slices.Equal(next, first) || !held(300) || held(500) || held(400) {
+		t.Fatal("a genome that qualified on 500 and then scored 300 is not held at 300 alone")
+	}
+	if _, _, held := played(500, 60); held(60) || held(500) || held(280) {
+		t.Fatal("a genome that qualified on 500 and then scored 60 entered")
+	}
+	if _, next, held := played(100); slices.Equal(next, first) || held(100) {
+		t.Fatal("a first round under the archive's worst did not close its evaluation unentered")
 	}
 }

@@ -228,6 +228,9 @@ type Driver struct {
 	ended       atomic.Uint32
 	learner     *Learner
 	alone       func() bool
+
+	// Round, when set, is told each round as it closes: its number and its score
+	Round func(n uint64, score float64)
 }
 
 // How the round in play was asked to end: by the game itself, as a defeat does, or
@@ -366,6 +369,9 @@ func (d *Driver) closeRound(played bool) {
 	if d.learner != nil {
 		alone := d.alone()
 		d.mind.net.genes = d.learner.turn(score, played && alone, alone)
+	}
+	if d.Round != nil {
+		d.Round(d.stats.Rounds, score)
 	}
 }
 

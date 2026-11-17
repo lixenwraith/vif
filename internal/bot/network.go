@@ -171,11 +171,35 @@ type scene struct {
 	// rock is the ceiling's and the floor's edge at the cursor's column, an eighth
 	// of the view ahead and a quarter ahead
 	rock    [3][2]float64
-	species [2]struct{ x, y, enraged float64 }
-	landing [2]float64
+	species [2]sighted
+	landing sighted
 	loot    [2]float64
 	column  float64 // -1 at the view's left edge, 1 at its right
 	energy  float64 // 0 with none, a half at energyHalf, toward 1
+}
+
+// sighted is one thing a scene holds: its offset, whether it is enraged, and its
+// nearness, a vector toward it that is 1 long beside the cursor and falls to
+// nothing a quarter of the view's width away, rows counted twice
+type sighted struct {
+	x, y, enraged, nearX, nearY float64
+}
+
+// sight is the thing at dx, dy cells from the cursor in a view width cells wide
+// and height tall; one on the cursor's own cell reads as beside it on the right
+func sight(dx, dy int, width, height float64, enraged bool) sighted {
+	s := sighted{x: float64(dx) / width, y: float64(dy) / height}
+	if enraged {
+		s.enraged = 1
+	}
+	reach, r := width/4, math.Sqrt(float64(dist2(dx, dy)))
+	switch {
+	case r == 0:
+		s.nearX = 1
+	case r < reach:
+		s.nearX, s.nearY = (1-r/reach)*float64(dx)/r, (1-r/reach)*float64(2*dy)/r
+	}
+	return s
 }
 
 // sensor is one input a network may read
@@ -194,8 +218,14 @@ const (
 	sensorSpecies2X
 	sensorSpecies2Y
 	sensorSpecies2Enraged
+	sensorSpeciesNearX
+	sensorSpeciesNearY
+	sensorSpecies2NearX
+	sensorSpecies2NearY
 	sensorLandingX
 	sensorLandingY
+	sensorLandingNearX
+	sensorLandingNearY
 	sensorLootX
 	sensorLootY
 	sensorColumn
@@ -222,8 +252,14 @@ var sensors = [sensorCount]sensorRow{
 	sensorSpecies2X:       {"species2_x", func(s *scene) float64 { return s.species[1].x }},
 	sensorSpecies2Y:       {"species2_y", func(s *scene) float64 { return s.species[1].y }},
 	sensorSpecies2Enraged: {"species2_enraged", func(s *scene) float64 { return s.species[1].enraged }},
-	sensorLandingX:        {"landing_x", func(s *scene) float64 { return s.landing[0] }},
-	sensorLandingY:        {"landing_y", func(s *scene) float64 { return s.landing[1] }},
+	sensorSpeciesNearX:    {"species_near_x", func(s *scene) float64 { return s.species[0].nearX }},
+	sensorSpeciesNearY:    {"species_near_y", func(s *scene) float64 { return s.species[0].nearY }},
+	sensorSpecies2NearX:   {"species2_near_x", func(s *scene) float64 { return s.species[1].nearX }},
+	sensorSpecies2NearY:   {"species2_near_y", func(s *scene) float64 { return s.species[1].nearY }},
+	sensorLandingX:        {"landing_x", func(s *scene) float64 { return s.landing.x }},
+	sensorLandingY:        {"landing_y", func(s *scene) float64 { return s.landing.y }},
+	sensorLandingNearX:    {"landing_near_x", func(s *scene) float64 { return s.landing.nearX }},
+	sensorLandingNearY:    {"landing_near_y", func(s *scene) float64 { return s.landing.nearY }},
 	sensorLootX:           {"loot_x", func(s *scene) float64 { return s.loot[0] }},
 	sensorLootY:           {"loot_y", func(s *scene) float64 { return s.loot[1] }},
 	sensorColumn:          {"column", func(s *scene) float64 { return s.column }},
@@ -260,12 +296,7 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 			if near[i] < 0 || d < near[i] {
 				copy(near[i+1:], near[i:])
 				copy(s.species[i+1:], s.species[i:])
-				near[i] = d
-				s.species[i].x, s.species[i].y = float64(pos.X-from.X)/width, float64(pos.Y-from.Y)/height
-				s.species[i].enraged = 0
-				if c.IsEnraged {
-					s.species[i].enraged = 1
-				}
+				near[i], s.species[i] = d, sight(pos.X-from.X, pos.Y-from.Y, width, height, c.IsEnraged)
 				break
 			}
 		}
@@ -275,7 +306,7 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 	best := -1
 	w.Components.Behavior.Each(func(_ core.Entity, b *component.BehaviorComponent) bool {
 		if d := dist2(b.TargetX-from.X, b.TargetY-from.Y); b.Landing && shown(b.TargetX, b.TargetY) && (best < 0 || d < best) {
-			best, s.landing = d, [2]float64{float64(b.TargetX-from.X) / width, float64(b.TargetY-from.Y) / height}
+			best, s.landing = d, sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false)
 		}
 		return true
 	})

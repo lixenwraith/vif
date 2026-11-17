@@ -30,7 +30,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, and for a graph that learned `Bot learned: rounds R, fielding S over C`, its best member's score and the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
+| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given or its graph learns. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |
@@ -318,7 +318,7 @@ graph                      score   ticks
 no input                     165     159
 default                      160     155
 flee threats within 20       245     240
-cave, as written by hand     230     217
+cave, as written by hand    1644    1347
 ```
 
 Fitness is in the `-headless` summary, the `bot stopped` log record, which also
@@ -343,8 +343,8 @@ both, as the embedded `[play]` has them, whatever the player's own says.
 ```toml
 [network]
 hidden = 6
-inputs = ["ceiling", "floor", "species_x", "species_y", "column"]
-x = { column = -0.4, bias = -0.2 }
+inputs = ["ceiling", "floor", "species_x", "species_y", "species_near_x", "column"]
+x = { column = -0.1, bias = 0.01, species_x = 0.2, species_near_x = -0.25 }
 y = { species_y = 0.9, ceiling = 0.05, floor = 0.05 }
 ```
 
@@ -357,8 +357,13 @@ y = { species_y = 0.9, ceiling = 0.05, floor = 0.05 }
   - `species_x`, `species_y`, `species_enraged`: the nearest species, as the
     `species` target counts them, and 1 while it is enraged; `species2_x`,
     `species2_y` and `species2_enraged` the second nearest.
+  - `species_near_x`, `species_near_y`, and `species2_near_x`, `species2_near_y`:
+    that species' nearness, a vector toward it 1 long beside the cursor and
+    falling to nothing a quarter of the view's width away, rows counted twice.
+    An offset grows with distance, so only a nearness lets a weight written by
+    hand back off what is close and leave alone what is far.
   - `landing_x`, `landing_y`: the nearest landing marker, where a raider's charge
-    or teleport ends.
+    or teleport ends; `landing_near_x`, `landing_near_y` its nearness.
   - `loot_x`, `loot_y`: the nearest drop that is the bot's own.
   - `column`: the cursor's place across the view, -1 at its left edge, 1 at its
     right.
@@ -377,35 +382,66 @@ plays: a genome plays a round, and the round's score
 
 - The search is the `StreamingEngine` of `lixenwraith/genetic`
   ([AI §3](ai-physics-and-evolution.md#3-genetic-library)) with one evaluation in
-  flight: an archive of 32 scored genomes, the hand-written one first; children
-  mostly one parent's, mixed a hidden unit or an output at a time, three in a
-  hundred of their weights stepped; every third round an archive member plays
-  again, and its score is the mean of its rounds.
-- A step is a share of a weight's range: a run starts at 0.1 and settles at 0.03
-  as its best stops improving.
+  flight: an archive of the 32 best genomes scored, the hand-written one playing
+  the first round of every run; children mostly one parent's, mixed a hidden unit
+  or an output at a time, three in a hundred of their weights stepped; every
+  third evaluation an archive member plays again, and its score is the mean of
+  its rounds.
+- A round's score is mostly luck, the game it drew: a candidate whose first round
+  would enter a full archive plays a second, and enters or not on that round
+  alone. A run fields the best member eight rounds have proved, which is seldom
+  the top of the archive, and with none the hand-written weights.
+- A step is a share of a weight's range: a new population starts at 0.1 and
+  settles at 0.03 as its best stops improving.
 - A run in a session does not learn, since any participant's defeat ends every
-  round there. Its bots, seats among them, field the best member a second round
-  confirmed, or with none the hand-written weights. A round an operator ends
-  (`:n`) scores nothing.
-- The population is kept in the user root as `bot/<graph>.<scenario>.json`,
-  written each half minute of play and as the run stops, under a digest of the
-  layout (`inputs` and `hidden`): a file of another layout is started over. A
-  browser keeps none.
-- A watched run's bar shows the round and the fielded member's score.
+  round there: its bots, seats among them, play what is fielded. A round an
+  operator ends (`:n`) scores nothing.
+- A learning run plays a bot's own screen, 120x40, watched or not, unless `-size`
+  names another, so one population is scored by one game: stop a headless run,
+  start a watched one, and it goes on from the same file.
+- A watched run's bar says what each round came to as it closes, `Round 12
+  scored 1480 | recent 1210 | fielding 1790 over 9`; a headless run prints `Bot
+  learned: rounds R of T, recent M, fielding S over C` as it stops, and each save
+  writes a `bot population kept` log record. `recent` is the mean of the last
+  rounds played, candidates and all, which no luck picked.
 
-What 12,000 rounds bought in `cave` at 120x40, a quarter of an hour of a core
-flat out: the member each run fields, over 400 rounds of four seeds it never
-played, a learning seed a column. The weights written by hand score 230 there.
+#### The population file
+
+The population is kept in the user root as `bot/<graph>.<scenario>.json`, written
+each half minute of play and as the run stops; a browser keeps none. Removing
+the file starts the population over, as does a change of layout (`inputs` or
+`hidden`), which the file's `layout` digest names.
+
+- `rounds`: every round scored since the population began, over all its runs.
+- `recent`: their mean lately, and `step`: the mutation step in force, which the
+  next run takes up.
+- `members`: the archive, best `score` first. It is no generation: a member
+  stays for as long as its score keeps it among the 32, so members of every age
+  stand side by side.
+  - `score` is the mean of the rounds the member has played and `rounds` how
+    many: 1 or 2 is a guess, dozens a measure.
+  - `born` is the population's round the member entered at.
+  - `genes` are the weights: each hidden unit's input weights and bias, then
+    each output's direct weights, hidden weights and bias.
+- `fielded`: the member a run that is not learning plays, -1 while none has
+  eight rounds.
+
+What is not kept: the candidate in play, the engine's queue and its random
+stream, so a run resumes the archive and not the exact search.
+
+What learning adds in `cave`, where a core plays five of the hand-written
+weights' rounds a second: over 400 rounds of four seeds no run learned on, those
+weights score 1,674, and what each of six runs fields after 4,000 rounds, a
+quarter of an hour, scores
 
 ```
 seed        1      2      3      4      5      6
-score    1233   1307    433    966   1359    719
-ticks    1014   1076    386    823   1110    617
+score    1850   1777   1762   1692   1652   1773
 ```
 
-The archive's own score for a member runs to twice that, a lucky round in it,
-and a run at speed 1 plays some 300 weak rounds an hour, so a watched run shows
-the early climb and a headless one flat out fills the file.
+The weights written by hand are most of what the bot knows, and a run adds to
+them slowly: a watched run at speed 1 plays some fifty rounds an hour, so it
+shows the play and a headless one flat out fills the file.
 
 ## Recording and replaying
 

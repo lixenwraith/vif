@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
@@ -207,16 +207,24 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err := learner.Close(); err != nil {
 		t.Fatal(err)
 	}
-	kept, err := persistence.NewManager(paths.PopulationDir(), nil).Load("cave.cave")
+	doc, err := os.ReadFile(filepath.Join(paths.PopulationDir(), "cave.cave.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	outcomes := 0
-	for _, c := range kept.Candidates {
-		outcomes += c.Count
+	var kept struct {
+		Layout  string
+		Rounds  int
+		Members []struct{ Rounds int }
 	}
-	if outcomes != rounds || kept.Tag == "" {
-		t.Fatalf("%d outcomes kept under tag %q, want the %d rounds played out", outcomes, kept.Tag, rounds)
+	if err := json.Unmarshal(doc, &kept); err != nil {
+		t.Fatal(err)
+	}
+	outcomes := 0
+	for _, m := range kept.Members {
+		outcomes += m.Rounds
+	}
+	if outcomes != rounds || kept.Rounds != rounds || kept.Layout == "" {
+		t.Fatalf("%d outcomes kept of %d rounds under layout %q, want the %d rounds played out", outcomes, kept.Rounds, kept.Layout, rounds)
 	}
 }
 

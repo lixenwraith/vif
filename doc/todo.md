@@ -256,79 +256,94 @@ Taken as defaults where the item said decide, each to confirm or change:
   species' kill its hit points, in every scenario, which moved armada's fitness
   (`default`, seed 3, 60 s: 55 to 44). A round scores its ticks and what it
   earned, defeats aside.
-- The store is the library's JSON, `bot/<graph>.<scenario>.json`, and the step
-  starts over each run, since the file holds none.
+- The store is a document of the bot package's own, JSON as the places file is,
+  `bot/<graph>.<scenario>.json`, which carries the step from run to run.
 - The switch is `[bot] learn`.
 
-What was measured, at 120x40 headless and flat out, where a core plays fifty
-weak rounds a second. A round's score, the mean of 800 over seeds 1 to 8:
+What was measured, at 120x40 headless and flat out. A tick costs 127 µs with no
+bot and 137 to 147 with the network steering, 138 when every goal it names is
+rock, so a core plays 7,000 to 8,000 ticks a second whatever the policy. A
+round's score, the mean of 800 over seeds 1 to 8:
 
 ```
-no input                    165
-default                     160
-flee threats within 20      245
-written by hand             230
+no input                                  165
+default                                   160
+flee threats within 20                    245
+written by hand, offsets alone            230
+written by hand, with nearness, shipped  1644
 ```
 
-And what a learner fields after 12,000 rounds from the weights written by hand,
-read over 400 rounds of four seeds it never played, a learning seed a column:
+What a learner fields, read over 400 rounds of four seeds it never played, a
+learning seed a column. From the offsets-alone weights, after 12,000 rounds:
 
 ```
-                                           seed 1  seed 2  seed 3
-a tenth of the weights stepped                304     628     254
-  hidden units' inputs drawn at random        385     665     303
-  every second round a repeat                 512    1007     505
-  the mean of three rounds an evaluation      352     648     478
-three in a hundred stepped, as shipped       1233    1307     433
-  the same, seeds 4 to 6                      966    1359     719
+a tenth of the weights stepped             304    628    254
+three in a hundred, as shipped            1233   1307    433    966   1359    719
 ```
 
-- Three seeds a row, and the shipped setting's six span 433 to 1,359: only the
-  share of weights stepped stands clear of that. The first row's first child was
-  drawn at a tenth too; drawn as shipped, its seed 1 reads 397.
-- The archive's own score runs to twice what its member holds on rounds it never
-  played: seed 2's fielded member read 2,314 over two rounds and 1,307 held out.
-- A ship lives by leaving a raider's cells at once: a hit pays energy, but a
-  touch takes 600 to 1,500 again every tick or two it lasts.
+From the shipped weights, which score 1,674 on those seeds, after 4,000 rounds,
+with what its candidates averaged over their last 500 rounds:
+
+```
+                                      seed 1     2     3     4     5     6
+enters on its first round, candidates    996  1156   918  1113  1178  1008
+enters on a second round, candidates    1203  1283  1258  1257  1160  1262
+  fielded by two rounds                 1540  1334  1594  1477  1799  1628
+  fielded by eight, as shipped          1850  1777  1762  1692  1652  1773
+```
+
+- A round is mostly luck: the shipped weights' rounds have a median of 2,018 and
+  a mean of 1,644. An archive's own score for a member runs 300 to 700 over what
+  it holds on rounds it never played, even over a dozen rounds, as only members
+  whose luck held are still there: 2,309 over twelve was 1,625.
+- A population that 9,000 rounds had left at the offsets-alone weights' level,
+  its 32 members one family, stayed there through 12,000 more on three seeds.
+  From weights that already back off a near raider the search has not stalled,
+  and from the same archives two rounds fielded worse than the weights it began
+  with.
 
 What remains:
 
-- **The dodge.** The direct term cannot both hold a raider's row, where the gun
-  pays, and leave a raider that landed beside the ship, which takes a hidden
-  unit switching on nearness; so the weights written by hand score under
-  `flee within 20`, and a run takes thousands of rounds to pass it. Decide what
-  starts it sooner: hidden units written by hand
-  (a `[network]` key for a unit's weights), a sensor that already reads nearness,
-  or neither and the offline trainer fills the file.
-- **The search.** Its settings want twelve seeds a row, as the library read its
-  own: a lower share of weights stepped still (0.01), that share with a repeat
-  every second round, and with the hidden units' inputs drawn at random, which
-  leaves the hand-written genome's outputs as they are. The archive churns: a
-  member enters on one round and the fielded one has seldom more than six
-  behind it, so measure too a floor on a member's outcomes before it is fielded
-  or bred from.
-- **A page's store.** A browser keeps no population: one kept in the page's
-  storage as its settings are (`browser.KeepSettings`), a document for each graph
-  and scenario, which the page hands over at start.
+- **Rounds an hour.** One game plays on one core, and the shipped weights'
+  rounds last 1,350 ticks: five rounds a second flat out, eighteen thousand an
+  hour, and some fifty an hour watched at speed 1. What multiplies it is a game
+  on every core, each its own instance and all feeding one learner: the engine
+  takes many evaluations in flight and `Learner.turn` holds one. With
+  [Train bot graphs offline](#train-bot-graphs-offline).
+- **What ends its rounds.** The long ones, near tick 2,000, end at the Kraken:
+  the weights keep the standoff that suits a raider, which is inside its reach,
+  and no sensor tells the two apart but the rock being gone. The short ones end
+  between two raiders: the weights heed the nearest alone, so backing off one
+  lands the ship on the other, which backs it off again, a jump a tick each way.
+  Both are a learner's to find, in `species2_near_x` and a hidden unit; decide
+  whether a sensor for the nearest species' size starts it sooner.
+- **The search.** Parents are picked by score, which a member with one round
+  tops; picking by a score drawn toward the recent mean by how few its rounds
+  are read no better on four seeds (candidates 1,103 to 1,364 against 1,203 to
+  1,283, and no better fielded). Its settings want twelve seeds a row, as the
+  library read its own; the hidden units start with no weights in or out, and
+  drawing their inputs at random, which leaves the hand-written outputs as they
+  are, fielded 385, 665 and 303 on the first row's seeds above. Offline the same
+  games can score every candidate, which no live run can.
+- **A page's store.** A browser keeps no population: `bot.Store` is a document's
+  bytes, so one kept in the page's storage as its settings are
+  (`browser.KeepSettings`), for each graph and scenario, handed over at start.
 - **Sessions.** A run in a session fields and does not learn. The first widening
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `Driver.Learn`'s `alone` is the seam, and its store needs one writer.
-- **The operator's side.** Nothing shows a learner but a watched run's bar and
-  the log: the `:bot` list and the menu's Bots page name no population, and
-  nothing starts one over or holds learning off for a run but editing the graph
-  or removing the file. A watched run's menu still turns auto-fire or the pointer
-  off under the bot, which its rounds then score, and writes that back as the
-  player's own. Two runs learning one graph in one scenario each save over the
-  other's file.
+- **The operator's side.** A watched run's bar, a headless run's summary and the
+  log show a learner; the `:bot` list and the menu's Bots page name no
+  population, and nothing starts one over or holds learning off for a run but
+  removing the file or editing the graph: decide the commands. A watched run's
+  menu still turns auto-fire or the pointer off under the bot, which its rounds
+  then score, and writes that back as the player's own. Two runs learning one
+  graph in one scenario each save over the other's file.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). And fitness takes a defeat's 100
   twice in a game where a hit's energy lifts the defeat inside the 250 ms before
   the reset and it falls again: decide whether it counts one a game.
-- **The cost of a blocked goal.** `Steer` lands as `PointAt` does, a scan of the
-  view when the cell it names is rock: measure a tick in `cave` with the network
-  pointing into rock, and search the column first if it shows.
 - **After `cave`**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
@@ -366,7 +381,8 @@ separable CMA-ES on the mean of three          3290
 
 The genome is the live learner's network, and the result its population file,
 `bot/<graph>.<scenario>.json`. A solo `-headless -speed max` run already learns
-on one core, fifty `cave` rounds a second, each a new game of its seed.
+on one core, five of the shipped `cave` weights' rounds a second, each a new game
+of its seed; a game on every core feeding that learner comes first here.
 `lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
 scenarios and seeds, fixed for the run since the batch engine never scores an
 elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run

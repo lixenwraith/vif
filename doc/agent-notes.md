@@ -822,14 +822,23 @@ Libraries · Branches.
 - A network graph and its learner are compared in rounds ([Bots](bots.md#learning)):
   a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
   and `bot.NewLearner` on a `NewHeadless` `cave` and steps until `Stats().Rounds`
-  reaches its count, some fifty weak rounds a second a core, so 12,000 take six
-  minutes of a learner that stays weak and fifteen of one that does not.
-  Read the fielded member's mean over held-out rounds on other seeds, never the
-  archive's own score, which a lucky round sets: an archive's 853 was 628 held
-  out. Settings are compared on a `tar` copy of the tree whose constants read the
-  environment, three seeds each at once; one setting's seeds span 433 to 1,359.
-  Send a run's lines to its file line-buffered (`grep --line-buffered`): a
-  container restart ends the runs and loses what a pipe still held.
+  reaches its count. A core plays 7,000 to 8,000 ticks a second whatever steers,
+  so fifty rounds of weights that fall at the first charge and five of the
+  shipped ones: 4,000 rounds of those are four million ticks, nine minutes.
+  The binary learns as the harness does, a seed's rounds the same in both.
+- A learner is read three ways and only two hold. Its candidates' mean over the
+  last 500 rounds is picked by no luck and tells two settings apart on six
+  seeds (1,160 to 1,283 against 918 to 1,178). The fielded member's mean over
+  held-out rounds on other seeds is what a run plays, and spans 1,652 to 1,850
+  across six seeds of one setting. The archive's own score is neither: only
+  members whose luck held are still in it, so 2,309 over twelve rounds was 1,625
+  held out, and a member fielded on two rounds scored under the weights the
+  search began from.
+- Settings are compared on a `tar` copy of the tree whose constants read the
+  environment, four runs at once. Send a run's lines to its file line-buffered
+  (`grep --line-buffered`): a container restart ends the runs and loses what a
+  pipe still held. `genetic`'s `Inject` keeps the gene slices it is handed, so a
+  test builds each learner its own population.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick
   144, and one that only fires at about 158. A hit pays energy and a raider's
   touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
