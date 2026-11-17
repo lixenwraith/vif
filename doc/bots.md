@@ -15,6 +15,8 @@ vif -join 127.0.0.1:7777              #   joining it from another terminal
 vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
 vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
+vif -s cave -bot cave -watch          # watch a network bot learn the cave
+vif -s cave -bot cave -headless -speed max   # the same flat out, kept at each Ctrl-C
 vif -replay <journal>                 # replay what it recorded
 vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room for people
 vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, in no seat
@@ -26,7 +28,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 |---|---|
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
-| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
+| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, and for a graph that learned `Bot learned: rounds R, fielding S over C`, its best member's score and the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
@@ -142,7 +144,8 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `learn = true`: a solo run evolves the `[network]`'s weights ([Networks and learning](#networks-and-learning)). |
+| `[network]` | The policy `Steer` runs: `inputs`, `hidden` and the weights written by hand. |
 | `[regions.<name>]` | `initial` only. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -162,6 +165,7 @@ Allowance left idle builds up to one second's worth.
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
+| `Steer` | none | a pointer move to the cell the graph's `[network]` names |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`) or that opens the command line
@@ -245,8 +249,8 @@ lists the bot's vocabulary, these left out, beside the scenario's.
 ### Timing and randomness
 
 - A graph updates once a tick, every 50 ms of game time.
-- `PointAt` and `TypeGlyph` read the world, so each acts only when all it queues
-  is sent before the next tick. `Intent` and `Text` queue regardless; wait for
+- `PointAt`, `Steer` and `TypeGlyph` read the world, so each acts only when all it
+  queues is sent before the next tick. `Intent` and `Text` queue regardless; wait for
   them with `Idle`.
 - Draws come from the bot's own stream, seeded from the session seed and its
   participant. A payload with no choice draws nothing, so a fixed sequence leaves
@@ -300,18 +304,94 @@ players have no score.
 |---|---|
 | a correctly typed character (`EventBoostReward`) | +1 |
 | a typing error (`EventBoostDeactivate`) | -1 |
-| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5 |
+| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5, or a data species' hit points, what it took to shoot down |
 | a gold sequence it completed (`EventGoldCompleted`) | +25 |
-| its cursor defeated (`EventCursorDefeatState`) | -100 |
+| its cursor defeated (`EventCursorDefeatState`) or crushed (`EventCursorCrushed`) | -100 |
 
-Fitness is in the `-headless` summary, the `bot stopped` log record and a seat's
-`bot left` record. From a checkout with `bin/vif` built,
+A round is one game, from its start to the new game its own play brought on, and
+scores its ticks plus what the rows above earned in it, the last aside: a defeat
+ends every round, so it tells none from another. `cave`'s rounds at 120x40, the
+mean of 800 over seeds 1 to 8:
+
+```
+graph                      score   ticks
+no input                     165     159
+default                      160     155
+flee threats within 20       245     240
+cave, as written by hand     230     217
+```
+
+Fitness is in the `-headless` summary, the `bot stopped` log record, which also
+holds the rounds and their summed score, and a seat's `bot left` record. From a
+checkout with `bin/vif` built,
 `./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` headless
 and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
 scenario and `td`, and prints each scenario's sum. Given a graph file, it
 fails unless that graph beats `default` on every scenario; with none, the sums
 are the baseline to beat. It appends a `stop` region (states `StopWait` and
 `StopQuit`), so a graph cannot use those names.
+
+## Networks and learning
+
+A graph may declare a network: a policy whose weights are numbers a search can
+tune, where a graph's states are not. `Steer` reads the `[network]`'s sensors,
+runs them through it and points the cursor at the cell its two outputs name. The
+shipped [`cave`](../internal/asset/bot/cave.toml) flies the `cave` scenario by
+one. It needs the pointer free and auto-fire on, and a bot's run starts with
+both, as the embedded `[play]` has them, whatever the player's own says.
+
+```toml
+[network]
+hidden = 6
+inputs = ["ceiling", "floor", "species_x", "species_y", "column"]
+x = { column = -0.4, bias = -0.2 }
+y = { species_y = 0.9, ceiling = 0.05, floor = 0.05 }
+```
+
+- `inputs`: the sensors read, in the order the weights take them. Each reads the
+  cells the view shows: an offset is from the cursor's cell, in view widths
+  across and view heights down, and what is not sighted reads 0.
+  - `ceiling`, `floor`: the rock's edges above and below the cursor's column,
+    the view's own rows where no rock stands; `ceiling_near` and `floor_near` an
+    eighth of the view ahead, `ceiling_far` and `floor_far` a quarter.
+  - `species_x`, `species_y`, `species_enraged`: the nearest species, as the
+    `species` target counts them, and 1 while it is enraged; `species2_x`,
+    `species2_y` and `species2_enraged` the second nearest.
+  - `landing_x`, `landing_y`: the nearest landing marker, where a raider's charge
+    or teleport ends.
+  - `loot_x`, `loot_y`: the nearest drop that is the bot's own.
+  - `column`: the cursor's place across the view, -1 at its left edge, 1 at its
+    right.
+  - `energy`: 0 with none, a half at 1,000, toward 1.
+- `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
+- `x`, `y`: the weights written by hand, each output's from the inputs it names
+  and its `bias`. Every other weight is 0, the hidden units' among them. An
+  output is that direct sum plus the hidden units', an offset in view widths or
+  heights, kept to the view; a weight lies within 4 either side of zero.
+
+### Learning
+
+With `[bot] learn = true` a solo watched or headless run learns the weights as it
+plays: a genome plays a round, and the round's score
+([Fitness](#fitness-and-comparing-graphs)) is its outcome.
+
+- The search is the `StreamingEngine` of `lixenwraith/genetic`
+  ([AI §3](ai-physics-and-evolution.md#3-genetic-library)) with one evaluation in
+  flight: an archive of 32 scored genomes, the hand-written one first; children
+  mostly one parent's, mixed a hidden unit or an output at a time, a tenth of
+  their weights stepped; every third round an archive member plays again, and
+  its score is the mean of its rounds.
+- A step is a share of a weight's range: a run starts at 0.1 and settles at 0.03
+  as its best stops improving.
+- A run in a session does not learn, since any participant's defeat ends every
+  round there. Its bots, seats among them, field the best member a second round
+  confirmed, or with none the hand-written weights. A round an operator ends
+  (`:n`) scores nothing.
+- The population is kept in the user root as `bot/<graph>.<scenario>.json`,
+  written each half minute of play and as the run stops, under a digest of the
+  layout (`inputs` and `hidden`): a file of another layout is started over. A
+  browser keeps none.
+- A watched run's bar shows the round and the fielded member's score.
 
 ## Recording and replaying
 
@@ -334,8 +414,9 @@ unattended.
 - It reaches only what its view shows. A seat's view is its holder's screen, so a
   person's bots see what that person sees and play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
-- A solo bot run is reproducible from its seed. In a session only a journal
-  reproduces a run: the front instance's, or a seat's this process journals.
+- A solo bot run is reproducible from its seed, and a learning one from its seed
+  and the population it started with. In a session only a journal reproduces a
+  run: the front instance's, or a seat's this process journals.
 - Graph state is in no capture: a correction or a reset reaches a graph only
   through the world it reads next.
 - A guest's bot has no link of its own, so it shows no throughput and is not
@@ -361,6 +442,7 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 ## Not built yet
 
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave)
+- [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave):
+  what the learner still lacks
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
 - [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)

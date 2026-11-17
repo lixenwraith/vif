@@ -112,6 +112,9 @@ func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membersh
 	cfg := runConfig{Config: p.Config, wiring: wiring{log: p.Log, membership: p.Wiring}}
 	finished, err = drive(cfg, "bot", p.Graph.Name, p.Stop, p.Hold, func(b *App) (pacedSource, error) {
 		d, err := bot.NewDriver(b, b.ctx, p.Graph, b.Seed(), b.membership.LocalParticipant())
+		if err == nil {
+			_, err = b.learn(d, p.Graph)
+		}
 		if err != nil {
 			return nil, err
 		}

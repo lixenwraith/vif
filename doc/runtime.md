@@ -672,8 +672,12 @@ flowchart LR
   advances auto-fire and held buttons, and the instance ticks. Its dispatch tap,
   live only while the driver plays, copies each event a trigger names and checks
   every one against the score table. `Step` returns false once an intent quits.
+- A new game's request closes the round, whichever goroutine dispatched it, and
+  the driver scores it as `Step` returns, off the world lock; a learning graph's
+  learner hands the next round its weights there ([Bots](bots.md#learning)).
 - Draws come from `vmath.NewSeededRand(seed, "bot.<participant>")`. Graph state is
-  in no capture, journal or fingerprint.
+  in no capture, journal or fingerprint. `app.RunBot` starts its run on the
+  embedded `[play]`'s auto-fire and pointer, as a seat's run starts.
 
 A seat (`internal/app/internal/membership/seat.go`) is that driver on another
 headless instance in the holder's process, on its own goroutine and paced against

@@ -347,8 +347,9 @@ saying fill = false at its top gains none of the built-in bindings when a run
 brings it up to date.
 .TP
 .I bot/<name>.toml
-Bot graphs that \-bot and :bot add name; a path also works. The default
-graph is compiled in and resolves last.
+Bot graphs that \-bot and :bot add name; a path also works. The default and
+cave graphs are compiled in and resolve last. A graph that learns keeps its
+population beside them in the user root, as <graph>.<scenario>.json.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif
 System configuration roots, in that order;

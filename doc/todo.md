@@ -234,89 +234,84 @@ graph to. The fleet request carries it once the site exposes one.
 ### Train a network bot live in `cave`
 
 - Priority: P2
-- Affected files: `internal/bot`, `cmd/vif`, `internal/paths`
-- Guide: [Bots](bots.md#fitness-and-comparing-graphs),
+- Affected files: `internal/bot`, `internal/app/script.go`, `internal/paths`,
+  `lixenwraith/genetic`
+- Guide: [Bots](bots.md#networks-and-learning),
   [AI §3](ai-physics-and-evolution.md#3-genetic-library)
 
-A solo watched or headless bot whose policy is a small network and whose genes are
-its weights. One candidate plays a round, a game from its start to its defeat, and
-the population learns as rounds end. Decided:
+A solo watched or headless bot playing the shipped `cave` graph learns its
+network's weights a round at a time and keeps its population in the user root
+([Bots](bots.md#networks-and-learning)). Decided, and built so:
 
 - **The game is `cave` as shipped, raiders on.** Its ramp, boss and faster caves
-  are the curriculum, a ship that kills nothing starves at tick 2002, so hiding
-  cannot win, and a defeat already resets the game, which ends the round.
-- **The genome is a network's weights**, not a graph's constants: a graph asks only
-  for the nearest target within a distance, so a constant's fitness is a staircase.
-- **The learner lives with the driver**, outside the world and its captures, and
-  saves its population in the user root, which the offline trainer also writes.
+  are the curriculum, and a defeat resets the game, which ends the round.
+- **The genome is a network's weights**, not a graph's constants.
+- **The learner lives with the driver**, outside the world and its captures.
 
-What was measured, at 120x40 headless and flat out, where a 60 s round takes 0.1 to
-0.2 s. Fitness is the mean of sixteen seeds of 60 s; defeats and the median round
-are over eight:
+Taken as defaults where the item said decide, each to confirm or change:
+
+- The network is the graph's `[network]` table, and the layout's digest covers
+  its `inputs`, its `hidden` count and a version a sensor's change bumps.
+- The fitness table gained the rows: a crush weighs as a defeat and a data
+  species' kill its hit points, in every scenario, which moved armada's fitness
+  (`default`, seed 3, 60 s: 55 to 44). A round scores its ticks and what it
+  earned, defeats aside.
+- The store is the library's JSON, `bot/<graph>.<scenario>.json`, and the step
+  starts over each run, since the file holds none.
+- The switch is `[bot] learn`.
+
+What was measured, at 120x40 headless and flat out, where a core plays fifty
+rounds a second: a round's score, the mean of 800 over seeds 1 to 8, and what a
+learner fields after 12,000 rounds from the weights written by hand, read over
+400 rounds of four seeds it never played:
 
 ```
-cave              fitness  defeats  round, ticks
-still               -1052       64           137
-flee within 6        -958
-flee within 12       -620
-flee within 20       -232       41           224   20 of the 41 are crushes
-flee within 30       -233
-default              -765       64           135
-
-armada            still -1656   flee 6 -150   flee 12 +2   flee 30 0   default -114
-
-cave, no raiders, columns a second     20      60     120     200
-still, median ticks to a crush      never    1064     489     288
-random mover                          715     424     293     202
+no input                    165
+default                     160
+flee threats within 20      245
+written by hand             230
+learned, three seeds        254  304  628
 ```
 
-- One number already separates graphs in `cave` against a seed spread of 150 to
-  200, but the table flatters it: a crush crosses `EventCursorCrushed`, which no
-  row weighs, so rounds lengthen 1.6 times where fitness improves 4.5 times.
-- The cave alone teaches nothing: the rock's push steers a still cursor into the
-  gap, and with no gravity a reacting one needs no lookahead.
-- Armada flattens at 0, a ship never hit that never shoots, until fitness pays for
-  damage dealt and a graph can stand under a ship.
+- A ship lives by leaving a raider's cells at once: a hit pays energy, but a
+  touch takes 600 to 1,500 again every tick or two it lasts.
+- The learner's settings are untuned: the three seeds above ran before its first
+  child was drawn a settled step off the hand-written genome, and a table of
+  the settings shipped, six seeds a row, is owed.
 
 What remains:
 
-- **Sensors**, read from what the view shows: the ceiling and floor rows at the
-  cursor's column and two ahead (`Positions.Rock()`), the nearest two raiders'
-  offsets and whether each is enraged, the landing marker's offset, the cursor's
-  column, energy, the nearest `U`. About sixteen inputs, each scaled to the view.
-- **The action**: one a state runs in `on_update`, which feeds the sensors through
-  the network and points at the cell its two outputs name, an offset in view
-  cells. Free mouse puts the cursor on any shown cell, and auto-fire shoots.
-- **The network**: six `tanh` units and a direct term from the inputs to the
-  outputs, about 150 weights, so a hand-written dodge is an exact genome with the
-  hidden outputs at zero, and enters first through `BeginEvaluation`. Decide the
-  table that declares it; its digest names the layout.
-- **Fitness**: a round scores its ticks plus its kills weighted by rank hit points
-  (8, 16, 28, 44), and a crush is a defeat. Decide whether a graph declares its
-  rows or the table gains them.
-- **The learner**: a `StreamingEngine` with one evaluation in flight, a candidate's
-  score one round or the mean of three, every third evaluation a `Reevaluate` and
-  repeats merged (`SetMerge`, `MeanScore`); children mostly one parent's by
-  `BlockCombiner`, a block a hidden unit or an output; the step under
-  `SetSchedule`, its floor the step to settle at. It fields the best member a
-  second outcome has confirmed (`Candidate.Count`), not `Best`.
-- **The store**: one file for each graph and scenario, saved by the rule a setting
-  is, so a browser keeps it. Its `Tag` (`persistence.PopulationDTO`) is the layout
-  digest, and a population of another starts over. The file holds each member's
-  count and not the schedule's step: decide whether the step starts over each run.
-- **The switch**: a `[bot]` key, so `-bot`, `:bot add` and the menu share it.
-- **The pace**: weak bots' rounds last 7 to 11 s, so a run at speed 1 scores 300 to
-  500 an hour and `-speed 8` eight times that, a solo bot's alone. Networks this
-  size are expected to want thousands, an estimate: live play shows the early
-  climb and the offline trainer fills the file.
-- **Sessions** wait: any participant's defeat resets every round, and a session
-  runs at its host's rate, a dedicated host's at 1x. The first is a session of one
-  bot on the fleet
-  ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)).
+- **The dodge.** The direct term cannot both hold a raider's row, where the gun
+  pays, and leave a raider that landed beside the ship, which takes a hidden
+  unit switching on nearness; so the weights written by hand score under
+  `flee within 20`, and a run finds the switch in its first 12,000 rounds on
+  one seed in three. Decide what starts it sooner: hidden units written by hand
+  (a `[network]` key for a unit's weights), a sensor that already reads nearness,
+  or neither and the offline trainer fills the file.
+- **The search.** The archive churns: a member enters on one round, and the
+  fielded one has seldom more than six behind it, so the archive's score runs
+  half again over what the member holds on other rounds. Measure a floor on a
+  member's outcomes before it may be fielded or bred from, and the engine of the
+  last point below, on the settings above.
+- **A page's store.** A browser keeps no population: one kept in the page's
+  storage as its settings are (`browser.KeepSettings`), a document for each graph
+  and scenario, which the page hands over at start.
+- **Sessions.** A run in a session fields and does not learn. The first widening
+  is a session whose only participant is the bot, the fleet's standing one
+  ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
+  `Driver.Learn`'s `alone` is the seam, and its store needs one writer.
+- **The operator's side.** Nothing shows a learner but a watched run's bar and
+  the log: the `:bot` list and the menu's Bots page name no population, and
+  nothing starts one over or holds learning off for a run but editing the graph
+  or removing the file.
+- **The cost of a blocked goal.** `Steer` lands as `PointAt` does, a scan of the
+  view when the cell it names is rock: measure a tick in `cave` with the network
+  pointing into rock, and search the column first if it shows.
 - **After `cave`**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
-  against an eye population that is itself evolving.
+  against an eye population that is itself evolving. A code species' kill still
+  weighs 5: its hit points want a table.
 - **If the archive stalls** in `cave` at this size: an evolution strategy with a
   step per gene, an engine of its own in `lixenwraith/genetic`. Measure first.
 
@@ -333,8 +328,6 @@ the same on the mean of three                  3570
 separable CMA-ES on the mean of three          3290
 ```
 
-- One round an evaluation, merged, ends level with the mean of three and sees
-  three times the candidates in an hour.
 - A step of 0.1 of a weight's range left one seed in twelve at the hand-written
   genome for 4,000 evaluations; 0.02 to 0.05 left none.
 - `AdaptiveStrength` falls to its `lo` within a few hundred noisy evaluations, so
@@ -349,7 +342,9 @@ separable CMA-ES on the mean of three          3290
 - Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
-The genome is the live learner's network, and the result its population file.
+The genome is the live learner's network, and the result its population file,
+`bot/<graph>.<scenario>.json`. A solo `-headless -speed max` run already learns
+on one core, fifty `cave` rounds a second, each a new game of its seed.
 `lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
 scenarios and seeds, fixed for the run since the batch engine never scores an
 elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run
@@ -1049,9 +1044,10 @@ plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
 ./deploy/k3s/session.sh create <id>` makes that pod beside the router, whatever
 `bots_max` offers a visitor. What it needs:
 
-- **The learner on a seat.** It is planned for a solo run's driver; here the bot
-  is the seat of a host nobody plays, in a session of one, at a dedicated host's
-  one rate, 1x: 300 to 500 rounds an hour by that item's reading.
+- **The learner on a seat.** It learns on a solo run's driver, and a seat fields
+  what that kept; here the bot is the seat of a host nobody plays, in a session
+  of one, at a dedicated host's one rate, 1x: 300 to 500 rounds an hour by that
+  item's reading.
 - **Its graph in the pod.** The pod's `-bot` names a count, which plays `default`:
   the learner's is named there (`N:graph`), embedded or served from the node's
   volume, which carries `scenario` and `image` alone (`wadCategories`).

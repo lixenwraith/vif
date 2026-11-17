@@ -819,6 +819,21 @@ Libraries · Branches.
   carries a tick that restarts with the game, so `cave`'s `"to":"PlayerCrushed"`
   and `"to":"PlayerDied"` lines are round lengths. A scenario copied to
   `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
+- A network graph and its learner are compared in rounds ([Bots](bots.md#learning)):
+  a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
+  and `bot.NewLearner` on a `NewHeadless` `cave` and steps until `Stats().Rounds`
+  reaches its count, some fifty rounds a second a core, 12,000 in six minutes.
+  Read the fielded member's mean over held-out rounds on other seeds, never the
+  archive's own score, which a lucky round sets: an archive's 853 was 628 held
+  out. Settings are compared on a `tar` copy of the tree whose constants read the
+  environment, three seeds each at once; one setting's seeds span 250 to 630.
+- In `cave` an unsteered ship falls to the first raider's first charge at tick
+  144, and one that only fires at about 158. A hit pays energy and a raider's
+  touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
+  five), so energy buys no time in a raider's cells: a policy lives by leaving
+  them. `EventCursorDefeatState` can cross `defeated` twice in one game, a hit's
+  energy lifting it inside the 250 ms before the reset, and fitness weighs each:
+  read a round by `Stats.Score`.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's
