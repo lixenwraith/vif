@@ -305,21 +305,24 @@ players have no score.
 |---|---|
 | a correctly typed character (`EventBoostReward`) | +1 |
 | a typing error (`EventBoostDeactivate`) | -1 |
-| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5, or a data species' hit points, what it took to shoot down |
+| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5; a data species' hit points, what it took to shoot down; a Kraken's the ticks its hit points take at four a second, for one shot down that fast or faster, and for a slower one the share that pace is of its own, a quarter at least |
 | a gold sequence it completed (`EventGoldCompleted`) | +25 |
 | its cursor defeated (`EventCursorDefeatState`) or crushed (`EventCursorCrushed`) | -100 |
 
 A round is one game, from its start to the new game its own play brought on, and
 scores its ticks plus what the rows above earned in it, the last aside: a defeat
-ends every round, so it tells none from another. `cave`'s rounds at 120x40, the
-mean of 800 over seeds 1 to 8:
+ends every round, so it tells none from another. The ticks a network steers
+whose table says `ticks = false` count nothing, as `cave`'s `kraken` does: a
+fight pays by the Kraken shot down, at four hit points a second its own time
+and less the longer it took, so camping out of its reach earns nothing.
+`cave`'s rounds at 120x40, the mean of 800 over seeds 1 to 8:
 
 ```
 graph                      score   ticks
 no input                     165     159
 default                      160     155
 flee threats within 20       245     240
-cave, as written by hand    8737    7294
+cave, as written by hand   10600    7294
 ```
 
 Fitness is in the `-headless` summary, the `bot stopped` log record, which also
@@ -392,6 +395,8 @@ on_update = [
   - `energy`: 0 with none, a half at 1,000, toward 1; `heat`: a half at 10.
   - Loot has no sensor: a drop homes on its owner, so its place steers nothing.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
+- `ticks = false`: the ticks the network steers add nothing to a round's score
+  ([Fitness](#fitness-and-comparing-graphs)); they count unless it says so.
 - `x`, `y`, `special`: the weights written by hand, each output's from the
   inputs it names and its `bias`. Every other weight is 0, the hidden units'
   among them, and a weight lies within 4 either side of zero. An output is that
@@ -470,21 +475,22 @@ What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
 
 The weights written by hand are most of what the bot knows at first. In `cave`,
-where a core plays one of their rounds a second, they score 8,737 a round: three
-rounds in four meet the first Kraken, and most of those shoot down three or
-four. What a run adds, by what each of four fields after nine million ticks of
-learning, twenty minutes of a core, over 60 rounds of four seeds no run learned
-on, where the hand-written weights score 8,920; taken while `raid` read the two
-nearest raiders and one landing, and not yet again with all three of each:
+where a core plays one of their rounds a second, they score 10,600 a round:
+three rounds in four meet the first Kraken, and most of those shoot down three
+or four. A learner adds to that within minutes. Before a Kraken's kill paid by
+its pace, while a round scored its ticks alone and `raid` read the two nearest
+raiders, those weights scored 8,920 over 60 rounds of four seeds no run learned
+on, and what each of four runs fielded after nine million ticks of learning,
+twenty minutes of a core, scored
 
 ```
 seed         1       2       3       4
 score    20662   10181   23770   11638
 ```
 
-The two that doubled it found how to outlast the Kraken, hopping from the edge
-its charge heads for to the far one, and play most of their rounds to the half
-hour's limit; before that limit, what the first fielded scored 69,485. A watched
+The two that doubled it had found how to outlast the Kraken, hopping from the
+edge its charge heads for to the far one and hitting it now and then, which is
+what the Kraken's pay now discourages; it is not measured again yet. A watched
 run at speed 1 plays some ten of the hand-written weights' rounds an hour, so it
 shows the play and a headless one flat out fills the files.
 

@@ -252,6 +252,12 @@ root ([Bots](bots.md#networks-and-learning)). Decided, and built so:
   population of its own, scored from where it first steered in the round.
 - **The special attack is the bot's to ask for**: the graph's run starts on
   auto-fire `main`, and a network's `special` output asks.
+- **A Kraken is to be shot down fast.** Its fight's ticks earn nothing and its
+  kill pays the ticks its hit points take at four a second, less for a slower
+  kill, a quarter at least, as later Krakens take long whatever is flown.
+- **`cave` starts with 10 heat**, which a person's first seconds use too.
+- **Watching changes nothing**: a watched run plays its terminal's size, as any
+  watched bot does.
 
 Taken as defaults where the item said decide, each to confirm or change:
 
@@ -282,6 +288,7 @@ one network, offsets alone                      230
   with nearness                                1644
   and auto-fire on main                        2406
 with a network for the Kraken, as shipped      8737
+  and the Kraken's kill paid by its pace      10600
 ```
 
 The Kraken network's weights, by the fights won of those met and the round's
@@ -316,8 +323,9 @@ leave its nearest cell and its charge's end      42 of 301   2646
 What a run fields after nine million ticks of learning, twenty minutes of a
 core, over 60 rounds of four seeds it never played, each closed at the limit,
 where the weights written by hand score 8,920, lose 93 rounds of 400 in the
-first cave and shoot five Krakens down in 9. It was taken while `raid` read the
-two nearest raiders, one landing and its loot, 23 inputs, and `kraken` 16:
+first cave and shoot five Krakens down in 9. It was taken while a round scored
+its ticks alone and `raid` read the two nearest raiders, one landing and its
+loot, 23 inputs, and `kraken` 16:
 
 ```
 seed                                    1       2       3       4
@@ -351,13 +359,16 @@ What remains:
   one. `kraken`'s learner is scored only by rounds that reach it; a scenario
   that opens on the Kraken would score it every round. With
   [Train bot graphs offline](#train-bot-graphs-offline).
+- **Measure it again.** What a run fields was read before the Kraken's kill paid
+  by its pace and before `raid` read every raider and landing: the edge hop it
+  found then hit the Kraken now and then and took its time, which the pay now
+  discourages. Read it anew, and what the hop's fights now earn beside one that
+  keeps the gun on it.
 - **The score past the limit.** A round closed at its limit scores the limit's
   ticks and what it earned, so candidates that all reach it differ by their
-  kills alone, and the Kraken's weighs 5. Decide what a long round is worth: the
-  Kraken's kill its hit points, which its component holds, a limit that grows
-  as the fielded members reach it, or no ticks while a Kraken is up. And a
-  member's score is the mean of rounds that run from 400 to the limit: decide
-  whether it ranks by a mean one long round moves that far.
+  kills alone: decide whether the limit grows as the fielded members reach it.
+  And a member's score is the mean of rounds that run from 400 to the limit:
+  decide whether it ranks by a mean one long round moves that far.
 - **What ends its rounds.** Of the 800, a quarter end in the first cave, a
   tenth scoring under 430, at a raider's first charges, and six in ten once
   three or four Krakens are down: species damage doubles a cave, so the fourth
@@ -391,8 +402,17 @@ What remains:
   `Driver.Learn`'s `alone` is the seam, and its stores need one writer.
 - **The operator's side.** A watched run's bar, a headless run's summary and the
   log show the learners; the `:bot` list and the menu's Bots page name no
-  population, and nothing starts one over or holds learning off for a run but
-  removing the file or editing the graph: decide the commands. A watched run's
+  population, and nothing starts one over but removing the file. To build, a
+  population named `<graph>.<scenario>.<network>`, a shorter name taking all
+  under it:
+  - `:bot clear cave.cave.kraken`, `cave.cave` or `cave` starts those
+    populations over, a learner of this run with them.
+  - `:bot export <name>` writes them as one TOML document, each with its graph,
+    scenario, network, layout, inputs and hidden count, and its members.
+  - `:bot import <file> [name]` patches the files with all the document holds
+    or the part named. A population is refused unless its layout is the
+    network's the graph has now; its scenario need not be one this player has,
+    so a bot trained elsewhere can be taken in. A watched run's
   menu still turns auto-fire or the pointer off under the bot, which its rounds
   then score, and writes that back as the player's own. Two runs learning one
   graph in one scenario each save over the other's files.

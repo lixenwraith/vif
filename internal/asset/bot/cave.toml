@@ -43,9 +43,11 @@ ceiling = 0.05
 floor = 0.05
 
 # kraken reads the map's edges, which ceiling and floor are once the rock is gone
-# and column across, the Kraken, and where its charge will end, a landing
+# and column across, the Kraken, and where its charge will end, a landing. Its
+# ticks earn nothing: a fight pays by the Kraken shot down, more the sooner
 [network.kraken]
 hidden = 6
+ticks = false
 inputs = [
     "ceiling", "floor", "column", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
     "landing_x", "landing_y", "landing_near_x", "landing_near_y", "energy", "heat",

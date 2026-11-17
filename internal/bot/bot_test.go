@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/vif/internal/asset"
@@ -1007,8 +1008,9 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 }
 
 // twoNetworks is a learning graph of two networks, fly steering while no Kraken is
-// up and kraken while one is, a driver on it and each network's learner
-func twoNetworks(t *testing.T) (*engine.World, *Driver, *recorder, []*Learner) {
+// up and kraken, whose table takes the keys given, while one is, a driver on it
+// and each network's learner
+func twoNetworks(t *testing.T, keys ...string) (*engine.World, *Driver, *recorder, []*Learner) {
 	t.Helper()
 	w, ctx := soloWorld(10, 2)
 	g, err := ParseGraph("net", []byte(`[bot]
@@ -1022,6 +1024,7 @@ x = { bias = 0.1 }
 [network.kraken]
 inputs = ["column"]
 x = { bias = -0.1 }
+`+strings.Join(keys, "\n")+`
 
 [regions.play]
 initial = "A"
@@ -1093,6 +1096,56 @@ func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
 	if st := kraken.Stats(); st.Scored != 1 || st.Recent != 3+5 || fly.Stats().Scored != 1 {
 		t.Fatalf("kraken scored %d rounds at %g and fly %d: want one of 8, the three ticks from the Kraken's rise and the kill after it, and fly's fielded member unscored",
 			st.Scored, st.Recent, fly.Stats().Scored)
+	}
+}
+
+// TestTheTicksANetworkSteersUnpaidAddNothingToARound: a network whose table says
+// ticks = false is paid by what it shoots down alone, in the round's score and in
+// its own learner's.
+func TestTheTicksANetworkSteersUnpaidAddNothingToARound(t *testing.T) {
+	w, d, rec, learners := twoNetworks(t, "ticks = false")
+	rec.rounds(t, d, 4) // fly's turn: the tick that starts the graph and four steered
+	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
+	rec.dispatch = []event.GameEvent{kill, {}}
+	for range 2 {
+		d.Step()
+	}
+	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
+	for range 3 {
+		d.Step()
+	}
+	if got := d.Stats().Score; got != 5+2+10 {
+		t.Fatalf("two rounds score %g, want 17: the first's five ticks, the second's two before the Kraken rose and its two kills of 5", got)
+	}
+	if got := learners[1].Stats().Recent; got != 5 {
+		t.Fatalf("kraken's candidate scored %g, want the kill after the Kraken rose alone", got)
+	}
+}
+
+// TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied: a Kraken shot down at
+// four hit points a second or faster earns the ticks that pace takes, a slower
+// kill the share its pace is of that, and never less than a quarter.
+func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	own := w.Resources.Player.Entity
+	// 120 hit points are thirty seconds at par
+	par := int64(30 * time.Second / w.TickInterval())
+	for _, lived := range []float64{20, 60, 600} {
+		kraken := place(w, core.DomainShared, 40, 10, func(e core.Entity) {
+			w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 120, Time: lived})
+		})
+		rec.dispatch = append(rec.dispatch, event.GameEvent{Type: event.EventSpeciesKilled,
+			Payload: &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesKraken, Entity: kraken}})
+	}
+	for range 3 {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, want := d.Stats().Fitness, par+par/2+par/4; got != want {
+		t.Fatalf("three Krakens shot down in 20, 60 and 600 seconds weigh %d, want %d: par's %d ticks, half and a quarter", got, want, par)
 	}
 }
 
