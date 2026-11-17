@@ -51,12 +51,14 @@ const (
 )
 
 // networkTable is one of a graph's [network.<name>] tables: the sensors the
-// network reads, in the order its weights take them, its hidden units, and the
-// weights written by hand, each output's from the inputs it names and its bias.
-// Every other weight is zero.
+// network reads, in the order its weights take them, its hidden units, whether
+// the ticks it steers count toward a round's score, as they do unless it says no,
+// and the weights written by hand, each output's from the inputs it names and its
+// bias. Every other weight is zero.
 type networkTable struct {
 	Inputs  []string           `toml:"inputs"`
 	Hidden  int                `toml:"hidden"`
+	Ticks   *bool              `toml:"ticks"`
 	X       map[string]float64 `toml:"x"`
 	Y       map[string]float64 `toml:"y"`
 	Special map[string]float64 `toml:"special"`
@@ -69,6 +71,7 @@ type network struct {
 	name   string
 	inputs []sensor
 	hidden int
+	unpaid bool // the ticks it steers add nothing to a round's score
 	genes  []float64
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
@@ -108,7 +111,7 @@ func parseNetwork(name string, raw any) (*network, error) {
 	if len(t.Inputs) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(t.Inputs), t.Hidden)
 	}
-	n := &network{name: name, hidden: t.Hidden}
+	n := &network{name: name, hidden: t.Hidden, unpaid: t.Ticks != nil && !*t.Ticks}
 	for _, name := range t.Inputs {
 		s := slices.IndexFunc(sensors[:], func(row sensorRow) bool { return row.name == name })
 		if s < 0 || slices.Contains(n.inputs, sensor(s)) {
@@ -383,12 +386,12 @@ var specialIntent, _ = input.IntentFor("fire_special", 1, "")
 // shows, as a mouse reaches no further, and landed as PointAt lands. Before that it
 // asks for the special attack where special says to, as often as auto-fire would.
 func (m *mind) steer(i int) {
+	m.steered[i], m.steering = true, i
 	from, cursor := m.ctx.World.LocalCursor()
 	minX, minY, maxX, maxY, ok := m.ctx.World.Resources.Config.VisibleMapRect()
 	if !cursor || !ok || m.room < 1 {
 		return
 	}
-	m.steered[i] = true
 	s := m.look(from, minX, minY, maxX, maxY)
 	out := m.nets[i].run(&s)
 	if out[outputSpecial] > specialOver && m.tick >= m.special {
