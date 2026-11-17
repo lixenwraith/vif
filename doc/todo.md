@@ -252,6 +252,10 @@ root ([Bots](bots.md#networks-and-learning)). Decided, and built so:
   population of its own, scored from where it first steered in the round.
 - **The special attack is the bot's to ask for**: the graph's run starts on
   auto-fire `main`, and a network's `special` output asks.
+- **A Kraken is to be shot down fast.** Its fight's ticks earn nothing and its
+  kill pays the ticks its hit points take at four a second, less for a slower
+  kill, a quarter at least, as later Krakens take long whatever is flown.
+- **`cave` starts with 10 heat**, which a person's first seconds use too.
 
 Taken as defaults where the item said decide, each to confirm or change:
 
@@ -282,6 +286,7 @@ one network, offsets alone                      230
   with nearness                                1644
   and auto-fire on main                        2406
 with a network for the Kraken, as shipped      8737
+  and the Kraken's kill paid by its pace      10600
 ```
 
 The Kraken network's weights, by the fights won of those met and the round's
@@ -316,8 +321,9 @@ leave its nearest cell and its charge's end      42 of 301   2646
 What a run fields after nine million ticks of learning, twenty minutes of a
 core, over 60 rounds of four seeds it never played, each closed at the limit,
 where the weights written by hand score 8,920, lose 93 rounds of 400 in the
-first cave and shoot five Krakens down in 9. It was taken while `raid` read the
-two nearest raiders, one landing and its loot, 23 inputs, and `kraken` 16:
+first cave and shoot five Krakens down in 9. It was taken while a round scored
+its ticks alone and `raid` read the two nearest raiders, one landing and its
+loot, 23 inputs, and `kraken` 16:
 
 ```
 seed                                    1       2       3       4
@@ -351,13 +357,16 @@ What remains:
   one. `kraken`'s learner is scored only by rounds that reach it; a scenario
   that opens on the Kraken would score it every round. With
   [Train bot graphs offline](#train-bot-graphs-offline).
+- **Measure it again.** What a run fields was read before the Kraken's kill paid
+  by its pace and before `raid` read every raider and landing: the edge hop it
+  found then hit the Kraken now and then and took its time, which the pay now
+  discourages. Read it anew, and what the hop's fights now earn beside one that
+  keeps the gun on it.
 - **The score past the limit.** A round closed at its limit scores the limit's
   ticks and what it earned, so candidates that all reach it differ by their
-  kills alone, and the Kraken's weighs 5. Decide what a long round is worth: the
-  Kraken's kill its hit points, which its component holds, a limit that grows
-  as the fielded members reach it, or no ticks while a Kraken is up. And a
-  member's score is the mean of rounds that run from 400 to the limit: decide
-  whether it ranks by a mean one long round moves that far.
+  kills alone: decide whether the limit grows as the fielded members reach it.
+  And a member's score is the mean of rounds that run from 400 to the limit:
+  decide whether it ranks by a mean one long round moves that far.
 - **What ends its rounds.** Of the 800, a quarter end in the first cave, a
   tenth scoring under 430, at a raider's first charges, and six in ten once
   three or four Krakens are down: species damage doubles a cave, so the fourth
@@ -389,13 +398,15 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `Driver.Learn`'s `alone` is the seam, and its stores need one writer.
-- **The operator's side.** A watched run's bar, a headless run's summary and the
-  log show the learners; the `:bot` list and the menu's Bots page name no
-  population, and nothing starts one over or holds learning off for a run but
-  removing the file or editing the graph: decide the commands. A watched run's
-  menu still turns auto-fire or the pointer off under the bot, which its rounds
-  then score, and writes that back as the player's own. Two runs learning one
-  graph in one scenario each save over the other's files.
+- **The watched map** and **the operator's side**, its `:bot clear`, `export`
+  and `import`, are items of their own:
+  [Size a bot's own run alike, watched or not](#size-a-bots-own-run-alike-watched-or-not)
+  and
+  [Clear, export and import a bot's populations](#clear-export-and-import-a-bots-populations).
+  Beside them, the `:bot` list and the menu's Bots page name no population; a
+  watched run's menu still turns auto-fire or the pointer off under the bot,
+  which its rounds then score, and writes that back as the player's own; and
+  two runs learning one graph in one scenario each save over the other's files.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). And fitness takes a defeat's 100
@@ -427,6 +438,65 @@ separable CMA-ES on the mean of three          3290
 - `AdaptiveStrength` falls to its `lo` within a few hundred noisy evaluations, so
   `lo` is the step it runs at: 0.02 ended level with the best fixed step and 0.005
   stalled.
+
+### Clear, export and import a bot's populations
+
+- Priority: P2
+- Affected files: `internal/mode/commands.go`, `internal/app`,
+  `internal/bot/learner.go`, `internal/paths`
+- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
+- Guide: [Bots](bots.md#the-population-file), [Bots](bots.md#commands-and-the-menu)
+
+A population is one network's of one graph in one scenario, kept as
+`bot/<graph>.<scenario>.<network>.json`, and nothing starts one over or moves one
+between players but handling the file. Three `:bot` commands name populations as
+the files do, `cave.cave.kraken` for one, and a shorter name for all under it:
+`cave.cave` a graph's in a scenario, `cave` a graph's everywhere.
+
+- `:bot clear <name>` starts those populations over: their files go, and a
+  learner of this run on one of them begins again from the weights written by
+  hand, or its next save brings the file back.
+- `:bot export <name>` writes them as one TOML document: for each its graph,
+  scenario and network, its layout with the `inputs` and `hidden` count it stands
+  for, and its rounds, step and members as the file holds them.
+  `lixenwraith/toml` marshals a struct by its tags. Decide where it lands: not
+  `bot/<name>.toml` of a root, which resolves as a graph and `-check` refuses.
+- `:bot import <file> [name]` patches the files with all the document holds, or
+  the part `name` picks. A population is refused, by name, unless the graph is
+  one this player has, the graph has that network, and its layout is that
+  network's now, as `network.digest` gives it; one that is refused leaves the
+  rest to be taken. Its scenario need not be one this player has or has played,
+  so a bot trained elsewhere patches one's own. A learner of this run takes the
+  import as it would the file at its start.
+
+Decide whether a headless run takes the same three as flags, since a trainer has
+no command line, and what `:bot` lists of a population: its rounds, its recent
+mean and the member it fields.
+
+### Size a bot's own run alike, watched or not
+
+- Priority: P2
+- Affected files: `internal/app/script.go`, `internal/app/internal/config/config.go`
+- Guide: [Runtime §1](runtime.md#1-process-modes), [Bots](bots.md#flags)
+
+Watching is a probe and should set nothing in the world, and a bot alone needs a
+map of its own where nothing names one. Today a run's map comes from:
+
+```
+a person playing                        the terminal, as it resizes
+a bot alone, -headless                  -size, else 120x40
+a bot alone, -watch                     the watching terminal, or -size
+  its graph learning                    -size, else 120x40
+bots beside a person or on a server     the session's; a server's own alone, 120x40
+a script with no size                   80x24
+the desktop window                      opens at 120x40
+```
+
+So a watch sets a bot's map unless its graph learns, where it shows a small map
+in a large terminal, and it sets no script's; and the fallbacks are two. Decide
+whether every bot alone plays `-size` or 120x40 whoever watches, the terminal a
+view of it, which is `RunBot`'s `terminalGeometry` gone, and whether a script
+with no size takes the same 120x40.
 
 ### Train bot graphs offline
 

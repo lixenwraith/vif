@@ -22,13 +22,15 @@ type mind struct {
 	ctx   *engine.GameContext
 	rng   *vmath.FastRand
 	queue *intentQueue
-	// nets are the graph's policies, which Steer runs by index, and steered which of
-	// them have played since the round began. tick is the driver's, and special the
-	// tick from which a network may ask for the special attack again.
-	nets    []*network
-	steered []bool
-	tick    uint64
-	special uint64
+	// nets are the graph's policies, which Steer runs by index; steered is which of
+	// them have played since the round began and steering the one this update, -1
+	// for none. tick is the driver's, and special the tick from which a network may
+	// ask for the special attack again.
+	nets     []*network
+	steered  []bool
+	steering int
+	tick     uint64
+	special  uint64
 
 	// room is how many more intents this step releases before its tick. An action
 	// that reads the world acts only when all it queues fits, or it would land on a

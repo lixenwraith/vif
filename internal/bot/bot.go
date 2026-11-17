@@ -239,15 +239,18 @@ type Driver struct {
 	fitness   int64
 	observing atomic.Bool
 
-	// earned is fitness without its defeats. The round in play began at roundTick
-	// with roundEarned; ended is how a new game was asked for since, which any
+	// earned is fitness without its defeats, and unpaid the ticks a network steered
+	// whose ticks count for nothing. The round in play began at roundTick with
+	// roundEarned and roundUnpaid; ended is how a new game was asked for since, which any
 	// dispatch may write. Each network's learner, nil for none, has a genome play
 	// a round; while the bot plays alone one of them at a time, explorer, plays a
 	// candidate, scored from where its network first steered in the round (from).
 	// A round that outlasts limit is one the driver asked the game to end (asked).
 	earned      int64
+	unpaid      uint64
 	roundTick   uint64
 	roundEarned int64
+	roundUnpaid uint64
 	ended       atomic.Uint32
 	learners    []*Learner
 	from        []roundMark
@@ -260,12 +263,13 @@ type Driver struct {
 	Round func(n uint64, score float64)
 }
 
-// roundMark is where in a round a network first steered: the tick and what the
-// round had earned by then
+// roundMark is where in a round a network first steered: the tick, and what the
+// round had earned and left unpaid by then
 type roundMark struct {
 	steered bool
 	tick    uint64
 	earned  int64
+	unpaid  uint64
 }
 
 // How the round in play was asked to end: by the game itself, as a defeat does, or
@@ -336,13 +340,28 @@ func payloadTrue(payload any, field string) bool {
 	return ok && v
 }
 
-// killWorth is what a kill weighs: a data species' the hit points its program
-// gives it, as what it took to shoot down, any other's weight
+// krakenPar is the hit points a second a gun kept on a Kraken takes, and bountyFloor
+// the least of its bounty a slow kill keeps
+const (
+	krakenPar   = 4.0
+	bountyFloor = 0.25
+)
+
+// killWorth is what a kill weighs. A data species' is the hit points its program
+// gives it, as what it took to shoot down. A Kraken's is the ticks its hit points
+// take at krakenPar, so a fight at that pace earns its own time, and the share of
+// them that pace is of the one it died at, bountyFloor at least. Any other's is weight.
 func (m *mind) killWorth(payload any, weight int64) int64 {
-	if p, ok := payload.(*event.SpeciesKilledPayload); ok && p.Species >= component.SpeciesDataFirst {
-		if i := int(p.Species - component.SpeciesDataFirst); i < len(m.ctx.World.Resources.Behaviors) {
-			return int64(m.ctx.World.Resources.Behaviors[i].HitPoints)
-		}
+	p, ok := payload.(*event.SpeciesKilledPayload)
+	if !ok {
+		return weight
+	}
+	if i := int(p.Species - component.SpeciesDataFirst); p.Species >= component.SpeciesDataFirst && i < len(m.ctx.World.Resources.Behaviors) {
+		return int64(m.ctx.World.Resources.Behaviors[i].HitPoints)
+	}
+	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken && k.Time > 0 {
+		par := float64(k.MaxHitPoints) / krakenPar
+		return int64(par / m.ctx.World.TickInterval().Seconds() * min(max(par/k.Time, bountyFloor), 1))
 	}
 	return weight
 }
@@ -358,7 +377,7 @@ func (d *Driver) Step() (bool, error) {
 	var err error
 	d.ctx.World.RunSafe(func() {
 		d.mind.fresh = [targetCount]bool{}
-		d.mind.room, d.mind.tick = int(d.credit/1000)-d.queue.n, d.stats.Ticks
+		d.mind.room, d.mind.tick, d.mind.steering = int(d.credit/1000)-d.queue.n, d.stats.Ticks, -1
 		if !d.started {
 			d.started = true
 			err = d.machine.Init(&d.mind)
@@ -372,8 +391,11 @@ func (d *Driver) Step() (bool, error) {
 		d.machine.Update(&d.mind, tick)
 		for i, steered := range d.mind.steered {
 			if steered && !d.from[i].steered {
-				d.from[i] = roundMark{steered: true, tick: d.stats.Ticks, earned: d.earned}
+				d.from[i] = roundMark{steered: true, tick: d.stats.Ticks, earned: d.earned, unpaid: d.unpaid}
 			}
+		}
+		if i := d.mind.steering; i >= 0 && d.mind.nets[i].unpaid {
+			d.unpaid++
 		}
 	})
 	if err != nil {
@@ -423,21 +445,22 @@ func (d *Driver) deal() {
 	}
 }
 
-// closeRound ends the round a new game closed. Its score is its ticks and what its
-// events earned, a defeat aside since one ends every round. The explorer takes
+// closeRound ends the round a new game closed. Its score is its ticks, those an
+// unpaid network steered aside, and what its events earned, a defeat aside since
+// one ends every round. The explorer takes
 // the part from where its network first steered, when the game or the run's limit
 // ended the round, and its turn passes once its candidate is settled, or at once
 // where the round never reached its network, so no learner waits on another.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
 	d.ctx.World.RunSafe(func() { earned = d.earned })
-	score := float64(d.stats.Ticks-d.roundTick) + float64(earned-d.roundEarned)
-	d.roundTick, d.roundEarned = d.stats.Ticks, earned
+	score := float64(d.stats.Ticks-d.roundTick) - float64(d.unpaid-d.roundUnpaid) + float64(earned-d.roundEarned)
+	d.roundTick, d.roundEarned, d.roundUnpaid = d.stats.Ticks, earned, d.unpaid
 	d.stats.Rounds++
 	d.stats.Score += score
 	if d.explorer >= 0 {
 		from := d.from[d.explorer]
-		part := float64(d.stats.Ticks-from.tick) + float64(earned-from.earned)
+		part := float64(d.stats.Ticks-from.tick) - float64(d.unpaid-from.unpaid) + float64(earned-from.earned)
 		if !from.steered || d.learners[d.explorer].settle(part, played && d.alone()) {
 			for d.explorer = (d.explorer + 1) % len(d.learners); d.learners[d.explorer] == nil; {
 				d.explorer = (d.explorer + 1) % len(d.learners)
