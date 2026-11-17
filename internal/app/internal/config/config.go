@@ -83,14 +83,10 @@ func (m Mode) Audio() bool {
 	return buildHasAudio && (m == ModePlay || m == ModeReplay || m == ModeScript)
 }
 
-// Terminal-equivalent dimensions applied when a caller-driven run leaves them unset
+// BotWidth and BotHeight are the screen of a run no player sits at where nothing
+// names another: a bot alone, a script, a seat whose holder names none, and a
+// server until its first person joins, so the map its own bots start alone.
 const (
-	DefaultWidth  = 80
-	DefaultHeight = 24
-
-	// BotWidth and BotHeight are a bot's screen where nothing names another: a
-	// headless bot given no -size, a seat whose holder names none, and so the map a
-	// server's own bots start alone.
 	BotWidth  = 120
 	BotHeight = 40
 )
@@ -187,7 +183,7 @@ type Config struct {
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
-	// Ignored when the terminal owns geometry; zero selects the defaults.
+	// Ignored when the terminal owns geometry; zero selects BotWidth and BotHeight.
 	Width, Height int
 
 	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
@@ -227,10 +223,10 @@ func (c *Config) Normalize() {
 		return
 	}
 	if c.Width == 0 {
-		c.Width = DefaultWidth
+		c.Width = BotWidth
 	}
 	if c.Height == 0 {
-		c.Height = DefaultHeight
+		c.Height = BotHeight
 	}
 }
 

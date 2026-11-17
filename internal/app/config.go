@@ -14,13 +14,10 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// Terminal-equivalent dimensions applied when a caller-driven run leaves them
-// unset, and a bot's screen where nothing names another (config.BotWidth)
+// The screen of a run no player sits at where nothing names another (config.BotWidth)
 const (
-	DefaultWidth  = config.DefaultWidth
-	DefaultHeight = config.DefaultHeight
-	BotWidth      = config.BotWidth
-	BotHeight     = config.BotHeight
+	BotWidth  = config.BotWidth
+	BotHeight = config.BotHeight
 )
 
 // Mode is config's runtime shape, aliased with its constants for the callers that
@@ -94,10 +91,6 @@ type wiring struct {
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
-
-	// terminalGeometry sizes a presented run from its terminal, as play does; a
-	// presented bot takes it when -size names none.
-	terminalGeometry bool
 
 	// geometryDefaulted records that Normalize supplied Width or Height, which is
 	// how a dedicated host tells "size me from the session" apart from "serve

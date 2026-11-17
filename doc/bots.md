@@ -31,7 +31,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given or its graph learns. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
+| `-size <WxH>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |
@@ -440,9 +440,9 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 - A run in a session does not learn, since any participant's defeat ends every
   round there: its bots, seats among them, play what is fielded. A round an
   operator ends (`:n`) scores nothing.
-- A learning run plays a bot's own screen, 120x40, watched or not, unless `-size`
-  names another, so one population is scored by one game: stop a headless run,
-  start a watched one, and it goes on from the same files.
+- A bot alone plays `-size`, else 120x40, watched or not, so one population is
+  scored by one game: stop a headless run, start a watched one, and it goes on
+  from the same files.
 - A headless run alone and flat out plays its graph in several games at once,
   `-games` of them, each a run of its own on a seed drawn from the run's, and all
   teach the one learner a network and keep the one file. Each game carries one

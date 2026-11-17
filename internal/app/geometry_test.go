@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -104,8 +105,8 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
 	a, addr := sizingLobby(t, 0, 0, resource.Options{Embedded: true})
 
 	beforeW, beforeH := mapSize(a)
-	if beforeW > 80 {
-		t.Fatalf("a server with no -size started on a %dx%d map, expected the default", beforeW, beforeH)
+	if beforeW > BotWidth {
+		t.Fatalf("a server with no -size started on a %dx%d map, expected a bot's screen", beforeW, beforeH)
 	}
 
 	sizedBy(t, addr, network.JoinerReport{Width: 160, Height: 45})
@@ -120,6 +121,31 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
 	if a.Context().Width != 160 || a.Context().Height != 45 {
 		t.Fatalf("the run's geometry is %dx%d, want the guest's 160x45",
 			a.Context().Width, a.Context().Height)
+	}
+}
+
+// TestABotAlonePlaysOneMapWatchedOrNot: a bot's own run that names no size plays a
+// bot's screen headless and on a screen of any size, which only shows it.
+func TestABotAlonePlaysOneMapWatchedOrNot(t *testing.T) {
+	// Not parallel: a presented run is built on a presentation of its own.
+	sized := errors.New("sized")
+	wantW, wantH := BotWidth-parameter.LeftMargin, BotHeight-parameter.TopMargin-parameter.BottomMargin
+	for name, run := range map[string]runConfig{
+		"headless":                    {},
+		"watched on a larger screen":  {Config: Config{Mode: ModeScript}, host: Host{Presentation: &framePresentation{w: 200, h: 60}}},
+		"watched on a smaller screen": {Config: Config{Mode: ModeScript}, host: Host{Presentation: &framePresentation{w: 80, h: 24}}},
+	} {
+		run.Resources, run.Seed = resource.Options{Embedded: true}, fixtureSeed
+		var w, h int
+		if _, err := drive(run, "bot", name, nil, nil, func(a *App) (pacedSource, error) {
+			w, h = mapSize(a)
+			return nil, sized
+		}); !errors.Is(err, sized) {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if w != wantW || h != wantH {
+			t.Errorf("%s plays a %dx%d map, want a bot's %dx%d", name, w, h, wantW, wantH)
+		}
 	}
 }
 

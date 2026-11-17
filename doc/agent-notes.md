@@ -283,6 +283,10 @@ Libraries · Branches.
   exported methods to `cmd/vif` and Android, which cannot import the package, and
   `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
   `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
+- `RunBot` and `RunScript` return counters alone. A test reads the world a driven
+  run is built on through `drive`, whose `build` is handed the App and ends the run
+  before it presents by returning an error (`TestABotAlonePlaysOneMapWatchedOrNot`),
+  and a run's size from its journal's anchor (`journal.NewCapture().Anchors()`).
 - The run a restart builds starts from the launch line and what earlier restarts
   named (`runConfig.restarted`), never from the live `m.cfg`: what a command wrote
   there, a phrase, a policy, a door, is gone at the next restart unless the ask

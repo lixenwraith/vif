@@ -103,12 +103,6 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	}
 	cfg.Play = botPlay(cfg.Play, graph)
 	run := runConfig{Config: cfg, host: host}
-	if run.Width == 0 && run.Height == 0 {
-		// A learning graph plays a bot's own screen watched or not, so the rounds its
-		// population is scored by are one game's
-		run.wiring.terminalGeometry = run.Mode == ModeScript && !graph.Settings.Learn
-		run.Width, run.Height = BotWidth, BotHeight
-	}
 	var (
 		driver   *bot.Driver
 		learners []*bot.Learner
