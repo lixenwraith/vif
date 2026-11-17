@@ -414,6 +414,14 @@ so a shield's rim never hides it. Truecolor lights its background alone, so a gl
 256-color draws a foreground block, since eight backgrounds cannot show its bright
 entries.
 
+A Kraken's charge has no line. The same renderer marks where its body ends, from
+the spin's first tick until it arrives, `visual.KrakenLandingReach` body radii
+round: wider than a shield, so the mark's rim shows round the cursor it locked on
+while that cursor still stands there. It blends `RgbKrakenAttack` into
+backgrounds alone, and 256-color draws its outline in `Kraken256Landing`, as a
+shield's. Its look is `visual.KrakenLandingStyle`, one of four
+([TODO](todo.md#choose-the-krakens-landing-look)).
+
 The kraken renderer shades a pose once. A tick moves the Kraken and the frames
 until the next show the same pose, so it keeps the shaded cells while the pose,
 position and visible bounds match, and draws them again as they are. It takes the

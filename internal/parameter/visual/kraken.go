@@ -19,6 +19,27 @@ const (
 	// the burnt end; the void glows as they reach it and closes over the rest
 	KrakenBurnLegs  = 0.75
 	KrakenBurnEmber = 0.3
+
+	// A charge marks where it ends, KrakenLandingReach body radii round so that a
+	// shield standing there leaves its rim showing, blending KrakenLandingAlpha at
+	// its strongest; its edge fades over the outer KrakenLandingFeather of that
+	// radius and a ring is KrakenLandingBand of it wide
+	KrakenLandingReach   = 1.4
+	KrakenLandingAlpha   = 0.56
+	KrakenLandingFeather = 0.2
+	KrakenLandingBand    = 0.22
+)
+
+// KrakenLandingStyle is the look a charge's mark draws in: a glow rising through
+// the spin, the landing marker's blink, the outline round a landing marker, or a
+// ring closing on that outline as the spin ends
+const (
+	KrakenLandingGlow = iota
+	KrakenLandingBlink
+	KrakenLandingRing
+	KrakenLandingClose
+
+	KrakenLandingStyle = KrakenLandingRing
 )
 
 // In 256 colors the console shows the legs' dark gradient and the body's void as
@@ -27,6 +48,8 @@ const (
 const (
 	Kraken256Leg  = ConMagenta
 	Kraken256Heat = ConBrightRed
+	// Kraken256Landing is the outline a console draws of a charge's mark
+	Kraken256Landing = ConRed
 )
 
 var (
