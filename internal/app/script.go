@@ -284,6 +284,10 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "games", len(drivers),
 				"rounds", st.Rounds, "recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
 		}
+		l.Lost = func(err error) {
+			a.log.Warn("app", "msg", "bot population not kept", "name", g.Name, "error", err.Error())
+			a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusAlert)
+		}
 		learners = append(learners, l)
 	}
 	// Games beside its own are played only by a run alone, which a headless one stays

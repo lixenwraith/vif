@@ -490,6 +490,16 @@ over, as does a change of layout (`inputs` or `hidden`), which the file's
 What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
 
+A run whose disk fails learns on in memory and says so once, in the log (`bot
+population not kept`) and on a watched run's bar:
+
+- a file that cannot be read is left as it is, and the run keeps nothing;
+- a file that cannot be parsed starts that population over, and the next save
+  replaces it;
+- a save that fails is tried again each half minute, and only the first is said.
+
+A run that ends without keeping what it learned ends with that error.
+
 The weights written by hand are most of what the bot knows at first. In `cave`,
 where a core plays one of their rounds a second, they score 10,600 a round:
 three rounds in four meet the first Kraken, and most of those shoot down three
