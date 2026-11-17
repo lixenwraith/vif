@@ -210,15 +210,18 @@ type scene struct {
 	// rock is the ceiling's and the floor's edge at the cursor's column, an eighth
 	// of the view ahead and a quarter ahead
 	rock    [3][2]float64
-	species [2]sighted
-	landing sighted // the nearest cell a raider is about to land on, or a Kraken to charge to
-	kraken  sighted // the Kraken's body, its nearness that of the nearest cell it covers
-	reach   float64 // how far out its striking legs are, 0 to 1
-	loot    [2]float64
-	column  float64 // -1 at the view's left edge, 1 at its right
-	energy  float64 // 0 with none, a half at energyHalf, toward 1
-	heat    float64 // 0 with none, a half at heatHalf, toward 1
+	species [slots]sighted // the nearest species, nearest first
+	landing [slots]sighted // the nearest cells a raider is about to land on, or a Kraken to charge to
+	kraken  sighted        // the Kraken's body, its nearness that of the nearest cell it covers
+	reach   float64        // how far out its striking legs are, 0 to 1
+	column  float64        // -1 at the view's left edge, 1 at its right
+	energy  float64        // 0 with none, a half at energyHalf, toward 1
+	heat    float64        // 0 with none, a half at heatHalf, toward 1
 }
+
+// slots is how many of a kind a scene holds, the nearest ones: a network that reads
+// them all drops none of a cave's raiders, which fly three at most
+const slots = 3
 
 // sighted is one thing a scene holds: its offset, whether it is enraged, and its
 // nearness, a vector toward it that is 1 long beside the cursor and falls to
@@ -244,84 +247,68 @@ func sight(dx, dy int, width, height float64, enraged bool) sighted {
 	return s
 }
 
-// sensor is one input a network may read
-type sensor uint8
+// nearest collects the slots nearest things of a kind, nearest first, ties to the
+// first seen
+type nearest struct {
+	at   [slots]sighted
+	dist [slots]int
+	n    int
+}
 
-const (
-	sensorCeiling sensor = iota
-	sensorFloor
-	sensorCeilingNear
-	sensorFloorNear
-	sensorCeilingFar
-	sensorFloorFar
-	sensorSpeciesX
-	sensorSpeciesY
-	sensorSpeciesEnraged
-	sensorSpecies2X
-	sensorSpecies2Y
-	sensorSpecies2Enraged
-	sensorSpeciesNearX
-	sensorSpeciesNearY
-	sensorSpecies2NearX
-	sensorSpecies2NearY
-	sensorLandingX
-	sensorLandingY
-	sensorLandingNearX
-	sensorLandingNearY
-	sensorKrakenX
-	sensorKrakenY
-	sensorKrakenNearX
-	sensorKrakenNearY
-	sensorKrakenReach
-	sensorLootX
-	sensorLootY
-	sensorColumn
-	sensorEnergy
-	sensorHeat
-	sensorCount
-)
+// add offers the thing at dist2 d
+func (k *nearest) add(d int, s sighted) {
+	i := k.n
+	if i < slots {
+		k.n++
+	} else if i--; d >= k.dist[i] {
+		return
+	}
+	for ; i > 0 && d < k.dist[i-1]; i-- {
+		k.at[i], k.dist[i] = k.at[i-1], k.dist[i-1]
+	}
+	k.at[i], k.dist[i] = s, d
+}
+
+// sensor is one input a network may read, an index into sensors
+type sensor uint8
 
 type sensorRow struct {
 	name string
 	read func(*scene) float64
 }
 
-// sensors is indexed by sensor: the name a [network] lists it by and its reading
-var sensors = [sensorCount]sensorRow{
-	sensorCeiling:         {"ceiling", func(s *scene) float64 { return s.rock[0][0] }},
-	sensorFloor:           {"floor", func(s *scene) float64 { return s.rock[0][1] }},
-	sensorCeilingNear:     {"ceiling_near", func(s *scene) float64 { return s.rock[1][0] }},
-	sensorFloorNear:       {"floor_near", func(s *scene) float64 { return s.rock[1][1] }},
-	sensorCeilingFar:      {"ceiling_far", func(s *scene) float64 { return s.rock[2][0] }},
-	sensorFloorFar:        {"floor_far", func(s *scene) float64 { return s.rock[2][1] }},
-	sensorSpeciesX:        {"species_x", func(s *scene) float64 { return s.species[0].x }},
-	sensorSpeciesY:        {"species_y", func(s *scene) float64 { return s.species[0].y }},
-	sensorSpeciesEnraged:  {"species_enraged", func(s *scene) float64 { return s.species[0].enraged }},
-	sensorSpecies2X:       {"species2_x", func(s *scene) float64 { return s.species[1].x }},
-	sensorSpecies2Y:       {"species2_y", func(s *scene) float64 { return s.species[1].y }},
-	sensorSpecies2Enraged: {"species2_enraged", func(s *scene) float64 { return s.species[1].enraged }},
-	sensorSpeciesNearX:    {"species_near_x", func(s *scene) float64 { return s.species[0].nearX }},
-	sensorSpeciesNearY:    {"species_near_y", func(s *scene) float64 { return s.species[0].nearY }},
-	sensorSpecies2NearX:   {"species2_near_x", func(s *scene) float64 { return s.species[1].nearX }},
-	sensorSpecies2NearY:   {"species2_near_y", func(s *scene) float64 { return s.species[1].nearY }},
-	sensorLandingX:        {"landing_x", func(s *scene) float64 { return s.landing.x }},
-	sensorLandingY:        {"landing_y", func(s *scene) float64 { return s.landing.y }},
-	sensorLandingNearX:    {"landing_near_x", func(s *scene) float64 { return s.landing.nearX }},
-	sensorLandingNearY:    {"landing_near_y", func(s *scene) float64 { return s.landing.nearY }},
-	sensorKrakenX:         {"kraken_x", func(s *scene) float64 { return s.kraken.x }},
-	sensorKrakenY:         {"kraken_y", func(s *scene) float64 { return s.kraken.y }},
-	sensorKrakenNearX:     {"kraken_near_x", func(s *scene) float64 { return s.kraken.nearX }},
-	sensorKrakenNearY:     {"kraken_near_y", func(s *scene) float64 { return s.kraken.nearY }},
-	sensorKrakenReach:     {"kraken_reach", func(s *scene) float64 { return s.reach }},
-	sensorLootX:           {"loot_x", func(s *scene) float64 { return s.loot[0] }},
-	sensorLootY:           {"loot_y", func(s *scene) float64 { return s.loot[1] }},
-	sensorColumn:          {"column", func(s *scene) float64 { return s.column }},
-	sensorEnergy:          {"energy", func(s *scene) float64 { return s.energy }},
-	sensorHeat:            {"heat", func(s *scene) float64 { return s.heat }},
-}
+// sensors is each sensor's name, as a [network] lists it, and its reading. The
+// second and third nearest of a kind carry their place in the name.
+var sensors = func() (rows []sensorRow) {
+	add := func(name string, read func(*scene) float64) { rows = append(rows, sensorRow{name, read}) }
+	for i, ahead := range [...]string{"", "_near", "_far"} {
+		add("ceiling"+ahead, func(s *scene) float64 { return s.rock[i][0] })
+		add("floor"+ahead, func(s *scene) float64 { return s.rock[i][1] })
+	}
+	for i, place := range [slots]string{"", "2", "3"} {
+		add("species"+place+"_x", func(s *scene) float64 { return s.species[i].x })
+		add("species"+place+"_y", func(s *scene) float64 { return s.species[i].y })
+		add("species"+place+"_enraged", func(s *scene) float64 { return s.species[i].enraged })
+		add("species"+place+"_near_x", func(s *scene) float64 { return s.species[i].nearX })
+		add("species"+place+"_near_y", func(s *scene) float64 { return s.species[i].nearY })
+		add("landing"+place+"_x", func(s *scene) float64 { return s.landing[i].x })
+		add("landing"+place+"_y", func(s *scene) float64 { return s.landing[i].y })
+		add("landing"+place+"_near_x", func(s *scene) float64 { return s.landing[i].nearX })
+		add("landing"+place+"_near_y", func(s *scene) float64 { return s.landing[i].nearY })
+	}
+	add("kraken_x", func(s *scene) float64 { return s.kraken.x })
+	add("kraken_y", func(s *scene) float64 { return s.kraken.y })
+	add("kraken_near_x", func(s *scene) float64 { return s.kraken.nearX })
+	add("kraken_near_y", func(s *scene) float64 { return s.kraken.nearY })
+	add("kraken_reach", func(s *scene) float64 { return s.reach })
+	add("column", func(s *scene) float64 { return s.column })
+	add("energy", func(s *scene) float64 { return s.energy })
+	add("heat", func(s *scene) float64 { return s.heat })
+	return rows
+}()
 
 // look reads the scene around the cursor at from, of the cells minX, minY to maxX,
-// maxY the view shows. The nearest of a kind is by dist2, ties to store order.
+// maxY the view shows. Nearness is by dist2, ties to store order.
 func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int) scene {
 	w := m.ctx.World
 	width, height := float64(maxX-minX+1), float64(maxY-minY+1)
@@ -339,37 +326,25 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 		s.rock[i] = [2]float64{float64(top-from.Y) / height, float64(bottom-from.Y) / height}
 	}
 
-	near := [2]int{-1, -1}
+	var species, landings nearest
 	w.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
 		pos, ok := w.Positions.GetPosition(e)
-		if !ok || !shown(pos.X, pos.Y) || c.CombatEntityType == component.CombatEntityCursor || c.CombatEntityType == component.CombatEntityTower {
-			return true
-		}
-		d := dist2(pos.X-from.X, pos.Y-from.Y)
-		for i := range near {
-			if near[i] < 0 || d < near[i] {
-				copy(near[i+1:], near[i:])
-				copy(s.species[i+1:], s.species[i:])
-				near[i], s.species[i] = d, sight(pos.X-from.X, pos.Y-from.Y, width, height, c.IsEnraged)
-				break
-			}
+		if ok && shown(pos.X, pos.Y) && c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
+			species.add(dist2(pos.X-from.X, pos.Y-from.Y), sight(pos.X-from.X, pos.Y-from.Y, width, height, c.IsEnraged))
 		}
 		return true
 	})
-
-	best := -1
 	w.Components.Behavior.Each(func(_ core.Entity, b *component.BehaviorComponent) bool {
-		if d := dist2(b.TargetX-from.X, b.TargetY-from.Y); b.Landing && shown(b.TargetX, b.TargetY) && (best < 0 || d < best) {
-			best, s.landing = d, sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false)
+		if b.Landing && shown(b.TargetX, b.TargetY) {
+			landings.add(dist2(b.TargetX-from.X, b.TargetY-from.Y), sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false))
 		}
 		return true
 	})
 
-	near[0] = -1
+	covered := -1
 	w.Components.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
-		tx, ty := int(k.TargetX), int(k.TargetY)
-		if d := dist2(tx-from.X, ty-from.Y); (k.State == component.KrakenSpin || k.State == component.KrakenMove) && shown(tx, ty) && (best < 0 || d < best) {
-			best, s.landing = d, sight(tx-from.X, ty-from.Y, width, height, false)
+		if tx, ty := int(k.TargetX), int(k.TargetY); (k.State == component.KrakenSpin || k.State == component.KrakenMove) && shown(tx, ty) {
+			landings.add(dist2(tx-from.X, ty-from.Y), sight(tx-from.X, ty-from.Y, width, height, false))
 		}
 		header, _ := w.Components.Header.GetPtr(e)
 		body, ok := w.Positions.GetPosition(e)
@@ -378,25 +353,17 @@ func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int
 		}
 		for i := range header.MemberEntries {
 			pos, ok := w.Positions.GetPosition(header.MemberEntries[i].Entity)
-			if d := dist2(pos.X-from.X, pos.Y-from.Y); ok && shown(pos.X, pos.Y) && (near[0] < 0 || d < near[0]) {
+			if d := dist2(pos.X-from.X, pos.Y-from.Y); ok && shown(pos.X, pos.Y) && (covered < 0 || d < covered) {
 				cell := sight(pos.X-from.X, pos.Y-from.Y, width, height, false)
-				near[0], s.kraken, s.reach = d, sight(body.X-from.X, body.Y-from.Y, width, height, false), k.AttackT
+				covered, s.kraken, s.reach = d, sight(body.X-from.X, body.Y-from.Y, width, height, false), k.AttackT
 				s.kraken.nearX, s.kraken.nearY = cell.nearX, cell.nearY
 			}
 		}
 		return true
 	})
+	s.species, s.landing = species.at, landings.at
 
 	own := w.Resources.Player.Entity
-	best = -1
-	w.Components.Loot.Each(func(e core.Entity, l *component.LootComponent) bool {
-		pos, ok := w.Positions.GetPosition(e)
-		if d := dist2(pos.X-from.X, pos.Y-from.Y); ok && l.Owner == own && shown(pos.X, pos.Y) && (best < 0 || d < best) {
-			best, s.loot = d, [2]float64{float64(pos.X-from.X) / width, float64(pos.Y-from.Y) / height}
-		}
-		return true
-	})
-
 	s.column = 2*float64(from.X-minX)/max(width-1, 1) - 1
 	if e, ok := w.Components.Energy.GetComponent(own); ok {
 		level := math.Abs(float64(e.Current))

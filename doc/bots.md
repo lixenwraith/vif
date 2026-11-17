@@ -366,27 +366,31 @@ on_update = [
   cells the view shows: an offset is from the cursor's cell, in view widths
   across and view heights down, and what is not sighted reads 0.
   - `ceiling`, `floor`: the rock's edges above and below the cursor's column,
-    the view's own rows where no rock stands; `ceiling_near` and `floor_near` an
-    eighth of the view ahead, `ceiling_far` and `floor_far` a quarter.
+    the view's own rows where no rock stands, as at `cave`'s Kraken, where they
+    are the map's edges; `ceiling_near` and `floor_near` an eighth of the view
+    ahead, `ceiling_far` and `floor_far` a quarter.
   - `species_x`, `species_y`, `species_enraged`: the nearest species, as the
-    `species` target counts them, and 1 while it is enraged; `species2_x`,
-    `species2_y` and `species2_enraged` the second nearest.
-  - `species_near_x`, `species_near_y`, and `species2_near_x`, `species2_near_y`:
-    that species' nearness, a vector toward it 1 long beside the cursor and
-    falling to nothing a quarter of the view's width away, rows counted twice.
-    An offset grows with distance, so only a nearness lets a weight written by
-    hand back off what is close and leave alone what is far.
-  - `landing_x`, `landing_y`: the nearest cell something is about to land on,
-    a raider's landing marker, where its charge or teleport ends, or the cell a
-    Kraken's charge will end on while it spins up and charges; `landing_near_x`,
-    `landing_near_y` its nearness.
+    `species` target counts them, and 1 while it is enraged; `species2_*` the
+    second nearest and `species3_*` the third. `cave` flies three raiders at
+    most and any may charge or teleport, so its network lists all three: the
+    nearest two would drop one for no reason its charge knows.
+  - `species_near_x`, `species_near_y`, and the same of `species2` and
+    `species3`: that species' nearness, a vector toward it 1 long beside the
+    cursor and falling to nothing a quarter of the view's width away, rows
+    counted twice. An offset grows with distance, so only a nearness lets a
+    weight written by hand back off what is close and leave alone what is far.
+  - `landing_x`, `landing_y`, `landing_near_x`, `landing_near_y`: the nearest
+    cell something is about to land on and its nearness, a raider's landing
+    marker, where its charge or teleport ends, or the cell a Kraken's charge
+    will end on while it spins up and charges; `landing2_*` and `landing3_*`
+    the next two, so every landing a cave can hold is read.
   - `kraken_x`, `kraken_y`: the Kraken's body; `kraken_near_x`, `kraken_near_y`
     the nearness of the nearest cell it covers, legs and all; `kraken_reach` how
     far out its striking legs are, 0 to 1.
-  - `loot_x`, `loot_y`: the nearest drop that is the bot's own.
   - `column`: the cursor's place across the view, -1 at its left edge, 1 at its
     right.
   - `energy`: 0 with none, a half at 1,000, toward 1; `heat`: a half at 10.
+  - Loot has no sensor: a drop homes on its owner, so its place steers nothing.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
 - `x`, `y`, `special`: the weights written by hand, each output's from the
   inputs it names and its `bias`. Every other weight is 0, the hidden units'
@@ -470,7 +474,8 @@ where a core plays one of their rounds a second, they score 8,737 a round: three
 rounds in four meet the first Kraken, and most of those shoot down three or
 four. What a run adds, by what each of four fields after nine million ticks of
 learning, twenty minutes of a core, over 60 rounds of four seeds no run learned
-on, where the hand-written weights score 8,920:
+on, where the hand-written weights score 8,920; taken while `raid` read the two
+nearest raiders and one landing, and not yet again with all three of each:
 
 ```
 seed         1       2       3       4

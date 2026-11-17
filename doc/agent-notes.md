@@ -858,6 +858,10 @@ Libraries · Branches.
   weights that leave that cell leave where the ship already is. A Kraken policy
   is read by fights won of those met, 300 of them in 400 rounds over four seeds,
   three points either way.
+- A network's inputs name every one of a kind its scenario can field, `cave`'s
+  three raiders and their three landings: the nearest two drop one for no reason
+  its charge knows, and the learner is scored on what it could not see. Leave
+  out only what play never steers by, as loot, which homes on the ship.
 - A learner that masters a phase makes its rounds long. Within a hundred of
   `kraken`'s candidates a run finds the hop from the edge the Kraken's charge
   heads for to the far one, and a round goes from 7,300 ticks to 60,000 and,

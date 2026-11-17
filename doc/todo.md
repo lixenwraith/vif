@@ -316,7 +316,8 @@ leave its nearest cell and its charge's end      42 of 301   2646
 What a run fields after nine million ticks of learning, twenty minutes of a
 core, over 60 rounds of four seeds it never played, each closed at the limit,
 where the weights written by hand score 8,920, lose 93 rounds of 400 in the
-first cave and shoot five Krakens down in 9:
+first cave and shoot five Krakens down in 9. It was taken while `raid` read the
+two nearest raiders, one landing and its loot, 23 inputs, and `kraken` 16:
 
 ```
 seed                                    1       2       3       4
@@ -335,6 +336,11 @@ fielded, held out                   20662   10181   23770   11638
 
 What remains:
 
+- **The inputs.** `raid` now reads all three raiders and every landing, three
+  at most, and no loot, which homes on the ship: 36 inputs, and `kraken` 14. The
+  weights written by hand play as they did, round for round; what a run fields
+  with them is to measure again. What a player also reads and no sensor does:
+  how soon a landing lands, a raider's size, and which cave it is.
 - **Rounds an hour.** One game plays on one core, and the shipped weights'
   rounds last 7,300 ticks: a round a second flat out, and some ten an hour
   watched at speed 1. A learner that outlasts the Kraken plays rounds up to the
@@ -358,8 +364,7 @@ What remains:
   Kraken's touch takes 80,000 energy and a ship with 190,000 and full heat is
   gone in a few ticks. Only 49 end at the first Kraken. So `raid` has the first
   minute to learn, where two raiders still trade the ship between them, and
-  `kraken` a touch it cannot afford at all; decide whether a sensor says which
-  cave it is.
+  `kraken` a touch it cannot afford at all.
 - **The special attack.** Nothing asks for it: the hand-written `special` has
   no weights, and a learner must cross 1 to find a use. Its blast lands where
   dust lies, and its heat is a touch's worth of buffer; measure a rule written

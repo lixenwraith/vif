@@ -621,8 +621,9 @@ y = { species_y = 1.0 }`), 2)
 }
 
 // TestTheSensorsReadWhatTheViewShows: each sensor is an offset from the cursor
-// scaled to the view, of the nearest of its kind the view shows, the rock's edges
-// at the cursor's column and ahead, and zero for what is not sighted.
+// scaled to the view, of the three nearest of its kind the view shows, nearest
+// first, the rock's edges at the cursor's column and ahead, and zero for what is
+// not sighted.
 func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	w, ctx := soloWorld(16, 10)
 	cfg := w.Resources.Config
@@ -648,21 +649,17 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 			w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, IsEnraged: enraged})
 		})
 	}
+	// and of the four the view shows the farthest is dropped
 	species(30, 10, false)
+	species(60, 10, false)
 	species(24, 12, true)
+	species(40, 6, false)
 	species(9, 10, true)
 	for i, b := range []component.BehaviorComponent{
-		{Landing: true, TargetX: 18, TargetY: 6}, {Landing: true, TargetX: 9, TargetY: 10}, {TargetX: 16, TargetY: 10},
+		{Landing: true, TargetX: 30, TargetY: 12}, {Landing: true, TargetX: 18, TargetY: 6},
+		{Landing: true, TargetX: 9, TargetY: 10}, {TargetX: 16, TargetY: 10},
 	} {
 		place(w, core.DomainShared, 150, i, func(e core.Entity) { w.Components.Behavior.SetComponent(e, b) })
-	}
-	for _, l := range []struct {
-		x, y  int
-		owner core.Entity
-	}{{26, 10, own}, {9, 10, own}, {16, 11, own + 1}} {
-		place(w, core.DomainPlayer, l.x, l.y, func(e core.Entity) {
-			w.Components.Loot.SetComponent(e, component.LootComponent{Owner: l.owner})
-		})
 	}
 
 	// A Kraken's body at 40,14 covers the cells its members stand on: of those the
@@ -689,21 +686,22 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		pull := max(1-r/(float64(width)/4), 0)
 		return pull * float64(dx) / r, pull * float64(2*dy) / r
 	}
+	// at is a thing dx, dy cells from the cursor
+	at := func(dx, dy int, enraged float64) sighted {
+		s := sighted{x: across(dx), y: down(dy), enraged: enraged}
+		s.nearX, s.nearY = near(dx, dy)
+		return s
+	}
 	want := scene{
 		rock:    [3][2]float64{{down(1 - 10), down(cfg.MapHeight - 3 - 10)}, {down(4 - 10), down(15 - 10)}, {down(7 - 10), down(12 - 10)}},
-		landing: sighted{x: across(2), y: down(-4)},
+		species: [slots]sighted{at(8, 2, 1), at(14, 0, 0), at(24, -4, 0)},
+		landing: [slots]sighted{at(2, -4, 0), at(14, 2, 0)},
 		kraken:  sighted{x: across(40 - 16), y: down(14 - 10)},
 		reach:   0.25,
-		loot:    [2]float64{across(10), 0},
 		column:  2*float64(16-minX)/float64(width-1) - 1,
 		energy:  0.5,
 		heat:    0.5,
 	}
-	want.species[0] = sighted{x: across(8), y: down(2), enraged: 1}
-	want.species[1] = sighted{x: across(14)}
-	want.species[0].nearX, want.species[0].nearY = near(8, 2)
-	want.species[1].nearX, want.species[1].nearY = near(14, 0)
-	want.landing.nearX, want.landing.nearY = near(2, -4)
 	want.kraken.nearX, want.kraken.nearY = near(22-16, 12-10)
 	if got != want {
 		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
@@ -711,8 +709,7 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	// A Kraken spinning up its charge, or on it, lands where the charge ends
 	charging, _ := w.Components.Kraken.GetPtr(kraken)
 	charging.State = component.KrakenSpin
-	want.landing = sighted{x: across(1), y: down(-1)}
-	want.landing.nearX, want.landing.nearY = near(1, -1)
+	want.landing = [slots]sighted{at(1, -1, 0), at(2, -4, 0), at(14, 2, 0)}
 	if got := d.mind.look(from, minX, minY, maxX, maxY); got != want {
 		t.Fatalf("with a Kraken charging the sensors read\n%+v, want\n%+v", got, want)
 	}

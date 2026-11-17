@@ -12,13 +12,19 @@ learn = true
 # candidate nothing beats is scored and the next one plays
 round_seconds = 1800
 
+# raid reads the rock, every raider, as three fly at most, and every cell one is
+# about to land on: what it leaves out it cannot learn from
 [network.raid]
 hidden = 6
 inputs = [
     "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
     "species_x", "species_y", "species_enraged", "species_near_x", "species_near_y",
     "species2_x", "species2_y", "species2_enraged", "species2_near_x", "species2_near_y",
-    "landing_near_x", "landing_near_y", "loot_x", "loot_y", "column", "energy", "heat",
+    "species3_x", "species3_y", "species3_enraged", "species3_near_x", "species3_near_y",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y",
+    "landing2_x", "landing2_y", "landing2_near_x", "landing2_near_y",
+    "landing3_x", "landing3_y", "landing3_near_x", "landing3_near_y",
+    "column", "energy", "heat",
 ]
 
 # The weights written by hand, which learning starts from: drift to a column just
@@ -36,12 +42,13 @@ species_y = 0.9
 ceiling = 0.05
 floor = 0.05
 
+# kraken reads the map's edges, which ceiling and floor are once the rock is gone
+# and column across, the Kraken, and where its charge will end, a landing
 [network.kraken]
 hidden = 6
 inputs = [
-    "ceiling", "floor", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
-    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "loot_x", "loot_y",
-    "column", "energy", "heat",
+    "ceiling", "floor", "column", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "energy", "heat",
 ]
 
 # By hand: leave the nearest cell the Kraken covers, legs and all, and hold a
