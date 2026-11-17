@@ -395,13 +395,25 @@ What remains:
   search, and a game more than the cores takes up the core it frees. That
   count is read on two to four cores, and three did better with two more: read
   it on more cores, where the learners' one lock may bind first.
-- **A scenario that opens on the Kraken.** `kraken`'s learner is scored only by
-  rounds that reach it, three in four of the hand-written weights'. A ship
-  arrives at the first Kraken with 43,000 to 69,000 energy (the quartiles of
-  44 fights, the median 50,000), 20 heat and the gun seven levels up; a copy of
-  `cave` starting so, its ramp skipped, meets the Kraken at tick 134 of every
-  round and the hand-written weights win 15 first fights of 16 there, as in the
-  game.
+- **A scenario that opens on the Kraken** scores `kraken` every round and
+  fields nothing better on four seeds, so none is built. A ship arrives there
+  with 43,000 to 69,000 energy (the quartiles of 44 fights, the median 50,000),
+  20 heat and the gun seven levels up; a copy of `cave` starting so, its ramp
+  skipped, meets the Kraken at tick 134 and the hand-written weights win 15
+  first fights of 16 there, as in the game. `kraken` learning alone for nine
+  million ticks of five games, then held out in `cave` beside the hand-written
+  `raid`:
+
+  ```
+  seed                          1       2       3       4
+  learned in cave           27383   34211   23074   51120
+    its rounds scored        1021     883    1064     698
+  learned in the copy       20666   21433   32686   50244
+    its rounds scored        1393    1477    1227    1018
+  ```
+
+  The copy's first fight starts from one state where `cave`'s vary; a learner
+  fed by both scenarios is not tried.
 - **What the fielded members fly.** A run once found the edge hop, from the
   side the Kraken's charge heads for to the far one, hitting it now and then,
   which its kill's pay by pace now discourages: whether what a run fields
