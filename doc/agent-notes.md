@@ -827,7 +827,7 @@ Libraries · Branches.
   Read the fielded member's mean over held-out rounds on other seeds, never the
   archive's own score, which a lucky round sets: an archive's 853 was 628 held
   out. Settings are compared on a `tar` copy of the tree whose constants read the
-  environment, three seeds each at once; one setting's seeds span 433 to 1,307.
+  environment, three seeds each at once; one setting's seeds span 433 to 1,359.
   Send a run's lines to its file line-buffered (`grep --line-buffered`): a
   container restart ends the runs and loses what a pipe still held.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick

@@ -398,9 +398,9 @@ flat out: the member each run fields, over 400 rounds of four seeds it never
 played, a learning seed a column. The weights written by hand score 230 there.
 
 ```
-seed        1      2      3
-score    1233   1307    433
-ticks    1014   1076    386
+seed        1      2      3      4      5      6
+score    1233   1307    433    966   1359    719
+ticks    1014   1076    386    823   1110    617
 ```
 
 The archive's own score for a member runs to twice that, a lucky round in it,

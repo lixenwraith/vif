@@ -280,11 +280,12 @@ a tenth of the weights stepped                304     628     254
   every second round a repeat                 512    1007     505
   the mean of three rounds an evaluation      352     648     478
 three in a hundred stepped, as shipped       1233    1307     433
+  the same, seeds 4 to 6                      966    1359     719
 ```
 
-- Three seeds a row, and one setting's span 433 to 1,307: only the share of
-  weights stepped stands clear of that. The first row ran with its first child
-  drawn at a tenth too, one evaluation's difference.
+- Three seeds a row, and the shipped setting's six span 433 to 1,359: only the
+  share of weights stepped stands clear of that. The first row's first child was
+  drawn at a tenth too; drawn as shipped, its seed 1 reads 397.
 - The archive's own score runs to twice what its member holds on rounds it never
   played: seed 2's fielded member read 2,314 over two rounds and 1,307 held out.
 - A ship lives by leaving a raider's cells at once: a hit pays energy, but a
