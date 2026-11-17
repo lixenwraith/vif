@@ -785,6 +785,11 @@ Libraries · Branches.
   without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
   nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
   under five at `:speed 8`.
+- Two looks of one effect compare at one tick: a `-script <file> -watch` run is
+  the same game whatever draws it, a build a look, each in its own tmux session.
+  `-speed 1/2` lets a capture every 50 ms land on every tick, read from the status
+  bar's `GT:`. A mark on the cell a cursor stands on lies under that cursor's
+  shield, 21 cells by 11: script the cursor to leave, and look at both moments.
 - A renderer's own test does not show how layers compose. A flash's glyph under a
   fading ground was blended to nothing, and a fade over a cell nothing painted
   (black in staging, the theme background after `finalize`) went through black:
