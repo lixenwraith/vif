@@ -896,8 +896,8 @@ rotated file soon receives a self-description. It carries:
 - fixed tick interval and terminal-equivalent `width`/`height` used by the
   simulation;
 - the map latch (`map_w`, `map_h`, `crop_on_resize`) and the cell aspect
-  (`cell_aspect`), whether the map was session-shared (`session_shared`), and
-  the local `slot`.
+  (`cell_aspect`), whether the map was session-shared (`session_shared`) or its
+  player fixed its size (`map_fixed`), and the local `slot`.
 
 Closing the journal writes an `end` record, `jrun`, `jtick` and `boundary`, so a
 replay also plays the input-free ticks after the last record.

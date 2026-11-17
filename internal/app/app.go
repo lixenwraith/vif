@@ -61,6 +61,10 @@ type restartRequest struct {
 
 	// Console is what this run's console listed, which the next one lists on from
 	Console []engine.ConsoleLine
+
+	// Fitted is the screen this run fixed its map at as it fitted it (-size fit),
+	// which the next one keeps as the size named, zeros where it fitted none
+	Fitted screen
 }
 
 // replaceWith latches req as the run to build next, and is the only thing that
@@ -517,10 +521,22 @@ func (a *App) settingsUnsaved(err error) {
 // applyMapLatch installs this run's D-14 position before any system is built and
 // before the FSM boot script spawns cursor slot zero at the centre of the map.
 // LockMap alone closes the crop path and engages the playout barrier; a run
-// reproducing a session also carries the bounds it must start on.
+// reproducing a session also carries the bounds it must start on. A person's run
+// that names its size, in no session, plays a map fixed at it or, to fit, as built.
 func (a *App) applyMapLatch() {
 	if a.cfg.LockMap {
 		a.world.MarkSessionShared()
+	} else if a.cfg.Mode.OwnsGeometry() && (a.cfg.FitSize || a.cfg.Width > 0 && a.cfg.Height > 0) {
+		a.cfg.FixMap = true
+		if a.cfg.FitSize {
+			a.cfg.Width, a.cfg.Height = a.ctx.Width, a.ctx.Height
+		}
+		a.cfg.MapWidth, a.cfg.MapHeight = engine.Viewport(a.cfg.Width, a.cfg.Height)
+		a.cfg.CropOnResize = true
+	}
+	if a.cfg.FixMap {
+		a.world.FixMap()
+		a.ctx.PublishMapLock()
 	}
 	cfg := a.world.Resources.Config
 	if a.cfg.MapWidth <= 0 || a.cfg.MapHeight <= 0 {

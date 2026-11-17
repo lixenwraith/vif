@@ -65,7 +65,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"relay"}, arg: "<addr>",
 				hint: "Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only"},
 			{names: []string{"size"}, arg: "<WxH|fit>",
-				hint: "Size of a run no player sits at, or fit for its screen's; without it 120x40, and a -serve session its first player's"},
+				hint: "Size a run's map is fixed at, WxH or fit for its screen's as it starts: a player's keeps it however their screen is resized, and a desktop window opens at it. Without it a player's map follows their screen, a run no player sits at plays 120x40, and a -serve session its first player's"},
 			{names: []string{"probe"}, arg: "<addr>", hint: "Health and metrics endpoint; -serve only"},
 			{names: []string{"first-join"}, arg: "<dur>", hint: "Exit if no guest connects within this; -serve only, 0 waits forever"},
 			{names: []string{"empty"}, arg: "<dur>", hint: "Exit this long after the last guest leaves; -serve only, 0 keeps the session"},

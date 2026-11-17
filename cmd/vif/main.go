@@ -693,7 +693,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.passphrase, "passphrase", "", "The passphrase this run's doors take (Argon2-SCRAM), or new for one made and printed; with -join, the one shown to a door that asks")
 	fs.StringVar(&f.admit, "admit", "", "What a -host or -serve door admits beside a pass: open (default), or ticket:<key>[,<key>], the site's tickets under the router's public key(s) and no bare key")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
-	fs.StringVar(&f.size, "size", "", "Size WxH of a run no player sits at, or fit for its screen's")
+	fs.StringVar(&f.size, "size", "", "Size WxH a run's map is fixed at, or fit for its screen's as it starts")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,
 		"With -serve, exit if no guest has connected within this duration, e.g. 90s; 0 waits forever")
 	fs.DurationVar(&f.empty, "empty", 0,
@@ -835,6 +835,9 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		if _, _, err := parseSize(f.size); err != nil {
 			return err
 		}
+	}
+	if f.size != "" && (replay != "" || f.spectate != "") {
+		return errors.New("-size sizes the map a run plays; a replay plays its journal's and a spectator watches its session's")
 	}
 	return nil
 }

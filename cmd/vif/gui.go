@@ -41,8 +41,12 @@ func (h *windowHost) Init() error {
 		return err
 	}
 	h.aspect = atlas.Aspect()
+	cols, rows := parameter.WindowCols, parameter.WindowRows
+	if c, r, err := parseSize(flagSession.size); err == nil {
+		cols, rows = c, r // the size its run names, which the window opens holding
+	}
 	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
-		Cols: parameter.WindowCols, Rows: parameter.WindowRows, Scale: *flagScale,
+		Cols: cols, Rows: rows, Scale: *flagScale,
 		Cell:      settings.Presentation.Cell,
 		Zoom:      glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep},
 		Maximized: windowMaximized, Fullscreen: windowFullscreen})

@@ -616,6 +616,7 @@ func (sc *Scribe) BuildAnchor() event.JournalAnchor {
 		CropOnResize:   cfg.CropOnResize,
 		CellAspect:     float64(cfg.CellAspect),
 		SessionShared:  sc.world.SessionShared(),
+		MapFixed:       sc.world.MapFixed(),
 		Slot:           uint64(sc.world.Resources.Player.LocalSlot()),
 	}
 }

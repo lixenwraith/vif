@@ -106,6 +106,7 @@ type anchorFields struct {
 	CropOnResize   bool    `json:"crop_on_resize"`
 	CellAspect     float64 `json:"cell_aspect"`
 	SessionShared  bool    `json:"session_shared"`
+	MapFixed       bool    `json:"map_fixed"`
 }
 
 // Load reads one or more journal files into a single set. The event registry must
@@ -289,7 +290,7 @@ func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {
 		ContentFiles: f.ContentFiles, ContentBlocks: f.ContentBlocks, ContentLines: f.ContentLines,
 		TickInterval: f.TickInterval, Width: f.Width, Height: f.Height,
 		MapWidth: f.MapWidth, MapHeight: f.MapHeight, CropOnResize: f.CropOnResize, CellAspect: f.CellAspect,
-		SessionShared: f.SessionShared, Slot: f.Slot,
+		SessionShared: f.SessionShared, MapFixed: f.MapFixed, Slot: f.Slot,
 	}, nil
 }
 

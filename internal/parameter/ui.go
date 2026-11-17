@@ -18,8 +18,8 @@ const (
 	LeftMargin = 1
 )
 
-// WindowCols and WindowRows are the grid a desktop window opens at; the player
-// resizes it by whole cells from there
+// WindowCols and WindowRows are the grid a desktop window opens at where -size
+// names none; the player resizes it by whole cells from there
 const (
 	WindowCols  = 120
 	WindowRows  = 40

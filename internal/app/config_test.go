@@ -165,6 +165,11 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 			want: "mutually exclusive",
 		},
 		{
+			name: "a player's size with no game area",
+			cfg:  Config{Width: 100, Height: 2},
+			want: "no game area",
+		},
+		{
 			name: "replay cannot network",
 			cfg:  Config{Mode: ModeReplay, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24},
 			want: "playback cannot join",
@@ -189,7 +194,7 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 // line with what the restart named, keeping a pinned seed and the console's lines.
 // A :join drops the -players and -authority of a session it no longer hosts and
 // falls back to that run alone; a run following nobody keeps its session's ceiling,
-// and a door reopens under the policy its session held, not the command line's.
+// a door reopens under its session's policy, and a size fitted is kept as named.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
@@ -235,6 +240,10 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	}
 	if pinned, _ := line.restarted(&restartRequest{Scenario: "duel", Host: "127.0.0.1:7001"}); pinned.Membership.Migrate {
 		t.Fatal("a door reopened for a session that ends with its host migrates, as the command line asked of another")
+	}
+	line.FitSize = true
+	if kept, _ := line.restarted(&restartRequest{Fitted: screen{160, 50}}); kept.Width != 160 || kept.Height != 50 || kept.FitSize {
+		t.Fatalf("a run replacing one that fitted 160x50 plays %dx%d, fitting again %t; want that size kept", kept.Width, kept.Height, kept.FitSize)
 	}
 	line.Membership.Migrate = false
 	if moving, _ := line.restarted(&restartRequest{Scenario: "duel", Host: "127.0.0.1:7001", Migrate: true}); !moving.Membership.Migrate {

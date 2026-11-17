@@ -293,6 +293,12 @@ Libraries · Branches.
   posts no resize for it: one at the launch starts a person's held first game
   over (`App.handleResize`), as run 1 on the next session's streams, and reaches
   a host's map after its door locked it.
+- `LockMap` latches the world as session-shared, which also engages the playout
+  barrier: a run in no session whose map must not follow its screen, as a person's
+  under `-size`, latches `World.FixMap` instead. `World.MapSizeLocal` answers for
+  both and gates the resize's crop, the reset's return to the viewport, a level
+  setup of no size and a held game starting over, so a new path that sizes a map
+  from a screen asks it.
 - A run that shows nothing reads its terminal off any standard stream still on it
   (`startedIn`): under `go test` there is none, and a test names one by swapping it.
 - The run a restart builds starts from the launch line and what earlier restarts
