@@ -63,7 +63,8 @@ musl (Alpine) or under Termux, build the terminal alone from the source with
 `./vif -g` opens a desktop window instead of playing in the terminal, on X11 or on
 Wayland through XWayland. It loads `libX11.so.6`, `libEGL.so.1` and
 `libGLESv2.so.2` when it opens, and `-scale 2` doubles its font for a HiDPI
-screen.
+screen. Ctrl with `=` or `-`, or with the wheel, zooms it, and Ctrl-0 puts its
+font back.
 
 <!-- end -->
 <!-- if windows -->

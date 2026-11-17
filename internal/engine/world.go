@@ -82,6 +82,11 @@ type World struct {
 	// reproduce. Set from the join anchor at construction and by AttachTransport.
 	sessionShared atomic.Bool
 
+	// mapFixed records that the run's player fixed its map's size, or that this
+	// world reproduces one so fixed: no terminal sizes it, as none sizes a shared
+	// one, while nothing of a session's applies. Set at construction.
+	mapFixed atomic.Bool
+
 	// cameraEdge is [play] camera_edge, the percent FollowCamera keeps the cursor
 	// from the view's sides. Outside Resources, so a world copied in, as a replay's
 	// seek installs, never takes back the viewer's setting
@@ -573,8 +578,16 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
 }
 
-// Map bounds may follow the local terminal only outside a shared session or replay (D-14).
-func (w *World) MapSizeLocal() bool { return !w.SessionShared() }
+// Map bounds may follow the local terminal only where the run's player fixed none
+// and outside a shared session or replay (D-14).
+func (w *World) MapSizeLocal() bool { return !w.mapFixed.Load() && !w.SessionShared() }
+
+// FixMap latches the map as its run's player fixed it: no resize crops it, and a
+// new game and a level reset keep its bounds, as a shared map's are kept.
+func (w *World) FixMap() { w.mapFixed.Store(true) }
+
+// MapFixed reports the map as fixed by its run's player (FixMap).
+func (w *World) MapFixed() bool { return w.mapFixed.Load() }
 
 // SessionShared reports whether this world is, or reproduces, one shared with
 // another participant: a second rostered cursor, a bound session transport, or the

@@ -178,6 +178,9 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	c.Membership.Passphrase, c.wiring.membership.Door = next.Passphrase, next.Door
 	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
 	c.wiring.console = next.Console
+	if next.Fitted != (screen{}) { // a map fixed to fit keeps its size, whatever the screen is by now
+		c.Width, c.Height, c.FitSize = next.Fitted.w, next.Fitted.h, false
+	}
 	c.wiring.membership.JoinPress, c.Resources.Provided = next.Press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false

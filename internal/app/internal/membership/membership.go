@@ -191,6 +191,7 @@ type Run interface {
 	Mode() config.Mode
 	Scripted() bool
 	GeometryDefaulted() bool
+	NamedSize() (width, height int)
 	Resources() resource.Options
 	JoinBase() JoinBase
 	Position() event.Stamp

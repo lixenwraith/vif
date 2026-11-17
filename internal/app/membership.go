@@ -68,6 +68,7 @@ type membershipRun struct{ a *App }
 func (r membershipRun) Mode() Mode                    { return r.a.cfg.Mode }
 func (r membershipRun) Scripted() bool                { return r.a.cfg.wiring.scriptedSession }
 func (r membershipRun) GeometryDefaulted() bool       { return r.a.cfg.wiring.geometryDefaulted }
+func (r membershipRun) NamedSize() (int, int)         { return r.a.namedSize() }
 func (r membershipRun) Resources() resource.Options   { return r.a.cfg.Resources }
 func (r membershipRun) JoinBase() membership.JoinBase { return r.a.cfg }
 
@@ -91,6 +92,24 @@ func (r membershipRun) Replacing() bool                               { return r
 // ReplaceWith latches the membership's ask as this run's request (replaceWith).
 func (r membershipRun) ReplaceWith(ask *membership.RestartAsk) bool {
 	return r.a.replaceWith(&restartRequest{RestartAsk: *ask})
+}
+
+// namedSize is the size this run's player named for its map (-size WxH), zeros
+// where its screen is its size or sizes its map
+func (a *App) namedSize() (int, int) {
+	if !a.cfg.Mode.OwnsGeometry() || a.cfg.FitSize {
+		return 0, 0
+	}
+	return a.cfg.Width, a.cfg.Height
+}
+
+// fitted is the screen this run fixed its map at as it fitted it, zeros for a run
+// that fitted none
+func (a *App) fitted() screen {
+	if !a.cfg.FixMap || !a.cfg.FitSize {
+		return screen{}
+	}
+	return screen{a.cfg.Width, a.cfg.Height}
 }
 
 // SeatScreenLocked is the screen a new seat plays in: this run's, so a person's bots

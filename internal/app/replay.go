@@ -40,7 +40,7 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 		Mode: ModeHeadless, Seed: a.Seed, Session: a.Session,
 		Width: a.Width, Height: a.Height, TickInterval: tick,
 		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
-		CellAspect: vmath.Aspect(a.CellAspect), LockMap: a.SessionShared,
+		CellAspect: vmath.Aspect(a.CellAspect), LockMap: a.SessionShared, FixMap: a.MapFixed,
 	}
 
 	// Embedded on both sides is the only pairing Config states exactly; a mixed

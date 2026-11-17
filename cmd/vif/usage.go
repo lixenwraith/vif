@@ -65,7 +65,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"relay"}, arg: "<addr>",
 				hint: "Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only"},
 			{names: []string{"size"}, arg: "<WxH|fit>",
-				hint: "Size of a run no player sits at, or fit for its screen's; without it 120x40, and a -serve session its first player's"},
+				hint: "Size a run's map is fixed at, WxH or fit for its screen's as it starts: a player's keeps it however their screen is resized, and a desktop window opens at it. Without it a player's map follows their screen, a run no player sits at plays 120x40, and a -serve session its first player's"},
 			{names: []string{"probe"}, arg: "<addr>", hint: "Health and metrics endpoint; -serve only"},
 			{names: []string{"first-join"}, arg: "<dur>", hint: "Exit if no guest connects within this; -serve only, 0 waits forever"},
 			{names: []string{"empty"}, arg: "<dur>", hint: "Exit this long after the last guest leaves; -serve only, 0 keeps the session"},
@@ -90,7 +90,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"cli"}, hint: "Play in the terminal whatever vif.toml's [presentation] or a vif-gui build says; wins over -g"},
 			{names: []string{"maximized"}, arg: "[=false]", hint: "Open the desktop window maximized; vif.toml's [presentation] maximized is the default, and a terminal run ignores it"},
 			{names: []string{"fullscreen"}, arg: "[=false]", hint: "Open the desktop window full screen; vif.toml's [presentation] fullscreen is the default, and a terminal run ignores it"},
-			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; with -g (default 1)"},
+			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; with -g (default 1). Ctrl with = or -, or with the wheel, zooms the window from there, as a terminal's own keys zoom a terminal, and Ctrl-0 puts its font back"},
 			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, sound on by default"},
 			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Force an audio backend instead of detecting one"},
 		},
@@ -374,8 +374,8 @@ User configuration root, normally
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
 music, scenario, content, keymap and downloads paths, the audio mixer buffer,
-whether the desktop window opens and how, the zoom Android and a browser keep, the
-[play] settings the menu writes back, and what a run keeps of its sessions. A run
+whether the desktop window opens and how, the zoom it, Android and a browser keep,
+the [play] settings the menu writes back, and what a run keeps of its sessions. A run
 brings the player's own, and their input/keymap.toml, up to this build's: what the
 build does not take goes, what it ships and the file lacks comes with its
 comments, and every other line stays.

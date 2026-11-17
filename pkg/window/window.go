@@ -8,7 +8,9 @@
 package window
 
 import (
+	"cmp"
 	"errors"
+	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -29,6 +31,10 @@ type Config struct {
 	Atlas      *glyph.Atlas
 	Cols, Rows int
 	Scale      int
+	// Cell is the zoom the window opens at, a cell's height in dp of Scale pixels,
+	// 0 for the atlas's own; Zoom is the range its player's zoom keeps to
+	Cell float64
+	Zoom glyph.Zoom
 	// Maximized or Fullscreen is the state the window opens in, asked of the window
 	// manager; the grid follows the size it gives, as it follows any resize
 	Maximized, Fullscreen bool
@@ -39,6 +45,7 @@ type Config struct {
 type Window struct {
 	atlas  *glyph.Atlas
 	scale  int
+	keeps  glyph.Zoom
 	events chan terminal.Event
 	ready  chan struct{} // a frame is waiting to be drawn
 	stop   chan struct{}
@@ -46,6 +53,7 @@ type Window struct {
 	once   sync.Once
 
 	grid    atomic.Uint64 // cols<<32 | rows
+	dp      atomic.Uint64 // the zoom, a cell's height in dp as float64 bits, 0 for the atlas's own
 	pointer atomic.Uint32 // pointerOff, pointerButtons or pointerMotion
 	asks    chan keyAsk   // the latest SetKeyReport the thread has not taken
 	keys    hostkey.Report
@@ -63,6 +71,7 @@ type Window struct {
 	raster     *glyph.Raster
 	cells      []terminal.Cell
 	winW, winH int
+	cw, ch     int // a cell's window pixels, at the scale and the zoom
 	lastCell   [2]int
 	detectable bool // the server repeats a held key as presses alone
 }
@@ -85,6 +94,14 @@ const (
 	pollWake   = 100 // ms
 )
 
+// settleWait bounds Open's wait for the window manager to place the window, as the
+// page's fit is bounded; settleQuiet is how long the size must then hold, since a
+// manager may size a window just after mapping it, as a Wayland compositor's does
+const (
+	settleWait  = time.Second
+	settleQuiet = 100 * time.Millisecond
+)
+
 // X event types and the input mask that selects them
 const (
 	xKeyPress        = 2
@@ -94,6 +111,7 @@ const (
 	xMotionNotify    = 6
 	xFocusOut        = 10
 	xExpose          = 12
+	xMapNotify       = 19
 	xConfigureNotify = 22
 	xClientMessage   = 33
 	xEventMask       = 1<<0 | 1<<1 | 1<<2 | 1<<3 | 1<<6 | 1<<15 | 1<<17 | 1<<21
@@ -125,7 +143,8 @@ type sizeHints struct {
 
 const hintMinSize, hintResizeInc, hintBaseSize = 1 << 4, 1 << 6, 1 << 8
 
-// Open loads the libraries, opens the window on $DISPLAY and starts its thread
+// Open loads the libraries, opens the window on $DISPLAY and starts its thread; it
+// returns once the window manager has placed the window (settle)
 func Open(cfg Config) (*Window, error) {
 	if cfg.Atlas == nil || cfg.Cols < 1 || cfg.Rows < 1 {
 		return nil, errors.New("window: an atlas and a grid of at least one cell are required")
@@ -147,6 +166,7 @@ func newWindow(cfg Config) *Window {
 	w := &Window{
 		atlas:  cfg.Atlas,
 		scale:  max(cfg.Scale, 1),
+		keeps:  cfg.Zoom,
 		events: make(chan terminal.Event, eventQueue),
 		ready:  make(chan struct{}, 1),
 		stop:   make(chan struct{}),
@@ -155,6 +175,7 @@ func newWindow(cfg Config) *Window {
 		raster: glyph.NewRaster(cfg.Atlas),
 	}
 	w.keys.Post = func(ev terminal.Event) { w.post(ev) }
+	w.setCell(cfg.Cell)
 	w.setGrid(cfg.Cols, cfg.Rows)
 	return w
 }
@@ -243,8 +264,18 @@ func (w *Window) SetKeyReport(report terminal.KeyReport, allow terminal.KeySourc
 
 func (w *Window) setGrid(cols, rows int) { w.grid.Store(uint64(cols)<<32 | uint64(uint32(rows))) }
 
-// cell is an atlas cell's size in window pixels
-func (w *Window) cell() (int, int) { return w.atlas.Width * w.scale, w.atlas.Height * w.scale }
+// Cell is the zoom the player left the window at, a cell's height in dp, 0 for the
+// atlas's own, which the run writes back to vif.toml
+func (w *Window) Cell() float64 { return math.Float64frombits(w.dp.Load()) }
+
+// setCell sizes a cell by the scale and the zoom dp, 0 for the atlas's own
+func (w *Window) setCell(dp float64) {
+	w.dp.Store(math.Float64bits(dp))
+	w.cw, w.ch = w.atlas.Cell(float64(w.scale), cmp.Or(dp, float64(w.atlas.Height)))
+}
+
+// cell is a cell's size in window pixels
+func (w *Window) cell() (int, int) { return w.cw, w.ch }
 
 func (w *Window) run(cfg Config, opened chan<- error) {
 	defer close(w.done)
@@ -255,6 +286,7 @@ func (w *Window) run(cfg Config, opened chan<- error) {
 		return
 	}
 	defer w.release()
+	w.settle(cfg.Fullscreen || cfg.Maximized)
 	opened <- nil
 
 	wake := make(chan struct{})
@@ -305,13 +337,78 @@ func (w *Window) open(cfg Config) error {
 			&states[0], int32(len(states)))
 	}
 	xMapWindow(w.dpy, w.win)
-	g, err := newGPU(w.dpy, w.win, w.scale)
+	g, err := newGPU(w.dpy, w.win)
 	if err != nil {
 		w.release()
 		return err
 	}
 	w.gpu = g
+	g.cell(cw, ch, w.atlas.Width, w.atlas.Height)
 	return nil
+}
+
+// zoom takes a zoom step: the grid the window's pixels hold follows the cell and is
+// posted as a resize, as a resized window's is. The size hints stay the opening
+// cell's: new ones would have the manager resize the window.
+func (w *Window) zoom(by float64) bool {
+	if !w.rescale(by) {
+		return true
+	}
+	w.gpu.cell(w.cw, w.ch, w.atlas.Width, w.atlas.Height)
+	w.gpu.draw(w.winW, w.winH)
+	return !w.regrid() || w.postGrid()
+}
+
+// rescale sets the cell a zoom step leaves, by scaling it within the range the
+// window keeps to and 0 putting back the atlas's own; false where it stays as it is
+func (w *Window) rescale(by float64) bool {
+	kept, dp := w.Cell(), 0.0
+	if was := cmp.Or(kept, float64(w.atlas.Height)); by != 0 {
+		if dp = w.keeps.Scale(w.atlas, float64(w.scale), was, by); dp == was {
+			return false
+		}
+	}
+	if dp == kept {
+		return false
+	}
+	w.setCell(dp)
+	return true
+}
+
+// settle takes the size the window manager places the window at, so Size is the
+// grid on screen when Open returns and no resize is posted for it: once the window
+// is mapped, and resized where a state was asked, its size has held for settleQuiet
+func (w *Window) settle(asked bool) {
+	fds := []unix.PollFd{{Fd: xConnectionNumber(w.dpy), Events: unix.POLLIN}}
+	openW, openH, mapped := w.winW, w.winH, false
+	bound := time.Now().Add(settleWait) // [wall] a wait on the window manager
+	until := bound
+	for {
+		var ev xEvent
+		for xPending(w.dpy) > 0 {
+			xNextEvent(w.dpy, &ev)
+			switch ev.int32At(0) {
+			case xMapNotify:
+				mapped = true
+			case xConfigureNotify:
+				w.fit(int(ev.int32At(56)), int(ev.int32At(60)))
+			default:
+				w.handle(&ev)
+				continue
+			}
+			until = bound
+			if quiet := time.Now().Add(settleQuiet); mapped && (!asked || w.winW != openW || w.winH != openH) && quiet.Before(bound) {
+				until = quiet
+			}
+		}
+		left := time.Until(until)
+		if left <= 0 {
+			return
+		}
+		if _, err := unix.Poll(fds, int(left/time.Millisecond)+1); err != nil && err != unix.EINTR {
+			return
+		}
+	}
 }
 
 func (w *Window) release() {
@@ -384,6 +481,9 @@ func (w *Window) handle(ev *xEvent) bool {
 		var keysym uint64
 		var buf [32]byte
 		xLookupString(ev, &buf[0], int32(len(buf)), &keysym, 0)
+		if by, ok := zoomKey(keysym, uint32(ev.int32At(80))); ok {
+			return w.zoom(by)
+		}
 		if k, ok := keyEvent(keysym, uint32(ev.int32At(80))); ok {
 			code := uint32(ev.int32At(84))
 			w.keys.Down(code, k, w.keys.Held(code))
@@ -397,6 +497,11 @@ func (w *Window) handle(ev *xEvent) bool {
 			w.keys.Lost()
 		}
 	case xButtonPress, xButtonRelease, xMotionNotify:
+		if ev.int32At(0) == xButtonPress {
+			if by, ok := zoomWheel(ev.int32At(84), uint32(ev.int32At(80))); ok {
+				return w.zoom(by)
+			}
+		}
 		if m, ok := w.mouseEvent(ev); ok {
 			return w.post(m)
 		}
@@ -414,21 +519,34 @@ func (w *Window) handle(ev *xEvent) bool {
 	return true
 }
 
-// resize records the window's pixel size and posts the grid when it changed
-func (w *Window) resize(width, height int) bool {
+// fit records the window's pixel size and reports whether its grid changed
+func (w *Window) fit(width, height int) bool {
 	if width == w.winW && height == w.winH {
-		return true
+		return false
 	}
 	w.winW, w.winH = width, height
 	w.gpu.draw(width, height)
-	cw, ch := w.cell()
-	cols, rows := max(width/cw, 1), max(height/ch, 1)
+	return w.regrid()
+}
+
+// regrid sizes the grid to the whole cells the window's pixels hold and reports
+// whether it changed
+func (w *Window) regrid() bool {
+	cols, rows := max(w.winW/w.cw, 1), max(w.winH/w.ch, 1)
 	if c, r := w.Size(); c == cols && r == rows {
-		return true
+		return false
 	}
 	w.setGrid(cols, rows)
+	return true
+}
+
+func (w *Window) postGrid() bool {
+	cols, rows := w.Size()
 	return w.post(terminal.Event{Type: terminal.EventResize, Width: cols, Height: rows})
 }
+
+// resize follows the window's pixel size and posts the grid when it changed
+func (w *Window) resize(width, height int) bool { return !w.fit(width, height) || w.postGrid() }
 
 // mouseEvent is the terminal event for a button or motion event at the cell under
 // the pointer, as SGR mouse reporting gives it; motion is reported once per cell

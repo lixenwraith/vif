@@ -343,6 +343,12 @@ func TestSizeNamesAScreenOrAsksToFit(t *testing.T) {
 			t.Errorf("-size %q is taken", size)
 		}
 	}
+	if err := (sessionFlags{size: "100x30"}).validateInvocation(false, false, "run.jsonl"); err == nil {
+		t.Error("-size is taken with a replay, which plays its journal's")
+	}
+	if err := (sessionFlags{size: "fit", spectate: "host.example:7777"}).validateInvocation(false, false, ""); err == nil {
+		t.Error("-size is taken with -spectate, which watches its session's map")
+	}
 }
 
 // TestASessionMigratesOnlyWhereItsHostAskedForIt: -authority migrate is the one word

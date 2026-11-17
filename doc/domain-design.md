@@ -350,6 +350,11 @@ draws on, so under the latch it reads the map instead of the terminal; `camera_*
 and `color_mode` have no shared counterpart and a script reading one is warned,
 because it can choose a different FSM branch on different terminals.
 
+A person's run that fixes its map with `-size` closes the same paths, the crop, the
+reset and the level setup to the viewport, through a latch of its own
+(`World.FixMap`), since the session's also engages the barrier:
+`World.MapSizeLocal` answers for both ([Runtime §1](runtime.md#1-process-modes)).
+
 ### D-15 — Classification is declared once
 
 System domain profiles, required/optional dependencies, and snapshot participation

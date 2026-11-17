@@ -100,7 +100,7 @@ const (
 	glCompileStatus, glLinkStatus, glInfoLogLen   = 0x8B81, 0x8B82, 0x8B84
 	glTexture2D, glTextureMinFilter, glTextureMag = 0x0DE1, 0x2801, 0x2800
 	glTextureWrapS, glTextureWrapT                = 0x2802, 0x2803
-	glNearest, glClampToEdge                      = 0x2600, 0x812F
+	glNearest, glLinear, glClampToEdge            = 0x2600, 0x2601, 0x812F
 	glRGBA, glUnsignedByte, glFloat               = 0x1908, 0x1401, 0x1406
 	glUnpackAlignment                             = 0x0CF5
 	glArrayBuffer, glStaticDraw                   = 0x8892, 0x88E4
@@ -192,12 +192,12 @@ func load() error {
 }
 
 // gpu is an EGL context on the window and the one textured quad a frame is drawn
-// as, scale window pixels to a texel each way
+// as, a cell of its texels over a cell of window pixels
 type gpu struct {
 	display, surface, context uintptr
 	texture                   uint32
 	texW, texH                int // the texture's allocated size, 0 before the first frame
-	scale                     int
+	cw, ch, tw, th            int // a cell's window pixels and its texels
 }
 
 // The quad covers the viewport; the texture's first row is the frame's top row
@@ -214,8 +214,8 @@ void main() { gl_FragColor = texture2D(frame, uv); }` + "\x00"
 var quad = []float32{-1, -1, 1, -1, -1, 1, 1, 1}
 
 // newGPU makes a GLES 2 context current on the calling thread, drawing to win
-func newGPU(xdpy, win uintptr, scale int) (*gpu, error) {
-	g := &gpu{scale: scale}
+func newGPU(xdpy, win uintptr) (*gpu, error) {
+	g := &gpu{cw: 1, ch: 1, tw: 1, th: 1}
 	// EGL 1.5 names the platform; an older one guesses it from the pointer
 	if eglGetPlatformDisplay != nil {
 		g.display = eglGetPlatformDisplay(eglPlatformX11, xdpy, 0)
@@ -330,13 +330,24 @@ func (g *gpu) upload(pix []byte, width, height int) {
 	glTexSubImage2D(glTexture2D, 0, 0, 0, int32(width), int32(height), glRGBA, glUnsignedByte, unsafe.Pointer(&pix[0]))
 }
 
-// draw clears the window and draws the frame at its scale, centred; nearest
-// filtering keeps each texel a block of whole pixels
+// cell sets the window pixels a cell of tw by th texels is drawn over: a whole
+// multiple keeps each texel a block of whole pixels, and any other is filtered
+func (g *gpu) cell(cw, ch, tw, th int) {
+	g.cw, g.ch, g.tw, g.th = cw, ch, tw, th
+	filter := int32(glLinear)
+	if cw%tw == 0 && ch%th == 0 {
+		filter = glNearest
+	}
+	glTexParameteri(glTexture2D, glTextureMinFilter, filter)
+	glTexParameteri(glTexture2D, glTextureMag, filter)
+}
+
+// draw clears the window and draws the frame at its cell's size, centred
 func (g *gpu) draw(winW, winH int) {
 	glViewport(0, 0, int32(winW), int32(winH))
 	glClear(glColorBufferBit)
 	if g.texW > 0 {
-		w, h := g.texW*g.scale, g.texH*g.scale
+		w, h := g.texW/g.tw*g.cw, g.texH/g.th*g.ch
 		x, y := (winW-w)/2, (winH-h)/2
 		glViewport(int32(x), int32(winH-y-h), int32(w), int32(h))
 		glDrawArrays(glTriangleStrip, 0, 4)

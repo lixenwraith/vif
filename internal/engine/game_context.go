@@ -395,16 +395,15 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	ctx.GameXOffset = parameter.LeftMargin
 	ctx.GameYOffset = parameter.TopMargin
+	return Viewport(ctx.Width, ctx.Height)
+}
 
-	// Calculate line number width based on height
-	gameHeight = max(ctx.Height-parameter.BottomMargin-parameter.TopMargin, 1)
-	gameWidth = max(ctx.Width-ctx.GameXOffset, 1)
-
-	// The viewport is what the resize and reset paths write the map from, so it is
-	// bounded here rather than at each of them: a terminal that reports a size the
-	// grid cannot hold is presented at the largest map there is, instead of
-	// producing bounds no cell exists for.
-	return position.Clamp(gameWidth, gameHeight)
+// Viewport is the game area a terminal of width by height leaves inside its
+// margins. It is what the resize and reset paths write the map from, so it is
+// bounded here rather than at each of them: a terminal the grid cannot hold is
+// presented at the largest map there is, never at bounds no cell exists for.
+func Viewport(width, height int) (int, int) {
+	return position.Clamp(max(width-parameter.LeftMargin, 1), max(height-parameter.BottomMargin-parameter.TopMargin, 1))
 }
 
 // ScreenSize inverts updateGameArea: terminal dimensions recovered from the viewport

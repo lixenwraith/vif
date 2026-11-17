@@ -37,9 +37,9 @@ func IdentityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 }
 
 // joinerReport is what this instance tells a coordinator about itself when it
-// accepts an offer: the geometry a dedicated host may size its map from, the
-// identity that host refuses the join on, and what it brings back when the offer
-// is the place its key waits under.
+// accepts an offer: the geometry a dedicated host may size its map from, its
+// screen's or the size its player named, the identity that host refuses the join
+// on, and what it brings back when the offer is the place its key waits under.
 func (m *Membership) joinerReport() network.JoinerReport {
 	r := network.JoinerReport{
 		Holder:   m.wiring.Holder,
@@ -47,6 +47,9 @@ func (m *Membership) joinerReport() network.JoinerReport {
 		Height:   m.ctx.Height,
 		Identity: m.sessionIdentity(),
 		Listen:   m.reach.DeclaredAddr(),
+	}
+	if w, h := m.run.NamedSize(); w > 0 && h > 0 {
+		r.Width, r.Height = w, h
 	}
 	if p := m.place.Load(); p != nil {
 		r.Record = p.Record
