@@ -144,7 +144,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights ([Networks and learning](#networks-and-learning)). |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never ([Networks and learning](#networks-and-learning)). |
 | `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden` and the weights written by hand. |
 | `[regions.<name>]` | `initial` only. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
@@ -424,6 +424,9 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
   the top of the archive, and with none the hand-written weights.
 - A step is a share of a weight's range: a new population starts at 0.1 and
   settles at 0.03 as its best stops improving.
+- A round the game has not ended within the graph's `round_seconds` is closed
+  as far as it came, by a new game the run asks for, so a candidate nothing
+  beats is scored and the next one plays. `cave` takes half an hour.
 - A run in a session does not learn, since any participant's defeat ends every
   round there: its bots, seats among them, play what is fielded. A round an
   operator ends (`:n`) scores nothing.

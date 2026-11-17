@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/toml/macro"
@@ -36,11 +37,13 @@ const (
 // Settings is a graph's [bot] table. AutoFire is the auto-fire its run starts each
 // game on, off, main or on as [play] spells them, the shipped one when empty.
 // Learn has a solo run evolve the weights of the graph's networks as its rounds
-// end, and any run field the best its stores hold.
+// end, and any run field the best its stores hold; RoundSeconds is the game time
+// after which such a run ends a round the game has not, none when zero.
 type Settings struct {
 	ActionsPerSecond int    `toml:"actions_per_second"`
 	AutoFire         string `toml:"auto_fire"`
 	Learn            bool   `toml:"learn"`
+	RoundSeconds     int    `toml:"round_seconds"`
 }
 
 // Graph is one parsed bot document: its settings, the networks it declares, in
@@ -97,6 +100,9 @@ func (g *Graph) validate() error {
 	}
 	if word := g.Settings.AutoFire; word != "" && !slices.Contains(engine.AutoFireWords[:], word) {
 		return fmt.Errorf("auto_fire %q is not off, main or on", word)
+	}
+	if g.Settings.RoundSeconds < 0 {
+		return fmt.Errorf("round_seconds must not be negative, got %d", g.Settings.RoundSeconds)
 	}
 	var err error
 	if g.nets, err = parseNetworks(g.doc["network"]); err != nil {
@@ -238,6 +244,7 @@ type Driver struct {
 	// dispatch may write. Each network's learner, nil for none, has a genome play
 	// a round; while the bot plays alone one of them at a time, explorer, plays a
 	// candidate, scored from where its network first steered in the round (from).
+	// A round that outlasts limit is one the driver asked the game to end (asked).
 	earned      int64
 	roundTick   uint64
 	roundEarned int64
@@ -246,6 +253,8 @@ type Driver struct {
 	from        []roundMark
 	explorer    int
 	alone       func() bool
+	limit       time.Duration
+	asked       bool
 
 	// Round, when set, is told each round as it closes: its number and its score
 	Round func(n uint64, score float64)
@@ -275,7 +284,8 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 		return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 	}
 	d := &Driver{inst: inst, ctx: ctx, machine: m, regions: m.DeclaredRegions(), rate: int64(g.Settings.ActionsPerSecond),
-		learners: make([]*Learner, len(g.nets)), from: make([]roundMark, len(g.nets)), explorer: -1}
+		learners: make([]*Learner, len(g.nets)), from: make([]roundMark, len(g.nets)), explorer: -1,
+		limit: time.Duration(g.Settings.RoundSeconds) * time.Second}
 	d.mind = mind{ctx: ctx, queue: &d.queue, steered: make([]bool, len(g.nets)),
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
 	for _, n := range g.nets {
@@ -377,7 +387,12 @@ func (d *Driver) Step() (bool, error) {
 	d.inst.Tick(1)
 	d.stats.Ticks++
 	if how := d.ended.Swap(roundOn); how != roundOn {
-		d.closeRound(how == roundOver)
+		d.closeRound(how == roundOver || d.asked)
+		d.asked = false
+	} else if over := time.Duration(d.stats.Ticks-d.roundTick) * tick; d.limit > 0 && over >= d.limit && !d.asked && d.explorer >= 0 && d.alone() {
+		// A learning round the game will not end is closed as far as it came, by a new game
+		d.asked = true
+		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 	}
 	return true, nil
 }

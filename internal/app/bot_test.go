@@ -256,6 +256,50 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	}
 }
 
+// TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds
+// has a solo learning run close a round the game has not ended by then, with a new
+// game, and score its candidate on what the round came to.
+func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two seconds are forty ticks, well before the first raider's first charge
+	graph, err := bot.ParseGraph("cave", []byte(strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 2", 1)))
+	if err != nil || graph.Settings.RoundSeconds != 2 {
+		t.Fatalf("the graph's round_seconds is %d, err %v", graph.Settings.RoundSeconds, err)
+	}
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Play: botPlay(paths.Play{}, graph), Resources: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raid, err := bot.NewLearner(graph, "raid", a.Seed(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Learn(func() bool { return true }, raid)
+	const rounds = 3
+	for d.Stats().Rounds < rounds {
+		if more, err := d.Step(); !more || err != nil || d.Stats().Ticks > 400 {
+			t.Fatalf("tick %d: more %v, err %v, %d rounds", d.Stats().Ticks, more, err, d.Stats().Rounds)
+		}
+	}
+	const limit = 2 * time.Second / parameter.GameUpdateInterval
+	if st := d.Stats(); st.Ticks < rounds*uint64(limit) || st.Ticks > rounds*uint64(limit+3) || raid.Stats().Scored != rounds {
+		t.Fatalf("%d rounds took %d ticks and scored %d candidates, want each closed within three ticks of its %d and scored",
+			rounds, st.Ticks, raid.Stats().Scored, limit)
+	}
+}
+
 // driveBot plays graph on the run cfg describes, as vif -bot does, on its own
 // goroutine and paced, and returns the run once the driver is on it, with its stop.
 func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, func()) {

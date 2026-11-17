@@ -83,6 +83,7 @@ on_update = [{ action = "PointAt", payload = { target = "button", away = true } 
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "button", key = "12" } }]`, "key must be one character"},
 		{"[bot]\nauto_fire = \"both\"" + region + "[states.A]", `auto_fire "both" is not off, main or on`},
+		{"[bot]\nround_seconds = -1" + region + "[states.A]", "round_seconds must not be negative"},
 		{region + `[states.A]
 on_update = [{ action = "Steer" }]`, `network "" is none of the graph's [network.<name>] tables`},
 		{"[network.a]\ninputs = [\"column\"]\n[network.b]\ninputs = [\"column\"]" + region + `[states.A]

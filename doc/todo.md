@@ -281,14 +281,14 @@ flee threats within 20                          245
 one network, offsets alone                      230
   with nearness                                1644
   and auto-fire on main                        2406
-with a network for the Kraken, as shipped    8737
+with a network for the Kraken, as shipped      8737
 ```
 
 The Kraken network's weights, by the fights won of those met and the round's
 score, 400 rounds over seeds 1 to 4:
 
 ```
-the raid weights                                 82 of 598   2406
+the raid weights                                 37 of 295   2375
 leave its nearest cell and its charge's end      42 of 301   2646
   and hold the middle, a fifth of the way       208 of 309   5127
   without its charge's end                      259 of 289   8089
@@ -317,11 +317,21 @@ What remains:
 
 - **Rounds an hour.** One game plays on one core, and the shipped weights'
   rounds last 7,300 ticks: a round a second flat out, and some ten an hour
-  watched at speed 1. What multiplies it is a game on every core, each its own
-  instance and all feeding the learners: the engine takes many evaluations in
-  flight and a `Learner` holds one. `kraken`'s learner is scored only by rounds
-  that reach it; a scenario that opens on the Kraken would score it every
-  round. With [Train bot graphs offline](#train-bot-graphs-offline).
+  watched at speed 1. A learner that outlasts the Kraken plays rounds up to the
+  graph's `round_seconds`, 36,000 ticks, five seconds a core and half an hour
+  watched; unbounded, one ran 520,000. What multiplies the
+  rounds is a game on every core, each its own instance and all feeding the
+  learners: the engine takes many evaluations in flight and a `Learner` holds
+  one. `kraken`'s learner is scored only by rounds that reach it; a scenario
+  that opens on the Kraken would score it every round. With
+  [Train bot graphs offline](#train-bot-graphs-offline).
+- **The score past the limit.** A round closed at its limit scores the limit's
+  ticks and what it earned, so candidates that all reach it differ by their
+  kills alone, and the Kraken's weighs 5. Decide what a long round is worth: the
+  Kraken's kill its hit points, which its component holds, a limit that grows
+  as the fielded members reach it, or no ticks while a Kraken is up. And a
+  member's score is the mean of rounds that run from 400 to the limit: decide
+  whether it ranks by a mean one long round moves that far.
 - **What ends its rounds.** Of the 800, a quarter end in the first cave, a
   tenth scoring under 430, at a raider's first charges, and six in ten once
   three or four Krakens are down: species damage doubles a cave, so the fourth
@@ -370,8 +380,7 @@ What remains:
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
   against an eye population that is itself evolving. A code species' kill still
-  weighs 5, the Kraken's among them, whose hit points its component holds: the
-  others' want a table.
+  weighs 5: its hit points want a table.
 - **If the archive stalls** in `cave` at this size: an evolution strategy with a
   step per gene, an engine of its own in `lixenwraith/genetic`. Measure first.
 

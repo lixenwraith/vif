@@ -8,6 +8,9 @@ actions_per_second = 20
 # unasked it spends the heat that outlasts the energy
 auto_fire = "main"
 learn = true
+# A round the game does not end is closed after half an hour of game time, so a
+# candidate nothing beats is scored and the next one plays
+round_seconds = 1800
 
 [network.raid]
 hidden = 6

@@ -858,6 +858,13 @@ Libraries · Branches.
   weights that leave that cell leave where the ship already is. A Kraken policy
   is read by fights won of those met, 300 of them in 400 rounds over four seeds,
   three points either way.
+- A learner that masters a phase makes its rounds long. Within a hundred of
+  `kraken`'s candidates a run finds the hop from the edge the Kraken's charge
+  heads for to the far one, and a round goes from 7,300 ticks to 60,000 and,
+  before the graph's `round_seconds`, past 500,000: the Kraken's hit points
+  double each time. Give a learning run ticks, not rounds,
+  cap its held-out rounds at the graph's limit as the run would, and read the
+  spread with the mean, which a few long rounds carry.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's
