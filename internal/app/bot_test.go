@@ -64,6 +64,15 @@ func playBot(t *testing.T, name string, seed uint64, n int, capture *journal.Cap
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A graph that learns writes no weight, so it acts on what a learner draws: its
+	// last network's here, kept nowhere, as no round ends to pass the turn on
+	if networks := graph.Networks(); graph.Settings.Learn {
+		l, err := bot.NewLearner(graph, networks[len(networks)-1], a.Seed(), 1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bot.Learn(func() bool { return true }, []*bot.Learner{l}, d)
+	}
 	for range n {
 		if more, err := d.Step(); !more || err != nil {
 			t.Fatalf("%s: more %v, err %v", name, more, err)

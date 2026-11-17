@@ -20,6 +20,8 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/machine"
 )
 
 // TestABrokenGraphFailsAtLoadNamingTheFault: a bot graph is resolved by name with no
@@ -108,7 +110,8 @@ on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" i
 	}
 }
 
-// soloWorld is an 80x24 instance whose own cursor stands at x, y
+// soloWorld is an 80x24 instance whose own cursor stands at x, y and whose cave
+// scrolls a column each tick
 func soloWorld(x, y int) (*engine.World, *engine.GameContext) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
@@ -117,6 +120,7 @@ func soloWorld(x, y int) (*engine.World, *engine.GameContext) {
 	w.Resources.Player.Bind(0, cursor)
 	w.Resources.Player.SetLocal(0)
 	w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
+	w.Resources.Cave.Steps = 1 // its cave scrolls a column a tick, so a round travels its ticks
 	return w, ctx
 }
 
@@ -660,7 +664,8 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	species(40, 6, false)
 	species(9, 10, true)
 	for i, b := range []component.BehaviorComponent{
-		{Landing: true, TargetX: 30, TargetY: 12}, {Landing: true, TargetX: 18, TargetY: 6},
+		{Landing: true, TargetX: 30, TargetY: 12},
+		{Landing: true, TargetX: 18, TargetY: 6, Machine: machine.Instance[component.BehaviorState]{Elapsed: 300 * time.Millisecond, Duration: 1200 * time.Millisecond}},
 		{Landing: true, TargetX: 9, TargetY: 10}, {TargetX: 16, TargetY: 10},
 	} {
 		place(w, core.DomainShared, 150, i, func(e core.Entity) { w.Components.Behavior.SetComponent(e, b) })
@@ -707,13 +712,16 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		heat:    0.5,
 	}
 	want.kraken.nearX, want.kraken.nearY = near(22-16, 12-10)
+	want.landing[0].soon = 0.25 // a quarter of its warning has run
 	if got != want {
 		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
 	}
-	// A Kraken spinning up its charge, or on it, lands where the charge ends
+	// A Kraken spinning up its charge, or on it, lands where the charge ends, the
+	// sooner the less of its spin is left
 	charging, _ := w.Components.Kraken.GetPtr(kraken)
-	charging.State = component.KrakenSpin
-	want.landing = [slots]sighted{at(1, -1, 0), at(2, -4, 0), at(14, 2, 0)}
+	charging.State, charging.StateRemaining = component.KrakenSpin, parameter.KrakenSpinDuration/5
+	want.landing = [slots]sighted{at(1, -1, 0), want.landing[0], at(14, 2, 0)}
+	want.landing[0].soon = 0.8
 	if got := d.mind.look(from, minX, minY, maxX, maxY); got != want {
 		t.Fatalf("with a Kraken charging the sensors read\n%+v, want\n%+v", got, want)
 	}
@@ -748,16 +756,17 @@ special = { column = 1.0, bias = -0.5 }`)))
 	}
 }
 
-// TestANetworkAsksForTheSpecialAttackWhileItsOutputIsOverOne: special over one asks
-// for the special attack ahead of the move, as often as auto-fire would, and takes
-// the update's one intent where the rate leaves no second; at one it asks for none.
-func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsOverOne(t *testing.T) {
+// TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive: a positive special
+// asks for the special attack ahead of the move, as often as auto-fire would, and
+// takes the update's one intent where the rate leaves no second; at zero, as with
+// no weights, it asks for none.
+func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive(t *testing.T) {
 	for _, c := range []struct {
 		rate  int
 		bias  float64
 		asked []int // the ticks the special attack was asked for at
 		moves int
-	}{{40, 1.5, []int{1, 6}, 6}, {20, 1.5, []int{1, 6}, 5}, {40, 1.0, nil, 6}} {
+	}{{40, 0.5, []int{1, 6}, 6}, {20, 0.5, []int{1, 6}, 5}, {40, 0, nil, 6}} {
 		_, ctx := soloWorld(10, 2)
 		doc := strings.Replace(steering(fmt.Sprintf("inputs = [\"column\"]\nx = { bias = 0.1 }\nspecial = { bias = %g }", c.bias)),
 			"actions_per_second = 20", fmt.Sprintf("actions_per_second = %d", c.rate), 1)
@@ -779,11 +788,13 @@ func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsOverOne(t *testing.T) {
 	}
 }
 
-// TestARoundScoresItsTicksAndWhatItEarnedADefeatAside: a new game closes a round,
-// scored by its ticks and its events' worth, a data species' kill its hit points;
-// a crush weighs as a defeat does, on the fitness alone, as one ends every round.
-func TestARoundScoresItsTicksAndWhatItEarnedADefeatAside(t *testing.T) {
+// TestARoundScoresHowFarItTravelledAndWhatItEarned: a new game closes a round,
+// scored by the columns its cave scrolled and its events' worth, a data species'
+// kill its hit points. Its end weighs once on the fitness alone, a crush and the
+// defeat it brings together, as one ends every round.
+func TestARoundScoresHowFarItTravelledAndWhatItEarned(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
+	w.Resources.Cave.Steps = 2
 	w.Resources.Behaviors = []component.BehaviorPrototype{{HitPoints: 28}}
 	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
 	own := w.Resources.Player.Entity
@@ -799,9 +810,9 @@ func TestARoundScoresItsTicksAndWhatItEarnedADefeatAside(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if st := d.Stats(); st.Rounds != 1 || st.Score != 4+28 || st.Fitness != 28-200+5 {
-		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks and a kill worth 28, and a fitness of %d",
-			st.Rounds, st.Score, st.Fitness, 28-200+5)
+	if st := d.Stats(); st.Rounds != 1 || st.Score != 4*2+28 || st.Fitness != 28-100+5 {
+		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks at two columns each and a kill worth 28, and a fitness of %d",
+			st.Rounds, st.Score, st.Fitness, 28-100+5)
 	}
 }
 
@@ -811,10 +822,11 @@ type memory struct{ doc []byte }
 func (m *memory) Load() ([]byte, error)  { return m.doc, nil }
 func (m *memory) Store(doc []byte) error { m.doc = doc; return nil }
 
-// keeping is a store holding members as a population of layout
+// keeping is a store holding members as a population of layout, past the rounds
+// that draw its first genomes at random
 func keeping(t *testing.T, layout string, members ...member) *memory {
 	t.Helper()
-	doc, err := json.Marshal(population{Version: populationVersion, Layout: layout, Members: members})
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: layout, Rounds: learnPool, Members: members})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,8 +936,8 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
-	if saved.Layout != net.digest || saved.Rounds != 1 || len(saved.Members) != 4 || entered < 0 ||
-		saved.Members[entered].Born != 1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
+	if saved.Layout != net.digest || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 0 ||
+		saved.Members[entered].Born != learnPool+1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
 		t.Fatalf("saved %+v: want the three kept with their births, the genome scored 45 born at round 1, and the proved member fielded",
 			saved)
 	}
@@ -1117,12 +1129,52 @@ func TestARoundInFlightCountsTowardAMembersProof(t *testing.T) {
 	}
 }
 
+// TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom: a population with no
+// rounds behind it has nothing to breed from, so its first learnPool rounds play
+// genomes drawn about the hand-written one, zero where a graph writes none, each
+// its own; one past them breeds, and a graph that writes no weight tries none.
+func TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom(t *testing.T) {
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLearner(g, "fly", 1, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var drawn [][]float64
+	for range learnPool {
+		genes := l.take(0, true)
+		if !slices.ContainsFunc(genes, func(w float64) bool { return w != 0 }) || slices.ContainsFunc(drawn, func(d []float64) bool { return slices.Equal(d, genes) }) {
+			t.Fatalf("round %d plays %v, want a genome of its own drawn at random", len(drawn)+1, genes[:3])
+		}
+		drawn = append(drawn, slices.Clone(genes))
+		l.settle(0, float64(len(drawn)), true)
+	}
+	if members := l.engine.Snapshot().Members; len(members) != learnPool {
+		t.Fatalf("%d members after %d rounds, want each genome drawn scored into the archive", len(members), learnPool)
+	}
+	bred := l.take(0, true)
+	parent := slices.IndexFunc(drawn, func(d []float64) bool {
+		same := 0
+		for i := range d {
+			if d[i] == bred[i] {
+				same++
+			}
+		}
+		return same > len(d)/2
+	})
+	if parent < 0 {
+		t.Fatalf("the round after plays %v, want a child bred from the archive, most of its weights a member's", bred[:3])
+	}
+}
+
 // TestEachGameSettlesItsOwnCandidate: a learner holds a candidate a game, so a
 // round scores the genome its own game played, in whatever order the games' rounds
 // close.
 func TestEachGameSettlesItsOwnCandidate(t *testing.T) {
 	g, _, _ := learning(t)
-	l, err := NewLearner(g, "fly", 1, 3, nil)
+	l, err := NewLearner(g, "fly", 1, 3, keeping(t, g.nets[0].digest))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1369,11 +1421,11 @@ func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
 	}
 }
 
-// TestTheTicksANetworkSteersUnpaidAddNothingToARound: a network whose table says
-// ticks = false is paid by what it shoots down alone, in the round's score and in
-// its own learner's.
-func TestTheTicksANetworkSteersUnpaidAddNothingToARound(t *testing.T) {
-	w, d, rec, learners := twoNetworks(t, "ticks = false")
+// TestARoundScoresNoTickItsCaveStoodStill: time alone moves no score, so the ticks
+// of a fight the scroll halts for add nothing to the round or to the candidate
+// that fought it, which what it shot down pays.
+func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
+	w, d, rec, learners := twoNetworks(t)
 	rec.rounds(t, d, 4) // fly's turn: the tick that starts the graph and four steered
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
@@ -1381,12 +1433,13 @@ func TestTheTicksANetworkSteersUnpaidAddNothingToARound(t *testing.T) {
 		d.Step()
 	}
 	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	w.Resources.Cave.Steps = 0
 	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
 	for range 3 {
 		d.Step()
 	}
 	if got := d.Stats().Score; got != 5+2+10 {
-		t.Fatalf("two rounds score %g, want 17: the first's five ticks, the second's two before the Kraken rose and its two kills of 5", got)
+		t.Fatalf("two rounds score %g, want 17: the first's five columns, the second's two before the scroll halted and its two kills of 5", got)
 	}
 	if got := learners[1].Stats().Recent; got != 5 {
 		t.Fatalf("kraken's candidate scored %g, want the kill after the Kraken rose alone", got)

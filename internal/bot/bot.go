@@ -179,7 +179,7 @@ type Stats struct {
 	Dropped  uint64
 	Fitness  int64
 	Rounds   uint64
-	Score    float64 // the rounds' scores summed: their ticks and what they earned
+	Score    float64 // the rounds' scores summed: how far they travelled and what they earned
 	State    string  // each region's active state, region:state, space separated
 
 	// Learn is how far each of the graph's learners is, in its networks' order;
@@ -241,16 +241,17 @@ type Driver struct {
 	fitness   int64
 	observing atomic.Bool
 
-	// earned is fitness without its defeats, and unpaid the ticks a network steered
-	// whose ticks count for nothing. The round in play began at roundTick with
-	// roundEarned and roundUnpaid; ended is how a new game was asked for since,
-	// which any dispatch may write.
-	earned      int64
-	unpaid      uint64
-	roundTick   uint64
-	roundEarned int64
-	roundUnpaid uint64
-	ended       atomic.Uint32
+	// earned is fitness without its defeats, and travelled the columns the cave has
+	// scrolled under the bot. The round in play began at roundTick with roundEarned
+	// and roundTravelled, and downed says its end has been weighed; ended is how a
+	// new game was asked for since, which any dispatch may write.
+	earned         int64
+	travelled      uint64
+	roundTick      uint64
+	roundEarned    int64
+	roundTravelled uint64
+	downed         bool
+	ended          atomic.Uint32
 
 	// Each network's learner, nil for none, has a genome play a round; while the
 	// bot plays alone one of them at a time, explorer, plays a candidate, scored
@@ -272,13 +273,12 @@ type Driver struct {
 	Round func(n uint64, score float64)
 }
 
-// roundMark is where in a round a network first steered: the tick, and what the
-// round had earned and left unpaid by then
+// roundMark is where in a round a network first steered: what the round had
+// earned and how far it had travelled by then
 type roundMark struct {
-	steered bool
-	tick    uint64
-	earned  int64
-	unpaid  uint64
+	steered   bool
+	earned    int64
+	travelled uint64
 }
 
 // How the round in play was asked to end: by the game itself, as a defeat does, or
@@ -328,8 +328,16 @@ func (d *Driver) observe(ev event.GameEvent) {
 			if row.event == ev.Type && (row.owner == "" || d.mind.owns(ev.Payload, row.owner)) &&
 				(row.when == "" || payloadTrue(ev.Payload, row.when)) {
 				weight := row.weight
-				if row.weigh == weighKill {
+				switch row.weigh {
+				case weighKill:
 					weight = d.mind.killWorth(ev.Payload, weight)
+				case weighEnd:
+					// A round ends once, however often its last hits lift and drop
+					// the defeat before the new game, and a crush is a defeat too
+					if d.downed {
+						continue
+					}
+					d.downed = true
 				}
 				d.fitness += weight
 				if row.weigh != weighEnd {
@@ -396,7 +404,7 @@ func (d *Driver) Step() (more bool, err error) {
 	d.credit = min(d.credit+d.rate*tick.Milliseconds(), d.rate*1000)
 	d.ctx.World.RunSafe(func() {
 		d.mind.fresh = [targetCount]bool{}
-		d.mind.room, d.mind.tick, d.mind.steering = int(d.credit/1000)-d.queue.n, d.stats.Ticks, -1
+		d.mind.room, d.mind.tick = int(d.credit/1000)-d.queue.n, d.stats.Ticks
 		if !d.started {
 			d.started = true
 			err = d.machine.Init(&d.mind)
@@ -410,11 +418,8 @@ func (d *Driver) Step() (more bool, err error) {
 		d.machine.Update(&d.mind, tick)
 		for i, steered := range d.mind.steered {
 			if steered && !d.from[i].steered {
-				d.from[i] = roundMark{steered: true, tick: d.stats.Ticks, earned: d.earned, unpaid: d.unpaid}
+				d.from[i] = roundMark{steered: true, earned: d.earned, travelled: d.travelled}
 			}
-		}
-		if i := d.mind.steering; i >= 0 && d.mind.nets[i].unpaid {
-			d.unpaid++
 		}
 	})
 	if err != nil {
@@ -427,6 +432,7 @@ func (d *Driver) Step() (more bool, err error) {
 	}
 	d.inst.Tick(1)
 	d.stats.Ticks++
+	d.ctx.World.RunSafe(func() { d.travelled += uint64(max(d.ctx.World.Resources.Cave.Steps, 0)) })
 	if how := d.ended.Swap(roundOn); how != roundOn {
 		d.closeRound(how == roundOver || d.asked)
 		d.asked = false
@@ -482,21 +488,22 @@ func (d *Driver) deal() {
 	}
 }
 
-// closeRound ends the round a new game closed. Its score is its ticks, those an
-// unpaid network steered aside, and what its events earned, a defeat aside since
-// one ends every round. The explorer takes the part from where its network first
-// steered, when the game or the run's limit ended the round, and its turn passes
-// once its candidate is settled, or at once where the round never reached it.
+// closeRound ends the round a new game closed. Its score is how far its cave
+// scrolled, which time alone does not move, and what its events earned, a defeat
+// aside since one ends every round. The explorer takes the part from where its
+// network first steered, when the game or the run's limit ended the round, and its
+// turn passes once its candidate is settled, or at once where the round never
+// reached it.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
-	d.ctx.World.RunSafe(func() { earned = d.earned })
-	score := float64(d.stats.Ticks-d.roundTick) - float64(d.unpaid-d.roundUnpaid) + float64(earned-d.roundEarned)
-	d.roundTick, d.roundEarned, d.roundUnpaid = d.stats.Ticks, earned, d.unpaid
+	d.ctx.World.RunSafe(func() { earned, d.downed = d.earned, false })
+	score := float64(d.travelled-d.roundTravelled) + float64(earned-d.roundEarned)
+	d.roundTick, d.roundEarned, d.roundTravelled = d.stats.Ticks, earned, d.travelled
 	d.stats.Rounds++
 	d.stats.Score += score
 	if d.explorer >= 0 && (d.games == nil || d.games.enter(d.game, d.stats.Ticks)) {
 		from := d.from[d.explorer]
-		part := float64(d.stats.Ticks-from.tick) - float64(d.unpaid-from.unpaid) + float64(earned-from.earned)
+		part := float64(d.travelled-from.travelled) + float64(earned-from.earned)
 		if !from.steered || d.learners[d.explorer].settle(d.game, part, played && d.alone()) {
 			for d.explorer = (d.explorer + 1) % len(d.learners); d.learners[d.explorer] == nil; {
 				d.explorer = (d.explorer + 1) % len(d.learners)

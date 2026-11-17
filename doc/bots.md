@@ -147,7 +147,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 | Table | Holds |
 |---|---|
 | `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never ([Networks and learning](#networks-and-learning)). |
-| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden` and the weights written by hand. |
+| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden` and, if any, weights written by hand. |
 | `[regions.<name>]` | `initial` only. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -309,22 +309,23 @@ players have no score.
 | a typing error (`EventBoostDeactivate`) | -1 |
 | a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5; a data species' hit points, what it took to shoot down; a Kraken's the ticks its hit points take at four a second, for one shot down that fast or faster, and for a slower one the share that pace is of its own, a quarter at least |
 | a gold sequence it completed (`EventGoldCompleted`) | +25 |
-| its cursor defeated (`EventCursorDefeatState`) or crushed (`EventCursorCrushed`) | -100 |
+| its cursor defeated (`EventCursorDefeatState`) or crushed (`EventCursorCrushed`) | -100, once a round: a crush is a defeat too, and a last hit's energy can lift a defeat and drop it again before the new game |
 
 A round is one game, from its start to the new game its own play brought on, and
-scores its ticks plus what the rows above earned in it, the last aside: a defeat
-ends every round, so it tells none from another. The ticks a network steers
-whose table says `ticks = false` count nothing, as `cave`'s `kraken` does: a
-fight pays by the Kraken shot down, at four hit points a second its own time
-and less the longer it took, so camping out of its reach earns nothing.
-`cave`'s rounds at 120x40, the mean of 800 over seeds 1 to 8:
+scores how far its cave scrolled, in columns, plus what the rows above earned in
+it, the last aside: a defeat ends every round, so it tells none from another.
+Time alone scores nothing. A run that closes a round by the clock
+(`round_seconds`) would else pay a ship for outlasting it, hopping about a
+Kraken it barely scratches; as it is the scroll halts for the fight, the Kraken
+shot down is what pays, and the sooner it is down the further the round
+travels. `cave`'s first cave scrolls a column a tick, so there a round's score
+is near its ticks; its rounds at 120x40, the mean of 800 over seeds 1 to 8:
 
 ```
 graph                      score   ticks
 no input                     165     159
 default                      160     155
 flee threats within 20       245     240
-cave, as written by hand   10600    7294
 ```
 
 Fitness is in the `-headless` summary, the `bot stopped` log record, which also
@@ -355,8 +356,6 @@ outlasts the energy, and what its blasts happen to catch is luck in the score.
 [network.raid]
 hidden = 6
 inputs = ["ceiling", "floor", "species_x", "species_y", "species_near_x", "column"]
-x = { column = -0.1, bias = 0.01, species_x = 0.2, species_near_x = -0.25 }
-y = { species_y = 0.9, ceiling = 0.05, floor = 0.05 }
 
 [states.Fly]
 on_update = [
@@ -382,13 +381,15 @@ on_update = [
   - `species_near_x`, `species_near_y`, and the same of `species2` and
     `species3`: that species' nearness, a vector toward it 1 long beside the
     cursor and falling to nothing a quarter of the view's width away, rows
-    counted twice. An offset grows with distance, so only a nearness lets a
-    weight written by hand back off what is close and leave alone what is far.
+    counted twice. An offset grows with distance, so only a nearness lets one
+    weight back off what is close and leave alone what is far.
   - `landing_x`, `landing_y`, `landing_near_x`, `landing_near_y`: the nearest
     cell something is about to land on and its nearness, a raider's landing
     marker, where its charge or teleport ends, or the cell a Kraken's charge
-    will end on while it spins up and charges; `landing2_*` and `landing3_*`
-    the next two, so every landing a cave can hold is read.
+    will end on while it spins up and charges. `landing_soon` is how soon, from
+    0 as the warning starts to 1 as the body leaves for it, which a player
+    watches too. `landing2_*` and `landing3_*` are the next two, so every
+    landing a cave can hold is read.
   - `kraken_x`, `kraken_y`: the Kraken's body; `kraken_near_x`, `kraken_near_y`
     the nearness of the nearest cell it covers, legs and all; `kraken_reach` how
     far out its striking legs are, 0 to 1.
@@ -397,15 +398,18 @@ on_update = [
   - `energy`: 0 with none, a half at 1,000, toward 1; `heat`: a half at 10.
   - Loot has no sensor: a drop homes on its owner, so its place steers nothing.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
-- `ticks = false`: the ticks the network steers add nothing to a round's score
-  ([Fitness](#fitness-and-comparing-graphs)); they count unless it says so.
-- `x`, `y`, `special`: the weights written by hand, each output's from the
-  inputs it names and its `bias`. Every other weight is 0, the hidden units'
-  among them, and a weight lies within 4 either side of zero. An output is that
-  direct sum plus the hidden units'.
+- The outputs are three, each the direct sum of its weights over the inputs plus
+  the hidden units' and its bias, a weight within 4 either side of zero:
   - `x` and `y` are an offset in view widths and heights, kept to the view.
-  - `special` asks for the special attack while it is over 1, ahead of the move
-    and as often as auto-fire would, so with no weights it never asks.
+  - `special` asks for the special attack while it is positive, ahead of the
+    move and as often as auto-fire would.
+- No weight is written: `cave` leaves its networks' to the learner, which draws
+  them at random and keeps what plays best, so nothing it does was put there by
+  hand, the use of its heat among it. A graph may still write some, as the
+  tables `x`, `y` and `special` of a network, each an output's weights from the
+  inputs it names and its `bias`; they are then every run's first candidate.
+  With no weight and no population a network asks for nothing and the ship
+  holds still.
 
 ### Learning
 
@@ -417,8 +421,9 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 
 - Each network has a learner of its own, the `StreamingEngine` of
   `lixenwraith/genetic` ([AI §3](ai-physics-and-evolution.md#3-genetic-library))
-  with one evaluation in flight: an archive of the 32 best genomes scored, the
-  hand-written one its first candidate in every run; children mostly one
+  with one evaluation in flight: an archive of the 32 best genomes scored. A
+  population's first 32 rounds play genomes drawn at random, each weight three
+  hundredths of its bound about zero; after them children are mostly one
   parent's, mixed a hidden unit or an output at a time, three in a hundred of
   their weights stepped. A member's score is the mean of its rounds, and every
   third candidate is the best member short of eight rounds again, so what tops
@@ -432,7 +437,7 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 - A round's score is mostly luck, the game it drew: a candidate whose first round
   would enter a full archive plays a second, and enters or not on that round
   alone. A run fields the best member eight rounds have proved, which is seldom
-  the top of the archive, and with none the hand-written weights.
+  the top of the archive, and with none the weights its graph wrote, if any.
 - A step is a share of a weight's range: a new population starts at 0.1 and
   settles at 0.03 as its best stops improving.
 - A round the game has not ended within the graph's `round_seconds` is closed
@@ -448,8 +453,7 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
   `-games` of them, each a run of its own on a seed drawn from the run's, and all
   teach the one learner a network and keep the one file. Each game carries one
   candidate of one network beside the members the rest field, as a lone game
-  does, and the hand-written genome is every game's first candidate until a
-  round has scored it.
+  does.
   - A round closes into the learners in the order of the tick it closed at and
     then of its game, as if the games took turns a tick at a time, so one seed
     and one count of games search alike however the cores run them.
@@ -501,11 +505,18 @@ population not kept`) and on a watched run's bar:
 
 A run that ends without keeping what it learned ends with that error.
 
-The weights written by hand are most of what the bot knows at first. In `cave`,
-where a core plays one of their rounds a second, they score 10,600 a round:
-three rounds in four meet the first Kraken, and most of those shoot down three
-or four. A learner adds to that within minutes. Over 60 rounds of four seeds no
-run learned on, each closed at the graph's limit, those weights score 10,033,
+What a run learns from nothing in `cave`, where a core plays 7,000 ticks a
+second: after three million ticks of one game, seven minutes, two runs field
+members that score 2,906 and 3,654 over 40 rounds of four seeds neither learned
+on, where a ship that holds still scores 165, and meet the first Kraken in one
+round in five. A round snowballs, since a ship that outlives the first cave has
+its gun raised and its energy deep, so a few long rounds carry the mean and the
+median is 1,030 and 1,555. A watched run at speed 1 shows the play, and a
+headless one flat out fills the files.
+
+What a game on every core adds was read before that, while the graph wrote its
+weights by hand and a round scored its ticks. Over 60 rounds of four seeds no
+run learned on, each closed at the graph's limit, those weights scored 10,033,
 and what each of four runs fielded after 22 minutes of learning on four cores
 scored
 
@@ -518,17 +529,14 @@ five games    35177   65154   201735   60530
 - One game is a core's nine million ticks and 1,200 to 1,500 rounds, 3,300 to
   4,100 an hour; five games are 35 million ticks and 2,700 to 5,100 rounds,
   8,000 to 12,600 an hour, the fewer the longer its members last.
-- Every five-game run fields members that shoot five Krakens or more down in
-  most rounds, and seeds 3 and 4 play three rounds in four to the limit. Of the
-  one-game runs only seed 1's do, 38 rounds of 60 to the limit.
+- Every five-game run fielded members that shot five Krakens or more down in
+  most rounds, and seeds 3 and 4 played three rounds in four to the limit. Of
+  the one-game runs only seed 1's did, 38 rounds of 60 to the limit.
 - A Kraken's hit points double a cave and its pay with them, so a score about
-  doubles with each Kraken more: seed 3's rounds at the limit are worth
+  doubles with each Kraken more: seed 3's rounds at the limit were worth
   320,000 on eight.
 - A seed moves the outcome as much as the count of games does: read a setting
   over several.
-
-A watched run at speed 1 plays some ten of the hand-written weights' rounds an
-hour, so it shows the play and a headless one flat out fills the files.
 
 ## Recording and replaying
 
