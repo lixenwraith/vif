@@ -822,11 +822,14 @@ Libraries · Branches.
 - A network graph and its learner are compared in rounds ([Bots](bots.md#learning)):
   a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
   and `bot.NewLearner` on a `NewHeadless` `cave` and steps until `Stats().Rounds`
-  reaches its count, some fifty rounds a second a core, 12,000 in six minutes.
+  reaches its count, some fifty weak rounds a second a core, so 12,000 take six
+  minutes of a learner that stays weak and fifteen of one that does not.
   Read the fielded member's mean over held-out rounds on other seeds, never the
   archive's own score, which a lucky round sets: an archive's 853 was 628 held
   out. Settings are compared on a `tar` copy of the tree whose constants read the
-  environment, three seeds each at once; one setting's seeds span 250 to 630.
+  environment, three seeds each at once; one setting's seeds span 433 to 1,307.
+  Send a run's lines to its file line-buffered (`grep --line-buffered`): a
+  container restart ends the runs and loses what a pipe still held.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick
   144, and one that only fires at about 158. A hit pays energy and a raider's
   touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in

@@ -19,7 +19,7 @@ import (
 // outcomes behind its score is one a run fields.
 const (
 	learnPool      = 32
-	learnRate      = 0.1
+	learnRate      = 0.03
 	learnStep      = 0.1
 	learnStepFloor = 0.03
 	learnStepCeil  = 0.2

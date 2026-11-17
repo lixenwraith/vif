@@ -378,9 +378,9 @@ plays: a genome plays a round, and the round's score
 - The search is the `StreamingEngine` of `lixenwraith/genetic`
   ([AI §3](ai-physics-and-evolution.md#3-genetic-library)) with one evaluation in
   flight: an archive of 32 scored genomes, the hand-written one first; children
-  mostly one parent's, mixed a hidden unit or an output at a time, a tenth of
-  their weights stepped; every third round an archive member plays again, and
-  its score is the mean of its rounds.
+  mostly one parent's, mixed a hidden unit or an output at a time, three in a
+  hundred of their weights stepped; every third round an archive member plays
+  again, and its score is the mean of its rounds.
 - A step is a share of a weight's range: a run starts at 0.1 and settles at 0.03
   as its best stops improving.
 - A run in a session does not learn, since any participant's defeat ends every
@@ -392,6 +392,20 @@ plays: a genome plays a round, and the round's score
   layout (`inputs` and `hidden`): a file of another layout is started over. A
   browser keeps none.
 - A watched run's bar shows the round and the fielded member's score.
+
+What 12,000 rounds bought in `cave` at 120x40, a quarter of an hour of a core
+flat out: the member each run fields, over 400 rounds of four seeds it never
+played, a learning seed a column. The weights written by hand score 230 there.
+
+```
+seed        1      2      3
+score    1233   1307    433
+ticks    1014   1076    386
+```
+
+The archive's own score for a member runs to twice that, a lucky round in it,
+and a run at speed 1 plays some 300 weak rounds an hour, so a watched run shows
+the early climb and a headless one flat out fills the file.
 
 ## Recording and replaying
 

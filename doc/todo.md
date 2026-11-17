@@ -261,38 +261,51 @@ Taken as defaults where the item said decide, each to confirm or change:
 - The switch is `[bot] learn`.
 
 What was measured, at 120x40 headless and flat out, where a core plays fifty
-rounds a second: a round's score, the mean of 800 over seeds 1 to 8, and what a
-learner fields after 12,000 rounds from the weights written by hand, read over
-400 rounds of four seeds it never played:
+weak rounds a second. A round's score, the mean of 800 over seeds 1 to 8:
 
 ```
 no input                    165
 default                     160
 flee threats within 20      245
 written by hand             230
-learned, three seeds        254  304  628
 ```
 
+And what a learner fields after 12,000 rounds from the weights written by hand,
+read over 400 rounds of four seeds it never played, a learning seed a column:
+
+```
+                                           seed 1  seed 2  seed 3
+a tenth of the weights stepped                304     628     254
+  hidden units' inputs drawn at random        385     665     303
+  every second round a repeat                 512    1007     505
+  the mean of three rounds an evaluation      352     648     478
+three in a hundred stepped, as shipped       1233    1307     433
+```
+
+- Three seeds a row, and one setting's span 433 to 1,307: only the share of
+  weights stepped stands clear of that. The first row ran with its first child
+  drawn at a tenth too, one evaluation's difference.
+- The archive's own score runs to twice what its member holds on rounds it never
+  played: seed 2's fielded member read 2,314 over two rounds and 1,307 held out.
 - A ship lives by leaving a raider's cells at once: a hit pays energy, but a
   touch takes 600 to 1,500 again every tick or two it lasts.
-- The learner's settings are untuned: the three seeds above ran before its first
-  child was drawn a settled step off the hand-written genome, and a table of
-  the settings shipped, six seeds a row, is owed.
 
 What remains:
 
 - **The dodge.** The direct term cannot both hold a raider's row, where the gun
   pays, and leave a raider that landed beside the ship, which takes a hidden
   unit switching on nearness; so the weights written by hand score under
-  `flee within 20`, and a run finds the switch in its first 12,000 rounds on
-  one seed in three. Decide what starts it sooner: hidden units written by hand
+  `flee within 20`, and a run takes thousands of rounds to pass it. Decide what
+  starts it sooner: hidden units written by hand
   (a `[network]` key for a unit's weights), a sensor that already reads nearness,
   or neither and the offline trainer fills the file.
-- **The search.** The archive churns: a member enters on one round, and the
-  fielded one has seldom more than six behind it, so the archive's score runs
-  half again over what the member holds on other rounds. Measure a floor on a
-  member's outcomes before it may be fielded or bred from, and the engine of the
-  last point below, on the settings above.
+- **The search.** Its settings want twelve seeds a row, as the library read its
+  own: a lower share of weights stepped still (0.01), that share with a repeat
+  every second round, and with the hidden units' inputs drawn at random, which
+  leaves the hand-written genome's outputs as they are. The archive churns: a
+  member enters on one round and the fielded one has seldom more than six
+  behind it, so measure too a floor on a member's outcomes before it is fielded
+  or bred from.
 - **A page's store.** A browser keeps no population: one kept in the page's
   storage as its settings are (`browser.KeepSettings`), a document for each graph
   and scenario, which the page hands over at start.
@@ -303,7 +316,15 @@ What remains:
 - **The operator's side.** Nothing shows a learner but a watched run's bar and
   the log: the `:bot` list and the menu's Bots page name no population, and
   nothing starts one over or holds learning off for a run but editing the graph
-  or removing the file.
+  or removing the file. A watched run's menu still turns auto-fire or the pointer
+  off under the bot, which its rounds then score, and writes that back as the
+  player's own. Two runs learning one graph in one scenario each save over the
+  other's file.
+- **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
+  on the embedded scenario and `td`; rounds are read by a scratch test
+  ([agent notes](agent-notes.md#measuring)). And fitness takes a defeat's 100
+  twice in a game where a hit's energy lifts the defeat inside the 250 ms before
+  the reset and it falls again: decide whether it counts one a game.
 - **The cost of a blocked goal.** `Steer` lands as `PointAt` does, a scan of the
   view when the cell it names is rock: measure a tick in `cave` with the network
   pointing into rock, and search the column first if it shows.
