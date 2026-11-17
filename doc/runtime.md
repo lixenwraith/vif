@@ -13,18 +13,35 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | `ModePlay` | Yes | No | presentation / presentation | If built | `PausableClock`; scheduler and event goroutines |
 | `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; a harness, `journal.ScriptDriver`, `bot.Driver`, or `journal.ReplayDriver` verifying a journal invokes ticks and injections; a script or bot in a session attaches network I/O |
 | `ModeReplay` | Yes | Yes | journal / playback controls | If built | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
-| `ModeScript` | Yes | Yes | script, or the presentation for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
+| `ModeScript` | Yes | Yes | script or config / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
 | `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no presentation and no local cursor |
 
 The six predicates in `internal/app/internal/config` are the policy boundary:
 `Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly
 checks them rather than scattering mode comparisons through the runtime. A config
-whose mode does not own geometry defaults to terminal-equivalent geometry 80x24
-when dimensions are not supplied, and rejects I/O settings the selected mode cannot
-honor. It also rejects a simulation speed setting — a driven mode's clock is
+whose mode does not own geometry defaults to a bot's screen, 120x40 (`app.BotWidth`
+x `BotHeight`), when dimensions are not supplied, and rejects I/O settings the
+selected mode cannot honor. It also rejects a simulation speed setting — a driven mode's clock is
 advanced only by `Tick`, and a dedicated host runs at the session's rate — with one
 exception: an authored script or bot reads `-speed` as its wall pace, which is a
 property of the run rather than of the clock. See §1.1.
+
+A run's size comes from one place, and a watch shows a run without sizing it:
+
+```
+a person playing    the terminal, as it resizes
+a replay            its journal's
+a script            its own width and height, else as a bot alone
+a bot alone         -size, else 120x40, watched or headless
+  with -size fit    its screen's, else 120x40
+a server            -size, else its first person's, or 120x40 for its own bots (§1.2)
+a seat              its holder's screen (§4, Bot seats)
+```
+
+`-size fit` reads the screen once, as the run is built (`runConfig.fit`): the
+terminal, window or page that shows it, or for a run that shows nothing the
+terminal it was started in. A later resize moves the view and not the world, and
+on a server it is no size at all, so the first person's stands.
 
 Those predicates describe a full native build. Compile-time capabilities refine
 them: `vif_headless` makes presenting modes unavailable and omits renderers;
@@ -48,7 +65,7 @@ process (§4, Bot seats). See [Bots](bots.md).
 | Export schema | `manifest.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Verify replay | `app.VerifyJournal` | No | `-r <file> -headless`: replay a journal flat out and fail at the first world digest it does not reproduce; a `jseq` gap fails before it plays. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the session's start gate. |
-| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1), and alone, where its graph learns, plays `-games` further headless runs of its own beside it, each on its own goroutine; a watched one defaults to real time and the terminal's size, or 120x40 where its graph learns ([Bots](bots.md#learning)). Ordinary `-bot` uses `app.Run` with a human. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. Headless it paces as a script does (§1.1), and alone, where its graph learns, plays `-games` further headless runs of its own beside it, each on its own goroutine ([Bots](bots.md#learning)); watched it defaults to real time. Ordinary `-bot` uses `app.Run` with a human. |
 
 ### 1.0 The four session flags
 
@@ -150,16 +167,16 @@ through the mid-run gate. An interactive `-host` is `:host` given at startup.
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
-Without it the server takes that geometry from its **first person**. Otherwise a run
-with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
-79x21 map — and because the joiner adopts the host's latch, every participant would
-then play on it however large its own terminal is. The joiner's acceptance therefore
+Without it, or with `-size fit`, the server takes that geometry from its **first
+person**. Otherwise it
+would serve a bot's screen (120x40, a 119x36 map), and because the joiner adopts the
+host's latch, every participant would play on it however large its own terminal is.
+The joiner's acceptance therefore
 carries its own geometry (`network.JoinerReport`), and `Membership.adoptLobbyGeometry` applies the
 first person's before the roster closes, so the bounds it produces are the ones the
 offer names and the tick-zero capture contains. A seat's report names its holder and
 sizes nothing. A server that seats bots of its own starts on them at once, on a bot's
-screen (`app.BotWidth` x `BotHeight`, 120x40, a 119x37 map), and a person who joins
-later plays on that map.
+screen, and a person who joins later plays on that map.
 
 First rather than smallest, and the difference is the mid-run gate: guests arrive
 throughout the run, so sizing from the smallest would mean shrinking the map under
