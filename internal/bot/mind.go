@@ -22,7 +22,13 @@ type mind struct {
 	ctx   *engine.GameContext
 	rng   *vmath.FastRand
 	queue *intentQueue
-	net   *network // the graph's policy, which Steer runs; nil for a graph with none
+	// nets are the graph's policies, which Steer runs by index, and steered which of
+	// them have played since the round began. tick is the driver's, and special the
+	// tick from which a network may ask for the special attack again.
+	nets    []*network
+	steered []bool
+	tick    uint64
+	special uint64
 
 	// room is how many more intents this step releases before its tick. An action
 	// that reads the world acts only when all it queues fits, or it would land on a
@@ -42,6 +48,7 @@ const (
 	targetGold
 	targetNugget
 	targetSpecies
+	targetKraken
 	targetCursor
 	targetThreat
 	targetButton
@@ -79,6 +86,11 @@ var targets = [targetCount]struct {
 		}
 	}},
 	targetSpecies: {"species", scanSpecies},
+	targetKraken: {"kraken", func(m *mind, visit func(core.Entity)) {
+		for _, e := range m.ctx.World.Components.Kraken.Entities() {
+			visit(e)
+		}
+	}},
 	targetCursor: {"cursor", func(m *mind, visit func(core.Entity)) {
 		own := m.ctx.World.Resources.Player.Entity
 		for _, e := range m.ctx.World.Components.Cursor.Entities() {
@@ -383,6 +395,9 @@ type (
 	textPayload struct {
 		Text string `toml:"text"`
 	}
+	steerPayload struct {
+		Network string `toml:"network"`
+	}
 	hasTargetArgs struct {
 		Target string `toml:"target"`
 		Key    string `toml:"key"`
@@ -405,8 +420,8 @@ type (
 
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
-// bot's own view, and the bot's actions and guards; Steer is refused without net.
-func register(m *fsm.Machine[*mind], net *network) {
+// bot's own view, and the bot's actions and guards; Steer resolves among nets.
+func register(m *fsm.Machine[*mind], nets []*network) {
 	std.Register(m, std.Host[*mind]{
 		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
@@ -455,7 +470,7 @@ func register(m *fsm.Machine[*mind], net *network) {
 		m.push(input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
 	})
 	m.RegisterAction("PointAt", compilePointAt, (*mind).pointAt)
-	m.RegisterAction("Steer", compileSteer(net), func(m *mind, _ struct{}) { m.steer() })
+	m.RegisterAction("Steer", compileSteer(nets), (*mind).steer)
 
 	m.RegisterGuard("HasTarget", func(a *hasTargetArgs) (fsm.GuardFunc[*mind], error) {
 		t, key, err := guardTarget(a.Target, a.Key)

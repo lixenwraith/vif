@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/genetic/persistence"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
@@ -162,9 +162,31 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 	}
 }
 
+// TestABotsRunStartsOnTheAutoFireItsGraphNames: a graph's run starts on the shipped
+// pointer whatever its player's settings say, and on the auto-fire its [bot] names,
+// the shipped one where it names none.
+func TestABotsRunStartsOnTheAutoFireItsGraphNames(t *testing.T) {
+	shipped := paths.DefaultPlay()
+	own := shipped
+	own.AutoFire, own.Mouse, own.FollowMouse = "off", !shipped.Mouse, !shipped.FollowMouse
+	for table, want := range map[string]string{"": shipped.AutoFire, "[bot]\nauto_fire = \"main\"\n": "main"} {
+		graph, err := bot.ParseGraph("g", []byte(table+"[regions.play]\ninitial = \"A\"\n[states.A]\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, play := range []paths.Play{own, {}} {
+			if got := botPlay(play, graph); got.AutoFire != want || got.Mouse != shipped.Mouse || got.FollowMouse != shipped.FollowMouse {
+				t.Errorf("graph %q on %+v starts on auto-fire %q, mouse %v and follow %v, want %q and the shipped pointer",
+					table, play, got.AutoFire, got.Mouse, got.FollowMouse, want)
+			}
+		}
+	}
+}
+
 // TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot: a learning graph alone in the
-// shipped cave is scored a round at each game its defeat ends, and its population
-// is saved under the graph's and the scenario's names beside the user root's graphs.
+// shipped cave is scored a round at each game its defeat ends, and a network's
+// population is saved under the graph's, the scenario's and its own names beside
+// the user root's graphs.
 func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
@@ -185,7 +207,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Play: botPlay(paths.Play{}, graph), Resources: opts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,29 +216,87 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	learner, err := a.learn(d, graph)
+	learners, err := a.learn(d, graph)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const rounds = 3
-	for tick := 0; d.Stats().Rounds < rounds; tick++ {
-		if more, err := d.Step(); !more || err != nil || tick > 20000 {
+	// The learners explore in turn, so raid's candidate is scored within two rounds
+	raid := func() bot.LearnStats {
+		st := d.Stats().Learn
+		return st[slices.IndexFunc(st, func(l bot.LearnStats) bool { return l.Network == "raid" })]
+	}
+	for tick := 0; raid().Scored == 0; tick++ {
+		if more, err := d.Step(); !more || err != nil || tick > 200000 {
 			t.Fatalf("tick %d: more %v, err %v, %d rounds", tick, more, err, d.Stats().Rounds)
 		}
 	}
-	if err := learner.Close(); err != nil {
-		t.Fatal(err)
+	for _, l := range learners {
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	kept, err := persistence.NewManager(paths.PopulationDir(), nil).Load("cave.cave")
+	doc, err := os.ReadFile(filepath.Join(paths.PopulationDir(), "cave.cave.raid.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	outcomes := 0
-	for _, c := range kept.Candidates {
-		outcomes += c.Count
+	var kept struct {
+		Layout  string
+		Rounds  int
+		Members []struct{ Rounds int }
 	}
-	if outcomes != rounds || kept.Tag == "" {
-		t.Fatalf("%d outcomes kept under tag %q, want the %d rounds played out", outcomes, kept.Tag, rounds)
+	if err := json.Unmarshal(doc, &kept); err != nil {
+		t.Fatal(err)
+	}
+	outcomes := 0
+	for _, m := range kept.Members {
+		outcomes += m.Rounds
+	}
+	if scored := raid().Scored; outcomes != scored || kept.Rounds != scored || kept.Layout == "" {
+		t.Fatalf("%d outcomes kept of %d rounds under layout %q, want the %d its candidates played out", outcomes, kept.Rounds, kept.Layout, scored)
+	}
+}
+
+// TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds
+// has a solo learning run close a round the game has not ended by then, with a new
+// game, and score its candidate on what the round came to.
+func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two seconds are forty ticks, well before the first raider's first charge
+	graph, err := bot.ParseGraph("cave", []byte(strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 2", 1)))
+	if err != nil || graph.Settings.RoundSeconds != 2 {
+		t.Fatalf("the graph's round_seconds is %d, err %v", graph.Settings.RoundSeconds, err)
+	}
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Play: botPlay(paths.Play{}, graph), Resources: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raid, err := bot.NewLearner(graph, "raid", a.Seed(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Learn(func() bool { return true }, raid)
+	const rounds = 3
+	for d.Stats().Rounds < rounds {
+		if more, err := d.Step(); !more || err != nil || d.Stats().Ticks > 400 {
+			t.Fatalf("tick %d: more %v, err %v, %d rounds", d.Stats().Ticks, more, err, d.Stats().Rounds)
+		}
+	}
+	const limit = 2 * time.Second / parameter.GameUpdateInterval
+	if st := d.Stats(); st.Ticks < rounds*uint64(limit) || st.Ticks > rounds*uint64(limit+3) || raid.Stats().Scored != rounds {
+		t.Fatalf("%d rounds took %d ticks and scored %d candidates, want each closed within three ticks of its %d and scored",
+			rounds, st.Ticks, raid.Stats().Scored, limit)
 	}
 }
 

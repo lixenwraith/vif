@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/toml/macro"
@@ -33,21 +34,35 @@ const (
 	queueMax = 256
 )
 
-// Settings is a graph's [bot] table. Learn has a solo run evolve the weights of the
-// graph's network as its rounds end, and any run field the best its store holds.
+// Settings is a graph's [bot] table. AutoFire is the auto-fire its run starts each
+// game on, off, main or on as [play] spells them, the shipped one when empty.
+// Learn has a solo run evolve the weights of the graph's networks as its rounds
+// end, and any run field the best its stores hold; RoundSeconds is the game time
+// after which such a run ends a round the game has not, none when zero.
 type Settings struct {
-	ActionsPerSecond int  `toml:"actions_per_second"`
-	Learn            bool `toml:"learn"`
+	ActionsPerSecond int    `toml:"actions_per_second"`
+	AutoFire         string `toml:"auto_fire"`
+	Learn            bool   `toml:"learn"`
+	RoundSeconds     int    `toml:"round_seconds"`
 }
 
-// Graph is one parsed bot document: its settings, the network it declares, nil for
-// none, and the FSM graph, which parsing compiles once so a broken reference fails
-// at load rather than in play.
+// Graph is one parsed bot document: its settings, the networks it declares, in
+// name order, and the FSM graph, which parsing compiles once so a broken reference
+// fails at load rather than in play.
 type Graph struct {
 	Name     string
 	Settings Settings
-	net      *network
+	nets     []*network
 	doc      map[string]any
+}
+
+// Networks names the graph's networks, in the order a list of them takes
+func (g *Graph) Networks() []string {
+	names := make([]string, len(g.nets))
+	for i, n := range g.nets {
+		names[i] = n.name
+	}
+	return names
 }
 
 // ParseGraph parses and validates one bot document. A startup graph parses before
@@ -83,12 +98,18 @@ func (g *Graph) validate() error {
 	if g.Settings.ActionsPerSecond <= 0 {
 		return fmt.Errorf("actions_per_second must be positive, got %d", g.Settings.ActionsPerSecond)
 	}
+	if word := g.Settings.AutoFire; word != "" && !slices.Contains(engine.AutoFireWords[:], word) {
+		return fmt.Errorf("auto_fire %q is not off, main or on", word)
+	}
+	if g.Settings.RoundSeconds < 0 {
+		return fmt.Errorf("round_seconds must not be negative, got %d", g.Settings.RoundSeconds)
+	}
 	var err error
-	if g.net, err = parseNetwork(g.doc["network"]); err != nil {
+	if g.nets, err = parseNetworks(g.doc["network"]); err != nil {
 		return fmt.Errorf("[network]: %w", err)
 	}
-	if g.Settings.Learn && g.net == nil {
-		return errors.New("learn needs a [network] whose weights to learn")
+	if g.Settings.Learn && len(g.nets) == 0 {
+		return errors.New("learn needs a [network.<name>] whose weights to learn")
 	}
 	regions, _ := g.doc["regions"].(map[string]any)
 	for name, raw := range regions {
@@ -108,7 +129,7 @@ func (g *Graph) validate() error {
 // so the loader resolves every name against it.
 func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 	m := fsm.NewMachine[*mind]()
-	register(m, g.net)
+	register(m, g.nets)
 	if err := m.LoadScenarioFromMap(g.doc); err != nil {
 		return nil, err
 	}
@@ -159,9 +180,9 @@ type Stats struct {
 	Score    float64 // the rounds' scores summed: their ticks and what they earned
 	State    string  // each region's active state, region:state, space separated
 
-	// Learning says the driver plays a learner's genomes, and Learn how far it is
-	Learning bool
-	Learn    LearnStats
+	// Learn is how far each of the graph's learners is, in its networks' order;
+	// none for a driver that plays the graph's own weights
+	Learn []LearnStats
 }
 
 // fitness is indexed by row: an event the bot's own step dispatched, the payload
@@ -220,14 +241,31 @@ type Driver struct {
 
 	// earned is fitness without its defeats. The round in play began at roundTick
 	// with roundEarned; ended is how a new game was asked for since, which any
-	// dispatch may write. A learner's genomes play a round each while the bot
-	// plays alone.
+	// dispatch may write. Each network's learner, nil for none, has a genome play
+	// a round; while the bot plays alone one of them at a time, explorer, plays a
+	// candidate, scored from where its network first steered in the round (from).
+	// A round that outlasts limit is one the driver asked the game to end (asked).
 	earned      int64
 	roundTick   uint64
 	roundEarned int64
 	ended       atomic.Uint32
-	learner     *Learner
+	learners    []*Learner
+	from        []roundMark
+	explorer    int
 	alone       func() bool
+	limit       time.Duration
+	asked       bool
+
+	// Round, when set, is told each round as it closes: its number and its score
+	Round func(n uint64, score float64)
+}
+
+// roundMark is where in a round a network first steered: the tick and what the
+// round had earned by then
+type roundMark struct {
+	steered bool
+	tick    uint64
+	earned  int64
 }
 
 // How the round in play was asked to end: by the game itself, as a defeat does, or
@@ -245,10 +283,14 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 	if err != nil {
 		return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 	}
-	d := &Driver{inst: inst, ctx: ctx, machine: m, regions: m.DeclaredRegions(),
-		rate: int64(g.Settings.ActionsPerSecond)}
-	d.mind = mind{ctx: ctx, queue: &d.queue, net: g.net.playing(),
+	d := &Driver{inst: inst, ctx: ctx, machine: m, regions: m.DeclaredRegions(), rate: int64(g.Settings.ActionsPerSecond),
+		learners: make([]*Learner, len(g.nets)), from: make([]roundMark, len(g.nets)), explorer: -1,
+		limit: time.Duration(g.Settings.RoundSeconds) * time.Second}
+	d.mind = mind{ctx: ctx, queue: &d.queue, steered: make([]bool, len(g.nets)),
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
+	for _, n := range g.nets {
+		d.mind.nets = append(d.mind.nets, n.playing())
+	}
 	inst.SetDispatchTap(d.observe)
 	inst.ReportReleases()
 	return d, nil
@@ -316,7 +358,7 @@ func (d *Driver) Step() (bool, error) {
 	var err error
 	d.ctx.World.RunSafe(func() {
 		d.mind.fresh = [targetCount]bool{}
-		d.mind.room = int(d.credit/1000) - d.queue.n
+		d.mind.room, d.mind.tick = int(d.credit/1000)-d.queue.n, d.stats.Ticks
 		if !d.started {
 			d.started = true
 			err = d.machine.Init(&d.mind)
@@ -328,6 +370,11 @@ func (d *Driver) Step() (bool, error) {
 		clear(d.seen)
 		d.seen = d.seen[:0]
 		d.machine.Update(&d.mind, tick)
+		for i, steered := range d.mind.steered {
+			if steered && !d.from[i].steered {
+				d.from[i] = roundMark{steered: true, tick: d.stats.Ticks, earned: d.earned}
+			}
+		}
 	})
 	if err != nil {
 		return false, err
@@ -340,22 +387,47 @@ func (d *Driver) Step() (bool, error) {
 	d.inst.Tick(1)
 	d.stats.Ticks++
 	if how := d.ended.Swap(roundOn); how != roundOn {
-		d.closeRound(how == roundOver)
+		d.closeRound(how == roundOver || d.asked)
+		d.asked = false
+	} else if over := time.Duration(d.stats.Ticks-d.roundTick) * tick; d.limit > 0 && over >= d.limit && !d.asked && d.explorer >= 0 && d.alone() {
+		// A learning round the game will not end is closed as far as it came, by a new game
+		d.asked = true
+		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 	}
 	return true, nil
 }
 
-// Learn has the driver play l's genomes, a round each: while alone reports the
-// bot plays by itself, a candidate, scored as its round ends; otherwise, as in a
-// session, whose rounds any participant ends, the member l fields.
-func (d *Driver) Learn(l *Learner, alone func() bool) {
-	d.learner, d.alone = l, alone
-	d.mind.net.genes = l.turn(0, false, alone())
+// Learn has the driver play each learner's genomes on its network, a round each.
+// While alone reports the bot plays by itself the learners explore in turn: one
+// plays a candidate and the rest the members they field, so a candidate's score
+// follows from its own change. Otherwise, as in a session, whose rounds any
+// participant ends, each plays what it fields.
+func (d *Driver) Learn(alone func() bool, learners ...*Learner) {
+	d.alone = alone
+	for _, l := range learners {
+		if i := slices.IndexFunc(d.mind.nets, func(n *network) bool { return n.name == l.name }); i >= 0 {
+			d.learners[i] = l
+		}
+	}
+	d.explorer = slices.IndexFunc(d.learners, func(l *Learner) bool { return l != nil })
+	d.deal()
+}
+
+// deal hands each learner's network the genome its next round plays
+func (d *Driver) deal() {
+	alone := d.alone()
+	for i, l := range d.learners {
+		if l != nil {
+			d.mind.nets[i].genes = l.take(alone && i == d.explorer)
+		}
+	}
 }
 
 // closeRound ends the round a new game closed. Its score is its ticks and what its
-// events earned, a defeat aside since one ends every round, which the learner
-// takes when the game itself ended it.
+// events earned, a defeat aside since one ends every round. The explorer takes
+// the part from where its network first steered, when the game or the run's limit
+// ended the round, and its turn passes once its candidate is settled, or at once
+// where the round never reached its network, so no learner waits on another.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
 	d.ctx.World.RunSafe(func() { earned = d.earned })
@@ -363,9 +435,20 @@ func (d *Driver) closeRound(played bool) {
 	d.roundTick, d.roundEarned = d.stats.Ticks, earned
 	d.stats.Rounds++
 	d.stats.Score += score
-	if d.learner != nil {
-		alone := d.alone()
-		d.mind.net.genes = d.learner.turn(score, played && alone, alone)
+	if d.explorer >= 0 {
+		from := d.from[d.explorer]
+		part := float64(d.stats.Ticks-from.tick) + float64(earned-from.earned)
+		if !from.steered || d.learners[d.explorer].settle(part, played && d.alone()) {
+			for d.explorer = (d.explorer + 1) % len(d.learners); d.learners[d.explorer] == nil; {
+				d.explorer = (d.explorer + 1) % len(d.learners)
+			}
+		}
+		d.deal()
+	}
+	clear(d.from)
+	clear(d.mind.steered)
+	if d.Round != nil {
+		d.Round(d.stats.Rounds, score)
 	}
 }
 
@@ -451,8 +534,10 @@ func (d *Driver) unhold(i int) bool {
 func (d *Driver) Stats() Stats {
 	st := d.stats
 	st.Dropped = d.queue.dropped
-	if d.learner != nil {
-		st.Learning, st.Learn = true, d.learner.Stats()
+	for _, l := range d.learners {
+		if l != nil {
+			st.Learn = append(st.Learn, l.Stats())
+		}
 	}
 	states := make([]string, 0, len(d.regions))
 	d.ctx.World.RunSafe(func() {

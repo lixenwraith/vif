@@ -110,6 +110,7 @@ func (r membershipRun) SeatScreenLocked() (int, int) {
 func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membership.Membership, d *bot.Driver) (slot int)) (finished bool, err error) {
 	var played *seatRun
 	cfg := runConfig{Config: p.Config, wiring: wiring{log: p.Log, membership: p.Wiring}}
+	cfg.Play = botPlay(cfg.Play, p.Graph)
 	finished, err = drive(cfg, "bot", p.Graph.Name, p.Stop, p.Hold, func(b *App) (pacedSource, error) {
 		d, err := bot.NewDriver(b, b.ctx, p.Graph, b.Seed(), b.membership.LocalParticipant())
 		if err == nil {

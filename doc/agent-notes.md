@@ -819,17 +819,27 @@ Libraries · Branches.
   carries a tick that restarts with the game, so `cave`'s `"to":"PlayerCrushed"`
   and `"to":"PlayerDied"` lines are round lengths. A scenario copied to
   `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
-- A network graph and its learner are compared in rounds ([Bots](bots.md#learning)):
+- A network graph and its learners are compared in rounds ([Bots](bots.md#learning)):
   a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
-  and `bot.NewLearner` on a `NewHeadless` `cave` and steps until `Stats().Rounds`
-  reaches its count, some fifty weak rounds a second a core, so 12,000 take six
-  minutes of a learner that stays weak and fifteen of one that does not.
-  Read the fielded member's mean over held-out rounds on other seeds, never the
-  archive's own score, which a lucky round sets: an archive's 853 was 628 held
-  out. Settings are compared on a `tar` copy of the tree whose constants read the
-  environment, three seeds each at once; one setting's seeds span 433 to 1,359.
-  Send a run's lines to its file line-buffered (`grep --line-buffered`): a
-  container restart ends the runs and loses what a pipe still held.
+  and a `bot.NewLearner` a network on a `NewHeadless` `cave`, its `Play` from
+  `botPlay`, and steps until `Stats().Rounds` reaches its count. A core plays
+  7,000 to 8,000 ticks a second whatever steers, so fifty rounds of weights that
+  fall at the first charge and one of the shipped ones, whose rounds run 6,900
+  ticks. The binary learns as the harness does, a seed's rounds the same in
+  both. `Driver.Stats` takes the world lock: called inside `RunSafe` it hangs.
+- A learner is read three ways and only two hold. Its candidates' mean over the
+  last 500 rounds is picked by no luck and tells two settings apart on six
+  seeds (1,160 to 1,283 against 918 to 1,178). The fielded member's mean over
+  held-out rounds on other seeds is what a run plays, and spans 1,652 to 1,850
+  across six seeds of one setting. The archive's own score is neither: only
+  members whose luck held are still in it, so 2,309 over twelve rounds was 1,625
+  held out, and a member fielded on two rounds scored under the weights the
+  search began from.
+- Settings are compared on a `tar` copy of the tree whose constants read the
+  environment, four runs at once. Send a run's lines to its file line-buffered
+  (`grep --line-buffered`): a container restart ends the runs and loses what a
+  pipe still held. `genetic`'s `Inject` keeps the gene slices it is handed, so a
+  test builds each learner its own population.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick
   144, and one that only fires at about 158. A hit pays energy and a raider's
   touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
@@ -837,6 +847,28 @@ Libraries · Branches.
   them. `EventCursorDefeatState` can cross `defeated` twice in one game, a hit's
   energy lifting it inside the 250 ms before the reset, and fitness weighs each:
   read a round by `Stats.Score`.
+- Heat is what stands between an empty shield and a defeat in `cave`, a touch
+  taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
+  the 10 a game starts with in its first seconds, on blasts wherever dust lies.
+  The same weights score 1,644 a round with it and 2,406 on `main`.
+- `cave`'s Kraken covers its body and its legs, 30 cells long at rest, 42 on a
+  charge and 70 striking, rows counted twice, and its touch takes 10,000 energy a
+  tick: weights that hold a raider's standoff, 28 cells, lose 50,000 in six
+  ticks. Its charge ends on the cell the ship stood on as it began to spin, so
+  weights that leave that cell leave where the ship already is. A Kraken policy
+  is read by fights won of those met, 300 of them in 400 rounds over four seeds,
+  three points either way.
+- A network's inputs name every one of a kind its scenario can field, `cave`'s
+  three raiders and their three landings: the nearest two drop one for no reason
+  its charge knows, and the learner is scored on what it could not see. Leave
+  out only what play never steers by, as loot, which homes on the ship.
+- A learner that masters a phase makes its rounds long. Within a hundred of
+  `kraken`'s candidates a run finds the hop from the edge the Kraken's charge
+  heads for to the far one, and a round goes from 7,300 ticks to 60,000 and,
+  before the graph's `round_seconds`, past 500,000: the Kraken's hit points
+  double each time. Give a learning run ticks, not rounds,
+  cap its held-out rounds at the graph's limit as the run would, and read the
+  spread with the mean, which a few long rounds carry.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's
