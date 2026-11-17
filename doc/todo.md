@@ -481,20 +481,19 @@ Decide whether a headless run takes the same three as flags, since a trainer has
 no command line, and what `:bot` lists of a population: its rounds, its recent
 mean and the member it fields.
 
-### Start a window's run at the size it opens to
+### Draw a watched run's wait on its screen
 
 - Priority: P3
-- Affected files: `pkg/window/window.go`, `cmd/vif/gui.go`
-- Guide: [Runtime §1](runtime.md#1-process-modes),
-  [Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+- Affected files: `internal/app/presentation_terminal.go` (`showStartupStatus`),
+  `internal/app/play.go` (`player.frame`)
+- Guide: [Runtime §1.1](runtime.md#11-script-pacing-and-presentation)
 
-`-size fit` reads the screen once, as the run is built. A terminal and a page give
-their size then, `browser.Open` waiting for the page's `fitted`; a window gives the
-120x40 it opens at, and `-maximized`, `-fullscreen` or the window manager's own
-placement arrive after as a resize, which a person's held first game starts over
-at and a bot's or a script's run only pans over. Have `window.Open` wait for the
-size the window manager settles, a second at most as the page does, so every run
-starts at the grid on screen.
+A watched script or bot that hosts or joins waits in its lobby drawn at its run's
+size, 120x40 unless `-size` names another, in the screen's top left corner: the
+wait's frame is a played run's (`App.frame`), laid out for the simulated screen,
+where each frame after it is laid out for the viewer's (`player.frame`). Lay the
+wait out as `player.frame` does, the view centred and the bar on the screen's
+last rows.
 
 ### Train bot graphs offline
 

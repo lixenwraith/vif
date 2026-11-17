@@ -287,10 +287,12 @@ Libraries · Branches.
   run is built on through `drive`, whose `build` is handed the App and ends the run
   before it presents by returning an error (`TestABotAlonePlaysOneMapWatchedOrNot`),
   and a run's size from its journal's anchor (`journal.NewCapture().Anchors()`).
-- A presentation's size as a run is built is final on a terminal and a page
-  (`browser.Open` waits for `fitted`) and the opening 120x40 on a window, whose
-  maximized or full-screen size arrives as a resize after. Only a person's held
-  first game starts over at it (`App.handleResize`); a driven run keeps its size.
+- A presentation's size is read once by what keeps it
+  ([Runtime §1](runtime.md#1-process-modes)), so a host whose size settles after
+  it opens waits for it in `Init` (`window.settle`, `browser.Open`'s `fitted`) and
+  posts no resize for it: one at the launch starts a person's held first game
+  over (`App.handleResize`), as run 1 on the next session's streams, and reaches
+  a host's map after its door locked it.
 - A run that shows nothing reads its terminal off any standard stream still on it
   (`startedIn`): under `go test` there is none, and a test names one by swapping it.
 - The run a restart builds starts from the launch line and what earlier restarts
@@ -488,6 +490,14 @@ Libraries · Branches.
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
   `TestEitherRouteRefusesBeforeDialling`).
+- A test that is its own window manager
+  (`TestAWindowOpensAtTheSizeItsManagerGivesIt`) selects `SubstructureRedirect` on
+  the root of an Xvfb it starts. Xlib answers a second `XInternAtom` of one name
+  from its cache, with no round trip and no flush: `XSync` is the round trip. Xvfb
+  starts over as its last client leaves and refuses a connection meanwhile
+  (`-noreset`), and killed, not terminated, leaves its socket and lock in `/tmp`.
+  An X error ends the process before a failure prints: keep a window until
+  whatever still sizes it is done.
 
 ## Locks
 
@@ -781,6 +791,11 @@ Libraries · Branches.
   releases reach vif as from a desk. tmux in between drops the protocol. With no
   window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
   `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
+- The desktop window runs under `Xvfb` with Mesa's `libegl1`, `libgles2` and
+  `libgl1-mesa-dri` and `LIBGL_ALWAYS_SOFTWARE=1`; `openbox` beside it grants
+  `-maximized` and `-fullscreen`. `xwininfo -root -tree` reads the window's pixels,
+  a cell being 12x24, `xdotool windowsize` resizes it, and the run's size is its
+  log's `init completed` line (`-l=<dir> -lv debug`).
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe

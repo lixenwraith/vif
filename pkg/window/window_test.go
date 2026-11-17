@@ -3,13 +3,19 @@
 package window
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"slices"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 
+	"github.com/ebitengine/purego"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/glyph"
@@ -108,6 +114,162 @@ func TestAButtonReportsWhatATerminalReports(t *testing.T) {
 	if ev, ok := w.mouseEvent(event(xButtonPress, 10)); ok {
 		t.Errorf("button 10 reported %+v", ev)
 	}
+}
+
+// TestAWindowOpensAtTheSizeItsManagerGivesIt: a window settles on the grid of the
+// last size its manager gave and posts no resize for it, whether the manager sizes
+// it before mapping it, after, or late for a state asked of it, and Open returns
+// settled. The test is the manager, on an X server of its own.
+func TestAWindowOpensAtTheSizeItsManagerGivesIt(t *testing.T) {
+	xvfb(t)
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := purego.Dlopen(libX11, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	if err != nil {
+		t.Skip(err)
+	}
+	var xResizeWindow func(dpy, win uintptr, w, h uint32) int32
+	var xSync func(dpy uintptr, discard int32) int32
+	purego.RegisterLibFunc(&xResizeWindow, lib, "XResizeWindow")
+	purego.RegisterLibFunc(&xSync, lib, "XSync")
+	const xMapRequest, substructureRedirect = 20, 1 << 20
+	// manage takes the next window that asks to be mapped and runs steps on it, those
+	// past | once the caller has heard of the first; it holds the redirect on return
+	manage := func(steps string) (acted, done chan struct{}) {
+		ready := make(chan bool)
+		acted, done = make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(done)
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+			dpy := xOpenDisplay(0)
+			if ready <- dpy != 0; dpy == 0 {
+				return
+			}
+			defer xCloseDisplay(dpy)
+			xSelectInput(dpy, xRootWindow(dpy, xDefaultScreen(dpy)), substructureRedirect)
+			xSync(dpy, 0) // the server redirects from here
+			ready <- true
+			var ev xEvent
+			for ev.int32At(0) != xMapRequest {
+				xNextEvent(dpy, &ev)
+			}
+			win := uintptr(ev.uint64At(40))
+			act := func(steps string) {
+				for _, step := range strings.Fields(steps) {
+					switch step {
+					case "map":
+						xMapWindow(dpy, win)
+					case "half":
+						xResizeWindow(dpy, win, 120, 120)
+					default:
+						xResizeWindow(dpy, win, 160, 160)
+					}
+				}
+				xSync(dpy, 0) // the server has sent the window its events
+			}
+			first, late, _ := strings.Cut(steps, "|")
+			act(first)
+			close(acted)
+			if late != "" {
+				time.Sleep(2 * settleQuiet)
+				act(late)
+			}
+		}()
+		if !<-ready || !<-ready {
+			t.Fatal("the manager reached no display")
+		}
+		return acted, done
+	}
+	given := func(name string, w *Window) {
+		t.Helper()
+		if cols, rows := w.Size(); cols != 40 || rows != 20 {
+			t.Errorf("%s: settled at %dx%d, want the 40x20 its manager gave", name, cols, rows)
+		}
+		select {
+		case ev := <-w.events:
+			t.Errorf("%s: posted %+v for the size it opened at", name, ev)
+		default:
+		}
+	}
+	cfg := Config{Title: "test", Atlas: atlas, Cols: 20, Rows: 10}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	for name, c := range map[string]struct {
+		asked bool
+		steps string
+	}{
+		"sized before it is mapped":    {false, "size map"},
+		"sized after it is mapped":     {false, "map size"},
+		"sized again and mapped late":  {false, "half | size map"},
+		"sized late for a state asked": {true, "map | size"},
+	} {
+		acted, done := manage(c.steps)
+		cfg.Maximized = c.asked
+		w := newWindow(cfg)
+		if err := w.open(cfg); err != nil {
+			t.Skip(err)
+		}
+		xFlush(w.dpy)
+		<-acted // its events are sent before settle reads, so no clock decides the order
+		start := time.Now()
+		w.settle(c.asked)
+		if took := time.Since(start); took < settleQuiet {
+			t.Errorf("%s: settled in %v, before its size had held %v", name, took, settleQuiet)
+		}
+		given(name, w)
+		<-done // before the window goes, which the manager may still be sizing
+		w.release()
+	}
+
+	_, done := manage("size map")
+	cfg.Maximized = false
+	w, err := Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	given("opened", w)
+	<-done
+	w.Close()
+}
+
+// xvfb starts an X server of the test's own, with no window manager, and makes it
+// the display; a machine with none to start, or no libraries to draw with, skips
+func xvfb(t *testing.T) {
+	t.Helper()
+	path, err := exec.LookPath("Xvfb")
+	if err != nil {
+		t.Skip("no Xvfb to open a window on")
+	}
+	if err := load(); err != nil {
+		t.Skip(err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	// -noreset: a server that starts over as its last client goes refuses the next
+	cmd := exec.Command(path, "-displayfd", "3", "-noreset", "-screen", "0", "640x480x24", "-nolisten", "tcp")
+	cmd.ExtraFiles = []*os.File{w}
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Signal(syscall.SIGTERM) // it removes its socket and lock as it goes
+		cmd.Wait()
+	})
+	r.SetReadDeadline(time.Now().Add(10 * time.Second))
+	number, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil {
+		t.Skipf("Xvfb named no display: %v", err)
+	}
+	t.Setenv("DISPLAY", ":"+strings.TrimSpace(number))
+	t.Setenv("LIBGL_ALWAYS_SOFTWARE", "1")
 }
 
 // BenchmarkPresent times a frame through the window: copy, raster, whole-texture

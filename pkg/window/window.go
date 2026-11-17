@@ -85,6 +85,14 @@ const (
 	pollWake   = 100 // ms
 )
 
+// settleWait bounds Open's wait for the window manager to place the window, as the
+// page's fit is bounded; settleQuiet is how long the size must then hold, since a
+// manager may size a window just after mapping it, as a Wayland compositor's does
+const (
+	settleWait  = time.Second
+	settleQuiet = 100 * time.Millisecond
+)
+
 // X event types and the input mask that selects them
 const (
 	xKeyPress        = 2
@@ -94,6 +102,7 @@ const (
 	xMotionNotify    = 6
 	xFocusOut        = 10
 	xExpose          = 12
+	xMapNotify       = 19
 	xConfigureNotify = 22
 	xClientMessage   = 33
 	xEventMask       = 1<<0 | 1<<1 | 1<<2 | 1<<3 | 1<<6 | 1<<15 | 1<<17 | 1<<21
@@ -125,7 +134,8 @@ type sizeHints struct {
 
 const hintMinSize, hintResizeInc, hintBaseSize = 1 << 4, 1 << 6, 1 << 8
 
-// Open loads the libraries, opens the window on $DISPLAY and starts its thread
+// Open loads the libraries, opens the window on $DISPLAY and starts its thread; it
+// returns once the window manager has placed the window (settle)
 func Open(cfg Config) (*Window, error) {
 	if cfg.Atlas == nil || cfg.Cols < 1 || cfg.Rows < 1 {
 		return nil, errors.New("window: an atlas and a grid of at least one cell are required")
@@ -255,6 +265,7 @@ func (w *Window) run(cfg Config, opened chan<- error) {
 		return
 	}
 	defer w.release()
+	w.settle(cfg.Fullscreen || cfg.Maximized)
 	opened <- nil
 
 	wake := make(chan struct{})
@@ -312,6 +323,42 @@ func (w *Window) open(cfg Config) error {
 	}
 	w.gpu = g
 	return nil
+}
+
+// settle takes the size the window manager places the window at, so Size is the
+// grid on screen when Open returns and no resize is posted for it: once the window
+// is mapped, and resized where a state was asked, its size has held for settleQuiet
+func (w *Window) settle(asked bool) {
+	fds := []unix.PollFd{{Fd: xConnectionNumber(w.dpy), Events: unix.POLLIN}}
+	openW, openH, mapped := w.winW, w.winH, false
+	bound := time.Now().Add(settleWait) // [wall] a wait on the window manager
+	until := bound
+	for {
+		var ev xEvent
+		for xPending(w.dpy) > 0 {
+			xNextEvent(w.dpy, &ev)
+			switch ev.int32At(0) {
+			case xMapNotify:
+				mapped = true
+			case xConfigureNotify:
+				w.fit(int(ev.int32At(56)), int(ev.int32At(60)))
+			default:
+				w.handle(&ev)
+				continue
+			}
+			until = bound
+			if quiet := time.Now().Add(settleQuiet); mapped && (!asked || w.winW != openW || w.winH != openH) && quiet.Before(bound) {
+				until = quiet
+			}
+		}
+		left := time.Until(until)
+		if left <= 0 {
+			return
+		}
+		if _, err := unix.Poll(fds, int(left/time.Millisecond)+1); err != nil && err != unix.EINTR {
+			return
+		}
+	}
 }
 
 func (w *Window) release() {
@@ -414,19 +461,28 @@ func (w *Window) handle(ev *xEvent) bool {
 	return true
 }
 
-// resize records the window's pixel size and posts the grid when it changed
-func (w *Window) resize(width, height int) bool {
+// fit records the window's pixel size and reports whether its grid changed
+func (w *Window) fit(width, height int) bool {
 	if width == w.winW && height == w.winH {
-		return true
+		return false
 	}
 	w.winW, w.winH = width, height
 	w.gpu.draw(width, height)
 	cw, ch := w.cell()
 	cols, rows := max(width/cw, 1), max(height/ch, 1)
 	if c, r := w.Size(); c == cols && r == rows {
-		return true
+		return false
 	}
 	w.setGrid(cols, rows)
+	return true
+}
+
+// resize follows the window's pixel size and posts the grid when it changed
+func (w *Window) resize(width, height int) bool {
+	if !w.fit(width, height) {
+		return true
+	}
+	cols, rows := w.Size()
 	return w.post(terminal.Event{Type: terminal.EventResize, Width: cols, Height: rows})
 }
 
