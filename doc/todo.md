@@ -422,8 +422,9 @@ What remains:
   ticks and what it earned, so candidates that all reach it differ by their
   kills alone, and two five-game runs of four field members that reach it
   three rounds in four: decide whether the limit grows as they do.
-  And a member's score is the mean of rounds that run from 400 to the limit:
-  decide whether it ranks by a mean one long round moves that far.
+  And a member's score is the mean of rounds that run from 400 to the limit,
+  which one long round moves that far: ranking by the mean of their logarithms
+  fields no better (the search, below).
 - **What ends its rounds.** Of the 800, a quarter end in the first cave, a
   tenth scoring under 430, at a raider's first charges, and six in ten once
   three or four Krakens are down: species damage doubles a cave, so the fourth
@@ -441,12 +442,30 @@ What remains:
 - **The search.** Parents are picked by score, which a member with one round
   tops; picking by a score drawn toward the recent mean by how few its rounds
   are read no better on four seeds (candidates 1,103 to 1,364 against 1,203 to
-  1,283, and no better fielded). Its settings want twelve seeds a row, as the
-  library read its own; the hidden units start with no weights in or out, and
-  drawing their inputs at random, which leaves the hand-written outputs as they
-  are, fielded 385, 665 and 303 against 304, 628 and 254 from the offsets-alone
-  weights. Offline the same games can score every candidate, which no live run
-  can.
+  1,283, and no better fielded). The hidden units start with no weights in or
+  out, and drawing their inputs at random, which leaves the hand-written
+  outputs as they are, fielded 385, 665 and 303 against 304, 628 and 254 from
+  the offsets-alone weights. Offline the same games can score every candidate,
+  which no live run can. Its settings over twelve seeds a row, as the library
+  read its own, each five million ticks of five games and what it fields held
+  out for 40 rounds:
+
+  ```
+                            fielded  geometric  Krakens     lost   five   at the
+                               mean       mean  a round    early   down    limit
+  as shipped                  29241      23065  3.73±0.33   0.20   0.45     0.24
+  ranked by the mean log      23939      21040  3.44±0.26   0.25   0.42     0.24
+  a repeat every second       26917      23147  3.91±0.34   0.17   0.49     0.17
+  a repeat every fifth        24300      21704  3.70±0.27   0.17   0.45     0.17
+  ```
+
+  - No row is told from the shipped one. Its seeds field 8,721 to 105,159, so
+    twelve carry a geometric mean within a factor of 1.2 and a setting is read
+    only once it moves what is fielded 1.7 times, or a Kraken a round.
+  - The hand-written weights score 10,033 and 2.2 Krakens a round; a row's
+    runs learn on 880 to 990 rounds, a seventh of the ticks of the equal-time
+    runs above.
+  - The rate and the step floor are not read.
 - **A page's store.** A browser keeps no population: `bot.Store` is a document's
   bytes, so one kept in the page's storage as its settings are
   (`browser.KeepSettings`), for each graph, scenario and network, handed over at
