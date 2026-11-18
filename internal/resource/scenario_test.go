@@ -629,10 +629,11 @@ func weights(t *testing.T, path string) bot.Weights {
 	return g.Weights()
 }
 
-// TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork: create writes a bot
-// of the player's, the scenario's own with no weight or a source's with every
-// weight or the networks' asked, and import gives one that exists a source's. A
-// source is a bot as a seat names one, or another scenario's by its address.
+// TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork: create writes a graph
+// of the player's, the scenario's own with no weight or the one addressed, whole
+// or with the weights of the network its address names, and import gives one
+// that exists those. A graph is addressed as a seat names one, or by a
+// scenario's name for its own.
 func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 	o, sc, user, verb := botFixture(t)
 	pilot, _ := sc.Bot("pilot")
@@ -651,7 +652,7 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 	if got, _ := os.ReadFile(at("whole")); !bytes.Equal(got, pilot) {
 		t.Fatalf("a bot created from a source is not its document:\n%s", got)
 	}
-	if _, err := verb("create", "part", "import", "pilot", "kraken"); err != nil {
+	if _, err := verb("create", "part", "import", "pilot.kraken"); err != nil {
 		t.Fatal(err)
 	}
 	want := weights(t, at("whole"))
@@ -668,7 +669,7 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(user, "mine.flight.fly.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	told, err := verb("import", "pilot", "mine", "fly")
+	told, err := verb("import", "pilot.fly", "mine")
 	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || !strings.Contains(told, "mine.flight.fly") {
 		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and the population that still plays", w, told, err)
 	}
@@ -677,25 +678,29 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 			t.Errorf("import wrote into %s, no bot of the player's by name: %s", name, told)
 		}
 	}
-	if told, err := verb("import", "pilot", "mine", "raid"); err == nil {
-		t.Errorf("import took a network its source lacks: %s", told)
+	for _, words := range [][]string{{"import", "pilot.raid", "mine"}, {"import", "pilot", "mine", "fly"}, {"create", "more", "import", "pilot", "fly"}} {
+		if told, err := verb(words...); err == nil {
+			t.Errorf("%v was taken, a network its graph lacks or a word too many: %s", words, told)
+		}
 	}
 
-	// From a run of another scenario, flight's bots are found by its address
-	for source, heat := range map[string]bool{"flight": false, "flight.spare": true} {
-		lines, err := BotFiles(o, Scenario{}, []string{"create", "far" + strings.ReplaceAll(source, ".", ""), "import", source})
+	// From a run of another scenario, flight's own bot is found by flight's name
+	for source, whole := range map[string]bool{"flight": true, "flight.kraken": false} {
+		name := "far" + strings.ReplaceAll(source, ".", "")
+		lines, err := BotFiles(o, Scenario{}, []string{"create", name, "import", source})
 		if err != nil {
 			t.Fatalf("%s: %v, %v", source, lines, err)
 		}
-		if w := weights(t, at("far"+strings.ReplaceAll(source, ".", ""))); nonzero(w["kraken"]) == heat {
-			t.Errorf("a bot created from %s writes %v; want that scenario's bot", source, w)
+		if w := weights(t, at(name)); !slices.Equal(w["kraken"], want["kraken"]) || nonzero(w["fly"]) != whole {
+			t.Errorf("a graph created from %s writes %v; want that scenario's own, whole or its kraken alone", source, w)
 		}
 	}
 }
 
-// TestWhatBotsLearnedIsListedAndClearedByAddress: list names every bot a seat can
-// play, a player's first, clear removes the populations below an address and no
-// other, and export writes a bot no population proves as its document.
+// TestWhatBotsLearnedIsListedAndClearedByAddress: list names every graph a seat
+// can play, a player's first, clear removes what the graph addressed learned in
+// the run's scenario, one network's or all, and no other, and export writes a
+// graph no population proves as its document.
 func TestWhatBotsLearnedIsListedAndClearedByAddress(t *testing.T) {
 	_, sc, user, verb := botFixture(t)
 	if _, err := verb("create", "mine"); err != nil {
@@ -713,26 +718,31 @@ func TestWhatBotsLearnedIsListedAndClearedByAddress(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if told, err := verb("clear", "mine.flight"); err != nil || !strings.Contains(told, "mine.flight.fly, mine.flight.kraken") {
-		t.Fatalf("clear told %q, %v", told, err)
+	if told, err := verb("clear", "mine.fly"); err != nil || !strings.HasPrefix(told, "Cleared mine.flight.fly;") {
+		t.Fatalf("clear of one network told %q, %v", told, err)
+	}
+	if told, err := verb("clear", "mine"); err != nil || !strings.HasPrefix(told, "Cleared mine.flight.kraken;") {
+		t.Fatalf("clear of the rest told %q, %v", told, err)
 	}
 	if left, _ := filepath.Glob(filepath.Join(user, "*.json")); len(left) != 2 {
-		t.Fatalf("clear mine.flight left %v; want another scenario's and another bot's", left)
+		t.Fatalf("clear left %v; want another scenario's and another graph's", left)
 	}
-	if told, err := verb("clear", "mine.flight"); err == nil {
+	if told, err := verb("clear", "mine"); err == nil {
 		t.Errorf("clear of nothing kept told %q", told)
 	}
 
 	file := filepath.Join(t.TempDir(), "out", "pilot.toml")
 	pilot, _ := sc.Bot("pilot")
-	if _, err := verb("export", "pilot", file); err != nil {
-		t.Fatal(err)
+	for _, address := range []string{"pilot", "pilot.kraken"} {
+		if _, err := verb("export", address, file); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(file); !bytes.Equal(got, pilot) {
+			t.Fatalf("%s, which nothing proved, was exported as:\n%s", address, got)
+		}
 	}
-	if got, _ := os.ReadFile(file); !bytes.Equal(got, pilot) {
-		t.Fatalf("a bot nothing proved was exported as:\n%s", got)
-	}
-	if told, err := verb("export", "./pilot.toml", file); err == nil {
-		t.Errorf("export took a file for a bot: %s", told)
+	if told, err := verb("export", "pilot.raid", file); err == nil {
+		t.Errorf("export took a network the graph lacks: %s", told)
 	}
 }
 

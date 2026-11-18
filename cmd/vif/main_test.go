@@ -641,7 +641,7 @@ func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {
 		{[]string{"-bot", "-watch"}, "1", true},
 		{[]string{"-bot", "2:default", "-watch"}, "2:default", true},
 		{[]string{"--bot=default", "-watch"}, "default", true},
-		{[]string{"-bot", "create", "mine", "import", "cave", "kraken", "-watch"}, "create mine import cave kraken", true},
+		{[]string{"-bot", "create", "mine", "import", "cave.kraken", "-watch"}, "create mine import cave.kraken", true},
 	} {
 		fs := flag.NewFlagSet("bot", flag.ContinueOnError)
 		var spec string

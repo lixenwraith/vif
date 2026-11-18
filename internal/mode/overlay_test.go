@@ -493,7 +493,7 @@ func TestTheBotCommandReadsOneGrammar(t *testing.T) {
 	ctx.SessionCtl = session
 	for _, tt := range [][2]string{
 		{"bot", "add "}, {"bot 2", "add 2"}, {"bot add 2:cave", "add 2:cave"}, {"bot cave", "add cave"}, {"bot drop A", "drop 10"},
-		{"bot list", "files list"}, {"bot create mine import cave kraken", "files create mine import cave kraken"},
+		{"bot list", "files list"}, {"bot create mine import cave.kraken", "files create mine import cave.kraken"},
 	} {
 		if ExecuteCommand(ctx, tt[0]); len(session.calls) == 0 || session.calls[len(session.calls)-1] != tt[1] {
 			t.Fatalf(":%s asked the session for %v; want %q", tt[0], session.calls, tt[1])

@@ -46,7 +46,7 @@ var configForms = map[string]configFormSpec{
 		label: "Add bots", description: "Seat local bots in this session. A solo run opens a session only they can join; host first to invite remote players.", command: "bot",
 		fields: []configFormField{
 			{"Count", "1", "Number of bots to add. Each bot occupies a player slot.", inputNumber},
-			{"Policy", "", "Policy graph name or path; blank is the scenario's own bot, or default where it carries none. Bots belong to this run and leave with it.", inputText},
+			{"Graph", "", "Graph name or path; blank is the scenario's own bot, or default where it carries none. Bots belong to this run and leave with it.", inputText},
 		},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			n, err := strconv.Atoi(strings.TrimSpace(f.Value(0)))
@@ -62,7 +62,7 @@ var configForms = map[string]configFormSpec{
 	},
 	"files": {
 		label: "Bot files", command: "bot",
-		description: "List the bots this run can seat with what each has learned, or keep your own, as :bot does: " + strings.Join(botFileVerbs(), "; ") + ".",
+		description: "List the graphs this run can seat with what each has learned, or keep your own, as :bot does: " + strings.Join(botFileVerbs(), "; ") + ".",
 		fields:      []configFormField{{"Verb", "list", "A verb of :bot and what follows it.", inputText}},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			return botFiles(ctx, strings.Fields(f.Value(0)))
