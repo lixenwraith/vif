@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/mode"
@@ -234,6 +235,8 @@ func main() {
 			fmt.Printf("settings %s: a run reads it up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))
 		}
 		err = resource.Check(buildConfig().Resources, os.Stdout)
+	case flagSession.botFiles() != nil:
+		err = botFiles(buildConfig().Resources, flagSession.botFiles())
 	case *flagReplay != "" && *flagHeadless:
 		sayNotice()
 		err = verifyJournal(*flagReplay)
@@ -287,6 +290,20 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCode(err))
 	}
+}
+
+// botFiles runs a -bot verb that keeps bot files for the scenario asked, and
+// prints what it says
+func botFiles(o resource.Options, words []string) error {
+	sc, err := resource.LoadScenario(o)
+	if err != nil {
+		return err
+	}
+	lines, err := resource.BotFiles(o, sc, words)
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+	return err
 }
 
 // exitCode is a returned error's code. A refused join has its own: its reason
@@ -544,7 +561,7 @@ func buildConfig() app.Config {
 	if cfg.FitSize = flagSession.size == sizeFit; flagSession.size != "" && !cfg.FitSize {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
-	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
+	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.botSpec())
 
 	cfg.Play, cfg.Settings, cfg.Notice = settings.Play, settingsStore, settingsNotice
 	// A page keeps its places for its tab; a terminal or a window keeps them past the
@@ -706,8 +723,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		"Ceiling on the roster, itself included (2..%d; with -serve, guests only, 1..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers, parameter.MaxPlayers))
 	fs.StringVar(&f.bot, "bot", "", fmt.Sprintf(
-		"Add bots using [N[:graph]|graph]: one where no count is given, and the scenario's own bot where no graph is, %s for a scenario that carries none",
-		app.DefaultBotGraph))
+		"Add bots using [N[:graph]|graph]: one where no count is given, and the scenario's own bot where no graph is, %s for a scenario that carries none. "+
+			"It takes the words of :bot, %s: drop is a run's, and a verb that keeps bot files acts and exits", app.DefaultBotGraph, engine.BotUsage("")))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, listen at this address so this run can take the session over, "+
 			"whatever [play] takeover says; the session shares what is bound with its players. "+
@@ -769,7 +786,15 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.ca != "" && f.join == "" && f.spectate == "" {
 		return fmt.Errorf("-ca is what a joiner trusts a wss:// host by; it takes a -join or a -spectate")
 	}
-	if _, err := app.BotSpecs(f.bot); err != nil {
+	switch verb, rest := f.botVerb(); {
+	case verb == "drop":
+		return errors.New("-bot drop takes a bot out of a run: :bot drop <slot> there")
+	case verb == "add" && len(rest) > 1:
+		return errors.New("usage: -bot " + engine.BotUsage(verb))
+	case f.botFiles() != nil && (f.host != "" || f.join != "" || f.serve != "" || f.spectate != ""):
+		return fmt.Errorf("-bot %s keeps bot files and exits; it takes no run", verb)
+	}
+	if _, err := app.BotSpecs(f.botSpec()); err != nil {
 		return err
 	}
 	if e, err := link.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != link.SchemeSite {
@@ -962,6 +987,9 @@ func validateInvocation(schema, check bool, replay, script string, watch bool, s
 	if err := session.validateInvocation(schema, check, replay); err != nil {
 		return err
 	}
+	if files := session.botFiles(); files != nil && (script != "" || watch) {
+		return fmt.Errorf("-bot %s keeps bot files and exits; it takes no run", files[0])
+	}
 	if watch && script == "" && session.botCount() == 0 {
 		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
 	}
@@ -973,12 +1001,45 @@ func validateInvocation(schema, check bool, replay, script string, watch bool, s
 
 // botCount is how many bots -bot asks for, once it is valid.
 func (f sessionFlags) botCount() int {
-	bots, _ := app.BotSpecs(f.bot)
+	bots, _ := app.BotSpecs(f.botSpec())
 	return len(bots)
 }
 
-// Go's flag parser has no optional operand: -bot's spec and the slot after
-// -spectate's address are folded into their flag's value, and the next option kept.
+// botVerb is -bot's verb and what follows it, as :bot reads them (engine.BotVerb):
+// no verb where the flag is absent, and add's graph whole, since a path may hold
+// a space.
+func (f sessionFlags) botVerb() (string, []string) {
+	if f.bot == "" {
+		return "", nil
+	}
+	verb, rest := engine.BotVerb(strings.Fields(f.bot))
+	if first, _, _ := strings.Cut(f.bot, " "); verb == "add" && first != verb {
+		rest = []string{f.bot}
+	}
+	return verb, rest
+}
+
+// botSpec is what -bot seats bots by: nothing unless it adds, and one bot of
+// the scenario's own where add names none.
+func (f sessionFlags) botSpec() string {
+	verb, rest := f.botVerb()
+	if verb != "add" {
+		return ""
+	}
+	return cmp.Or(strings.Join(rest, " "), "1")
+}
+
+// botFiles is the words of a -bot verb that keeps bot files, nil for any other
+func (f sessionFlags) botFiles() []string {
+	if verb, rest := f.botVerb(); verb != "" && verb != "add" && verb != "drop" {
+		return append([]string{verb}, rest...)
+	}
+	return nil
+}
+
+// Go's flag parser has no optional operand: -bot's words, a graph or a verb with
+// all that follows it, and the slot after -spectate's address are folded into
+// their flag's value, and the next option kept.
 func botArgs(fs *flag.FlagSet, args []string) []string {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -1008,6 +1069,10 @@ func botArgs(fs *flag.FlagSet, args []string) []string {
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++
 				spec = args[i]
+				for engine.BotUsage(spec[:strings.IndexAny(spec+" ", " ")]) != "" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					spec += " " + args[i]
+				}
 			}
 			out = append(out, "-"+name+"="+spec)
 			continue

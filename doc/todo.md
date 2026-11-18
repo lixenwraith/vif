@@ -234,28 +234,66 @@ root's `bot/` holds a player's alone: what they made, changed or trained
 ([Bot catalogue](bot-catalogue.md)), with no `loot` and `threat` a target alone;
 the bot document, a network's `while`, a `Steer` over a list, `InState`,
 `outputs`, `[bot] inputs` and every weight written; a scenario's `bots`, a seat
-that names no graph playing the first; and `cave`'s two in its scenario, `seed`
+that names no graph playing the first; `cave`'s two in its scenario, `seed`
 the start written by hand and `cave` a model learned from it, run K's best of
 four, which fields 300,260 over 100 rounds of seeds 101 to 104 where `seed`
-fields 27,614. Decided (Lixen, 2026-11-18), what is left, a PR a step:
+fields 27,614; and the verbs, one grammar after `:bot` and `-bot`, that keep a
+player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
+2026-11-18), what is left, a PR a step:
 
-- **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
-  <source>]`, `import`, `export`, `clear` and `list`, a source being a
-  scenario's bot, one network of it alone or a file, so one population is taken
-  from a scenario and another started fresh. A document naming an input or a
-  unit the bot lacks lands nothing, and one whose inputs are fewer than the
-  network's lands with zero for the rest: models learned on 36 and 14 inputs
-  replay round for round on the shipped 39 and 15, zero on each
-  `landing*_soon`. A model is its genes and not its scores, so a member goes
-  by its layout, never by a population's `version`. `list` names each
-  population's rounds, recent mean and the member it fields, on the menu's
-  Bots page too. `export` writes the member a population fields as the document
-  a scenario's bot carries, as `cave`'s was written by a scratch test: every
-  weight not zero, read back the same genome bit for bit and replayed round
-  for round.
-- **Training on from `cave`'s model.** Its `round_seconds`, half an hour, closes
-  85 of 100 held-out rounds at the limit, so a learner cannot tell apart what
-  outlasts it: a bot document's limit is its own to raise first.
+- **The verbs' edges.** `export` writes a network's weights at the document's
+  end, not beside its inputs; a word after a verb is split at spaces, so a path
+  holding one is not taken there; the menu's Bots page names populations only
+  through its Bot files row; and `clear` in a run learning the population is
+  undone by that run's next save.
+- **Training on from `cave`'s model.** Every run adds its rounds to the one
+  population, a few seconds' too, and with the title tested
+  ([Bots](bots.md#learning)) no run measured fielded a worse member than it
+  began with. What limits it, measured over 100 held-out rounds:
+  - **The score has a ceiling.** A round closed at its half hour pays by the
+    Krakens shot down in it, 375,000 for nine, 214,000 for eight and 132,000
+    for seven, and none shoots ten: `cave`'s model has nine in 72 rounds and
+    fields 300,260. A bot document's `round_seconds` is its own to raise.
+  - **Twelve rounds are lost in the first 1,900 ticks**, nine crushed at the
+    rock. The model stands within a row of the rock 80 ticks in 100, since its
+    `raid` learned a `ceiling` weight of -0.058 on `y` where `floor` kept
+    0.05: a push down whatever the gap. Set back to 0.05 by hand it is crushed
+    once and fields 187,300, a Kraken slower in most rounds, so the nudge has
+    to be learned. Fifteen million ticks with the title tested field a `raid`
+    that still stands at the rock 80 ticks in 100, loses five rounds early,
+    two crushed, and shoots nine Krakens down in 80.
+  - **A nudge in the pay**, tried in a scratch tree and not built: a learner
+    is paid no column scrolled while a block stands within two rows above or
+    below its ship. Under the rule that fielded the best of eight rounds it
+    is crushed less and fields no more for it, within what luck moves: after
+    three million ticks 313,827 on seed 1 and 287,986 on seed 2, five rounds
+    and one crushed and ten and twelve lost early, and after fifteen million
+    on seed 1 323,960, four crushed and six lost. It is `cave`'s own
+    knowledge in the bot package's scoring: a bot document would declare it,
+    as it does `while`.
+  - **A lower limit does not help.** Trained with rounds closed at 150
+    seconds, where the early losses are, three million ticks fielded 20,441
+    on seed 1 and 107,101 on seed 2: `kraken` is scored on fights cut before
+    the kill pays, and `raid` on its first cave alone. That `raid` beside
+    `cave`'s own `kraken` fielded 315,649 on seed 1, four rounds lost early,
+    none crushed and 96 at the limit, and the 107,101 on seed 2, twenty lost.
+  - **The archive ranks by raw mean**, so a member whose mean many rounds
+    have brought down to what it is worth sinks below newcomers one lucky
+    round put there: after fifteen million ticks `raid`'s fielded stood 30th
+    and 32nd of 32, and `kraken` on seed 2 kept no proved member, each one
+    tested to its first lost round having left an archive of 32 at the
+    limit's score. Pushed off, a title passes to the next proved, or to the
+    weights written. The archive wants ranking by the trusted mean, a
+    newcomer let in at its foot on what its round claims: a rank hook in
+    `lixenwraith/genetic`, or the fielded member held outside the archive.
+  - **Something crosses a new game.** Two runs of one `raid` network started
+    games 4 and 5 of seed 101 alike, cell, energy and heat, and to tick 100
+    flew them alike, then apart by which `kraken` had flown the games before:
+    game 5 through its half hour under one, and to the left edge and crushed
+    at tick 211 under the other. A game after a crush starts a cell or two
+    from where one after the limit does. What a new game leaves as it was, in
+    the bot or the world, is not found, and the change to a bot's death wants
+    it settled: until then held-out rounds do not pair by index.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **A scenario's bot held to its scenario by `-check`**: an `InState` that names
@@ -322,8 +360,11 @@ built so:
 - **The inputs are what a player reads**: the rock, all three raiders, every
   landing and how soon it lands, the Kraken, energy and heat. A raider's size
   and the cave's number steer nothing a person steers by.
-- **A member ranks by the mean of its rounds**, enters a full archive on a
-  second round, and is fielded once eight have proved it.
+- **A member ranks by the mean of its rounds** and enters a full archive on a
+  second round. Fielded is, of those eight rounds have proved, the one whose
+  mean is trusted most, weighed with eight rounds at the population's recent
+  mean, and a third of the rounds go by turns to proving the most trusted
+  guess and to testing the fielded against its rival.
 - **A game on every core.** A headless run alone plays `-games` games at once,
   each its own instance on a seed drawn from the run's, all feeding one learner
   a network and its one file, their rounds closing by tick and then by game.
@@ -1071,14 +1112,11 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `bot.Learn`'s `alone` is the seam, and its stores need one writer.
-- **The operator's side**, its `:bot clear`, `export` and `import`, is an item of
-  its own:
-  [Have a scenario describe the bots that play it](#have-a-scenario-describe-the-bots-that-play-it).
-  Beside it, the `:bot` list and the menu's Bots page name no population; a
-  watched run's menu still turns auto-fire or the pointer off under the bot,
-  which its rounds then score, and writes that back as the player's own. Two
-  runs learning one graph in one scenario keep the file of the one further on;
-  what the other learned is not merged into it.
+- **The operator's side.** A watched run's viewer may still turn auto-fire or
+  the pointer off under the bot, which its rounds then score; the change is
+  saved as theirs, as any `[play]` change is. Two runs learning one graph in
+  one scenario keep the file of the one further on; what the other learned is
+  not merged into it.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs

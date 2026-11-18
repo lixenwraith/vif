@@ -1485,34 +1485,41 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	var err error
-	switch {
-	case len(args) == 0:
-		ctx.SetStatusMessage(ctx.SessionCtl.BotSummary(), parameter.StatusNotice)
-		return CommandResult{Continue: true}
-	case args[0] == "add" && len(args) <= 2:
-		graph := ""
-		if len(args) == 2 {
-			graph = args[1]
+	switch verb, rest := engine.BotVerb(args); {
+	case verb == "add" && len(rest) <= 1:
+		if err = ctx.SessionCtl.AddBot(strings.Join(rest, "")); err == nil {
+			ctx.SetStatusMessage("Bot joining; :bot list names this run's bots", parameter.StatusNotice)
 		}
-		if err = ctx.SessionCtl.AddBot(graph); err == nil {
-			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusNotice)
-		}
-	case args[0] == "drop" && len(args) == 2:
-		slot, perr := ParsePlayerSlot(args[1])
+	case verb == "drop" && len(rest) == 1:
+		slot, perr := ParsePlayerSlot(rest[0])
 		if err = perr; err == nil {
 			err = ctx.SessionCtl.DropBot(slot)
 			if err == nil {
 				ctx.SetStatusMessage(fmt.Sprintf("Bot %X leaving", slot), parameter.StatusNotice)
 			}
 		}
+	case verb == "add" || verb == "drop":
+		setCommandError(ctx, "Usage: :bot "+engine.BotUsage(verb))
 	default:
-		setCommandError(ctx, "Usage: :bot [add [N[:graph]|graph] | drop <slot>]")
-		return CommandResult{Continue: true}
+		err = botFiles(ctx, args)
 	}
 	if err != nil {
 		setCommandError(ctx, sentence(err))
 	}
 	return CommandResult{Continue: true}
+}
+
+// botFiles runs a :bot verb that keeps bot files and posts what it says, a line
+// a message: the console lists them all. A browser has no files and lists alone.
+func botFiles(ctx *engine.GameContext, words []string) error {
+	if len(words) > 0 && words[0] != "list" && !paths.ExternalFiles() {
+		return errors.New(unavailable("Bot files"))
+	}
+	lines, err := ctx.SessionCtl.BotFiles(words)
+	for _, line := range lines {
+		ctx.SetStatusMessage(line, parameter.StatusNotice)
+	}
+	return err
 }
 
 // ParsePlayerSlot reads a roster slot as a command or a launch flag names one: in

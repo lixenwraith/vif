@@ -102,6 +102,14 @@ func (s *menuSession) RemoveBot(id uint64) error {
 	s.calls = append(s.calls, fmt.Sprintf("remove %d", id))
 	return nil
 }
+func (s *menuSession) DropBot(slot int) error {
+	s.calls = append(s.calls, fmt.Sprintf("drop %d", slot))
+	return nil
+}
+func (s *menuSession) BotFiles(words []string) ([]string, error) {
+	s.calls = append(s.calls, "files "+strings.Join(words, " "))
+	return []string{"first", "last"}, nil
+}
 
 // awaySession is a session holding the participants it is given.
 type awaySession struct {
@@ -432,6 +440,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		want      string
 	}{
 		{"multiplayer", "multiplayer/#Bots/add", []string{"2", "default"}, "add 2:default"},
+		{"multiplayer", "multiplayer/#Bots/files", []string{"create mine import cave"}, "files create mine import cave"},
 		{"multiplayer", "multiplayer/#Session/host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
 		{"multiplayer", "multiplayer/#Session/join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
 		{"multiplayer", "multiplayer/#Session/spectate", []string{"vif://example.test:4242/run"}, "spectate vif://example.test:4242/run 0"},
@@ -459,12 +468,12 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	showConfigMenu(ctx, "multiplayer")
 	ctx.SetOverlaySelection("multiplayer/#Bots/drop/10")
 	r.moveConfigMenu(input.MotionRight, 0)
-	if len(session.calls) != 5 {
+	if len(session.calls) != 6 {
 		t.Fatal("arrow key removed a bot")
 	}
 	session.bots[0].ID = 11
 	r.handleOverlayActivate()
-	if len(session.calls) != 5 {
+	if len(session.calls) != 6 {
 		t.Fatal("stale selection removed a replacement on the same slot")
 	}
 	r.RefreshConfigMenu()
@@ -472,6 +481,32 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	r.handleOverlayActivate()
 	if session.calls[len(session.calls)-1] != "remove 11" || ctx.IsOverlayActive() {
 		t.Fatal("bot removal failed to submit and resume")
+	}
+}
+
+// TestTheBotCommandReadsOneGrammar: a count or a graph alone seats bots as add
+// does, and no word one of the scenario's own; drop unseats, and any other verb
+// keeps bot files, each line it says a message of its own.
+func TestTheBotCommandReadsOneGrammar(t *testing.T) {
+	ctx := engine.NewGameContext(engine.NewWorld(), 80, 24)
+	session := &menuSession{}
+	ctx.SessionCtl = session
+	for _, tt := range [][2]string{
+		{"bot", "add "}, {"bot 2", "add 2"}, {"bot add 2:cave", "add 2:cave"}, {"bot cave", "add cave"}, {"bot drop A", "drop 10"},
+		{"bot list", "files list"}, {"bot create mine import cave kraken", "files create mine import cave kraken"},
+	} {
+		if ExecuteCommand(ctx, tt[0]); len(session.calls) == 0 || session.calls[len(session.calls)-1] != tt[1] {
+			t.Fatalf(":%s asked the session for %v; want %q", tt[0], session.calls, tt[1])
+		}
+	}
+	lines, _ := ctx.ConsoleLines(nil)
+	if n := len(lines); n < 2 || lines[n-2].Text != "first" || lines[n-1].Text != "last" || ctx.GetStatusMessage() != "last" {
+		t.Fatalf("a verb's lines were posted as %+v", lines)
+	}
+	for _, refused := range []string{"bot add 1 2", "bot drop"} {
+		if ExecuteCommand(ctx, refused); len(session.calls) != 7 || !strings.HasPrefix(ctx.GetStatusMessage(), "Usage: :bot ") {
+			t.Fatalf(":%s was taken: %v, %q", refused, session.calls, ctx.GetStatusMessage())
+		}
 	}
 }
 

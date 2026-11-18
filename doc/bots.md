@@ -90,19 +90,68 @@ into the session it joins, and `:leave` takes them out of one with the run.
 
 | Command | Effect |
 |---|---|
-| `:bot` | List this run's bots: slot, graph, joining or leaving. |
-| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
+| `:bot [N[:graph]\|graph]`, `:bot add …` | Seat more bots, one where no count is given; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
+| `:bot list` | Every bot a seat can play with what it has learned here, then this run's bots: slot, graph, joining or leaving. |
+| `:bot create`, `import`, `export`, `clear` | Keep a player's bot files ([below](#a-players-bot-files)). |
 | `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3`, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
 
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 [configuration menu](config-menu.md#bots) offers the same operations.
 
+The words after `-bot` are the words after `:bot`, one grammar
+(`engine.BotVerbs`): `-bot`, `-bot 2:cave` and `-bot add 2:cave` seat bots as the
+run starts, `-bot drop` is refused, a run's alone, and `-bot` with a verb that
+keeps bot files acts, prints and exits, for the scenario `-s` names.
+
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:pause`, `:bot add`, `:bot drop` and `:player` work there.
+`:n`, `:pause`, `:bot`, `:bot drop` and `:player` work there, and what its viewer
+changes of `[play]` or the zoom is saved as a player's is: a preference is the
+operator's, whatever the run presents.
+
+### A player's bot files
+
+A player's bots are the user root's `bot/<name>.toml`, beside what every bot
+learned ([The population file](#the-population-file)). The verbs that keep them
+print a line each, in a run as status messages the console lists; a browser has
+no files and reads `Bot files unavailable in a browser`, `list` excepted.
+
+- `list`: each bot a seat can play, yours first, then the installed, the
+  scenario's and the shipped `default`, with each population it keeps in the
+  run's scenario: `raid 814 rounds, recent 51440, fields 140138 over 12`.
+- `create <name>`: a new bot of yours, the scenario's own with no weight, which
+  learns from nothing. A name is one word that is no count and no verb.
+  - `create <name> import <source>` copies the source's document whole.
+  - `create <name> import <source> <network>...` copies it with the weights of
+    those networks alone, so one population starts from a scenario's and
+    another fresh: `-s cave -bot create mine import cave kraken`.
+- `import <source> <name> [network...]`: writes a source's weights, every
+  network's or those named, into a bot of yours that exists
+  (`bot.Graph.Fit`).
+  - A weight goes by its input's name, its output's and its hidden unit's place;
+    one the bot has and the source lacks is zero.
+  - A network, an input, an output or a hidden unit the bot lacks lands
+    nothing: a network is taken whole or not at all.
+  - What a population of the bot already kept still plays, and learns on, the
+    new weights a candidate among its members; `clear` it to start from them.
+- `export <bot>[.<scenario>] <file>`: the bot's document with, for each
+  network, the member its population fields in that scenario, the run's where
+  none is named, and what it wrote where none is proved: a file a scenario
+  carries as its bot, or another player imports. It reads back the same genome
+  bit for bit (`bot.Graph.Document`), each weight not zero written, a hidden
+  unit a `[[network.<n>.units]]` table and an output a `[network.<n>.<unit>]`
+  one, at the document's end.
+- `clear <bot>[.<scenario>[.<network>]]`: removes the populations below the
+  address, which start over. A run learning one keeps it again as it saves.
+
+A source is a bot as a seat names one, a file's path among them, or, where no
+such bot is found, another scenario's: `<scenario>` for its own and
+`<scenario>.<bot>` for any it carries, as `cave.seed`. A member is its genes,
+whatever scored them: `export` reads a population of any `version` whose
+`layout` is the network's.
 
 ## Telling cursors apart
 
@@ -468,11 +517,12 @@ end, and all the rest for `raid`.
   it writes some the population starts from them alone. Children are mostly
   one parent's, mixed a hidden unit or an output at a time, three in a hundred
   of their weights stepped. A member's score is the mean of its rounds, and every
-  third candidate is the best member short of eight rounds again, so what tops
-  the archive is proved or falls. A candidate the archive already holds is that
-  member again, as a kept population's written start is, and a member pushed
-  off the archive while a round of it plays comes back, if at all, on the mean
-  of all its rounds.
+  third candidate is a member again, by turns the one short of eight rounds it
+  trusts most, so a guess is proved or falls, and the less played of the member
+  fielded and its rival, so the title is tested for as long as it is held. A
+  candidate the archive already holds is that member again, as a kept
+  population's written start is, and a member pushed off the archive while a
+  round of it plays comes back, if at all, on the mean of all its rounds.
 - Every learner plays a candidate, and a round's ticks are the network's that
   steered last: `kraken` learns only while a Kraken is up and `raid` everywhere
   else, neither paid for the other's ticks. A candidate whose network a round
@@ -481,13 +531,18 @@ end, and all the rest for `raid`.
   not play it.
 - A round's score is mostly luck, the game it drew: a candidate whose first round
   would enter a full archive plays a second, and enters or not on that round
-  alone. A run fields the best member eight rounds have proved, which is seldom
-  the top of the archive, and with none the weights its graph wrote, if any.
+  alone. A run fields, of the members eight rounds have proved, the one it
+  trusts most, and with none the weights its graph wrote, if any: a member's
+  mean is trusted as if eight more rounds had scored the population's recent
+  mean, so eight lucky rounds do not unseat thirty good ones, and its rival is
+  the next by that mean.
 - A step is a share of a weight's range: a new population starts at 0.1 and
   settles at 0.03 as its best stops improving.
 - A round the game has not ended within the graph's `round_seconds` is closed
   as far as it came, by a new game the run asks for, so a candidate nothing
-  beats is scored and the next one plays. `cave` takes half an hour.
+  beats is scored and the next one plays. `cave` takes half an hour: a limit
+  under a fight's length scores it before its kill pays, and with 150 seconds
+  its own model learned on to one that fields 20,441 for 300,260.
 - A run in a session does not learn, since any participant's defeat ends every
   round there: its bots, seats among them, play what is fielded. A round an
   operator ends (`:n`) scores nothing.
@@ -537,8 +592,8 @@ which its `version` counts.
   - `born` is the population's round the member entered at.
   - `genes` are the weights: each hidden unit's input weights and bias, then
     each output's direct weights, hidden weights and bias.
-- `fielded`: the member a round plays where its learner tries no candidate, -1
-  while none has eight rounds.
+- `fielded`: the member a round plays where its learner tries no candidate, the
+  most trusted of those with eight rounds, -1 while none has them.
 
 What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
@@ -561,18 +616,27 @@ seeds 101 to 104 with no learner, each closed at the graph's limit. From
 `seed`'s weights, which field 27,614 themselves with a median of 33,174 and
 reach the Kraken in 73 rounds, four games' three million ticks, two minutes on
 four cores; from nothing, `cave`'s graph with no weight written, where a ship
-that holds still scores 159, one game's 600,000:
+that holds still scores 159, one game's 600,000. Each beside what the rule
+before this one fielded, the best mean of eight rounds; `reach` is the rounds
+of 100 that meet a Kraken:
 
 ```
-                   rounds scored      fields            reach the   Krakens
-start     seed     raid   kraken     mean   median   Kraken of 100     down
-seed's       1      814      408    51440    46982              98      423
-             2      767      437    51679    52348              93      421
-             3      570      305   140138   127276              97      633
-nothing      1      864      125     6115     2726              30       35
-             2      774      115     6640     3340              28       39
+                    the best of eight          the most trusted
+start     seed     mean   median   reach     mean   median   reach
+seed's       1    51440    46982      98    52588    59824      93
+             2    51679    52348      93    87882    80992      92
+             3   140138   127276      97   113267    86658      99
+nothing      1     6115     2726      30     6435     2874      25
+             2     6640     3340      28     2304     1694      15
+             3     3325     2845      33     4431     2703      18
+             4     5029     3428      28     4603     2405      19
+             5     2968     2358      19     4384     2944      25
+             6     3365     2990      18     4104     2530      25
 ```
 
+- A start learns as well under either, one seed with another: from `seed`'s
+  the three means come to 81,086 and 84,579, from nothing the six to 4,574 and
+  4,377. What the rule changes is what a population already good fields, below.
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
@@ -583,6 +647,41 @@ nothing      1      864      125     6115     2726              30       35
 - What the learners fielded while they explored in turn, a round each scored
   whole, and what longer runs did then, is in the
   [todo](todo.md#train-a-network-bot-live-in-cave).
+
+Training on from `cave`'s own weights is read the same way, four games on four
+cores, beside what the rule before this one fielded, the best mean of eight
+rounds. `lost` counts the rounds that end before the first Kraken, and a mean
+of 100 such rounds moves by 13,000 with luck alone:
+
+```
+                               3,000,000 ticks          15,000,000 ticks
+fields                seed     mean   median   lost     mean   median   lost
+cave's own weights           300260   374046     12
+the best of eight        1   257385   219311      6   295609   373815     15
+                         2   300260   374046     12
+the most trusted         1   300260   374046     12   330680   374835      5
+                         2   300260   374046     12   324772   374859      8
+```
+
+- Every run adds its rounds to the population, a few seconds' as well: two runs
+  of 600,000 ticks left `raid` 47 rounds and then 90. Flat out a game closes a
+  round every second or two; watched at speed 1 a round the ship survives is
+  half an hour, and a run stopped inside one scores nothing for it.
+- After three million ticks the most trusted is still `cave`'s own, by then
+  tested over 20 to 25 rounds, which bring its `raid` from the 56,000 to 59,000
+  its first eight scored to 51,000 to 54,000. The best of eight had on seed 1
+  fielded a `raid` its eight rounds put at 67,316, a Kraken slower in most
+  rounds.
+- After fifteen million `raid`'s title has passed, to a member 73 rounds have
+  tested on seed 1, 18 weights from `cave`'s, and one of 16 on seed 2. Both
+  lose fewer rounds early, and neither stands off the rock: within a row of
+  it 80 ticks in 100, as `cave`'s own.
+- The archive still ranks by the plain mean, so a member many rounds have
+  brought down to what it is worth can be pushed off by newcomers one round
+  put above it, and its title passes to the next proved or, with none, to the
+  weights the graph wrote: `kraken` ended seed 2 so, every member at the
+  limit's score on a round or two
+  ([todo](todo.md#have-a-scenario-describe-the-bots-that-play-it)).
 
 A watched run at speed 1 shows the play, and a headless one flat out fills the
 files.

@@ -13,7 +13,7 @@ complete -c vif -o spectate -x -d 'Spectate a session at an address -join takes:
 complete -c vif -o spectators -x -d 'How many spectators a session this run hosts feeds at once, 0..1024; 0 takes none (default 8)'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested'
-complete -c vif -o bot -d 'Add bots alongside you: one where no count is given, the scenario\'s own bot where no graph is, default where it carries none; -host/-join keep your player'
+complete -c vif -o bot -d 'Add bots alongside you: one where no count is given, the scenario\'s own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear'
 complete -c vif -o authority -x -a 'host migrate' -d 'What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares'
 complete -c vif -o slow-window -x -d 'Window a participant\'s lateness is judged over; host only, 0 never evicts (default 20s)'
 complete -c vif -o slow-late -x -d 'Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)'

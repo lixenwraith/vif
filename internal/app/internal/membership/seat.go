@@ -366,7 +366,7 @@ func (m *Membership) botSeats() []engine.BotSeat {
 func (m *Membership) seatsSummary() string {
 	bots := m.botSeats()
 	if len(bots) == 0 {
-		return "No bots; :bot add [N[:graph]|graph] seats bots"
+		return "No bots; :bot [N[:graph]|graph] seats bots"
 	}
 	parts := make([]string, 0, len(bots))
 	for _, b := range bots {

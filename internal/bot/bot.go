@@ -56,6 +56,7 @@ type Graph struct {
 	Name     string
 	Settings Settings
 	nets     []*network
+	text     []byte // the document as written, which Document writes weights into
 	doc      map[string]any
 }
 
@@ -79,7 +80,7 @@ func ParseGraph(name string, data []byte) (*Graph, error) {
 	if doc, err = macro.ExpandDocument(doc); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, doc: doc}
+	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, text: data, doc: doc}
 	if err := g.validate(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
