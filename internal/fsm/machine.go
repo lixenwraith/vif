@@ -54,6 +54,15 @@ func (m *Machine[T]) RegisterPayloadGuard[A any](name string, build func(*A, Tri
 	}
 }
 
+// RegisterStateGuard registers a guard that reads the region it guards in, as its
+// state's time, which Guard refuses for want of one
+func (m *Machine[T]) RegisterStateGuard[A any](name string, build func(*A) (GuardFunc[T], error)) {
+	m.RegisterGuard(name, build)
+	entry := m.guardReg[name]
+	entry.state = true
+	m.guardReg[name] = entry
+}
+
 // RegisterAction registers name to run with what compile makes of its payload,
 // decoded strictly into A once at load; an A of no fields takes no payload
 func (m *Machine[T]) RegisterAction[A, R any](name string, compile func(*A) (R, error), run func(T, R)) {
@@ -910,6 +919,21 @@ func (m *Machine[T]) ResumeRegion(regionName string) {
 func (m *Machine[T]) HasRegion(regionName string) bool {
 	_, ok := m.regions[regionName]
 	return ok
+}
+
+// In reports whether region runs and, where states names any, is in one of them:
+// its active state or a state that one is within
+func (m *Machine[T]) In(region string, states []string) bool {
+	r, ok := m.regions[region]
+	if !ok {
+		return false
+	}
+	for _, id := range r.ActivePath {
+		if node := m.nodes[id]; node != nil && slices.Contains(states, node.Name) {
+			return true
+		}
+	}
+	return len(states) == 0
 }
 
 // GetRegionState returns current state name for a region
