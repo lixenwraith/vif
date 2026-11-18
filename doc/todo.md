@@ -228,39 +228,17 @@ follow the redesign.
   `internal/app/script.go`, `internal/mode/commands.go`, `cmd/vif`
 - Guide: [Bots](bots.md#networks-and-learning), [Bot catalogue](bot-catalogue.md)
 
-A scenario is to carry the bots made for its map, among its own files, and the
-user root's `bot/` to hold a player's alone: what they made, changed or trained.
-The catalogue a network reads through has landed with its rows
-([Bot catalogue](bot-catalogue.md)): no `loot`, which homes on its owner and
-whose kinds are many, and `threat` a target alone. So has the bot document
-([Bots](bots.md#networks-and-learning)): a network's `while`, a `Steer` over a
-list, `InState`, `outputs`, `[bot] inputs` and every weight written. A copy of
-`cave`'s graph with `kraken` bound to `boss` in `BossFight`, the two steered as
-a list and their first inputs the document's, kept its populations' bytes on
-two seeds of 600,000 ticks, so its scenario needs no change and its score none.
-Decided (Lixen, 2026-11-18), a PR a step in this order:
+A scenario carries the bots made for its map among its own files, and the user
+root's `bot/` holds a player's alone: what they made, changed or trained
+([Bots](bots.md#writing-a-graph)). Built: the catalogue a network reads through
+([Bot catalogue](bot-catalogue.md)), with no `loot` and `threat` a target alone;
+the bot document, a network's `while`, a `Steer` over a list, `InState`,
+`outputs`, `[bot] inputs` and every weight written; a scenario's `bots`, a seat
+that names no graph playing the first; and `cave`'s two in its scenario, `seed`
+the start written by hand and `cave` a model learned from it, run K's best of
+four, which fields 300,260 over 100 rounds of seeds 101 to 104 where `seed`
+fields 27,614. Decided (Lixen, 2026-11-18), what is left, a PR a step:
 
-- **Cave's trained model.** The shipped `seed` is `cave`'s two networks
-  with a start written by hand, seven weights of `raid` and five of `kraken`
-  ([below](#train-a-network-bot-live-in-cave)), a bot of its own to train
-  from. `cave` is to carry a model trained from it, the member a run fields,
-  held out, and the scenario both as its bots, the seed under its own label.
-  A layout stays as it is, so what is written or exported stays valid, and
-  both keep one; `cave` from nothing is held by the byte check and the seed by
-  what it fields on seeds 101 to 104, 27,614 with a median of 33,174. Models
-  trained from those weights exist, the owner's to land (the measuring
-  thread's run K: four seeds of five games, held out over 60 rounds at medians
-  of 91,959 to 373,684, read before exploring went by phase). Next (Lixen,
-  2026-11-18): `cave` carries two bot documents and training goes on from them.
-- **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
-  scenario: templates, which play only while the player has no bot of that name
-  and whose weights are the author's start for a learner. With no name, `-bot`,
-  `-bot 2`, `:bot add` and `:bot add 2` all seat the scenario's bot, and
-  `default` where the scenario carries none, as if it were named; `-bot default`
-  is the generic one shipped, bound to no scenario, which a player may change or
-  train. A population stays `bot/<name>.<scenario>.<network>.json`, one a
-  network. A bot document's `round_seconds` is its own: at `cave`'s 36,000
-  ticks the best models are cut off in most rounds.
 - **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
   <source>]`, `import`, `export`, `clear` and `list`, a source being a
   scenario's bot, one network of it alone or a file, so one population is taken
@@ -271,15 +249,17 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   `landing*_soon`. A model is its genes and not its scores, so a member goes
   by its layout, never by a population's `version`. `list` names each
   population's rounds, recent mean and the member it fields, on the menu's
-  Bots page too. Their
-  first use is the member a population fields written as the document a
-  scenario's bot carries, every weight of it, 378 for `raid` and 162 for
-  `kraken`, read back the same genome bit for bit.
+  Bots page too. `export` writes the member a population fields as the document
+  a scenario's bot carries, as `cave`'s was written by a scratch test: every
+  weight not zero, read back the same genome bit for bit and replayed round
+  for round.
+- **Training on from `cave`'s model.** Its `round_seconds`, half an hour, closes
+  85 of 100 held-out rounds at the limit, so a learner cannot tell apart what
+  outlasts it: a bot document's limit is its own to raise first.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
-- **Cave.** Its bot moves from the embedded graphs into its scenario, which
-  takes the next `network.ProtocolVersion`; its networks, digests and
-  population files stay.
+- **A scenario's bot held to its scenario by `-check`**: an `InState` that names
+  a region or a state the scenario lacks loads, and never holds.
 - **A move that names a place**, not built: `outputs` leaves room for one. An
   output's units are its own and a network has those of the outputs it lists,
   so a move to a place in the view takes `move`'s place in a list, where `move`
@@ -287,11 +267,9 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   `move`. A five-minute probe from nothing left the edges, 42% of the raid in
   the outer tenths where it was 96%, and scored no better.
 
-These steps leave `learner.go` and a round's scoring as they stand, what a read
-of them found being fixed ahead of the steps
-([below](#train-a-network-bot-live-in-cave)), so a learner in a run takes an
-import or a clear from its next run. The population file stays JSON: one cut
-short never parses, where a TOML one can read as fewer members.
+The population file stays JSON: one cut short never parses, where a TOML one
+can read as fewer members. A learner in a run takes an import or a clear from
+its next run.
 
 ### Let a scenario expose values of its own to a bot
 
@@ -315,7 +293,7 @@ only scenarios that do, so it waits on a scenario carrying its bots and on
 - Guide: [Bots](bots.md#networks-and-learning),
   [AI §3](ai-physics-and-evolution.md#3-genetic-library)
 
-A solo watched or headless bot playing the shipped `cave` graph learns its
+A solo watched or headless bot playing the `cave` scenario's own bot learns its
 networks' weights a round at a time and keeps a population for each in the user
 root ([Bots](bots.md#networks-and-learning)). `cave` is the one scenario
 worked on until a bot plays it near perfectly: armada's wants rework first, and
@@ -325,9 +303,10 @@ built so:
 - **The game is `cave` as shipped, raiders on**, starting with 10 heat. Its
   ramp, boss and faster caves are the curriculum, and a defeat resets the game,
   which ends the round.
-- **The genome is a network's weights**, and none is written by hand: a
-  population starts from genomes drawn at random, so what a bot does it found,
-  the use of its heat in the first cave among it.
+- **The genome is a network's weights.** `cave` carries a model learned from
+  `seed`'s, the start written by hand, and a population learns on from what its
+  graph writes; one whose graph writes none starts from genomes drawn at
+  random, as every run measured below as from nothing did.
 - **A network a phase.** `raid` steers while the raiders fly and `kraken` while
   the Kraken is up, picked by a guard on the world, each with a learner and a
   population of its own. Both play a candidate, each scored by the ticks its

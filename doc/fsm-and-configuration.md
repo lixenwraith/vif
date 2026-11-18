@@ -141,6 +141,7 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `description` | Optional short scenario summary, carried with the scenario during transfers. |
 | `min_players`, `max_players` | How many players, bots counted, the scenario runs with: `0..parameter.MaxPlayers`, max at least 1 and min. Undeclared, 1 and a full roster. `max_players` is a ceiling beside `-players`, the lower one holding, and a startup lobby waits for `min_players` ([Runtime §1.2](runtime.md#12-the-dedicated-host)); a min of 0 waits for one until a game with nobody in it can run. |
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
+| `bots` | The bot documents made for the scenario's map, files of its own listed in order and named by their files; the first is the bot a seat that names no graph plays ([Bots: Writing a graph](bots.md#writing-a-graph)). |
 | `systems.disabled_systems` | Systems the baseline leaves off. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |

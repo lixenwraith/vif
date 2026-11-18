@@ -924,6 +924,21 @@ Libraries · Branches.
   Main's binary and the branch's are read from `seed` in six minutes a seed on
   four cores: two each to train four games' three million ticks, one each to
   hold what they field out over 100 rounds.
+- A scenario's bots are files of the scenario, `cave`'s in
+  `wad/scenario/base/cave/bot/`, and only `default` is embedded. A test reads
+  one through `resource.LoadScenario` and `Scenario.Bot`, or by its path from
+  the package, and `-bot` with no graph is the way to play it. A copy of the
+  name in a root's `bot/` plays in its place, as an install before the move
+  left one. A held-out harness built earlier refuses a scenario whose entry has
+  a key it does not know: run it on a copy of `wad/` taken before the change.
+- A model is landed in a bot document by a scratch test in `internal/bot`: it
+  parses the document, takes `members[fielded]` of each population file, writes
+  `[[network.<name>.units]]` and a table an output unit with every weight not
+  zero (`strconv.FormatFloat(w, 'g', -1, 64)`), and parses the result back to
+  the same `math.Float64bits`. A population written by another tool is raised
+  to this `version` in a copy by a JSON round trip, not by `sed`: its spacing
+  is its writer's. The document then replays the population's held-out rounds
+  line for line with no learner.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.
