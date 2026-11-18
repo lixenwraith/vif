@@ -1414,6 +1414,8 @@ func (s *Scheduler) processTick() {
 		s.world.LatchSession()
 		s.publishInputHorizon()
 		s.steerFSM()
+		// The cave's step count is a tick's own: one that runs no system leaves none
+		s.world.Resources.Cave.Steps = 0
 		// Pointer reports since the last tick cross as one placement, an input. It and
 		// anything else pushed since the last tick settle before the tick opens, as the
 		// event loop would have settled them, so a replay settles them where the run did

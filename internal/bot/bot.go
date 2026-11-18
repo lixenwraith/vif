@@ -454,9 +454,14 @@ func (d *Driver) Step() (more bool, err error) {
 	if !d.expire() || !d.inject() || !d.inst.InputTick() {
 		return false, nil
 	}
+	// A new game asked for ahead of the tick, by the step's own input or between
+	// steps, plays it, so the round closes before the tick is counted
+	early := d.ended.Load() != roundOn
 	d.inst.Tick(1)
 	d.stats.Ticks++
-	d.count()
+	if !early {
+		d.count()
+	}
 	if how := d.ended.Swap(roundOn); how != roundOn {
 		d.closeRound(how == roundOver || d.asked)
 		d.asked = false
@@ -464,6 +469,9 @@ func (d *Driver) Step() (more bool, err error) {
 		// A learning round the game will not end is closed as far as it came, by a new game
 		d.asked = true
 		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+	}
+	if early {
+		d.count()
 	}
 	if d.games != nil {
 		d.games.reach(d.game, d.stats.Ticks+1)

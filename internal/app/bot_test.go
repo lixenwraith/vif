@@ -268,7 +268,8 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 
 // TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds
 // has a solo learning run close a round the game has not ended by then, with a new
-// game, and score its candidate on what the round came to.
+// game, and score its candidate on what the round came to: the columns of its own
+// game's ticks, one each here, and none of the tick the new game began on or at.
 func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -298,10 +299,17 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	}
 	bot.Learn(func() bool { return true }, []*bot.Learner{raid}, d)
 	const rounds = 3
+	played := uint64(0)
+	d.Round = func(n uint64, score float64) {
+		if score != float64(played) {
+			t.Errorf("round %d scored %g, want the %d columns of the ticks its game played", n, score, played)
+		}
+	}
 	for d.Stats().Rounds < rounds {
 		if more, err := d.Step(); !more || err != nil || d.Stats().Ticks > 400 {
 			t.Fatalf("tick %d: more %v, err %v, %d rounds", d.Stats().Ticks, more, err, d.Stats().Rounds)
 		}
+		played = a.world.Resources.Game.State.GetGameTicks()
 	}
 	const limit = 2 * time.Second / parameter.GameUpdateInterval
 	if st := d.Stats(); st.Ticks < rounds*uint64(limit) || st.Ticks > rounds*uint64(limit+3) || raid.Stats().Scored != rounds {
