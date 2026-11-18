@@ -408,17 +408,16 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
   hand, the use of its heat among it. The shipped
-  [`cave_seed`](../internal/asset/bot/cave_seed.toml) is the same two networks
+  [`seed`](../internal/asset/bot/seed.toml) is the same two networks
   with a start written by hand, twelve direct weights that hold the nearest
   raider's row, back off what is near and keep to the middle: a seed to train
   a model for `cave` from, since from nothing the search did not reach the gun.
-  Over 100 rounds of seeds 101 to 104 it fields 27,614, and what one run of
-  four games learned from it in three million ticks fields 53,852. A graph may
-  write any: a unit's table
-  (`x`, `y`, `special`) gives its weight from each input by name, its `bias`
-  and, as `hidden`, a weight a hidden unit in their order, and `units` lists a
-  table a hidden unit, its weight from each input and its `bias`. What is
-  written is every run's first candidate and what is not is zero: with no
+  Over 100 rounds of seeds 101 to 104 it fields 27,614, and what runs learn
+  from it is [below](#the-population-file). A graph may write any: a unit's
+  table (`x`, `y`, `special`) gives its weight from each input by name, its
+  `bias` and, as `hidden`, a weight a hidden unit in their order, and `units`
+  lists a table a hidden unit, its weight from each input and its `bias`. What
+  is written is every run's first candidate and what is not is zero: with no
   weight and no population a network asks for nothing and the ship holds still.
   - A move is an offset from the ship in view widths and heights, taken each
     update. A positive weight on a thing's offset closes that share of the gap
@@ -434,10 +433,11 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
 ### Learning
 
 With `[bot] learn = true` a solo watched or headless run learns each network's
-weights as it plays: a genome plays a round, and its outcome is the round's score
-([Fitness](#fitness-and-comparing-graphs)) from the tick its network first
-steered in it, the whole round for `raid` and from the Kraken's rise for
-`kraken`.
+weights as it plays: a genome plays a round, and its outcome is its network's
+part of the round's score ([Fitness](#fitness-and-comparing-graphs)), the
+columns of the ticks the network steered and what they earned. In `cave` that
+is the fight for `kraken`, from the Kraken's rise to its death or the round's
+end, and all the rest for `raid`.
 
 - Each network has a learner of its own, the `StreamingEngine` of
   `lixenwraith/genetic` ([AI §3](ai-physics-and-evolution.md#3-genetic-library))
@@ -448,13 +448,16 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
   one parent's, mixed a hidden unit or an output at a time, three in a hundred
   of their weights stepped. A member's score is the mean of its rounds, and every
   third candidate is the best member short of eight rounds again, so what tops
-  the archive is proved or falls.
-- The learners explore in turn. One plays a candidate and the rest the members
-  they field, unscored, so every score in an archive is of a round the other
-  networks played at their best, and follows from the candidate's own change.
-  The turn passes once a round has settled the candidate, and at once where the
-  round never reached its network, as `kraken`'s in a round lost to a raider, so
-  no learner waits on another.
+  the archive is proved or falls. A candidate the archive already holds is that
+  member again, as a kept population's written start is, and a member pushed
+  off the archive while a round of it plays comes back, if at all, on the mean
+  of all its rounds.
+- Every learner plays a candidate, and a round's ticks are the network's that
+  steered last: `kraken` learns only while a Kraken is up and `raid` everywhere
+  else, neither paid for the other's ticks. A candidate whose network a round
+  never reached plays on until one does, as `kraken`'s through the rounds lost
+  to a raider, so no round passes unscored and none scores a network that did
+  not play it.
 - A round's score is mostly luck, the game it drew: a candidate whose first round
   would enter a full archive plays a second, and enters or not on that round
   alone. A run fields the best member eight rounds have proved, which is seldom
@@ -472,9 +475,8 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
   from the same files.
 - A headless run alone and flat out plays its graph in several games at once,
   `-games` of them, each a run of its own on a seed drawn from the run's, and all
-  teach the one learner a network and keep the one file. Each game carries one
-  candidate of one network beside the members the rest field, as a lone game
-  does.
+  teach the one learner a network and keep the one file. Each game carries a
+  candidate of every network, as a lone game does.
   - A round closes into the learners in the order of the tick it closed at and
     then of its game, as if the games took turns a tick at a time, so one seed
     and one count of games search alike however the cores run them.
@@ -482,7 +484,10 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
     core stands free meanwhile: the count is one more than the cores unless
     `-games` names it, which keeps each core playing.
   - A run its graph quits ends every game at the tick its own reached, and
-    `-games 1` learns as a watched run does, round for round.
+    `-games 1` learns as a watched run does, round for round. No round a game
+    closes past that tick is scored; a game ahead of the run's own has played
+    past it all the same, so the ticks and actions a run sums over its games
+    are not its seed's as its populations are.
 - A watched run's bar says what each round came to as it closes and how far each
   learner is, `Round 12 scored 5480 | kraken recent 2210, fielding 2790 over 9 |
   raid recent 4100, fielding 5300 over 31`; a headless run prints `Bot learned
@@ -523,40 +528,39 @@ population not kept`) and on a watched run's bar:
 - a file that cannot be read is left as it is, and the run keeps nothing;
 - a file that cannot be parsed starts that population over, and the next save
   replaces it;
+- a file another run has taken further on, by its `rounds`, is left as it is:
+  two runs may learn one population, as a watched run opened beside a headless
+  one, and the one further on keeps the file;
 - a save that fails is tried again each half minute, and only the first is said.
 
 A run that ends without keeping what it learned ends with that error.
 
-What a run learns from nothing in `cave`, held out over 60 rounds of four seeds
-no run learned on, each closed at the graph's limit, where the weights last
-written by hand score 11,896 and a ship that holds still 165: after 22 minutes
-on four cores, five games' 25 million ticks or one game's 6 million beside three
-others, the runs field
+What a run learns in `cave` is read by what it fields held out: 100 rounds of
+seeds 101 to 104 with no learner, each closed at the graph's limit. From
+[`seed`](../internal/asset/bot/seed.toml)'s weights, which field 27,614
+themselves with a median of 33,174 and reach the Kraken in 73 rounds, four
+games' three million ticks, two minutes on four cores; from nothing, where a
+ship that holds still scores 159, one game's 600,000:
 
 ```
-seed                1       2       3       4
-five games       3720    5464    6141    5891
-  its median     1277    1070    2320    1344
-one game         3887    4556    4753    3159
-  its median     1105    1057    1382    1198
+                   rounds scored      fields            reach the   Krakens
+start     seed     raid   kraken     mean   median   Kraken of 100     down
+seed's       1      814      408    51440    46982              98      423
+             2      767      437    51679    52348              93      421
+             3      570      305   140138   127276              97      633
+nothing      1      864      125     6115     2726              30       35
+             2      774      115     6640     3340              28       39
 ```
 
-- Half the rounds or more are lost in the first cave, where the hand weights
-  lose a quarter, and what five games field after two million ticks is about
-  what they field after 25: a game on every core gets there sooner, no further.
-- It learns the special attack as a trigger in place of flying: a blast clears
-  the screen wherever the ship is, and it asks when raiders crowd it or one is
-  about to charge, about ten blasts in the first cave. Held off, what it fields
-  scores 250 to 1,500, where a ship that holds still scores 165, and loses
-  every round there. It asks most at heat 0, where an ask does nothing
-  ([todo](todo.md#train-a-network-bot-live-in-cave)).
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
+- What the learners fielded while they explored in turn, a round each scored
+  whole, and what longer runs did then, is in the
+  [todo](todo.md#train-a-network-bot-live-in-cave).
 
 A watched run at speed 1 shows the play, and a headless one flat out fills the
-files. What a game on every core added while the graph wrote its weights by
-hand and a round scored its ticks, on that score, is in the same todo item.
+files.
 
 ## Recording and replaying
 
