@@ -260,10 +260,15 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
     rock. The model stands within a row of the rock 80 ticks in 100, since its
     `raid` learned a `ceiling` weight of -0.058 on `y` where `floor` kept
     0.05: a push down whatever the gap. Set back to 0.05 by hand it is crushed
-    once and fields 187,300, a Kraken slower in most rounds, so the nudge has
-    to be learned. Fifteen million ticks with the title tested field a `raid`
-    that still stands at the rock 80 ticks in 100, loses five rounds early,
-    two crushed, and shoots nine Krakens down in 80.
+    once and fields 187,300, a Kraken slower in most rounds. Learned on from
+    so, fifteen million ticks field 201,942 on seed 1 and 267,101 on seed 2,
+    one round and none crushed, at the rock 73 and 76 ticks in 100, nine
+    Krakens down in 29 rounds and 62: seed 1's `raid` kept no member of more
+    than three rounds and fielded the weights it began with
+    ([below](#have-a-scenario-describe-the-bots-that-play-it)), and seed 2
+    lost 17 rounds early to the raiders. From `cave`'s own weights the same
+    ticks field a `raid` that still stands at the rock 80 ticks in 100, loses
+    five rounds early, two crushed, and shoots nine Krakens down in 80.
   - **A nudge in the pay**, tried in a scratch tree and not built: a learner
     is paid no column scrolled while a block stands within two rows above or
     below its ship. Under the rule that fielded the best of eight rounds it
