@@ -348,9 +348,13 @@ one game, 6.2 to 6.4 million ticks
   a five-game run fields changes a dozen times in 22 minutes, and in two runs
   of four one born in the first three minutes was fielded again in the last ten.
 
-What each member does with the special in those rounds, a blast being one that
-detonated and spent its heat, and the same members with `special` held off, its
-weights zeroed and its bias negative in a copy of the files:
+What each member does with the special in those rounds, and the same members
+with `special` held off, its weights zeroed and its bias negative in a copy of
+the files. A blast is a special that detonated and spent its heat:
+`detonateDust` turns every dark glyph the player owns to dust anywhere on the
+map, at no distance from the ship, and detonates up to 256 centres of radius
+12. A blast clears the screen wherever the ship is, which is why it stands in
+for flying.
 
 ```
                                     seed 1       2       3       4
@@ -372,19 +376,46 @@ one game
     lost before the Kraken              60      60      60      60
 ```
 
-- Every member blasts in the first cave in 53 to 60 rounds of 60, and 27 of
-  the 5,047 blasts there fell in a round's first 100 ticks: the first comes as
-  the raiders close and the tenth 26 to 53 seconds in, where a round that
-  reaches the Kraken meets it at a median tick of 1,100 to 2,900.
-- Held off, every member loses all 60 rounds before the first Kraken, some
-  scoring little more than a ship that holds still.
+- Every member blasts in the first cave in 53 to 60 rounds of 60, 27 of the
+  5,047 blasts there in a round's first 100 ticks and the tenth 26 to 53
+  seconds in, where a round that reaches the Kraken meets it at a median tick
+  of 1,100 to 2,900.
+- Held off, what the runs field scores 252 to 1,475, where a ship that holds
+  still scores 165, and loses all 60 rounds before the first Kraken, where the
+  hand weights, which never ask for the special, lose 16: `raid` learned a
+  trigger and almost no flying.
 - None reached the limit, and a defeat ends at heat 0 by its rule, energy and
   heat both at nothing, so no lost round ends with heat left. In 14 to 39
-  rounds of 60 the blasts alone spent every heat the round had, its 10 and its
-  loot's; a ship that reaches the Kraken has a median 10 to 15.
-- So, per seed: every run fires in the first cave and not all in its first
-  seconds, and the ablation costs every run the first cave; no run ends its
-  rounds with heat left.
+  rounds of 60 the blasts spent every heat the round had, its 10 and its
+  loot's, and in the other 21 to 46 touches took the last; a ship that reaches
+  the Kraken has a median 10 to 15.
+
+What the special follows, before the first Kraken in the same rounds: each ask,
+an `EventFireSpecialRequest`, beside every 20th tick, over the eight members.
+They ask 10 to 18 times a round there and blast 9 to 13, and the asks fill 4 to
+11% of what an output always positive asks, one every 5 ticks:
+
+```
+                                at an ask   every 20th tick
+raiders flying                    2.4-3.0           1.5-2.1
+  none                                 0%             8-17%
+the nearest, median cells           13-33             22-38
+an enraged raider                 75-100%            29-52%
+a landing marked                   69-95%            28-51%
+heat                              5.2-7.6          7.3-10.7
+  none                             10-31%             2-12%
+
+heat                         0     1-3     4-6     7-9     10+
+asked, of always on     10-28%   4-10%    2-8%   4-12%    2-5%
+```
+
+- The raid's danger gates the ask: none with no raider flying and almost none
+  with one, 0 to 15% of always on with two, 5 to 35% with three, and 75 to
+  100% of the asks come with a raider enraged or about to land. It answers the
+  raiders crowding and charging, closer than usual but not by distance alone.
+- Asking does not fall as the heat does: it is highest at heat 0, where an ask
+  does nothing, 3 to 10 times its rate at 10 or more. Nothing in it holds heat
+  back, and the heat a round keeps is what the raiders leave.
 
 What five games fielded as they learned, their files as saved nearest 2, 5, 10
 and 20 million ticks (1.8 to 2.3, 5.0 to 5.2, 9.8 to 10.3, 19.8 to 20.2), when
@@ -414,6 +445,136 @@ lost before the Kraken, of 40
   before the Kraken; the means move with a few long rounds. Every copy blasts
   about ten times before the Kraken and loses all 40 rounds there with the
   special held off.
+
+Whether its selection is luck: every `raid` member of each five-game population
+held out 24 rounds, 6 on each of seeds 101 to 104, the same games for every
+member, beside the `kraken` member the run fields; and the curve's zero, a new
+population stopped as its first 32 rounds end, one game on seeds 1 and 2, its
+32 draws played the same way. Genes apart is the root mean square of two
+members' difference, as a share of a weight's range:
+
+```
+                               seed 1      2      3      4  zero 1  zero 2
+archive score against held out, rank correlation
+  with the mean                  0.26  -0.17  -0.03   0.17    0.63    0.80
+  with the median                0.31  -0.35   0.01   0.37    0.65    0.78
+the member fielded, its rank       14     32     20      6       -       -
+the halves against each other   -0.20   0.29  -0.23   0.28    0.88    0.93
+held out, the members' median    3067   4471   4859   4473     144     149
+  best                           6963   9044   7952   8655     342     231
+  worst                          1470   2405   1864   1921      96      86
+genes apart, mean, %              1.5    1.4    1.3    1.3     2.1     2.1
+  most                            2.4    2.1    2.0    2.0     2.3     2.3
+blasts before the Kraken          11     12     11     10       4      10
+```
+
+- A learned archive is 32 near-copies that 24 rounds cannot tell apart, their
+  halves correlating -0.23 to 0.29, and its own score ranks them no better:
+  the member fielded held out 6th to 32nd of 32. Over the members with eight
+  rounds or more the correlations move by 0.07 at most. Choosing among them is
+  luck.
+- Random draws are told apart, by 24 rounds and by their one round alike: they
+  field about a still ship, 144 and 149, lose every round in the first cave and
+  already blast. From there the search reached a trigger fielding 1,500 to
+  5,000 by two million ticks, and no further.
+
+`raid` learned from nothing with `special` held off, learning and held out
+alike, as run C: a switch in a scratch copy of the tree has `raid`'s `steer`
+never ask, `kraken` as shipped, five games on four cores for 22 minutes on
+seeds 1 to 4 as above. Off, the copy keeps main's population bytes; on, it
+plays row 2's members as their files' ablation does, round for round. Held out
+under it, 60 rounds at the end and 40 a copy near 2, 5, 10 and 20 million
+ticks:
+
+```
+                                seed 1       2       3       4
+run C, 31.6 to 33.7 million ticks
+  raid: rounds                   18857   12147   15372   12735
+    recent                        1080    1802    1498    1751
+    fielding                      2487    5086    3617    6237
+      over                           8      11       8      13
+  kraken: rounds                     0      64      41      41
+    recent                           -    7805    3259    2941
+    fielding                         -   20790       0       0
+      over                           -       8       0       0
+  fielded, held out               1355    1940    2370    1762
+    its median                    1249    1204    1644    1328
+  lost before the Kraken            60      59      60      60
+    the median tick they end      1254    1198    1643    1333
+  five Krakens or more down          0       0       0       0
+  rounds at the limit                0       0       0       0
+```
+
+```
+                                     2       5      10      20
+copies, fielded
+  seed 1                           871     947    1104    1161
+  seed 2                           841    1850    1811    1692
+  seed 3                           953     953    1387    1439
+  seed 4                           742    1020    1518    2047
+its median
+  seed 1                           672     764     799    1181
+  seed 2                           721    1486    1416    1494
+  seed 3                           607     607     986    1028
+  seed 4                           763     831    1110    1185
+the median tick they end
+  seed 1                           677     769     804    1186
+  seed 2                           726    1483    1421    1499
+  seed 3                           612     612     991    1033
+  seed 4                           768     836    1115    1190
+```
+
+Beside the other players of those rounds, with the median tick a round lost
+before the Kraken ended at:
+
+```
+                            fielded   median     lost  at tick
+the hand weights              11896    13525       16      666
+row 2 held off, seed 1         1005      729       60      734
+row 2 held off, seed 2          252      248       60      253
+row 2 held off, seed 3         1475     1300       60     1305
+row 2 held off, seed 4          840      652       60      657
+run C, seed 1                  1355     1249       60     1254
+run C, seed 2                  1940     1204       59     1198
+run C, seed 3                  2370     1644       60     1643
+run C, seed 4                  1762     1328       60     1333
+```
+
+- Without blasts five games play 23,900 to 25,500 ticks a second, and a
+  learning round reached the Kraken 0 to 64 times a run, so `kraken` learned
+  little.
+- Every copy loses all 40 rounds before the Kraken and what each run fields 59
+  or 60 of 60, as row 2's members held off do, so the reading fixed before the
+  runs that has the search fly does not hold. Nor is it flat: what it fields
+  grows 1.6 to 2.5 times from two million ticks to the end, its lost rounds
+  lasting from a median tick of 612 to 768 to one of 1,198 to 1,643, past row
+  2's members held off on every seed. It finds some flying on a clean signal,
+  slowly, and none that passes the cave the hand weights pass in 44 rounds of
+  60.
+
+The same reading of selection on run C's populations, under the switch:
+
+```
+                                seed 1      2      3      4
+archive score against held out, rank correlation
+  with the mean                   0.09   0.42  -0.06   0.10
+  with the median                 0.19   0.21  -0.09   0.42
+the member fielded, its rank        17     15      1     24
+the halves against each other     0.04   0.29   0.09   0.36
+held out, the members' median     1362   1997   1691   1635
+  best                            1690   3699   2845   2510
+  worst                            915   1078   1076    946
+genes apart, mean, %               1.4    1.5    1.3    1.1
+  most                             1.9    2.2    1.9    1.9
+```
+
+- Held to flying the archive is the same: near-copies 1.1 to 1.5% of a
+  weight's range apart, halves correlating 0.04 to 0.36, its score ranking
+  them -0.06 to 0.42 against the held-out mean, within 0.12 over the members
+  with eight rounds or more, and the member fielded 1st to 24th of 32. No
+  round snowballs here, none passing the first cave, and still a round's luck
+  outweighs what sets the members apart: the stall is selection's, with the
+  special or without it.
 
 The rest was read while the graph wrote its weights by hand and a round scored
 its ticks, a Kraken's fight aside. Games that learn together, in ticks a second
@@ -477,17 +638,19 @@ What remains:
 - **Whether it finds the heat.** A person gets through the first cave, where
   the gun has no upgrade and a touch finds no shield, by blasting the raiders
   that crowd the ship, once or twice, and holding a heat back. From nothing a
-  run finds the blast and leans on it, about ten in the first cave, and holds
-  none back (above). Unread: whether one that first learns to fly that cave, as
-  the hand weights do, then learns to blast once or twice.
+  run learns the special as a trigger in place of flying: it asks when raiders
+  crowd the ship or charge, about ten blasts in the first cave, and most at
+  heat 0, where an ask does nothing, so nothing in it holds heat back (above).
+  A person's use rests on flying that cave, which no run learned, with the
+  special or without it: unread until one does.
 - **How fast it learns.** From nothing, what five games field after two
   million ticks, two minutes on four cores, is what they field after 25, and
   one game fields after 22 minutes, six million ticks, about what five games
   did at five million: a game on every core multiplies the ticks four times and
-  gets to that level sooner, no further. A game whose round closes ahead of the others'
-  ticks waits for them, which is what makes a seed's search one search, and a
-  game more than the cores takes up the core it frees: that count is read on
-  two to four cores, and three did better with two more, so read it on more,
+  gets to that level sooner, no further. A game whose round closes ahead of the
+  others' ticks waits for them, which is what makes a seed's search one search,
+  and a game more than the cores takes up the core it frees: that count is read
+  on two to four cores, and three did better with two more, so read it on more,
   where the learners' one lock may bind first. With
   [Train bot graphs offline](#train-bot-graphs-offline).
 - **A scenario that opens on the Kraken** scores `kraken` every round and
@@ -566,15 +729,15 @@ What remains:
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs
   5, the Kraken's aside: its hit points want a table.
-- **The archive stalls from nothing** in the first cave (above): its raid ends
-  half the rounds or more, most by a defeat and often with the heat blasted
-  away, while `raid`'s recent mean holds and its fielded member turns over. The next
-  experiment, before any other: learn `raid` from nothing with `special` held
-  off in every candidate, 22 minutes on four cores over seeds 1 to 4, and hold
-  out what it fields beside the table above. Fewer rounds lost before the
-  Kraken would say the blast's early pay is what holds the search there; as
-  many, that the flying is past this search, and then an evolution strategy
-  with a step per gene, an engine of its own in `lixenwraith/genetic`.
+- **The archive stalls from nothing** in the first cave, with the special and
+  without it (above). Its members become near-copies that 24 rounds do not
+  tell apart, and its own score picks among them by luck; held to flying, the
+  search learns to last longer there and still loses every round. The next
+  step the evidence points to, not yet run: the same games for a candidate and
+  the member it came from, so that a candidate is judged by its own change and
+  not by the game's luck, which is all 24 rounds of near-copies show. An
+  evolution strategy with a step per gene, an engine of its own in
+  `lixenwraith/genetic`, only if that stalls too.
 
 What `lixenwraith/genetic` measured on a stand-in, a 148-weight network of this
 shape on a noisy scrolling game, twelve seeds a row and 12,000 rounds each, read
