@@ -17,7 +17,7 @@ import (
 )
 
 // SchemaVersion is the FSM schema contract version -schema prints.
-const SchemaVersion = 26
+const SchemaVersion = 27
 
 // Schema writes the machine schema as JSON for -schema and authoring tools. It
 // needs no terminal, services or World instance.
@@ -39,12 +39,14 @@ func Schema(w io.Writer) error {
 	// Each vocabulary lists its guards and actions with their args: a scenario's,
 	// a bot graph's, which refuses the actions that write the world, and a behavior
 	// program's, with its probes, sustained verbs and flags. Names lists, by Go
-	// type, the names a payload field of that type takes.
+	// type, the names a payload field of that type takes, and BotCatalogue what a
+	// bot graph's network reads and asks for.
 	schema := struct {
 		SchemaVersion    int                        `json:"schema_version"`
 		Events           []eventSchema              `json:"events"`
 		Names            []dialect.NameList         `json:"names"`
 		Vocabularies     map[string][]dialect.Entry `json:"vocabularies"`
+		BotCatalogue     bot.Listing                `json:"bot_catalogue"`
 		Ops              []string                   `json:"ops"`
 		ConfigIntFields  []string                   `json:"config_int_fields"`
 		ConfigBoolFields []string                   `json:"config_bool_fields"`
@@ -52,6 +54,7 @@ func Schema(w io.Writer) error {
 		SchemaVersion:    SchemaVersion,
 		Names:            event.PayloadNames(component.Declared{}).List(),
 		Vocabularies:     map[string][]dialect.Entry{"scenario": m.Vocabulary(), "bot": bot.Vocabulary(), "behavior": system.BehaviorVocabulary().Entries()},
+		BotCatalogue:     bot.Catalogue(),
 		Ops:              dialect.Ops(),
 		ConfigIntFields:  engine.ConfigIntFields(),
 		ConfigBoolFields: engine.ConfigBoolFields(),

@@ -35,104 +35,17 @@ type mind struct {
 	// world that has moved on.
 	room int
 
-	// Nearest target per class, found once per update however many ask
-	seen  [targetCount]sighting
+	// Nearest target per kind, found once per update however many ask, and what the
+	// network steering this update reads through
+	seen  [targetCount]hunt
 	fresh [targetCount]bool
-}
-
-// target is a class of thing a graph points at or asks about
-type target uint8
-
-const (
-	targetGlyph target = iota
-	targetGold
-	targetNugget
-	targetSpecies
-	targetKraken
-	targetCursor
-	targetThreat
-	targetButton
-	targetRandom
-	targetCount
-)
-
-// targets is indexed by target: the name a graph uses and the scan that visits
-// every entity of the class. A button is a rectangle a scenario lays out, sighted
-// by button, and random a cell; neither is an entity to scan.
-var targets = [targetCount]struct {
-	name string
-	scan func(m *mind, visit func(core.Entity))
-}{
-	targetGlyph: {"glyph", func(m *mind, visit func(core.Entity)) {
-		c := m.ctx.World.Components
-		c.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
-			if g.Type != component.GlyphGold && !c.Member.HasEntity(e) && m.ctx.World.Positions.IsTypeable(e) {
-				visit(e)
-			}
-			return true
-		})
-	}},
-	targetGold: {"gold", func(m *mind, visit func(core.Entity)) {
-		m.ctx.World.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
-			if g.Type == component.GlyphGold {
-				visit(e)
-			}
-			return true
-		})
-	}},
-	targetNugget: {"nugget", func(m *mind, visit func(core.Entity)) {
-		for _, e := range m.ctx.World.Components.Nugget.Entities() {
-			visit(e)
-		}
-	}},
-	targetSpecies: {"species", scanSpecies},
-	targetKraken: {"kraken", func(m *mind, visit func(core.Entity)) {
-		for _, e := range m.ctx.World.Components.Kraken.Entities() {
-			visit(e)
-		}
-	}},
-	targetCursor: {"cursor", func(m *mind, visit func(core.Entity)) {
-		own := m.ctx.World.Resources.Player.Entity
-		for _, e := range m.ctx.World.Components.Cursor.Entities() {
-			if e != own {
-				visit(e)
-			}
-		}
-	}},
-	targetThreat: {"threat", func(m *mind, visit func(core.Entity)) {
-		scanSpecies(m, visit)
-		c := m.ctx.World.Components
-		c.Bullet.Each(func(e core.Entity, b *component.BulletComponent) bool {
-			if b.Hostile {
-				visit(e)
-			}
-			return true
-		})
-		c.Missile.Each(func(e core.Entity, missile *component.MissileComponent) bool {
-			if missile.Hostile {
-				visit(e)
-			}
-			return true
-		})
-	}},
-	targetButton: {name: "button"},
-	targetRandom: {name: "random"},
-}
-
-// scanSpecies visits every combat entity but a cursor or a tower
-func scanSpecies(m *mind, visit func(core.Entity)) {
-	m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-		if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
-			visit(e)
-		}
-		return true
-	})
+	view  view
 }
 
 // parseTarget resolves a graph's target name, refusing those its user can't take
-func parseTarget(name string, refused ...target) (target, error) {
+func parseTarget(name string, refused ...kind) (kind, error) {
 	for t := range targetCount {
-		if targets[t].name == name && !slices.Contains(refused, t) {
+		if kinds[t].name == name && !slices.Contains(refused, t) {
 			return t, nil
 		}
 	}
@@ -140,11 +53,11 @@ func parseTarget(name string, refused ...target) (target, error) {
 }
 
 // buttonKey reads the key that picks one button; only the button target takes it
-func buttonKey(t target, text string) (rune, error) {
+func buttonKey(t kind, text string) (rune, error) {
 	if text == "" {
 		return 0, nil
 	}
-	if t != targetButton {
+	if t != kindButton {
 		return 0, errors.New("key applies only to the button target")
 	}
 	key, size := utf8.DecodeRuneInString(text)
@@ -154,7 +67,7 @@ func buttonKey(t target, text string) (rune, error) {
 	return key, nil
 }
 
-// sighting is the nearest target of one class to the bot's own cursor
+// sighting is the nearest target of one kind to the bot's own cursor
 type sighting struct {
 	x, y int
 	// dist2 is the squared cell distance, rows counted twice as the terminal draws
@@ -163,9 +76,22 @@ type sighting struct {
 	found bool
 }
 
-// sight is the nearest target of a class, a button by its key
-func (m *mind) sight(t target, key rune) sighting {
-	if t == targetButton {
+// hunt keeps the thing nearest from of those a target's scan tells, ties to the
+// first found, which store order makes deterministic
+type hunt struct {
+	from component.PositionComponent
+	sighting
+}
+
+func (h *hunt) visit(t thing) {
+	if d := dist2(t.x-h.from.X, t.y-h.from.Y); !h.found || d < h.dist2 {
+		h.sighting = sighting{x: t.x, y: t.y, dist2: d, found: true}
+	}
+}
+
+// sight is the nearest target of a kind, a button by its key
+func (m *mind) sight(t kind, key rune) sighting {
+	if t == kindButton {
 		cfg := m.ctx.World.Resources.Config
 		return m.button(key, 0, 0, cfg.MapWidth-1, cfg.MapHeight-1)
 	}
@@ -202,28 +128,20 @@ func (m *mind) button(key rune, x0, y0, x1, y1 int) sighting {
 	return s
 }
 
-// nearest finds the entity of a class closest to the cursor's predicted cell, the
-// cell a person sees; ties go to store order, which is deterministic.
-func (m *mind) nearest(t target) sighting {
+// nearest finds the thing of a kind closest to the cursor's predicted cell, the
+// cell a person sees, over the whole world
+func (m *mind) nearest(t kind) sighting {
+	h := &m.seen[t]
 	if m.fresh[t] {
-		return m.seen[t]
+		return h.sighting
 	}
 	m.fresh[t] = true
-	var s sighting
-	from, ok := m.ctx.World.LocalCursor()
-	if ok {
-		targets[t].scan(m, func(e core.Entity) {
-			pos, ok := m.ctx.World.Positions.GetPosition(e)
-			if !ok {
-				return
-			}
-			if d := dist2(pos.X-from.X, pos.Y-from.Y); !s.found || d < s.dist2 {
-				s = sighting{x: pos.X, y: pos.Y, dist2: d, found: true}
-			}
-		})
+	*h = hunt{}
+	if from, ok := m.ctx.World.LocalCursor(); ok {
+		h.from = from
+		kinds[t].scan(m, h)
 	}
-	m.seen[t] = s
-	return s
+	return h.sighting
 }
 
 // glyphUnder is the rune typing would validate at the cursor: its cell's top glyph,
@@ -271,9 +189,9 @@ func (m *mind) pointAt(p pointArgs) {
 	}
 	var x, y int
 	switch p.target {
-	case targetRandom:
+	case kindRandom:
 		x, y = minX+m.rng.Intn(maxX-minX+1), minY+m.rng.Intn(maxY-minY+1)
-	case targetButton:
+	case kindButton:
 		if x, y, ok = m.aimButton(p, minX, minY, maxX, maxY); !ok {
 			return
 		}
@@ -289,7 +207,7 @@ func (m *mind) pointAt(p pointArgs) {
 		}
 		x, y = min(max(goalX, minX), maxX), min(max(goalY, minY), maxY)
 		// Start a newly acquired text run at its left edge instead of eating it backwards.
-		if p.target == targetGlyph && !p.away {
+		if p.target == kindGlyph && !p.away {
 			for x > minX {
 				if _, ok := m.glyphAt(x-1, y, true); !ok {
 					break
@@ -333,7 +251,7 @@ func (m *mind) aimButton(p pointArgs, minX, minY, maxX, maxY int) (int, int, boo
 		return 0, 0, false
 	}
 	if !s.found {
-		s = m.sight(targetButton, p.key)
+		s = m.sight(kindButton, p.key)
 	}
 	if !s.found {
 		return 0, 0, false
@@ -372,7 +290,7 @@ func dist2(dx, dy int) int { return dx*dx + 4*dy*dy }
 // pointArgs is a compiled PointAt payload; key picks a button, and away aims at the
 // target's mirror through the cursor
 type pointArgs struct {
-	target     target
+	target     kind
 	key        rune
 	fire, away bool
 }
@@ -520,8 +438,8 @@ func register(m *fsm.Machine[*mind], nets []*network) {
 
 // guardTarget reads the target a guard measures from the cursor, which a random
 // cell is not, and the key of a button
-func guardTarget(name, keyText string) (target, rune, error) {
-	t, err := parseTarget(name, targetRandom)
+func guardTarget(name, keyText string) (kind, rune, error) {
+	t, err := parseTarget(name, kindRandom)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -534,9 +452,9 @@ func compilePointAt(p *pointPayload) (pointArgs, error) {
 	if p.Fire && p.Away {
 		return pointArgs{}, errors.New("fire and away do not combine")
 	}
-	var refused []target
+	var refused []kind
 	if p.Away {
-		refused = []target{targetButton, targetRandom}
+		refused = []kind{kindButton, kindRandom}
 	}
 	t, err := parseTarget(p.Target, refused...)
 	if err != nil {

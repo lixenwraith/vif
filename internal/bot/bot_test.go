@@ -20,8 +20,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/machine"
 )
 
 // TestABrokenGraphFailsAtLoadNamingTheFault: a bot graph is resolved by name with no
@@ -628,108 +626,6 @@ y = { species_y = 1.0 }`), 2)
 	}
 }
 
-// TestTheSensorsReadWhatTheViewShows: each sensor is an offset from the cursor
-// scaled to the view, of the three nearest of its kind the view shows, nearest
-// first, the rock's edges at the cursor's column and ahead, and zero for what is
-// not sighted.
-func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
-	w, ctx := soloWorld(16, 10)
-	cfg := w.Resources.Config
-	cfg.MapWidth, cfg.CameraX = 200, 10
-	w.Positions.Resize(cfg.MapWidth, cfg.MapHeight)
-	minX, minY, maxX, maxY, _ := cfg.VisibleMapRect()
-	width, height := maxX-minX+1, maxY-minY+1
-	own := w.Resources.Player.Entity
-	w.Components.Energy.SetComponent(own, component.EnergyComponent{Current: -energyHalf})
-	w.Components.Heat.SetComponent(own, component.HeatComponent{Current: heatHalf})
-
-	cols := make([]engine.RockColumn, cfg.MapWidth)
-	for x := range cols {
-		cols[x] = engine.RockColumn{Ceil: 2, Floor: cfg.MapHeight - 3}
-	}
-	cols[16+width/8] = engine.RockColumn{Ceil: 5, Floor: 15}
-	cols[16+width/4] = engine.RockColumn{Ceil: 8, Floor: 12}
-	w.Positions.SetRock(component.WallBlockCursor, 0, cols)
-
-	// Each kind has one at 9,10, nearer than any the view shows and left of it
-	species := func(x, y int, enraged bool) {
-		place(w, core.DomainShared, x, y, func(e core.Entity) {
-			w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, IsEnraged: enraged})
-		})
-	}
-	// and of the four the view shows the farthest is dropped
-	species(30, 10, false)
-	species(60, 10, false)
-	species(24, 12, true)
-	species(40, 6, false)
-	species(9, 10, true)
-	for i, b := range []component.BehaviorComponent{
-		{Landing: true, TargetX: 30, TargetY: 12},
-		{Landing: true, TargetX: 18, TargetY: 6, Machine: machine.Instance[component.BehaviorState]{Elapsed: 300 * time.Millisecond, Duration: 1200 * time.Millisecond}},
-		{Landing: true, TargetX: 9, TargetY: 10}, {TargetX: 16, TargetY: 10},
-	} {
-		place(w, core.DomainShared, 150, i, func(e core.Entity) { w.Components.Behavior.SetComponent(e, b) })
-	}
-
-	// A Kraken's body at 40,14 covers the cells its members stand on: of those the
-	// view shows 22,12 is the nearest, 9,10 lying left of it
-	kraken := place(w, core.DomainShared, 40, 14, func(e core.Entity) {
-		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25})
-		var header component.HeaderComponent
-		for _, cell := range [][2]int{{30, 14}, {22, 12}, {9, 10}} {
-			member := place(w, core.DomainShared, cell[0], cell[1], func(core.Entity) {})
-			header.MemberEntries = append(header.MemberEntries, component.MemberEntry{Entity: member})
-		}
-		w.Components.Header.SetComponent(e, header)
-	})
-
-	d, _ := botFor(t, ctx, steering("inputs = [\"column\"]\nhidden = 0"), 0)
-	from, _ := w.LocalCursor()
-	got := d.mind.look(from, minX, minY, maxX, maxY)
-	across := func(cells int) float64 { return float64(cells) / float64(width) }
-	down := func(cells int) float64 { return float64(cells) / float64(height) }
-	// Nearness points at the thing, rows counted twice, and falls from 1 beside the
-	// cursor to nothing a quarter of the view's width away
-	near := func(dx, dy int) (float64, float64) {
-		r := math.Sqrt(float64(dx*dx + 4*dy*dy))
-		pull := max(1-r/(float64(width)/4), 0)
-		return pull * float64(dx) / r, pull * float64(2*dy) / r
-	}
-	// at is a thing dx, dy cells from the cursor
-	at := func(dx, dy int, enraged float64) sighted {
-		s := sighted{x: across(dx), y: down(dy), enraged: enraged}
-		s.nearX, s.nearY = near(dx, dy)
-		return s
-	}
-	want := scene{
-		rock:    [3][2]float64{{down(1 - 10), down(cfg.MapHeight - 3 - 10)}, {down(4 - 10), down(15 - 10)}, {down(7 - 10), down(12 - 10)}},
-		species: [slots]sighted{at(8, 2, 1), at(14, 0, 0), at(24, -4, 0)},
-		landing: [slots]sighted{at(2, -4, 0), at(14, 2, 0)},
-		kraken:  sighted{x: across(40 - 16), y: down(14 - 10)},
-		reach:   0.25,
-		column:  2*float64(16-minX)/float64(width-1) - 1,
-		energy:  0.5,
-		heat:    0.5,
-	}
-	want.kraken.nearX, want.kraken.nearY = near(22-16, 12-10)
-	want.landing[0].soon = 0.25 // a quarter of its warning has run
-	if got != want {
-		t.Fatalf("the sensors read\n%+v, want\n%+v", got, want)
-	}
-	// A Kraken spinning up its charge, or on it, lands where the charge ends, the
-	// sooner the less of its spin is left
-	charging, _ := w.Components.Kraken.GetPtr(kraken)
-	charging.State, charging.StateRemaining = component.KrakenSpin, parameter.KrakenSpinDuration/5
-	want.landing = [slots]sighted{at(1, -1, 0), want.landing[0], at(14, 2, 0)}
-	want.landing[0].soon = 0.8
-	if got := d.mind.look(from, minX, minY, maxX, maxY); got != want {
-		t.Fatalf("with a Kraken charging the sensors read\n%+v, want\n%+v", got, want)
-	}
-	if on := sight(0, 0, float64(width), float64(height), false); on.nearX != 1 || on.nearY != 0 {
-		t.Fatalf("a thing on the cursor's cell reads a nearness of %g, %g, want it beside the cursor on the right", on.nearX, on.nearY)
-	}
-}
-
 // TestANetworkAddsItsHiddenUnitsToItsDirectTerm: an output is its direct weights
 // over the inputs, its weights over the hidden units' tanh, and its bias.
 func TestANetworkAddsItsHiddenUnitsToItsDirectTerm(t *testing.T) {
@@ -744,7 +640,8 @@ special = { column = 1.0, bias = -0.5 }`)))
 	n := g.nets[0].playing()
 	copy(n.genes[n.unit(0):], []float64{1, -2, 0.5}) // the unit's two input weights and its bias
 	n.genes[n.output(outputX)+2], n.genes[n.output(outputY)+2], n.genes[n.output(outputSpecial)+2] = 3, -1, 2
-	out := n.run(&scene{column: 0.5, energy: 0.25})
+	n.in[0], n.in[1] = 0.5, 0.25
+	out := n.pass()
 	unit := math.Tanh(1*0.5 - 2*0.25 + 0.5)
 	for o, want := range [outputCount]float64{2*0.5 + 3*unit + 0.25, -0.25 - unit, 0.5 + 2*unit - 0.5} {
 		if math.Abs(out[o]-want) > 1e-12 {

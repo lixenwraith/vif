@@ -60,7 +60,8 @@ behavior programs), keymap, audio overrides, content and every bot graph, then
 exits; all state-level FSM errors are reported in one pass. `vif -schema` prints
 the machine schema (events with payload fields and the names an enum field takes;
 the guards and actions of a scenario, a bot graph and a behavior program with
-their arguments; operators and config fields) as JSON.
+their arguments; a bot network's inputs and outputs; operators and config fields)
+as JSON.
 
 ---
 
