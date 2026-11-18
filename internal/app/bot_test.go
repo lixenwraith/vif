@@ -230,7 +230,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The learners explore in turn, so raid's candidate is scored within two rounds
+	// raid steers every round from its start, so the first to end scores its candidate
 	raid := func() bot.LearnStats {
 		st := d.Stats().Learn
 		return st[slices.IndexFunc(st, func(l bot.LearnStats) bool { return l.Network == "raid" })]
@@ -398,8 +398,10 @@ on_enter = [{ action = "Intent", payload = { name = "quit" } }]
 	}
 	st, first := kept("first")
 	raid := st.Learn[slices.IndexFunc(st.Learn, func(l bot.LearnStats) bool { return l.Network == "raid" })]
-	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks%games != 0 || raid.Scored < games {
-		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d the run's own quit at, and a round of each scored",
+	// A game ahead of the run's own as that quits has played on, a tick here, so
+	// the ticks summed are no function of the seed as the populations are
+	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks > games*uint64(ticks+2) || raid.Scored < games {
+		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d its graph or the run's own quit at, and a round of each scored",
 			st.Games, st.Ticks, raid.Scored, games, ticks)
 	}
 	if _, second := kept("second"); second != first {

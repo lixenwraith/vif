@@ -1411,31 +1411,29 @@ func (r *recorder) rounds(t *testing.T, d *Driver, ticks ...int) {
 	}
 }
 
-// TestALearnerIsScoredFromWhereItsNetworkFirstSteered: the learner trying a
-// candidate takes the round from the tick its network first steered in it, the
-// ticks and what they earned since; the others' fielded members are not scored.
-func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
+// TestALearnerIsScoredByTheTicksItsNetworkSteered: a round's ticks and what they
+// earned are the network's that steered last, so one that steers only while a
+// Kraken is up is scored by the fight and the other by the rest of the round.
+func TestALearnerIsScoredByTheTicksItsNetworkSteered(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	rec.rounds(t, d, 4)
-	if got := fly.Stats().Recent; got != 4 || kraken.Stats().Scored != 0 {
-		t.Fatalf("four ticks steered with no Kraken: fly scored %g and kraken %d rounds, want 4 and none", got, kraken.Stats().Scored)
-	}
-	// Kraken's turn. A kill is worth 5: one lands before the Kraken rises, two
-	// ticks in, and one after
+	// A kill is worth 5: one lands in fly's first two ticks and one in the three a
+	// Kraken is up for, before the round's last two
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
 	for range 2 {
 		d.Step()
 	}
-	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
-	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
+	up := place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	rec.dispatch = []event.GameEvent{kill, {}, {}}
 	for range 3 {
 		d.Step()
 	}
-	if st := kraken.Stats(); st.Scored != 1 || st.Recent != 3+5 || fly.Stats().Scored != 1 {
-		t.Fatalf("kraken scored %d rounds at %g and fly %d: want one of 8, the three ticks from the Kraken's rise and the kill after it, and fly's fielded member unscored",
-			st.Scored, st.Recent, fly.Stats().Scored)
+	w.DestroyEntity(up)
+	rec.rounds(t, d, 2)
+	if f, k := fly.Stats(), kraken.Stats(); f.Scored != 1 || f.Recent != 4+5 || k.Scored != 1 || k.Recent != 3+5 {
+		t.Fatalf("fly scored %d rounds at %g and kraken %d at %g: want one each, fly's four ticks and its kill, 9, and kraken's three and its own, 8",
+			f.Scored, f.Recent, k.Scored, k.Recent)
 	}
 }
 
@@ -1444,7 +1442,7 @@ func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
 // that fought it, which what it shot down pays.
 func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
-	rec.rounds(t, d, 4) // fly's turn: the tick that starts the graph and four steered
+	rec.rounds(t, d, 4) // five columns: the tick that starts the graph and four steered
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
 	for range 2 {
@@ -1490,34 +1488,27 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	}
 }
 
-// TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField: one learner plays a
-// candidate, the hand-written genome first, and the rest the members they field.
-// The turn passes as a round settles the candidate, and at once where the round
-// never reached the explorer's network, whose candidate goes unscored.
-func TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField(t *testing.T) {
+// TestALearnersCandidateWaitsForTheRoundItsNetworkSteers: alone, every learner
+// plays a candidate, the hand-written genome first. A round scores those whose
+// networks steered in it, and the candidate of one that never did plays on
+// until a round reaches its network.
+func TestALearnersCandidateWaitsForTheRoundItsNetworkSteers(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	written := func(i int) bool { return slices.Equal(d.mind.nets[i].genes, d.learners[i].seed) }
-
-	rec.rounds(t, d, 2)
-	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
-		t.Fatalf("after fly's hand-written genome is scored: explorer %d, fly scored %d: want kraken's turn on its own hand-written genome and fly fielding",
-			d.explorer, fly.Stats().Scored)
+	plays := func(i int) []float64 { return d.mind.nets[i].genes }
+	if !slices.Equal(plays(0), fly.seed) || !slices.Equal(plays(1), kraken.seed) {
+		t.Fatal("the first round does not play each learner's hand-written genome")
 	}
-	rec.rounds(t, d, 2)
-	if d.explorer != 0 || fly.Stats().Scored != 1 || kraken.Stats().Scored != 0 || written(0) {
-		t.Fatalf("a round with no Kraken: explorer %d, fly scored %d, kraken %d: want neither scored and fly's turn again, on a candidate",
-			d.explorer, fly.Stats().Scored, kraken.Stats().Scored)
+	rec.rounds(t, d, 2, 2)
+	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 0 || kraken.flying() != 1 || !slices.Equal(plays(1), kraken.seed) {
+		t.Fatalf("two rounds with no Kraken: fly scored %d and kraken %d: want both rounds fly's and kraken's first candidate still in flight",
+			fly.Stats().Scored, kraken.Stats().Scored)
 	}
 	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	waiting := slices.Clone(plays(0))
 	rec.rounds(t, d, 2)
-	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
-		t.Fatalf("a round at the Kraken: explorer %d, fly scored %d: want fly's candidate dropped unscored and kraken's turn on its hand-written genome",
-			d.explorer, fly.Stats().Scored)
-	}
-	rec.rounds(t, d, 2)
-	if d.explorer != 0 || kraken.Stats().Scored != 1 || fly.Stats().Scored != 1 {
-		t.Fatalf("a second round at the Kraken: explorer %d, kraken scored %d, fly %d: want kraken's candidate scored and fly's turn",
-			d.explorer, kraken.Stats().Scored, fly.Stats().Scored)
+	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 1 || slices.Equal(plays(1), kraken.seed) || !slices.Equal(plays(0), waiting) {
+		t.Fatalf("a round at the Kraken: fly scored %d and kraken %d: want kraken's candidate scored and its next dealt, and fly's still in flight",
+			fly.Stats().Scored, kraken.Stats().Scored)
 	}
 }

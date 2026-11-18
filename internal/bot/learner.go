@@ -38,8 +38,9 @@ const (
 	// learnSaveEvery is the least wall time between two saves of a population in play
 	learnSaveEvery = 30 * time.Second
 
-	// populationVersion names the layout of the document a population is kept as
-	populationVersion = 2
+	// populationVersion names the document a population is kept as and how its
+	// rounds were scored: one kept under another starts over
+	populationVersion = 3
 )
 
 // Store keeps one population's document: Load returns what was kept, nothing for
