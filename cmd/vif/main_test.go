@@ -626,6 +626,9 @@ func TestTheBotFlagReadsTheWordsOfTheBotCommand(t *testing.T) {
 	if err := (sessionFlags{bot: "list", host: ":7777"}).validateInvocation(false, false, ""); err == nil {
 		t.Error("-bot list was taken beside -host")
 	}
+	if err := validateInvocation(false, false, "", "scenario.toml", false, sessionFlags{bot: "list"}); err == nil {
+		t.Error("-bot list was taken beside -script")
+	}
 }
 
 func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {

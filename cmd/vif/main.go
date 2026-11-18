@@ -792,7 +792,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	case verb == "add" && len(rest) > 1:
 		return errors.New("usage: -bot " + engine.BotUsage(verb))
 	case f.botFiles() != nil && (f.host != "" || f.join != "" || f.serve != "" || f.spectate != ""):
-		return fmt.Errorf("-bot %s keeps bot files and exits; it takes no session", verb)
+		return fmt.Errorf("-bot %s keeps bot files and exits; it takes no run", verb)
 	}
 	if _, err := app.BotSpecs(f.botSpec()); err != nil {
 		return err
@@ -986,6 +986,9 @@ func validateInvocation(schema, check bool, replay, script string, watch bool, s
 	}
 	if err := session.validateInvocation(schema, check, replay); err != nil {
 		return err
+	}
+	if files := session.botFiles(); files != nil && (script != "" || watch) {
+		return fmt.Errorf("-bot %s keeps bot files and exits; it takes no run", files[0])
 	}
 	if watch && script == "" && session.botCount() == 0 {
 		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
