@@ -2,6 +2,9 @@ description = "Fly a cave that scrolls past you: its rock pushes you back, and t
 min_players = 1
 max_players = 16
 macro_files = ["macros.toml"]
+# The bots made for this map: cave, which a seat that names no graph plays, flies
+# what was learned from seed, the same two networks with a start written by hand
+bots = ["bot/cave.toml", "bot/seed.toml"]
 
 # A side-scroller: the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock

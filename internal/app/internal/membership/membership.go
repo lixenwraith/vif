@@ -280,6 +280,11 @@ type Wiring struct {
 	// to should it take that session over; Participants is a host's own.
 	SessionPlayers int
 
+	// BotsCarried says the run's bots are seats the run it replaces held: one whose
+	// graph this run's scenario does not carry plays the scenario's own, where a
+	// bot named at the start that is not found fails it.
+	BotsCarried bool
+
 	// Door is the verifier the doors took before a scenario change rebuilt this run.
 	// The first session it opens takes it up, and is gated by it where the run holds
 	// no passphrase of its own: a session it took over, whose phrase it never held.

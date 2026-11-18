@@ -51,9 +51,9 @@ func ResolveScenario(fsys fs.FS, entry string) (map[string]any, error) {
 }
 
 // ScenarioFiles names every file a scenario is made of — its entry, its macro
-// files, the region files and behavior programs it includes — sorted and
-// deduplicated. A portable copy is read through this, so it carries exactly the
-// files the loader would have read and nothing that happens to sit beside them.
+// files, the region files and behavior programs it includes, its corpus and its
+// bots — sorted and deduplicated. A portable copy is read through this, so it
+// carries exactly the files the loader would have read and nothing beside them.
 func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 	var visited []string
 	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited, nil); err != nil {
@@ -89,6 +89,11 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 		}
 		if err := includeContent(fsys, parsed, baseDir, visited); err != nil {
 			return nil, fmt.Errorf("%s: %w", cleanName, err)
+		}
+		if bots, has := parsed["bots"]; has {
+			if err := includeListed(fsys, bots, "bot", "bots", baseDir, visited); err != nil {
+				return nil, fmt.Errorf("%s: %w", cleanName, err)
+			}
 		}
 	}
 
@@ -209,25 +214,39 @@ func includeTables(fsys fs.FS, entry map[string]any, key, what, baseDir string, 
 // into the file set a copy holds; the entry's embedder reads them as a corpus
 func includeContent(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string) error {
 	raw, ok := entry["content"]
-	if !ok || visited == nil {
+	if !ok {
 		return nil
 	}
 	table, ok := raw.(map[string]any)
 	if !ok {
 		return errors.New("content must be a table")
 	}
-	names, ok := table["files"].([]any)
-	if _, has := table["files"]; has && !ok {
-		return errors.New("content files must be an array of file names")
+	files, has := table["files"]
+	if !has {
+		return nil
+	}
+	return includeListed(fsys, files, "content", "content files", baseDir, visited)
+}
+
+// includeListed reads the files an entry lists under key beside its machine, a
+// corpus or the bots made for its map, into the file set a copy holds; the entry's
+// embedder reads what they are. Nothing where no file set is collected.
+func includeListed(fsys fs.FS, raw any, what, key, baseDir string, visited *[]string) error {
+	if visited == nil {
+		return nil
+	}
+	names, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("%s must be an array of file names", key)
 	}
 	for _, item := range names {
 		name, ok := item.(string)
 		if !ok {
-			return errors.New("content files must be an array of file names")
+			return fmt.Errorf("%s must be an array of file names", key)
 		}
 		full := path.Join(baseDir, name)
 		if _, err := fs.ReadFile(fsys, full); err != nil {
-			return fmt.Errorf("content %s: %w", name, err)
+			return fmt.Errorf("%s %s: %w", what, name, err)
 		}
 		*visited = append(*visited, full)
 	}

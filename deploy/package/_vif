@@ -14,7 +14,7 @@ _arguments \
   '-spectators[How many spectators a session this run hosts feeds at once, 0..1024; 0 takes none (default 8)]:n: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested]:n: ' \
-  '-bot[Add bots alongside you (default 1:default); -host/-join keep your player]' \
+  '-bot[Add bots alongside you: one where no count is given, the scenario'\''s own bot where no graph is, default where it carries none; -host/-join keep your player]' \
   '-authority[What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares]:value:(host migrate)' \
   '-slow-window[Window a participant'\''s lateness is judged over; host only, 0 never evicts (default 20s)]:dur: ' \
   '-slow-late[Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)]:n: ' \

@@ -637,7 +637,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	person.handleResize(170, 50)
 	seated := mustHeadless(t, fixtureSeed, 160, 45)
 	t.Cleanup(seated.Close)
-	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, resource.Scenario{}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,8 +1,7 @@
-# Fly the cave scenario by two small networks, each its sensors through six hidden
-# units and a direct term: raid steers while the cave's raiders fly and kraken
-# while its Kraken is up. No weight is written by hand: a solo run learns each
-# network's from genomes drawn at random, a round an evaluation, and any other
-# fields the best it kept, or none and the ship holds still.
+# cave's two networks with a start written by hand: the seed cave's own weights
+# were learned from, which a solo run learns from again, a round an evaluation.
+# Its layouts are cave's, so what is learned from it is a model cave's networks
+# take. Any other run fields the best it kept, or with none kept these.
 [bot]
 actions_per_second = 20
 # The gun fires by itself and the special attack only where a network asks: fired
@@ -28,6 +27,19 @@ inputs = [
     "column", "energy", "heat",
 ]
 
+# Hold the nearest raider's row to shoot it, back off it across and keep to the
+# middle. No special and no hidden unit's: the learner's to find
+[network.raid.x]
+column = -0.1
+bias = 0.01
+species_x = 0.2
+species_near_x = -0.25
+
+[network.raid.y]
+species_y = 0.9
+ceiling = 0.05
+floor = 0.05
+
 # kraken reads the map's edges, which ceiling and floor are once the rock is gone
 # and column across, the Kraken, and where its charge will end and how soon, a
 # landing
@@ -37,6 +49,16 @@ inputs = [
     "ceiling", "floor", "column", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
     "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon", "energy", "heat",
 ]
+
+# Back off the Kraken's nearest cell and keep to the middle
+[network.kraken.x]
+kraken_near_x = -1.0
+column = -0.1
+
+[network.kraken.y]
+kraken_near_y = -1.0
+ceiling = 0.1
+floor = 0.1
 
 [regions.play]
 initial = "Fly"

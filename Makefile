@@ -271,7 +271,9 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 # replaced, a player's kept, and the keymap.toml and vif.toml already there brought up
 # to this build's (tool/vif-settings). CLEAN=1 first removes the shipped
 # categories, those two files and of scenario/ base/ and the copies an older
-# install left beside it. A variable, as make -n runs a sub-make.
+# install left beside it. A cave graph an older install put in bot/ is named and
+# left: the cave scenario carries those now, and a copy in a root plays in its
+# place. A variable, as make -n runs a sub-make.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
 	if [ '$(CLEAN)' = 1 ]; then \
 		for dir in $(WAD_DIR)/*/ bot/ $(WAD_DIR)/scenario/base/ $(WAD_DIR)/scenario/base/*/; do \
@@ -282,6 +284,7 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 	fi; \
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
+	for old in cave seed cave_seed; do [ ! -e "$$root/bot/$$old.toml" ] || echo "stale   $$root/bot/$$old.toml plays in place of the cave scenario's own: remove it unless it is yours"; done; \
 	settings $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
 	put 0644 $(VIM_KEYMAP_SRC) "$$root/input/vim.toml"; \
 	settings $(SETTINGS_SRC) "$$root/vif.toml"; \
