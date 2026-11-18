@@ -378,7 +378,7 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 // changed on purpose, which starts every population kept for them over; its
 // seed's are the same, so what is learned from the seed is a model cave takes.
 func TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder(t *testing.T) {
-	for _, name := range []string{"cave", "cave_seed"} {
+	for _, name := range []string{"cave", "seed"} {
 		data, err := fs.ReadFile(asset.DefaultBots, name+".toml")
 		if err != nil {
 			t.Fatal(err)

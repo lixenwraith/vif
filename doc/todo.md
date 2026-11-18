@@ -240,7 +240,7 @@ a list and their first inputs the document's, kept its populations' bytes on
 two seeds of 600,000 ticks, so its scenario needs no change and its score none.
 Decided (Lixen, 2026-11-18), a PR a step in this order:
 
-- **Cave's trained model.** The shipped `cave_seed` is `cave`'s two networks
+- **Cave's trained model.** The shipped `seed` is `cave`'s two networks
   with a start written by hand, seven weights of `raid` and five of `kraken`
   ([below](#train-a-network-bot-live-in-cave)), a bot of its own to train
   from. `cave` is to carry a model trained from it, the member a run fields,

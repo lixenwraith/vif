@@ -408,7 +408,7 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
   hand, the use of its heat among it. The shipped
-  [`cave_seed`](../internal/asset/bot/cave_seed.toml) is the same two networks
+  [`seed`](../internal/asset/bot/seed.toml) is the same two networks
   with a start written by hand, twelve direct weights that hold the nearest
   raider's row, back off what is near and keep to the middle: a seed to train
   a model for `cave` from, since from nothing the search did not reach the gun.
