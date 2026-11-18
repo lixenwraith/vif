@@ -943,6 +943,13 @@ Libraries · Branches.
   `tick` is the length of the run it ended, at about 1.5% of the rate, and sum
   those by the log's time to each save. Copy the population files as their
   mtime moves to keep what the run fielded along the way.
+- What a graph's written weights field is read with no learner: a scratch test
+  in `internal/app` puts a driver on the graph, closes a round at the graph's
+  limit with `App.Reset(false)` and reads `Driver.Round`, its tap counting what
+  a round shot down, 100 rounds of seeds 101 to 104 in a minute on four cores.
+  A change of pay is read from one play: a round plays the same under both, so
+  its new score is the old plus what its kills now pay, which every round of
+  both runs is checked against.
 - A change to how a population starts is read from a written start as well as
   from nothing, by what it fields held out beside the start itself: drawing
   every weight about the start passed every test and read well from nothing,

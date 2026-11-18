@@ -763,7 +763,7 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 **-first-join** (also: first-guest window) — Allocated-session flag, `-serve` only: end the run if no guest connects within this long of the listener binding; 0 waits forever. See also **-empty**. [Runtime: The allocated session](runtime.md#the-allocated-session) · `internal/lifecycle` `PhaseWaiting`
 
 **fitness** — three senses.
-- *Bots*: the weighted sum of events a bot's own steps dispatched (+1 per correct character, +5 per kill or a data species' hit points, +25 per gold sequence, −1 per error, −100 for a defeat or a crush); it compares graphs, not players. A **round**'s score is its ticks plus what it earned, defeats aside. [Bots: Fitness and comparing graphs](bots.md#fitness-and-comparing-graphs) · `internal/bot` `Stats.Fitness`, `Stats.Score`
+- *Bots*: the weighted sum of events a bot's own steps dispatched (+1 per correct character, +5 per kill or twelve times a data species' hit points, +25 per gold sequence, −1 per error, −100 for a defeat or a crush); it compares graphs, not players. A **round**'s score is its ticks plus what it earned, defeats aside. [Bots: Fitness and comparing graphs](bots.md#fitness-and-comparing-graphs) · `internal/bot` `Stats.Fitness`, `Stats.Score`
 - *Route adaptation*: progress × efficiency of a graph-routed actor at death, which Hedge folds into its route's weight. [AI §2](ai-physics-and-evolution.md#2-online-route-adaptation) · `internal/system` `AdaptationSystem`
 - *Genetics*: a genotype's score reported to its population; for the eye, closest approach plus saturating damage. [AI §4](ai-physics-and-evolution.md#4-game-genetic-adapter) · `internal/system` `GeneticSystem` · `lixenwraith/genetic/fitness`
 
