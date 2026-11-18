@@ -1018,33 +1018,34 @@ func TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce(t *testing.T) {
 	}
 }
 
-// TestEveryThirdCandidateIsTheBestMemberYetToBeProved: a member's score is a guess
-// until its rounds prove it, so the repeats go to the best one short of them,
-// which a run fields once it has them.
-func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
+// TestRepeatsTestTheTitleAndProveTheBestGuessByTurns: every third candidate is a
+// member again, by turns the less played of the fielded and its rival, the two
+// most trusted, and the most trusted short of its proof. What is fielded is the
+// most trusted of the proved: a few lucky rounds do not unseat many good ones.
+func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest,
 		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
-		member{Genes: genome(0.2), Score: 40, Rounds: learnProven},
-		member{Genes: genome(0.3), Score: 30, Rounds: 1}))
+		member{Genes: genome(0.2), Score: 60, Rounds: learnProven},
+		member{Genes: genome(0.3), Score: 50, Rounds: 4 * learnProven},
+		member{Genes: genome(0.4), Score: 30, Rounds: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.2)) {
-		t.Fatalf("fields %v, want the member its rounds have proved", fielded[:1])
+	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.3)) {
+		t.Fatalf("fields %v, want the member of many rounds over the luckier one of few", fielded[:1])
 	}
-	// Two repeats bring the best member's rounds to learnProven, or one and a child
-	// bred its copy
-	for i := range 2 * learnRepeat {
-		if candidate := l.take(0, true); i+1 == learnRepeat && !slices.Equal(candidate, genome(0.1)) {
-			t.Fatalf("candidate %d is %v, want the best member short of its rounds", i+1, candidate[:1])
+	for i, want := range [][]float64{genome(0.2), genome(0.1)} {
+		for l.drawn%learnRepeat != learnRepeat-1 {
+			l.take(0, true)
+			l.settle(0, 20, true)
 		}
-		l.settle(0, 20, true)
-	}
-	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.1)) {
-		t.Fatalf("with those rounds fields %v, want the member they proved, still the best", fielded[:1])
+		if candidate := l.take(0, true); !slices.Equal(candidate, want) {
+			t.Fatalf("repeat %d is %v, want %v: the fielded's rival, the less played, then the most trusted short of its proof", i+1, candidate[:1], want[:1])
+		}
+		l.settle(0, 60, true)
 	}
 }
 
@@ -1201,7 +1202,7 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 	}
 	l.take(0, true)
 	l.settle(0, 1, true) // the hand-written genome, scored under them all
-	l.drawn = learnRepeat - 1
+	l.drawn = 2*learnRepeat - 1
 	if again := l.take(0, true); !slices.Equal(again, tail.Genes) {
 		t.Fatalf("the repeat is %v, want the one member short of its proof", again[:1])
 	}
@@ -1807,8 +1808,8 @@ func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
 	}
 	for _, version := range []int{1, populationVersion} {
 		k, ok, err := g.Kept("fly", doc(version, net.digest))
-		if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Members != 3 || k.Score != 60 || k.Proved != learnProven+1 || !slices.Equal(k.Fielded, genome(0.2)) {
-			t.Fatalf("version %d: kept %+v, %v, %v: want its 70 rounds and the member nine rounds proved", version, k, ok, err)
+		if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Members != 3 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
+			t.Fatalf("version %d: kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", version, k, ok, err)
 		}
 	}
 	if _, ok, err := g.Kept("fly", doc(populationVersion, "another")); ok || err != nil {

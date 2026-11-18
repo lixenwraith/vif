@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/toml"
 )
 
@@ -219,11 +220,14 @@ func (g *Graph) Kept(name string, store Store) (Kept, bool, error) {
 		return Kept{}, false, nil
 	}
 	k := Kept{Rounds: doc.Rounds, Members: len(doc.Members), Recent: doc.Recent, Stale: doc.Version != populationVersion}
+	members := make([]genetic.Candidate[[]float64, float64], 0, len(doc.Members))
 	for _, m := range doc.Members {
-		if m.Rounds >= learnProven && len(m.Genes) == n.geneCount() {
-			k.Fielded, k.Score, k.Proved = m.Genes, m.Score, m.Rounds
-			break
+		if len(m.Genes) == n.geneCount() {
+			members = append(members, genetic.Candidate[[]float64, float64]{Data: m.Genes, Score: m.Score, Count: m.Rounds})
 		}
+	}
+	if f, _ := fieldedOf(members, doc.Recent); f >= 0 {
+		k.Fielded, k.Score, k.Proved = members[f].Data, members[f].Score, members[f].Count
 	}
 	return k, true, nil
 }

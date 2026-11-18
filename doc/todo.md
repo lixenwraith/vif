@@ -246,9 +246,42 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
   holding one is not taken there; the menu's Bots page names populations only
   through its Bot files row; and `clear` in a run learning the population is
   undone by that run's next save.
-- **Training on from `cave`'s model.** Its `round_seconds`, half an hour, closes
-  85 of 100 held-out rounds at the limit, so a learner cannot tell apart what
-  outlasts it: a bot document's limit is its own to raise first.
+- **Training on from `cave`'s model.** Every run adds its rounds to the one
+  population, a few seconds' too, and with the title tested
+  ([Bots](bots.md#learning)) a run no longer fields a worse member than it
+  began with. What limits it, measured over 100 held-out rounds:
+  - **The score has a ceiling.** A round closed at its half hour pays by the
+    Krakens shot down in it, 375,000 for nine, 214,000 for eight and 132,000
+    for seven, and none shoots ten: `cave`'s model has nine in 72 rounds and
+    fields 300,260. A bot document's `round_seconds` is its own to raise.
+  - **Twelve rounds are lost in the first 1,900 ticks**, nine crushed at the
+    rock. The model stands within a row of the rock 80 ticks in 100, since its
+    `raid` learned a `ceiling` weight of -0.058 on `y` where `floor` kept
+    0.05: a push down whatever the gap. Set back to 0.05 by hand it is crushed
+    once and fields 187,300, a Kraken slower in most rounds, so the nudge has
+    to be learned. Fifteen million ticks with the title tested field a `raid`
+    that still stands at the rock 80 ticks in 100, loses five rounds early,
+    two crushed, and shoots nine Krakens down in 80.
+  - **A nudge in the pay**, tried in a scratch tree and not built: a learner
+    is paid no column scrolled while a block stands within two rows above or
+    below its ship. Under the rule that fielded the best of eight rounds, on
+    seed 1, three million ticks then fielded 313,827 with ten rounds lost
+    early and fifteen million 323,960 with six, where the same runs unnudged
+    fielded 257,385 and 295,609. It is `cave`'s own knowledge in the bot
+    package's scoring: a bot document would declare it, as it does `while`.
+  - **The archive ranks by raw mean**, so a member whose mean many rounds
+    have brought down to what it is worth sinks below newcomers one lucky
+    round put there, and the one fielded stood 29th of 32 after fifteen
+    million ticks: pushed off, its title passes to the next most trusted. An
+    archive ranked by the trusted mean keeps it, and needs newcomers let in
+    at its foot.
+  - **Something crosses a new game.** Every round starts its ship alike, its
+    cell, energy and heat, and yet one `raid` network flew a game of seed 101
+    differently from its tick 150 on by which `kraken` had flown the game
+    before: through its half hour under one, and to the left edge and crushed
+    at tick 211 under the other. What a new game leaves as it was, in the bot
+    or the world, is not found, and the change to a bot's death wants it
+    settled: until then held-out rounds do not pair by index.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **A scenario's bot held to its scenario by `-check`**: an `InState` that names
@@ -315,8 +348,11 @@ built so:
 - **The inputs are what a player reads**: the rock, all three raiders, every
   landing and how soon it lands, the Kraken, energy and heat. A raider's size
   and the cave's number steer nothing a person steers by.
-- **A member ranks by the mean of its rounds**, enters a full archive on a
-  second round, and is fielded once eight have proved it.
+- **A member ranks by the mean of its rounds** and enters a full archive on a
+  second round. Fielded is, of those eight rounds have proved, the one whose
+  mean is trusted most, weighed with eight rounds at the population's recent
+  mean, and a third of the rounds go by turns to proving the most trusted
+  guess and to testing the fielded against its rival.
 - **A game on every core.** A headless run alone plays `-games` games at once,
   each its own instance on a seed drawn from the run's, all feeding one learner
   a network and its one file, their rounds closing by tick and then by game.

@@ -517,11 +517,12 @@ end, and all the rest for `raid`.
   it writes some the population starts from them alone. Children are mostly
   one parent's, mixed a hidden unit or an output at a time, three in a hundred
   of their weights stepped. A member's score is the mean of its rounds, and every
-  third candidate is the best member short of eight rounds again, so what tops
-  the archive is proved or falls. A candidate the archive already holds is that
-  member again, as a kept population's written start is, and a member pushed
-  off the archive while a round of it plays comes back, if at all, on the mean
-  of all its rounds.
+  third candidate is a member again, by turns the one short of eight rounds it
+  trusts most, so a guess is proved or falls, and the less played of the member
+  fielded and its rival, so the title is tested for as long as it is held. A
+  candidate the archive already holds is that member again, as a kept
+  population's written start is, and a member pushed off the archive while a
+  round of it plays comes back, if at all, on the mean of all its rounds.
 - Every learner plays a candidate, and a round's ticks are the network's that
   steered last: `kraken` learns only while a Kraken is up and `raid` everywhere
   else, neither paid for the other's ticks. A candidate whose network a round
@@ -530,8 +531,11 @@ end, and all the rest for `raid`.
   not play it.
 - A round's score is mostly luck, the game it drew: a candidate whose first round
   would enter a full archive plays a second, and enters or not on that round
-  alone. A run fields the best member eight rounds have proved, which is seldom
-  the top of the archive, and with none the weights its graph wrote, if any.
+  alone. A run fields, of the members eight rounds have proved, the one it
+  trusts most, and with none the weights its graph wrote, if any: a member's
+  mean is trusted as if eight more rounds had scored the population's recent
+  mean, so eight lucky rounds do not unseat thirty good ones, and its rival is
+  the next by that mean.
 - A step is a share of a weight's range: a new population starts at 0.1 and
   settles at 0.03 as its best stops improving.
 - A round the game has not ended within the graph's `round_seconds` is closed
@@ -586,8 +590,8 @@ which its `version` counts.
   - `born` is the population's round the member entered at.
   - `genes` are the weights: each hidden unit's input weights and bias, then
     each output's direct weights, hidden weights and bias.
-- `fielded`: the member a round plays where its learner tries no candidate, -1
-  while none has eight rounds.
+- `fielded`: the member a round plays where its learner tries no candidate, the
+  most trusted of those with eight rounds, -1 while none has them.
 
 What is not kept: the candidate in play, the engine's queue and its random
 stream, so a run resumes the archive and not the exact search.
@@ -632,6 +636,32 @@ nothing      1      864      125     6115     2726              30       35
 - What the learners fielded while they explored in turn, a round each scored
   whole, and what longer runs did then, is in the
   [todo](todo.md#train-a-network-bot-live-in-cave).
+
+Training on from `cave`'s own weights is read the same way, four games on four
+cores, beside what the rule before this one fielded, the best mean of eight
+rounds. `lost` counts the rounds that end before the first Kraken, and a mean
+of 100 such rounds moves by 13,000 with luck alone:
+
+```
+                               3,000,000 ticks          15,000,000 ticks
+fields                seed     mean   median   lost     mean   median   lost
+cave's own weights           300260   374046     12
+the best of eight        1   257385   219311      6   295609   373815     15
+                         2   300260   374046     12
+the most trusted         1   300260   374046     12   330680   374835      5
+                         2   300260   374046     12
+```
+
+- Every run adds its rounds to the population, a few seconds' as well: two runs
+  of 600,000 ticks left `raid` 47 rounds and then 90. Flat out a game closes a
+  round every second or two; watched at speed 1 a round the ship survives is
+  half an hour, and a run stopped inside one scores nothing for it.
+- After three million ticks the most trusted is still `cave`'s own, by then
+  tested over 20 to 25 rounds, which bring its `raid` from the 56,000 to 59,000
+  its first eight scored to 51,000 to 54,000. The best of eight had on seed 1 fielded a
+  `raid` its eight rounds put at 67,316, a Kraken slower in most rounds.
+- After fifteen million the title has passed: `raid`'s to a member 73 rounds
+  have tested, 18 weights from `cave`'s, and `kraken`'s to one of ten.
 
 A watched run at speed 1 shows the play, and a headless one flat out fills the
 files.
