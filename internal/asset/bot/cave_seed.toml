@@ -1,0 +1,70 @@
+# cave's two networks with a start written by hand: a seed a solo run learns from,
+# a round an evaluation, where cave itself starts from nothing. Its layouts are
+# cave's, so what is learned from it is a model cave's networks take. Any other
+# run fields the best it kept, or with none kept these.
+[bot]
+actions_per_second = 20
+# The gun fires by itself and the special attack only where a network asks: fired
+# unasked it spends the heat that outlasts the energy
+auto_fire = "main"
+learn = true
+# A round the game does not end is closed after half an hour of game time, so a
+# candidate nothing beats is scored and the next one plays
+round_seconds = 1800
+
+# raid reads the rock, every raider, as three fly at most, and every cell one is
+# about to land on with how soon: what it leaves out it cannot learn from
+[network.raid]
+hidden = 6
+inputs = [
+    "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
+    "species_x", "species_y", "species_enraged", "species_near_x", "species_near_y",
+    "species2_x", "species2_y", "species2_enraged", "species2_near_x", "species2_near_y",
+    "species3_x", "species3_y", "species3_enraged", "species3_near_x", "species3_near_y",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon",
+    "landing2_x", "landing2_y", "landing2_near_x", "landing2_near_y", "landing2_soon",
+    "landing3_x", "landing3_y", "landing3_near_x", "landing3_near_y", "landing3_soon",
+    "column", "energy", "heat",
+]
+
+# Hold the nearest raider's row to shoot it, back off it across and keep to the
+# middle. No special and no hidden unit's: the learner's to find
+[network.raid.x]
+column = -0.1
+bias = 0.01
+species_x = 0.2
+species_near_x = -0.25
+
+[network.raid.y]
+species_y = 0.9
+ceiling = 0.05
+floor = 0.05
+
+# kraken reads the map's edges, which ceiling and floor are once the rock is gone
+# and column across, the Kraken, and where its charge will end and how soon, a
+# landing
+[network.kraken]
+hidden = 6
+inputs = [
+    "ceiling", "floor", "column", "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon", "energy", "heat",
+]
+
+# Back off the Kraken's nearest cell and keep to the middle
+[network.kraken.x]
+kraken_near_x = -1.0
+column = -0.1
+
+[network.kraken.y]
+kraken_near_y = -1.0
+ceiling = 0.1
+floor = 0.1
+
+[regions.play]
+initial = "Fly"
+
+[states.Fly]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "raid" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]
