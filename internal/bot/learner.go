@@ -39,7 +39,7 @@ const (
 	learnSaveEvery = 30 * time.Second
 
 	// populationVersion names the layout of the document a population is kept as
-	populationVersion = 1
+	populationVersion = 2
 )
 
 // Store keeps one population's document: Load returns what was kept, nothing for

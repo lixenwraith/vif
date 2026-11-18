@@ -370,24 +370,27 @@ func payloadTrue(payload any, field string) bool {
 	return ok && v
 }
 
-// krakenPar is the hit points a second a gun kept on a Kraken takes, and bountyFloor
-// the least of its bounty a slow kill keeps
+// krakenPar is the hit points a second a gun kept on a Kraken takes, bountyFloor
+// the least of its bounty a slow kill keeps, and killPay what a data species'
+// kill pays for each hit point its program gives it
 const (
 	krakenPar   = 4.0
 	bountyFloor = 0.25
+	killPay     = 12
 )
 
-// killWorth is what a kill weighs. A data species' is the hit points its program
-// gives it, as what it took to shoot down. A Kraken's is the ticks its hit points
-// take at krakenPar, so a fight at that pace earns its own time, and the share of
-// them that pace is of the one it died at, bountyFloor at least. Any other's is weight.
+// killWorth is what a kill weighs. A data species' is killPay times the hit points
+// its program gives it, what it took to shoot down. A Kraken's is the ticks its
+// hit points take at krakenPar, so a fight at that pace earns its own time, and the
+// share of them that pace is of the one it died at, bountyFloor at least. Any
+// other's is weight.
 func (m *mind) killWorth(payload any, weight int64) int64 {
 	p, ok := payload.(*event.SpeciesKilledPayload)
 	if !ok {
 		return weight
 	}
 	if i := int(p.Species - component.SpeciesDataFirst); p.Species >= component.SpeciesDataFirst && i < len(m.ctx.World.Resources.Behaviors) {
-		return int64(m.ctx.World.Resources.Behaviors[i].HitPoints)
+		return killPay * int64(m.ctx.World.Resources.Behaviors[i].HitPoints)
 	}
 	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken && k.Time > 0 {
 		par := float64(k.MaxHitPoints) / krakenPar

@@ -783,8 +783,8 @@ func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive(t *testing.T) {
 
 // TestARoundScoresHowFarItTravelledAndWhatItEarned: a new game closes a round,
 // scored by the columns its cave scrolled and its events' worth, a data species'
-// kill its hit points. Its end weighs once on the fitness alone, a crush and the
-// defeat it brings together, as one ends every round.
+// kill twelve times its hit points. Its end weighs once on the fitness alone, a
+// crush and the defeat it brings together, as one ends every round.
 func TestARoundScoresHowFarItTravelledAndWhatItEarned(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
 	w.Resources.Cave.Steps = 2
@@ -803,9 +803,9 @@ func TestARoundScoresHowFarItTravelledAndWhatItEarned(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if st := d.Stats(); st.Rounds != 1 || st.Score != 4*2+28 || st.Fitness != 28-100+5 {
-		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks at two columns each and a kill worth 28, and a fitness of %d",
-			st.Rounds, st.Score, st.Fitness, 28-100+5)
+	if st := d.Stats(); st.Rounds != 1 || st.Score != 4*2+12*28 || st.Fitness != 12*28-100+5 {
+		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks at two columns each and a kill of 28 hit points paid twelve times, and a fitness of %d",
+			st.Rounds, st.Score, st.Fitness, 12*28-100+5)
 	}
 }
 
