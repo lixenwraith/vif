@@ -128,6 +128,8 @@ in the same PR.
   another session must measure before it merges opens as a draft and says so in its
   first line. Before calling a PR ready, check that its head is the commit pushed
   (`gh api repos/<owner>/<repo>/pulls/<n> -q .head.sha`).
+- Never offer or ask to watch a PR, its CI or its reviews, in a report or anywhere
+  else, and never start watching one unasked: an agent watches only when told to.
 - A change made for performance reports its measurement, before and after, in the
   PR body and in the design doc it serves: the benchmark or the reading, the
   shape it was taken in, and the benefit in the unit the user feels (bytes, CPU,
