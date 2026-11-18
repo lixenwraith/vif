@@ -300,7 +300,7 @@ players have no score.
 |---|---|
 | a correctly typed character (`EventBoostReward`) | +1 |
 | a typing error (`EventBoostDeactivate`) | -1 |
-| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5; a data species' hit points, what it took to shoot down; a Kraken's the ticks its hit points take at four a second, for one shot down that fast or faster, and for a slower one the share that pace is of its own, a quarter at least |
+| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5; a data species' twelve times its hit points, what it took to shoot down; a Kraken's the ticks its hit points take at four a second, for one shot down that fast or faster, and for a slower one the share that pace is of its own, a quarter at least |
 | a gold sequence it completed (`EventGoldCompleted`) | +25 |
 | its cursor defeated (`EventCursorDefeatState`) or crushed (`EventCursorCrushed`) | -100, once a round: a crush is a defeat too, and a last hit's energy can lift a defeat and drop it again before the new game |
 
@@ -311,14 +311,15 @@ Time alone scores nothing. A run that closes a round by the clock
 (`round_seconds`) would else pay a ship for outlasting it, hopping about a
 Kraken it barely scratches; as it is the scroll halts for the fight, the Kraken
 shot down is what pays, and the sooner it is down the further the round
-travels. `cave`'s first cave scrolls a column a tick, so there a round's score
-is near its ticks; its rounds at 120x40, the mean of 800 over seeds 1 to 8:
+travels. `cave`'s first cave scrolls a column a tick and its raiders have 8 hit
+points, 96 a kill; its rounds at 120x40, the mean of 800 over seeds 1 to 8, the
+kills auto-fire's own:
 
 ```
-graph                      score   ticks
-no input                     165     159
-default                      160     155
-flee threats within 20       245     240
+graph                      score   ticks   kills
+no input                     225     159    0.74
+default                      205     155    0.57
+flee threats within 20       304     240    0.71
 ```
 
 Fitness is in the `-headless` summary, the `bot stopped` log record, which also
@@ -406,7 +407,14 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   weight within 4 either side of zero.
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
-  hand, the use of its heat among it. A graph may write any: a unit's table
+  hand, the use of its heat among it. The shipped
+  [`cave_seed`](../internal/asset/bot/cave_seed.toml) is the same two networks
+  with a start written by hand, twelve direct weights that hold the nearest
+  raider's row, back off what is near and keep to the middle: a seed to train
+  a model for `cave` from, since from nothing the search did not reach the gun.
+  Over 100 rounds of seeds 101 to 104 it fields 27,614, and what one run of
+  four games learned from it in three million ticks fields 53,852. A graph may
+  write any: a unit's table
   (`x`, `y`, `special`) gives its weight from each input by name, its `bias`
   and, as `hidden`, a weight a hidden unit in their order, and `units` lists a
   table a hidden unit, its weight from each input and its `bias`. What is
@@ -489,7 +497,8 @@ A network's population is kept in the user root as
 `bot/<graph>.<scenario>.<network>.json`, written each half minute of play and as
 the run stops; a browser keeps none. Removing the file starts that population
 over, as does a change of layout (the inputs read, `hidden`, or an output left
-out), which the file's `layout` digest names.
+out), which the file's `layout` digest names, and one of what a round scores,
+which its `version` counts.
 
 - `rounds`: every round scored since the population began, over all its runs.
 - `recent`: their mean lately, and `step`: the mutation step in force, which the

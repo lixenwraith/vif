@@ -240,14 +240,14 @@ a list and their first inputs the document's, kept its populations' bytes on
 two seeds of 600,000 ticks, so its scenario needs no change and its score none.
 Decided (Lixen, 2026-11-18), a PR a step in this order:
 
-- **Cave's pay and its start weights**, a PR each, the pay first. A raider's
-  kill pays twelve times its hit points (`killWorth`, the data species'
-  branch), and `cave`'s graph writes the weights its networks start from, seven
-  of `raid` and five of `kraken`, no `special` and no hidden unit's: from
-  nothing the search does not reach the gun
-  ([below](#train-a-network-bot-live-in-cave)). The layout takes its next
-  version once for both, and each is shown the only change by a scratch build
-  without it keeping main's population bytes.
+- **Cave's trained model.** The shipped `cave_seed` is `cave`'s two networks
+  with a start written by hand, seven weights of `raid` and five of `kraken`
+  ([below](#train-a-network-bot-live-in-cave)), a bot of its own to train
+  from. `cave` is to carry a model trained from it, the member a run fields,
+  held out, and the scenario both as its bots, the seed under its own label.
+  A layout stays as it is, so what is written or exported stays valid, and
+  both keep one; `cave` from nothing is held by the byte check and the seed by
+  what it fields on seeds 101 to 104, 27,614 with a median of 33,174.
 - **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
   scenario: templates, which play only while the player has no bot of that name
   and whose weights are the author's start for a learner. With no name, `-bot`,
@@ -261,7 +261,10 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   scenario's bot, one network of it alone or a file, so one population is taken
   from a scenario and another started fresh. A document naming an input or a
   unit the bot lacks lands nothing. `list` names each population's rounds,
-  recent mean and the member it fields, on the menu's Bots page too.
+  recent mean and the member it fields, on the menu's Bots page too. Their
+  first use is the member a population fields written as the document a
+  scenario's bot carries, every weight of it, 378 for `raid` and 162 for
+  `kraken`, read back the same genome bit for bit.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **Cave.** Its bot moves from the embedded graphs into its scenario, which
@@ -274,10 +277,9 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   `move`. A five-minute probe from nothing left the edges, 42% of the raid in
   the outer tenths where it was 96%, and scored no better.
 
-`learner.go` is untouched throughout, and a round's scoring but for that pay,
-so a learner in a run takes an import or a clear from its next run. The
-population file stays JSON: one cut short never parses, where a TOML one can
-read as fewer members.
+`learner.go` and a round's scoring are untouched throughout, so a learner in a
+run takes an import or a clear from its next run. The population file stays
+JSON: one cut short never parses, where a TOML one can read as fewer members.
 
 ### Let a scenario expose values of its own to a bot
 
@@ -366,6 +368,26 @@ starting from them alone            40865    32688           57 of 60
   an update, and `species_near_x` at -0.09 for -0.25.
 - Any run that learned from written weights between the two is a reading of
   the lost start, not of the learner.
+
+A raider's kill pays twelve times its hit points, 96 in the first cave where
+it paid 8, and populations start over under it (`populationVersion`). What a
+graph's written weights field over the same 100 rounds of seeds 101 to 104
+under each pay, with no learner; a round plays the same under both, its score
+the old one plus eleven times the hit points it shot down:
+
+```
+                                    paid 8         paid 96      reach the
+                                  mean  median   mean  median      Kraken
+no weight, the ship holds still    152     146    159     146    0 of 100
+species_y alone at 0.9             243     197    412     285           0
+column, species_near_x, species_y 2213    3055   5889    8473          60
+the hand weights, both networks  12170   13566  27614   33174          73
+```
+
+- A ship that only follows a raider's row fields 2.6 times a still one, where
+  it fielded 1.6, and the hand weights 174 times, where 80.
+- The row of three leaves `kraken` unwritten, so its ship holds still at the
+  Kraken.
 
 From nothing, what one game fields after three million ticks, seven minutes of
 a core, over 40 rounds of four seeds it never played, each closed at the limit,

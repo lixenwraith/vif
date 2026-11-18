@@ -375,22 +375,25 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 
 // TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder: a layout's digest names the
 // populations it fits, so the shipped cave's two stand until its networks are
-// changed on purpose, which starts every population kept for them over.
+// changed on purpose, which starts every population kept for them over; its
+// seed's are the same, so what is learned from the seed is a model cave takes.
 func TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder(t *testing.T) {
-	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, err := ParseGraph("cave", data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[string]string{}
-	for _, n := range g.nets {
-		got[n.name] = n.digest
-	}
-	if want := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}; !maps.Equal(got, want) {
-		t.Fatalf("cave's layouts are %v, want %v", got, want)
+	for _, name := range []string{"cave", "cave_seed"} {
+		data, err := fs.ReadFile(asset.DefaultBots, name+".toml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, err := ParseGraph(name, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, n := range g.nets {
+			got[n.name] = n.digest
+		}
+		if want := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}; !maps.Equal(got, want) {
+			t.Fatalf("%s's layouts are %v, want %v", name, got, want)
+		}
 	}
 }
 
