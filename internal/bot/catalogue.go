@@ -299,13 +299,12 @@ func share(part, full float64) float64 {
 	return min(max(part/full, 0), 1)
 }
 
-// flag is on as a flag reads it, with no branch for a scan to mispredict
+// flag is on as a flag reads it
 func flag(on bool) float64 {
-	var bit int
 	if on {
-		bit = 1
+		return 1
 	}
-	return float64(bit)
+	return 0
 }
 
 // count is c as a count reads it
