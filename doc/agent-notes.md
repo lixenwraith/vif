@@ -287,6 +287,9 @@ Libraries · Branches.
   run is built on through `drive`, whose `build` is handed the App and ends the run
   before it presents by returning an error (`TestABotAlonePlaysOneMapWatchedOrNot`),
   and a run's size from its journal's anchor (`journal.NewCapture().Anchors()`).
+- A watched run's viewer's input never passes the interactive loop's
+  `inputTick`: `player.route` hands it to the router, so what a player's input
+  does besides, as saving a changed `[play]`, is done there for a watched run.
 - A presentation's size is read once by what keeps it
   ([Runtime §1](runtime.md#1-process-modes)), so a host whose size settles after
   it opens waits for it in `Init` (`window.settle`, `browser.Open`'s `fitted`) and
@@ -931,14 +934,14 @@ Libraries · Branches.
   name in a root's `bot/` plays in its place, as an install before the move
   left one. A held-out harness built earlier refuses a scenario whose entry has
   a key it does not know: run it on a copy of `wad/` taken before the change.
-- A model is landed in a bot document by a scratch test in `internal/bot`: it
-  parses the document, takes `members[fielded]` of each population file, writes
-  `[[network.<name>.units]]` and a table an output unit with every weight not
-  zero (`strconv.FormatFloat(w, 'g', -1, 64)`), and parses the result back to
-  the same `math.Float64bits`. A population written by another tool is raised
-  to this `version` in a copy by a JSON round trip, not by `sed`: its spacing
-  is its writer's. The document then replays the population's held-out rounds
-  line for line with no learner.
+- A model is landed in a bot document by `-bot export <bot> <file>`, which
+  writes what each population fields over the bot's own document
+  (`bot.Graph.Document`: every weight not zero, parsed back to the same
+  `math.Float64bits`). A population written by another tool is raised to this
+  `version` in a copy by a JSON round trip, not by `sed`: its spacing is its
+  writer's. The document then replays the population's held-out rounds line
+  for line with no learner. `toml.Document.Delete` takes a table with the
+  comment block above it.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.
@@ -991,10 +994,10 @@ Libraries · Branches.
   and from weights that fielded 12,170 it fielded 4,863 after five minutes.
   Whether the start is still in the archive is one look at its members' zero
   weights.
-- A population moves to a graph that reads its inputs and more by a zero weight
-  for each added input in every unit's row, and the new `layout`: four learned
-  under 901ac22's inputs, widened to the `*_soon` readings `cave` and
-  `cave_seed` take, replayed their 60 held-out rounds round for round.
+- A model moves to a graph that reads its inputs and more by `-bot import`,
+  a zero weight for each added input in every unit's row (`bot.Graph.Fit`):
+  four learned under 901ac22's inputs, widened so to the `*_soon` readings
+  `cave` takes, replayed their 60 held-out rounds round for round.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what

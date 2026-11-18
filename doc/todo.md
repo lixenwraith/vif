@@ -234,25 +234,18 @@ root's `bot/` holds a player's alone: what they made, changed or trained
 ([Bot catalogue](bot-catalogue.md)), with no `loot` and `threat` a target alone;
 the bot document, a network's `while`, a `Steer` over a list, `InState`,
 `outputs`, `[bot] inputs` and every weight written; a scenario's `bots`, a seat
-that names no graph playing the first; and `cave`'s two in its scenario, `seed`
+that names no graph playing the first; `cave`'s two in its scenario, `seed`
 the start written by hand and `cave` a model learned from it, run K's best of
 four, which fields 300,260 over 100 rounds of seeds 101 to 104 where `seed`
-fields 27,614. Decided (Lixen, 2026-11-18), what is left, a PR a step:
+fields 27,614; and the verbs, one grammar after `:bot` and `-bot`, that keep a
+player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
+2026-11-18), what is left, a PR a step:
 
-- **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
-  <source>]`, `import`, `export`, `clear` and `list`, a source being a
-  scenario's bot, one network of it alone or a file, so one population is taken
-  from a scenario and another started fresh. A document naming an input or a
-  unit the bot lacks lands nothing, and one whose inputs are fewer than the
-  network's lands with zero for the rest: models learned on 36 and 14 inputs
-  replay round for round on the shipped 39 and 15, zero on each
-  `landing*_soon`. A model is its genes and not its scores, so a member goes
-  by its layout, never by a population's `version`. `list` names each
-  population's rounds, recent mean and the member it fields, on the menu's
-  Bots page too. `export` writes the member a population fields as the document
-  a scenario's bot carries, as `cave`'s was written by a scratch test: every
-  weight not zero, read back the same genome bit for bit and replayed round
-  for round.
+- **The verbs' edges.** `export` writes a network's weights at the document's
+  end, not beside its inputs; a word after a verb is split at spaces, so a path
+  holding one is not taken there; the menu's Bots page names populations only
+  through its Bot files row; and `clear` in a run learning the population is
+  undone by that run's next save.
 - **Training on from `cave`'s model.** Its `round_seconds`, half an hour, closes
   85 of 100 held-out rounds at the limit, so a learner cannot tell apart what
   outlasts it: a bot document's limit is its own to raise first.
@@ -1071,14 +1064,11 @@ What remains:
   is a session whose only participant is the bot, the fleet's standing one
   ([Keep a standing session for the lobby](#keep-a-standing-session-for-the-lobby)):
   `bot.Learn`'s `alone` is the seam, and its stores need one writer.
-- **The operator's side**, its `:bot clear`, `export` and `import`, is an item of
-  its own:
-  [Have a scenario describe the bots that play it](#have-a-scenario-describe-the-bots-that-play-it).
-  Beside it, the `:bot` list and the menu's Bots page name no population; a
-  watched run's menu still turns auto-fire or the pointer off under the bot,
-  which its rounds then score, and writes that back as the player's own. Two
-  runs learning one graph in one scenario keep the file of the one further on;
-  what the other learned is not merged into it.
+- **The operator's side.** A watched run's viewer may still turn auto-fire or
+  the pointer off under the bot, which its rounds then score; the change is
+  saved as theirs, as any `[play]` change is. Two runs learning one graph in
+  one scenario keep the file of the one further on; what the other learned is
+  not merged into it.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
@@ -307,8 +306,8 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 	var learners []*bot.Learner
 	for _, network := range g.Networks() {
 		var store bot.Store
-		if dir := paths.PopulationDir(); dir != "" {
-			store = paths.PlaceFile{Path: filepath.Join(dir, g.Name+"."+a.scenario.Shown()+"."+network+".json")}
+		if file := resource.PopulationFile(g.Name, a.scenario.Shown(), network); file != "" {
+			store = paths.PlaceFile{Path: file}
 		}
 		l, err := bot.NewLearner(g, network, a.Seed(), len(drivers), store)
 		if err != nil {

@@ -60,6 +60,14 @@ var configForms = map[string]configFormSpec{
 			return nil
 		},
 	},
+	"files": {
+		label: "Bot files", command: "bot",
+		description: "List the bots this run can seat with what each has learned, or keep your own, as :bot does: " + strings.Join(botFileVerbs(), "; ") + ".",
+		fields:      []configFormField{{"Verb", "list", "A verb of :bot and what follows it.", inputText}},
+		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
+			return botFiles(ctx, strings.Fields(f.Value(0)))
+		},
+	},
 	"host": {
 		label: "Host this game", description: "Open this running game to other players at a listening address.", command: "host",
 		fields: []configFormField{
@@ -220,7 +228,7 @@ func multiplayerConfigOptions(ctx *engine.GameContext) []configNode {
 	if players := participantConfigOptions(ctx); len(players) > 0 {
 		options = append(options, section("Players", players))
 	}
-	return append(options, section("Bots", append([]configNode{formRow("add")}, botConfigOptions(ctx)...)))
+	return append(options, section("Bots", append([]configNode{formRow("add"), formRow("files")}, botConfigOptions(ctx)...)))
 }
 
 // nearbyConfigOptions lists the games found on this network, each joined as :join
@@ -261,6 +269,17 @@ func nearbyConfigOptions(ctx *engine.GameContext) []configNode {
 			}})
 	}
 	return options
+}
+
+// botFileVerbs spells each verb of :bot that keeps bot files with what follows it
+func botFileVerbs() []string {
+	var spelt []string
+	for _, v := range engine.BotVerbs {
+		if v[0] != "add" && v[0] != "drop" {
+			spelt = append(spelt, engine.BotUsage(v[0]))
+		}
+	}
+	return spelt
 }
 
 func botConfigOptions(ctx *engine.GameContext) []configNode {

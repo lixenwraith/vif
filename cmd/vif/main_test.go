@@ -599,6 +599,35 @@ func TestGeneratedFilesAreTheHelpTable(t *testing.T) {
 	}
 }
 
+// TestTheBotFlagReadsTheWordsOfTheBotCommand: no verb and add seat bots as the run
+// starts, a path whole though it holds a space; a verb that keeps bot files is
+// run by itself and seats none, and drop is a run's alone.
+func TestTheBotFlagReadsTheWordsOfTheBotCommand(t *testing.T) {
+	for _, tt := range []struct {
+		bot, spec string
+		files     []string
+		refused   bool
+	}{
+		{bot: "1", spec: "1"},
+		{bot: "add", spec: "1"},
+		{bot: "add 2:cave", spec: "2:cave"},
+		{bot: "my bots/x.toml", spec: "my bots/x.toml"},
+		{bot: "list", files: []string{"list"}},
+		{bot: "create mine import cave", files: []string{"create", "mine", "import", "cave"}},
+		{bot: "drop 1", refused: true},
+		{bot: "add 1 2", refused: true},
+	} {
+		f := sessionFlags{bot: tt.bot}
+		err := f.validateInvocation(false, false, "")
+		if (err != nil) != tt.refused || err == nil && (f.botSpec() != tt.spec || !slices.Equal(f.botFiles(), tt.files)) {
+			t.Errorf("-bot %s seats by %q and keeps files by %v, %v", tt.bot, f.botSpec(), f.botFiles(), err)
+		}
+	}
+	if err := (sessionFlags{bot: "list", host: ":7777"}).validateInvocation(false, false, ""); err == nil {
+		t.Error("-bot list was taken beside -host")
+	}
+}
+
 func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {
 	for _, tt := range []struct {
 		args  []string
@@ -609,6 +638,7 @@ func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {
 		{[]string{"-bot", "-watch"}, "1", true},
 		{[]string{"-bot", "2:default", "-watch"}, "2:default", true},
 		{[]string{"--bot=default", "-watch"}, "default", true},
+		{[]string{"-bot", "create", "mine", "import", "cave", "kraken", "-watch"}, "create mine import cave kraken", true},
 	} {
 		fs := flag.NewFlagSet("bot", flag.ContinueOnError)
 		var spec string

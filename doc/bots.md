@@ -90,19 +90,68 @@ into the session it joins, and `:leave` takes them out of one with the run.
 
 | Command | Effect |
 |---|---|
-| `:bot` | List this run's bots: slot, graph, joining or leaving. |
-| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
+| `:bot [N[:graph]\|graph]`, `:bot add …` | Seat more bots, one where no count is given; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
+| `:bot list` | Every bot a seat can play with what it has learned here, then this run's bots: slot, graph, joining or leaving. |
+| `:bot create`, `import`, `export`, `clear` | Keep a player's bot files ([below](#a-players-bot-files)). |
 | `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3`, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
 
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 [configuration menu](config-menu.md#bots) offers the same operations.
 
+The words after `-bot` are the words after `:bot`, one grammar
+(`engine.BotVerbs`): `-bot`, `-bot 2:cave` and `-bot add 2:cave` seat bots as the
+run starts, `-bot drop` is refused, a run's alone, and `-bot` with a verb that
+keeps bot files acts, prints and exits, for the scenario `-s` names.
+
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:pause`, `:bot add`, `:bot drop` and `:player` work there.
+`:n`, `:pause`, `:bot`, `:bot drop` and `:player` work there, and what its viewer
+changes of `[play]` or the zoom is saved as a player's is: a preference is the
+operator's, whatever the run presents.
+
+### A player's bot files
+
+A player's bots are the user root's `bot/<name>.toml`, beside what every bot
+learned ([The population file](#the-population-file)). The verbs that keep them
+print a line each, in a run as status messages the console lists; a browser has
+no files and reads `Bot files unavailable in a browser`, `list` excepted.
+
+- `list`: each bot a seat can play, yours first, then the installed, the
+  scenario's and the shipped `default`, with each population it keeps in the
+  run's scenario: `raid 814 rounds, recent 51440, fields 140138 over 12`.
+- `create <name>`: a new bot of yours, the scenario's own with no weight, which
+  learns from nothing. A name is one word that is no count and no verb.
+  - `create <name> import <source>` copies the source's document whole.
+  - `create <name> import <source> <network>...` copies it with the weights of
+    those networks alone, so one population starts from a scenario's and
+    another fresh: `-s cave -bot create mine import cave kraken`.
+- `import <source> <name> [network...]`: writes a source's weights, every
+  network's or those named, into a bot of yours that exists
+  (`bot.Graph.Fit`).
+  - A weight goes by its input's name, its output's and its hidden unit's place;
+    one the bot has and the source lacks is zero.
+  - A network, an input, an output or a hidden unit the bot lacks lands
+    nothing: a network is taken whole or not at all.
+  - What a population of the bot already kept still plays, and learns on, the
+    new weights a candidate among its members; `clear` it to start from them.
+- `export <bot>[.<scenario>] <file>`: the bot's document with, for each
+  network, the member its population fields in that scenario, the run's where
+  none is named, and what it wrote where none is proved: a file a scenario
+  carries as its bot, or another player imports. It reads back the same genome
+  bit for bit (`bot.Graph.Document`), each weight not zero written, a hidden
+  unit a `[[network.<n>.units]]` table and an output a `[network.<n>.<unit>]`
+  one, at the document's end.
+- `clear <bot>[.<scenario>[.<network>]]`: removes the populations below the
+  address, which start over. A run learning one keeps it again as it saves.
+
+A source is a bot as a seat names one, a file's path among them, or, where no
+such bot is found, another scenario's: `<scenario>` for its own and
+`<scenario>.<bot>` for any it carries, as `cave.seed`. A member is its genes,
+whatever scored them: `export` reads a population of any `version` whose
+`layout` is the network's.
 
 ## Telling cursors apart
 

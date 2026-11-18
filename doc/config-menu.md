@@ -201,8 +201,9 @@ player are outside this list.
 Adding bots to a solo game opens a session only they can join, in a browser too.
 To invite remote players, **host at the intended listening address before adding
 bots**. An existing session cannot be rebound through the menu. The same
-operations are `:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see
-[Bots](bots.md).
+operations are `:bot [N[:graph]|graph]` and `:bot drop <slot>`. **Bot files**
+takes a verb of `:bot` that keeps bot files and what follows it, `list` as it
+opens, typed on its row; see [Bots](bots.md#a-players-bot-files).
 
 ### Settings
 

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -74,6 +75,9 @@ type SessionController interface {
 	RemoveBot(id uint64) error
 	BotSummary() string
 	Bots() []BotSeat
+	// BotFiles runs one of BotVerbs that keeps bot files, its word first, and
+	// returns what it tells the operator, a line each.
+	BotFiles(words []string) ([]string, error)
 	Participants() []SessionParticipant
 	DropPlayer(slot int) error
 	RemovePlayer(entity core.Entity) error
@@ -94,6 +98,44 @@ type SessionController interface {
 	Nearby() []NearbySession
 	ReportNearby()
 	Announce()
+}
+
+// BotVerbs are the words after :bot and -bot that name no graph, each with what
+// follows it: add and drop seat and unseat, and the rest keep bot files.
+var BotVerbs = [][2]string{
+	{"add", "[N[:graph]|graph]"},
+	{"drop", "<slot>"},
+	{"list", ""},
+	{"create", "<name> [import <source> [network...]]"},
+	{"import", "<source> <name> [network...]"},
+	{"export", "<bot>[.<scenario>] <file>"},
+	{"clear", "<bot>[.<scenario>[.<network>]]"},
+}
+
+// BotVerb splits the words after :bot and -bot into a verb and what follows it:
+// add where the first word is no verb, so a graph or a count alone seats bots.
+func BotVerb(words []string) (string, []string) {
+	if len(words) > 0 && BotUsage(words[0]) != "" {
+		return words[0], words[1:]
+	}
+	return "add", words
+}
+
+// BotUsage spells verb with what follows it, "" for a word that is no verb, and
+// with no verb the whole grammar.
+func BotUsage(verb string) string {
+	var all []string
+	for _, v := range BotVerbs {
+		spelt := strings.TrimSpace(v[0] + " " + v[1])
+		if v[0] == verb {
+			return spelt
+		}
+		all = append(all, spelt)
+	}
+	if verb != "" {
+		return ""
+	}
+	return "[" + strings.Join(all, " | ") + "]"
 }
 
 // NearbySession is a session found on the local network, as the menu lists it.
