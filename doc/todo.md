@@ -240,14 +240,14 @@ a list and their first inputs the document's, kept its populations' bytes on
 two seeds of 600,000 ticks, so its scenario needs no change and its score none.
 Decided (Lixen, 2026-11-18), a PR a step in this order:
 
-- **A seed for cave's training.** `cave`'s graph writes the weights its
-  populations start from, seven of `raid` and five of `kraken`, no `special`
-  and no hidden unit's: from nothing the search does not reach the gun
-  ([below](#train-a-network-bot-live-in-cave)). They are a seed and not the
-  scenario's own: its bot is to carry a model trained from them, the member a
-  run fields, held out. A layout stays as it is, so what is written or
-  exported stays valid; once `cave` writes weights a step is held to what its
-  start fields on seeds 101 to 104, where the byte check held one from nothing.
+- **Cave's trained model.** The shipped `cave_seed` is `cave`'s two networks
+  with a start written by hand, seven weights of `raid` and five of `kraken`
+  ([below](#train-a-network-bot-live-in-cave)), a bot of its own to train
+  from. `cave` is to carry a model trained from it, the member a run fields,
+  held out, and the scenario both as its bots, the seed under its own label.
+  A layout stays as it is, so what is written or exported stays valid, and
+  both keep one; `cave` from nothing is held by the byte check and the seed by
+  what it fields on seeds 101 to 104, 27,614 with a median of 33,174.
 - **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
   scenario: templates, which play only while the player has no bot of that name
   and whose weights are the author's start for a learner. With no name, `-bot`,

@@ -407,7 +407,14 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   weight within 4 either side of zero.
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
-  hand, the use of its heat among it. A graph may write any: a unit's table
+  hand, the use of its heat among it. The shipped
+  [`cave_seed`](../internal/asset/bot/cave_seed.toml) is the same two networks
+  with a start written by hand, twelve direct weights that hold the nearest
+  raider's row, back off what is near and keep to the middle: a seed to train
+  a model for `cave` from, since from nothing the search did not reach the gun.
+  Over 100 rounds of seeds 101 to 104 it fields 27,614, and what one run of
+  four games learned from it in three million ticks fields 53,852. A graph may
+  write any: a unit's table
   (`x`, `y`, `special`) gives its weight from each input by name, its `bias`
   and, as `hidden`, a weight a hidden unit in their order, and `units` lists a
   table a hidden unit, its weight from each input and its `bias`. What is
