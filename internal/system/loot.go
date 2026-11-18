@@ -528,11 +528,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		if !ok {
 			return false
 		}
-		full := component.WeaponSpecs[spec.Weapon].MaxCharges
-		if weapons.GunLevels > 0 && component.WeaponSpecs[spec.Weapon].Delivery == component.DeliveryTracer {
-			full = weapons.GunLevels
-		}
-		return weapons.Charges[spec.Weapon] >= full
+		return weapons.Charges[spec.Weapon] >= weapons.ChargeCap(spec.Weapon)
 	}
 
 	var results []DropResult
