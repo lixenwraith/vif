@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/system"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -246,6 +247,7 @@ func (p *player) run() error {
 			if p.rw == nil || !p.rw.lent {
 				p.frame()
 			}
+			p.a.persistCell() // the zoom is its viewer's, whatever the run presents
 			if p.done && p.err != nil {
 				return p.err
 			}
@@ -790,14 +792,22 @@ func (p *player) holdMixer() { p.a.holdMixer(p.paused || p.done || p.seek != nil
 // out-of-band control rather than the recorded player, so none of it is effort.
 func (p *player) route(intent *input.Intent) bool {
 	a := p.a
+	was, cont := a.livePlay(), true
 	if p.interactive {
-		return a.Inject(intent)
+		cont = a.Inject(intent)
+	} else {
+		a.world.RunSafe(func() {
+			a.world.WithOrigin(event.OriginDebug, func() { cont = a.router.Handle(intent) })
+		})
+		a.Settle()
 	}
-	cont := true
-	a.world.RunSafe(func() {
-		a.world.WithOrigin(event.OriginDebug, func() { cont = a.router.Handle(intent) })
-	})
-	a.Settle()
+	// What its viewer's own input changed of [play] is theirs to keep, as a player's
+	// is; what the stream presented changes is the run's and is never written
+	if now := a.livePlay(); now != was && a.cfg.Settings != nil {
+		if err := paths.SavePlay(a.cfg.Settings, was, now); err != nil {
+			a.settingsUnsaved(err)
+		}
+	}
 	return cont
 }
 

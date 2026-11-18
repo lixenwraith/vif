@@ -4,6 +4,7 @@ package app
 
 import (
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
@@ -129,6 +131,49 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 	press(terminal.Event{Key: terminal.KeyF1})
 	if p.cmd != nil || a.ctx.Viewer.Load() || a.ctx.GetMode() != core.ModeInsert || a.ctx.TimeCtl.IsPaused() {
 		t.Fatal("closing help failed to return the recorded mode and pause")
+	}
+}
+
+// TestAWatchedRunKeepsWhatItsViewerChangesOfItsSettings: a setting is its
+// operator's whatever the run presents, so one changed while watching a bot is
+// written back as a player's is. What the bot's own stream changes is the run's
+// and is never written.
+func TestAWatchedRunKeepsWhatItsViewerChangesOfItsSettings(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	dir := t.TempDir()
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
+		Play: paths.DefaultPlay(), Settings: paths.FileStore{Path: filepath.Join(dir, paths.SettingsFile)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, a.scenario, DefaultBotGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &player{a: a, src: botSource{d}, driven: true, interactive: true, interval: parameter.GameUpdateInterval,
+		scale: engine.ScaleNormal}
+	// As a graph's own intent might turn it: no doing of the viewer's
+	a.ctx.AutoFire.Store((a.ctx.AutoFire.Load() + 1) % (engine.AutoFireBoth + 1))
+	for _, key := range ":fps 24\r" {
+		ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: key}
+		if key == '\r' {
+			ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}
+		}
+		if !p.key(ev) {
+			t.Fatal("the viewer quit")
+		}
+	}
+	kept, _, _, err := paths.LoadSettings(dir)
+	if err != nil || kept.Play.MaxFPS != 24 || kept.Play.AutoFire != paths.DefaultPlay().AutoFire {
+		t.Fatalf("kept max_fps %d and auto_fire %q, %v: want the 24 its viewer set written back, and the auto-fire the stream turned left as it was",
+			kept.Play.MaxFPS, kept.Play.AutoFire, err)
 	}
 }
 
