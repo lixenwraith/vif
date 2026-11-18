@@ -243,9 +243,11 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
 
 - **The verbs' edges.** `export` writes a network's weights at the document's
   end, not beside its inputs; a word after a verb is split at spaces, so a path
-  holding one is not taken there; the menu's Bots page names populations only
-  through its Bot files row; and `clear` in a run learning the population is
-  undone by that run's next save.
+  holding one is not taken there; an address names one network or all, so two
+  of three take two commands; a population of another scenario is reached by
+  `-s` alone; the menu's Bots page names populations only through its Bot
+  files row; and `clear` in a run learning the population is undone by that
+  run's next save.
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and with the title tested
   ([Bots](bots.md#learning)) no run measured fielded a worse member than it
@@ -286,14 +288,6 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
     weights written. The archive wants ranking by the trusted mean, a
     newcomer let in at its foot on what its round claims: a rank hook in
     `lixenwraith/genetic`, or the fielded member held outside the archive.
-  - **Something crosses a new game.** Two runs of one `raid` network started
-    games 4 and 5 of seed 101 alike, cell, energy and heat, and to tick 100
-    flew them alike, then apart by which `kraken` had flown the games before:
-    game 5 through its half hour under one, and to the left edge and crushed
-    at tick 211 under the other. A game after a crush starts a cell or two
-    from where one after the limit does. What a new game leaves as it was, in
-    the bot or the world, is not found, and the change to a bot's death wants
-    it settled: until then held-out rounds do not pair by index.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **A scenario's bot held to its scenario by `-check`**: an `InState` that names
@@ -1193,14 +1187,30 @@ weighs no nugget, since nothing pushes `EventNuggetCollected`: push it in
 `NuggetSystem.collectNugget` and drop that function's own `statCollected`
 increment, which the event's handler repeats.
 
-### Adapt bots to the session's players
+### Teach a bot its player's style, for an auto-pilot
 
-- Priority: P3
-- Prerequisite: [Train bot graphs offline](#train-bot-graphs-offline)
+- Priority: P3, an aspiration for the last stages of the bot work
+- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
+- Guide: [Bots](bots.md#networks-and-learning)
 
-A small model of each other participant from Shared state, keyed by participant
-for the session and dropped at its end, and a bandit over trained genomes. Decide
-what is modelled and whether players see it; nothing is persisted.
+Wanted (Lixen, 2026-11-18), and not to be built yet: a bot that learns to play
+as the person it plays beside does, and an auto-pilot a player turns on to have
+that bot fly their ship until they take it back, as when a session cannot pause
+and they must leave the keys for a few minutes.
+
+- **A different learner.** Not the search over a population a solo run does:
+  a slow, streaming one that reads the player's own play, what they saw and
+  where they moved, and updates one set of weights live, at each death, in the
+  game the bot and the player share. What it is, a network pulled toward the
+  player's moves or something else, is to be defined.
+- **Before it**, the game's own changes: a bot's death that does not start the
+  game over, both ships back as they were or a little changed.
+- **To decide then**: what of a player is read and where it is kept, since a
+  style learned over weeks outlives a session; what the auto-pilot does with
+  the special attack, a typed scenario and a player's settings; and how the
+  hand back is told to the session's others, if at all.
+- An older sketch here was a model of each other participant for one session,
+  with a bandit over trained genomes: it kept nothing.
 
 ## Authoring
 
