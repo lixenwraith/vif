@@ -348,7 +348,7 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 
 // addWeapon grants or recharges one weapon on one cursor
 func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType) {
-	if weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor); ok && weaponComp.Charges[weapon] < chargeCap(weaponComp, weapon) {
+	if weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor); ok && weaponComp.Charges[weapon] < weaponComp.ChargeCap(weapon) {
 		s.setWeapon(cursor, weapon, weaponComp.Charges[weapon]+1)
 	}
 }
@@ -366,20 +366,11 @@ func (s *WeaponSystem) setWeapon(cursor core.Entity, weapon component.WeaponType
 	}
 
 	firstAcquire := weaponComp.Charges[weapon] == 0
-	weaponComp.Charges[weapon] = min(charges, chargeCap(weaponComp, weapon))
+	weaponComp.Charges[weapon] = min(charges, weaponComp.ChargeCap(weapon))
 	if firstAcquire {
 		weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately on first pickup
 		s.publishLoadout(cursor, weaponComp)
 	}
-}
-
-// chargeCap is the charges a kind holds at most: its spec's, or a charge per level
-// of the path a gun climbs
-func chargeCap(weaponComp *component.WeaponComponent, weapon component.WeaponType) int {
-	if weaponComp.GunLevels > 0 && component.WeaponSpecs[weapon].Delivery == component.DeliveryTracer {
-		return weaponComp.GunLevels
-	}
-	return component.WeaponSpecs[weapon].MaxCharges
 }
 
 // removeAllWeapons strips the loot from one cursor's loadout and destroys only

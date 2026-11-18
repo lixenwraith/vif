@@ -230,15 +230,11 @@ follow the redesign.
 
 A scenario is to carry the bots made for its map, among its own files, and the
 user root's `bot/` to hold a player's alone: what they made, changed or trained.
-The catalogue a network reads through has landed with the sensors `cave` had
-([Bot catalogue](bot-catalogue.md)). Decided (Lixen, 2026-11-18), a PR a step
-in this order:
+The catalogue a network reads through has landed with its rows
+([Bot catalogue](bot-catalogue.md)): no `loot`, which homes on its owner and
+whose kinds are many, and `threat` a target alone. Decided (Lixen, 2026-11-18),
+a PR a step in this order:
 
-- **The catalogue's rows.** Kinds `bullet`, `missile`, `cursor`, `glyph`, `gold`
-  and `nugget` beside today's, a species' and a Kraken's hit points and a
-  species' size, the ranks to eight, the terrain about the cursor, and more of
-  the bot's own: its row, shield, boost and weapons. No `loot`, which homes on
-  its owner and whose kinds are many, and `threat` stays a target alone.
 - **The bot document.** A network may say `while`, a guard binding it to a state
   of the scenario, and `Steer` take an ordered list, the first whose binding
   holds steering; `InState { region, states }` reads the scenario's own
@@ -250,10 +246,12 @@ in this order:
   a scenario exposes values of its own is decided at this step.
 - **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
   scenario: templates, which play only while the player has no bot of that name
-  and whose weights are the author's start for a learner. `-bot` with no name
-  plays the scenario's bot, and `-bot default` the generic one shipped, bound to
-  no scenario, which a player may change or train. A population stays
-  `bot/<name>.<scenario>.<network>.json`, one a network.
+  and whose weights are the author's start for a learner. With no name, `-bot`,
+  `-bot 2`, `:bot add` and `:bot add 2` all seat the scenario's bot, and
+  `default` where the scenario carries none, as if it were named; `-bot default`
+  is the generic one shipped, bound to no scenario, which a player may change or
+  train. A population stays `bot/<name>.<scenario>.<network>.json`, one a
+  network.
 - **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
   <source>]`, `import`, `export`, `clear` and `list`, a source being a
   scenario's bot, one network of it alone or a file, so one population is taken
@@ -267,8 +265,8 @@ in this order:
   population files stay.
 
 `learner.go` and a round's scoring are untouched throughout, so a learner in a
-run takes an import or a clear from its next run. Whether the population file
-moves from JSON to TOML waits on a reading of the two.
+run takes an import or a clear from its next run. The population file stays
+JSON: one cut short never parses, where a TOML one can read as fewer members.
 
 ### Train a network bot live in `cave`
 
