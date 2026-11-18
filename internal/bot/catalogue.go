@@ -472,22 +472,22 @@ func (m *mind) rock(place int) [2]float64 {
 	return v.rocks[place]
 }
 
-// walls are the ways a network reads how far the cursor may go before a cell
-// blocks it
-var walls = [...]struct {
+// blocks are the ways a network reads how far the cursor may go before a cell
+// blocks it: a wall, the rock or the map's edge
+var blocks = [...]struct {
 	name   string
 	dx, dy int
 	doc    string
 }{
-	{"wall_up", 0, -1, "the first cell above the cursor that blocks it"},
-	{"wall_down", 0, 1, "the first cell below the cursor that blocks it"},
-	{"wall_left", -1, 0, "the first cell left of the cursor that blocks it"},
-	{"wall_right", 1, 0, "the first cell right of the cursor that blocks it"},
+	{"block_up", 0, -1, "the first cell above the cursor that blocks it"},
+	{"block_down", 0, 1, "the first cell below the cursor that blocks it"},
+	{"block_left", -1, 0, "the first cell left of the cursor that blocks it"},
+	{"block_right", 1, 0, "the first cell right of the cursor that blocks it"},
 }
 
-// wall is the offset of the first cell that blocks the cursor along dx, dy: the
+// block is the offset of the first cell that blocks the cursor along dx, dy: the
 // cell past the view's edge where none it shows does
-func (m *mind) wall(dx, dy int) float64 {
+func (m *mind) block(dx, dy int) float64 {
 	v := &m.view
 	x, y := v.from.X+dx, v.from.Y+dy
 	for v.shown(x, y) && !m.ctx.World.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockCursor) {
@@ -597,7 +597,7 @@ type sensor struct {
 }
 
 // sensors is every name a network's inputs take: the rock's edges by place, the
-// walls about the cursor, each kind's nearest by rank and field, the second and
+// blocks about the cursor, each kind's nearest by rank and field, the second and
 // later carrying their rank in the name, and the bot's own
 var sensors = func() (rows []sensor) {
 	// halved names the half a count's or a rate's line reads at
@@ -613,13 +613,13 @@ var sensors = func() (rows []sensor) {
 				func(*network) reading { return func(m *mind, _ *network) float64 { return m.rock(p)[e] } }})
 		}
 	}
-	for _, w := range walls {
+	for _, b := range blocks {
 		scale := scaleDown
-		if w.dx != 0 {
+		if b.dx != 0 {
 			scale = scaleAcross
 		}
-		rows = append(rows, sensor{w.name, scale, w.doc,
-			func(*network) reading { return func(m *mind, _ *network) float64 { return m.wall(w.dx, w.dy) } }})
+		rows = append(rows, sensor{b.name, scale, b.doc,
+			func(*network) reading { return func(m *mind, _ *network) float64 { return m.block(b.dx, b.dy) } }})
 	}
 	for k := range kindCount {
 		for rank := range kinds[k].ranks {

@@ -49,7 +49,7 @@ func readings(t *testing.T, ctx *engine.GameContext) map[string]float64 {
 
 // TestTheSensorsReadWhatTheViewShows: each sensor is an offset from the cursor
 // scaled to the view, of the nearest of its kind the view shows, nearest first,
-// with what the kind knows of each, the rock's edges and the walls about the
+// with what the kind knows of each, the rock's edges and the blocks about the
 // cursor, and the bot's own; what is not sighted reads zero.
 func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	w, ctx := soloWorld(16, 10)
@@ -148,8 +148,8 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		"ceiling_near": down(4 - 10), "floor_near": down(15 - 10),
 		"ceiling_far": down(7 - 10), "floor_far": down(12 - 10),
 		// The rock above and below, the view's left edge and the wall
-		"wall_up": down(1 - 10), "wall_down": down(cfg.MapHeight - 3 - 10),
-		"wall_left": across(minX - 1 - 16), "wall_right": across(36 - 16),
+		"block_up": down(1 - 10), "block_down": down(cfg.MapHeight - 3 - 10),
+		"block_left": across(minX - 1 - 16), "block_right": across(36 - 16),
 		"species_enraged": 1, "landing_soon": 0.25, // a quarter of its warning has run
 		"species_hp": 0.5, "species_size": 0.5, "species_vx": 0.5, "species_vy": -0.75,
 		"species2_size": 1.0 / (1 + sizeHalf), "species3_size": 1.0 / (1 + sizeHalf), "species5_size": 1.0 / (1 + sizeHalf),
@@ -363,8 +363,8 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 			terrain[edge.name+place.suffix] = true
 		}
 	}
-	for _, wall := range walls {
-		terrain[wall.name] = true
+	for _, block := range blocks {
+		terrain[block.name] = true
 	}
 	_, ctx := soloWorld(10, 2)
 	got := readings(t, ctx)
@@ -415,8 +415,8 @@ func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
 	for _, row := range places {
 		rows["place "+strconv.Quote(row.suffix)] = row.doc
 	}
-	for _, row := range walls {
-		rows["wall "+row.name] = row.doc
+	for _, row := range blocks {
+		rows["block "+row.name] = row.doc
 	}
 	for _, row := range self {
 		rows["own "+row.name] = row.doc
@@ -520,8 +520,8 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 		}
 		item("", code(at...)+": "+row.doc+".")
 	}
-	b.WriteString("\n### Walls\n\nEach is an offset from the cursor, to the cell past the view's edge where none\nit shows blocks:\n\n")
-	for _, row := range walls {
+	b.WriteString("\n### Blocks\n\nA block is a cell the cursor may not enter: a wall, the rock or the map's edge.\nEach is an offset from the cursor, to the cell past the view's edge where none\nit shows blocks:\n\n")
+	for _, row := range blocks {
 		scale := scaleDown
 		if row.dx != 0 {
 			scale = scaleAcross
