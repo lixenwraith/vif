@@ -10,11 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lixenwraith/vif/internal/component"
-	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
-	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 const (
@@ -29,21 +25,8 @@ const (
 	// the pass through the network takes the next, and populations start over
 	layoutVersion = 2
 
-	// energyHalf and heatHalf are the energy and the heat their sensors read as a half
-	energyHalf = 1000
-	heatHalf   = 10
-
 	// biasName names an output's bias among its hand-written weights
 	biasName = "bias"
-)
-
-// The outputs of a network: the offset Steer points at, across and down, and
-// special, which asks for the special attack while it is positive
-const (
-	outputX = iota
-	outputY
-	outputSpecial
-	outputCount
 )
 
 // networkTable is one of a graph's [network.<name>] tables: the sensors the
@@ -63,11 +46,30 @@ type networkTable struct {
 // then each output's direct weights, hidden weights and bias.
 type network struct {
 	name   string
-	inputs []sensor
+	inputs []reading
+	wants  []want // the kinds its inputs read, each to the furthest rank one asks for
 	hidden int
 	genes  []float64
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
+	near   []nearest // scratch: the nearest things of each kind it wants
+}
+
+// want is a kind a network reads and how many of its nearest
+type want struct {
+	kind  kind
+	ranks int
+}
+
+// asks has the network read the ranks nearest of kind k and returns where among
+// near it keeps them
+func (n *network) asks(k kind, ranks int) int {
+	slot := slices.IndexFunc(n.wants, func(w want) bool { return w.kind == k })
+	if slot < 0 {
+		slot, n.wants = len(n.wants), append(n.wants, want{kind: k})
+	}
+	n.wants[slot].ranks = max(n.wants[slot].ranks, ranks)
+	return slot
 }
 
 // parseNetworks reads a graph's [network] table, a network a name, in name order;
@@ -105,15 +107,15 @@ func parseNetwork(name string, raw any) (*network, error) {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(t.Inputs), t.Hidden)
 	}
 	n := &network{name: name, hidden: t.Hidden}
-	for _, name := range t.Inputs {
-		s := slices.IndexFunc(sensors[:], func(row sensorRow) bool { return row.name == name })
-		if s < 0 || slices.Contains(n.inputs, sensor(s)) {
+	for i, name := range t.Inputs {
+		s := slices.IndexFunc(sensors, func(row sensor) bool { return row.name == name })
+		if s < 0 || slices.Contains(t.Inputs[:i], name) {
 			return nil, fmt.Errorf("inputs: %q is no sensor, or is named twice", name)
 		}
-		n.inputs = append(n.inputs, sensor(s))
+		n.inputs = append(n.inputs, sensors[s].bind(n))
 	}
 	n.genes = make([]float64, n.geneCount())
-	n.in = make([]float64, len(n.inputs)+n.hidden)
+	n.in, n.near = make([]float64, len(n.inputs)+n.hidden), make([]nearest, len(n.wants))
 	for o, weights := range [outputCount]map[string]float64{outputX: t.X, outputY: t.Y, outputSpecial: t.Special} {
 		for _, name := range slices.Sorted(maps.Keys(weights)) {
 			i := slices.Index(t.Inputs, name)
@@ -169,17 +171,26 @@ func (n *network) blocks() [][]int {
 // playing is a network of its own for one driver, whose weights a learner replaces
 func (n *network) playing() *network {
 	c := *n
-	c.genes, c.in = slices.Clone(n.genes), make([]float64, len(n.in))
+	c.genes, c.in, c.near = slices.Clone(n.genes), make([]float64, len(n.in)), make([]nearest, len(n.near))
 	return &c
 }
 
-// run reads the scene through the network and returns its outputs
-func (n *network) run(s *scene) (out [outputCount]float64) {
+// read takes the inputs from the world as m's view frames it: of each kind they
+// name the nearest things, found once, then each input in the weights' order
+func (n *network) read(m *mind) {
+	for i, w := range n.wants {
+		n.near[i] = nearest{m: m, kind: w.kind, ranks: w.ranks}
+		kinds[w.kind].scan(m, &n.near[i])
+	}
+	for i, read := range n.inputs {
+		n.in[i] = read(m, n)
+	}
+}
+
+// pass runs the inputs read through the network and returns its outputs
+func (n *network) pass() (out [outputCount]float64) {
 	width := len(n.inputs)
 	in, hid := n.in[:width], n.in[width:]
-	for i, kind := range n.inputs {
-		in[i] = sensors[kind].read(s)
-	}
 	for h := range hid {
 		row := n.genes[n.unit(h):]
 		sum := row[width]
@@ -199,215 +210,32 @@ func (n *network) run(s *scene) (out [outputCount]float64) {
 	return out
 }
 
-// scene is what the sensors read, taken once an update from the cells the view
-// shows: an offset is from the cursor's cell, in view widths across and view
-// heights down, and nothing sighted reads zero.
-type scene struct {
-	// rock is the ceiling's and the floor's edge at the cursor's column, an eighth
-	// of the view ahead and a quarter ahead
-	rock    [3][2]float64
-	species [slots]sighted // the nearest species, nearest first
-	landing [slots]sighted // the nearest cells a raider is about to land on, or a Kraken to charge to
-	kraken  sighted        // the Kraken's body, its nearness that of the nearest cell it covers
-	reach   float64        // how far out its striking legs are, 0 to 1
-	column  float64        // -1 at the view's left edge, 1 at its right
-	energy  float64        // 0 with none, a half at energyHalf, toward 1
-	heat    float64        // 0 with none, a half at heatHalf, toward 1
-}
-
-// slots is how many of a kind a scene holds, the nearest ones: a network that reads
-// them all drops none of a cave's raiders, which fly three at most
-const slots = 3
-
-// sighted is one thing a scene holds: its offset, whether it is enraged, and its
-// nearness, a vector toward it that is 1 long beside the cursor and falls to
-// nothing a quarter of the view's width away, rows counted twice. A landing's
-// soon runs from 0 as its warning starts to 1 as the body leaves for it.
-type sighted struct {
-	x, y, enraged, nearX, nearY, soon float64
-}
-
-// sight is the thing at dx, dy cells from the cursor in a view width cells wide
-// and height tall; one on the cursor's own cell reads as beside it on the right
-func sight(dx, dy int, width, height float64, enraged bool) sighted {
-	s := sighted{x: float64(dx) / width, y: float64(dy) / height}
-	if enraged {
-		s.enraged = 1
-	}
-	reach, r := width/4, math.Sqrt(float64(dist2(dx, dy)))
-	switch {
-	case r == 0:
-		s.nearX = 1
-	case r < reach:
-		s.nearX, s.nearY = (1-r/reach)*float64(dx)/r, (1-r/reach)*float64(2*dy)/r
-	}
-	return s
-}
-
-// nearest collects the slots nearest things of a kind, nearest first, ties to the
-// first seen
-type nearest struct {
-	at   [slots]sighted
-	dist [slots]int
-	n    int
-}
-
-// add offers the thing at dist2 d
-func (k *nearest) add(d int, s sighted) {
-	i := k.n
-	if i < slots {
-		k.n++
-	} else if i--; d >= k.dist[i] {
-		return
-	}
-	for ; i > 0 && d < k.dist[i-1]; i-- {
-		k.at[i], k.dist[i] = k.at[i-1], k.dist[i-1]
-	}
-	k.at[i], k.dist[i] = s, d
-}
-
-// sensor is one input a network may read, an index into sensors
-type sensor uint8
-
-type sensorRow struct {
-	name string
-	read func(*scene) float64
-}
-
-// sensors is each sensor's name, as a [network] lists it, and its reading. The
-// second and third nearest of a kind carry their place in the name.
-var sensors = func() (rows []sensorRow) {
-	add := func(name string, read func(*scene) float64) { rows = append(rows, sensorRow{name, read}) }
-	for i, ahead := range [...]string{"", "_near", "_far"} {
-		add("ceiling"+ahead, func(s *scene) float64 { return s.rock[i][0] })
-		add("floor"+ahead, func(s *scene) float64 { return s.rock[i][1] })
-	}
-	for i, place := range [slots]string{"", "2", "3"} {
-		add("species"+place+"_x", func(s *scene) float64 { return s.species[i].x })
-		add("species"+place+"_y", func(s *scene) float64 { return s.species[i].y })
-		add("species"+place+"_enraged", func(s *scene) float64 { return s.species[i].enraged })
-		add("species"+place+"_near_x", func(s *scene) float64 { return s.species[i].nearX })
-		add("species"+place+"_near_y", func(s *scene) float64 { return s.species[i].nearY })
-		add("landing"+place+"_x", func(s *scene) float64 { return s.landing[i].x })
-		add("landing"+place+"_y", func(s *scene) float64 { return s.landing[i].y })
-		add("landing"+place+"_near_x", func(s *scene) float64 { return s.landing[i].nearX })
-		add("landing"+place+"_near_y", func(s *scene) float64 { return s.landing[i].nearY })
-		add("landing"+place+"_soon", func(s *scene) float64 { return s.landing[i].soon })
-	}
-	add("kraken_x", func(s *scene) float64 { return s.kraken.x })
-	add("kraken_y", func(s *scene) float64 { return s.kraken.y })
-	add("kraken_near_x", func(s *scene) float64 { return s.kraken.nearX })
-	add("kraken_near_y", func(s *scene) float64 { return s.kraken.nearY })
-	add("kraken_reach", func(s *scene) float64 { return s.reach })
-	add("column", func(s *scene) float64 { return s.column })
-	add("energy", func(s *scene) float64 { return s.energy })
-	add("heat", func(s *scene) float64 { return s.heat })
-	return rows
-}()
-
-// look reads the scene around the cursor at from, of the cells minX, minY to maxX,
-// maxY the view shows. Nearness is by dist2, ties to store order.
-func (m *mind) look(from component.PositionComponent, minX, minY, maxX, maxY int) scene {
-	w := m.ctx.World
-	width, height := float64(maxX-minX+1), float64(maxY-minY+1)
-	shown := func(x, y int) bool { return x >= minX && x <= maxX && y >= minY && y <= maxY }
-	var s scene
-
-	rock := w.Positions.Rock()
-	for i, ahead := range [...]int{0, (maxX - minX + 1) / 8, (maxX - minX + 1) / 4} {
-		top, bottom := minY-1, maxY+1
-		if rock != nil {
-			if col, ok := rock.Column(min(from.X+ahead, maxX)); ok {
-				top, bottom = max(top, col.Ceil-1), min(bottom, col.Floor)
-			}
-		}
-		s.rock[i] = [2]float64{float64(top-from.Y) / height, float64(bottom-from.Y) / height}
-	}
-
-	var species, landings nearest
-	w.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-		pos, ok := w.Positions.GetPosition(e)
-		if ok && shown(pos.X, pos.Y) && c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
-			species.add(dist2(pos.X-from.X, pos.Y-from.Y), sight(pos.X-from.X, pos.Y-from.Y, width, height, c.IsEnraged))
-		}
-		return true
-	})
-	w.Components.Behavior.Each(func(_ core.Entity, b *component.BehaviorComponent) bool {
-		if b.Landing && shown(b.TargetX, b.TargetY) {
-			landing := sight(b.TargetX-from.X, b.TargetY-from.Y, width, height, false)
-			landing.soon = b.Machine.Progress()
-			landings.add(dist2(b.TargetX-from.X, b.TargetY-from.Y), landing)
-		}
-		return true
-	})
-
-	covered := -1
-	w.Components.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
-		if tx, ty := int(k.TargetX), int(k.TargetY); (k.State == component.KrakenSpin || k.State == component.KrakenMove) && shown(tx, ty) {
-			landing := sight(tx-from.X, ty-from.Y, width, height, false)
-			if landing.soon = 1; k.State == component.KrakenSpin {
-				landing.soon = min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
-			}
-			landings.add(dist2(tx-from.X, ty-from.Y), landing)
-		}
-		header, _ := w.Components.Header.GetPtr(e)
-		body, ok := w.Positions.GetPosition(e)
-		if !ok || header == nil {
-			return true
-		}
-		for i := range header.MemberEntries {
-			pos, ok := w.Positions.GetPosition(header.MemberEntries[i].Entity)
-			if d := dist2(pos.X-from.X, pos.Y-from.Y); ok && shown(pos.X, pos.Y) && (covered < 0 || d < covered) {
-				cell := sight(pos.X-from.X, pos.Y-from.Y, width, height, false)
-				covered, s.kraken, s.reach = d, sight(body.X-from.X, body.Y-from.Y, width, height, false), k.AttackT
-				s.kraken.nearX, s.kraken.nearY = cell.nearX, cell.nearY
-			}
-		}
-		return true
-	})
-	s.species, s.landing = species.at, landings.at
-
-	own := w.Resources.Player.Entity
-	s.column = 2*float64(from.X-minX)/max(width-1, 1) - 1
-	if e, ok := w.Components.Energy.GetComponent(own); ok {
-		level := math.Abs(float64(e.Current))
-		s.energy = level / (level + energyHalf)
-	}
-	if h, ok := w.Components.Heat.GetComponent(own); ok {
-		s.heat = float64(h.Current) / float64(h.Current+heatHalf)
-	}
-	return s
-}
-
-// specialIntent is how a network asks for the special attack, as a key does
-var specialIntent, _ = input.IntentFor("fire_special", 1, "")
-
-// steer plays network i for an update. It points at the cell the outputs name: an
-// offset from the cursor's in view widths and heights, kept to the cells the view
-// shows, as a mouse reaches no further, and landed as PointAt lands. Before that it
-// asks for the special attack where special says to, as often as auto-fire would.
+// steer plays network i for an update: it reads the network's inputs through the
+// view around the cursor, then acts on each output in turn for as long as the
+// step has room
 func (m *mind) steer(i int) {
 	m.steered[i] = true
-	from, cursor := m.ctx.World.LocalCursor()
-	minX, minY, maxX, maxY, ok := m.ctx.World.Resources.Config.VisibleMapRect()
-	if !cursor || !ok || m.room < 1 {
+	if !m.frame() || m.room < 1 {
 		return
 	}
-	s := m.look(from, minX, minY, maxX, maxY)
-	out := m.nets[i].run(&s)
-	if out[outputSpecial] > 0 && m.tick >= m.special {
-		m.special = m.tick + uint64(max(parameter.AutoFireInterval/m.ctx.World.TickInterval(), 1))
-		if m.push(specialIntent); m.room < 1 {
+	n := m.nets[i]
+	n.read(m)
+	out := n.pass()
+	for _, o := range outputs {
+		if !o.act(m, out[o.at:o.at+o.units]) {
 			return
 		}
 	}
-	goalX := from.X + int(math.Round(min(max(out[outputX], -1), 1)*float64(maxX-minX+1)))
-	goalY := from.Y + int(math.Round(min(max(out[outputY], -1), 1)*float64(maxY-minY+1)))
-	x, y, ok := m.land(min(max(goalX, minX), maxX), min(max(goalY, minY), maxY), goalX, goalY)
-	if !ok || x == from.X && y == from.Y {
-		return
-	}
-	m.push(input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true})
+}
+
+// frame takes the view an update's readings go through, the cursor's cell and
+// the cells shown; false with no cursor on the map or nothing shown
+func (m *mind) frame() bool {
+	from, cursor := m.ctx.World.LocalCursor()
+	minX, minY, maxX, maxY, ok := m.ctx.World.Resources.Config.VisibleMapRect()
+	m.view = view{from: from, minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+		width: float64(maxX - minX + 1), height: float64(maxY - minY + 1)}
+	return cursor && ok
 }
 
 // compileSteer resolves the network a Steer names among the graph's, which a graph
