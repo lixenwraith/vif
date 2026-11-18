@@ -652,29 +652,19 @@ var sensors = func() (rows []sensor) {
 	return rows
 }()
 
-// The units of a network's outputs, in the order its weights hold them: the
-// offset Steer points at, across and down, and special
-const (
-	outputX = iota
-	outputY
-	outputSpecial
-	outputCount
-)
-
-// unitNames is indexed by unit: the table a graph writes an output's weights in
-var unitNames = [outputCount]string{outputX: "x", outputY: "y", outputSpecial: "special"}
-
 // outputs is what a network asks for, in the order Steer acts on it: a key ahead
-// of the move, as a hand presses one on its way. at is where an output's units
-// stand among a network's, and act reports whether the step has room for more.
+// of the move, as a hand presses one on its way. units names the tables a graph
+// writes an output's weights in, a unit each, which a network's weights hold in
+// the order of at, and act reports whether the step has room for more.
 var outputs = [...]struct {
-	name      string
-	at, units int
-	doc       string
-	act       func(m *mind, out []float64) bool
+	name  string
+	at    int
+	units []string
+	doc   string
+	act   func(m *mind, out []float64) bool
 }{
-	{"special", outputSpecial, 1, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial},
-	{"move", outputX, 2, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point},
+	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial},
+	{"move", 0, []string{"x", "y"}, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point},
 }
 
 // specialIntent is how a network asks for the special attack, as a key does
@@ -731,7 +721,7 @@ func Catalogue() (l Listing) {
 		l.Inputs = append(l.Inputs, Input{s.name, scales[s.scale].name, s.doc})
 	}
 	for _, o := range outputs {
-		l.Outputs = append(l.Outputs, Output{o.name, unitNames[o.at : o.at+o.units], o.doc})
+		l.Outputs = append(l.Outputs, Output{o.name, o.units, o.doc})
 	}
 	for _, s := range scales {
 		l.Scales = append(l.Scales, Scale{s.name, s.doc})

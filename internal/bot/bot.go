@@ -44,6 +44,8 @@ type Settings struct {
 	AutoFire         string `toml:"auto_fire"`
 	Learn            bool   `toml:"learn"`
 	RoundSeconds     int    `toml:"round_seconds"`
+	// Inputs are the sensors every network of the graph reads ahead of its own
+	Inputs []string `toml:"inputs"`
 }
 
 // Graph is one parsed bot document: its settings, the networks it declares, in
@@ -105,7 +107,7 @@ func (g *Graph) validate() error {
 		return fmt.Errorf("round_seconds must not be negative, got %d", g.Settings.RoundSeconds)
 	}
 	var err error
-	if g.nets, err = parseNetworks(g.doc["network"]); err != nil {
+	if g.nets, err = parseNetworks(g.doc["network"], g.Settings.Inputs); err != nil {
 		return fmt.Errorf("[network]: %w", err)
 	}
 	if g.Settings.Learn && len(g.nets) == 0 {
@@ -126,10 +128,21 @@ func (g *Graph) validate() error {
 }
 
 // machine compiles a fresh machine over the graph, the vocabulary registered first
-// so the loader resolves every name against it.
+// so the loader resolves every name against it, and each network's while built
+// of that machine's guards, for a Steer that names the network to ask.
 func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 	m := fsm.NewMachine[*mind]()
-	register(m, g.nets)
+	whiles := make([]fsm.GuardFunc[*mind], len(g.nets))
+	register(m, g.nets, whiles)
+	for i, n := range g.nets {
+		if n.while == nil {
+			continue
+		}
+		var err error
+		if whiles[i], err = m.Guard(n.while.Name, n.while.Args); err != nil {
+			return nil, fmt.Errorf("[network]: %s: while: %w", n.name, err)
+		}
+	}
 	if err := m.LoadScenarioFromMap(g.doc); err != nil {
 		return nil, err
 	}
@@ -139,7 +152,7 @@ func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 // Vocabulary lists the actions and guards a graph resolves, for -schema
 func Vocabulary() []dialect.Entry {
 	m := fsm.NewMachine[*mind]()
-	register(m, nil)
+	register(m, nil, nil)
 	return m.Vocabulary()
 }
 

@@ -225,8 +225,8 @@ func TestANetworkScansOnlyTheKindsItsInputsName(t *testing.T) {
 }
 
 // TestASteerAndASightingAllocateNothing: a kind's scan tells a visitor its network
-// or its mind already holds, so neither an update's readings nor a guard's
-// sighting leaves the collector anything.
+// or its mind already holds, and a network keeps what it reads and asks for, so
+// neither a Steer nor a guard's sighting leaves the collector anything.
 func TestASteerAndASightingAllocateNothing(t *testing.T) {
 	w, ctx := soloWorld(16, 10)
 	for i := range 3 {
@@ -241,16 +241,14 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 		w.Components.Header.SetComponent(e, component.HeaderComponent{MemberEntries: []component.MemberEntry{{Entity: leg}}})
 	})
 	d, _ := botFor(t, ctx, everySensor(), 0)
-	m, n := &d.mind, d.mind.nets[0]
+	m, order := &d.mind, []bound{{net: 0}}
 	if allocs := testing.AllocsPerRun(100, func() {
-		m.fresh = [targetCount]bool{}
-		m.frame()
-		n.read(m)
-		n.pass()
+		m.fresh, m.room = [targetCount]bool{}, 1
+		m.steer(order)
 		m.nearest(kindThreat)
 		m.nearest(kindKraken)
-	}); allocs != 0 {
-		t.Fatalf("reading every sensor and sighting two targets allocated %v times an update, want none", allocs)
+	}); allocs != 0 || !m.steered[0] {
+		t.Fatalf("a Steer by every sensor and two sightings allocated %v times an update, want none", allocs)
 	}
 }
 
@@ -544,7 +542,7 @@ output's weights in a table named for each of its units.
 
 `)
 	for _, row := range outputs {
-		item("", code(row.name)+", units "+code(unitNames[row.at:row.at+row.units]...)+": "+row.doc+".")
+		item("", code(row.name)+", units "+code(slices.Clone(row.units)...)+": "+row.doc+".")
 	}
 	return b.String()
 }

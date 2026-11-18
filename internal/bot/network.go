@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
@@ -25,33 +26,45 @@ const (
 	// the pass through the network takes the next, and populations start over
 	layoutVersion = 2
 
-	// biasName names an output's bias among its hand-written weights
-	biasName = "bias"
+	// biasName names a unit's bias among its written weights, and hiddenName an
+	// output's weights over the hidden units
+	biasName   = "bias"
+	hiddenName = "hidden"
 )
 
-// networkTable is one of a graph's [network.<name>] tables: the sensors the
-// network reads, in the order its weights take them, its hidden units, and any
-// weights written by hand, each output's from the inputs it names and its bias.
-// Every other weight is zero, and a network that learns needs none written.
+// networkTable is one of a graph's [network.<name>] tables, its weights aside: the
+// sensors it reads after the document's own, in the order its weights take them,
+// its hidden units and a table of weights for each, the outputs it has, special
+// and move when it lists none, and the guard that has it steer
 type networkTable struct {
-	Inputs  []string           `toml:"inputs"`
-	Hidden  int                `toml:"hidden"`
-	X       map[string]float64 `toml:"x"`
-	Y       map[string]float64 `toml:"y"`
-	Special map[string]float64 `toml:"special"`
+	Inputs  []string `toml:"inputs"`
+	Hidden  int      `toml:"hidden"`
+	Units   []any    `toml:"units"`
+	Outputs []string `toml:"outputs"`
+	While   *binding `toml:"while"`
+}
+
+// binding is a network's while, a guard as a tree names one
+type binding struct {
+	Name string         `toml:"name"`
+	Args map[string]any `toml:"args"`
 }
 
 // network is one policy of a graph: tanh hidden units and a direct term from the
-// inputs to its outputs. Its genes are each hidden unit's input weights and bias,
-// then each output's direct weights, hidden weights and bias.
+// inputs to its outputs' units. Its genes are each hidden unit's input weights and
+// bias, then each output unit's direct weights, hidden weights and bias.
 type network struct {
 	name   string
 	inputs []reading
-	wants  []want // the kinds its inputs read, each to the furthest rank one asks for
+	wants  []want   // the kinds its inputs read, each to the furthest rank one asks for
+	units  []string // its outputs' units, in the order its genes hold them
+	acts   []acting // its outputs, in the order Steer acts on them
+	while  *binding
 	hidden int
 	genes  []float64
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
+	out    []float64 // scratch: its units' sums
 	near   []nearest // scratch: the nearest things of each kind it wants
 }
 
@@ -59,6 +72,13 @@ type network struct {
 type want struct {
 	kind  kind
 	ranks int
+}
+
+// acting is an output a network has: where its units stand among the network's,
+// how many they are and what acts on them
+type acting struct {
+	at, units int
+	act       func(m *mind, out []float64) bool
 }
 
 // asks has the network read the ranks nearest of kind k and returns where among
@@ -72,10 +92,10 @@ func (n *network) asks(k kind, ranks int) int {
 	return slot
 }
 
-// parseNetworks reads a graph's [network] table, a network a name, in name order;
-// a name is part of a population's file name, so it is lowercase letters, digits
-// and underscores
-func parseNetworks(raw any) ([]*network, error) {
+// parseNetworks reads a graph's [network] table, a network a name, in name order,
+// each reading shared ahead of its own inputs; a name is part of a population's
+// file name, so it is lowercase letters, digits and underscores
+func parseNetworks(raw any, shared []string) ([]*network, error) {
 	tables, ok := raw.(map[string]any)
 	if raw != nil && !ok {
 		return nil, errors.New("holds a [network.<name>] table a network")
@@ -85,10 +105,11 @@ func parseNetworks(raw any) ([]*network, error) {
 		if name == "" || strings.Trim(name, "abcdefghijklmnopqrstuvwxyz0123456789_") != "" {
 			return nil, fmt.Errorf("name %q is not lowercase letters, digits and underscores", name)
 		}
-		if _, ok := tables[name].(map[string]any); !ok {
+		table, ok := tables[name].(map[string]any)
+		if !ok {
 			return nil, fmt.Errorf("%q is no table: a network is named, [network.<name>]", name)
 		}
-		n, err := parseNetwork(name, tables[name])
+		n, err := parseNetwork(name, table, shared)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -97,60 +118,162 @@ func parseNetworks(raw any) ([]*network, error) {
 	return nets, nil
 }
 
-// parseNetwork reads one [network.<name>] table
-func parseNetwork(name string, raw any) (*network, error) {
+// parseNetwork reads one [network.<name>] table, whose keys named for an output's
+// unit are that unit's weights
+func parseNetwork(name string, raw map[string]any, shared []string) (*network, error) {
+	table, weights := map[string]any{}, map[string]any{}
+	for key, value := range raw {
+		into := table
+		for _, o := range outputs {
+			if slices.Contains(o.units, key) {
+				into = weights
+			}
+		}
+		into[key] = value
+	}
 	var t networkTable
-	if err := dialect.DecodeInto(raw, &t); err != nil {
+	if err := dialect.DecodeInto(table, &t); err != nil {
 		return nil, err
 	}
-	if len(t.Inputs) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
-		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(t.Inputs), t.Hidden)
+	names := slices.Concat(shared, t.Inputs)
+	if len(names) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
+		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(names), t.Hidden)
 	}
-	n := &network{name: name, hidden: t.Hidden}
-	for i, name := range t.Inputs {
+	n := &network{name: name, hidden: t.Hidden, while: t.While}
+	for i, name := range names {
 		s := slices.IndexFunc(sensors, func(row sensor) bool { return row.name == name })
-		if s < 0 || slices.Contains(t.Inputs[:i], name) {
+		if s < 0 || slices.Contains(names[:i], name) {
 			return nil, fmt.Errorf("inputs: %q is no sensor, or is named twice", name)
 		}
 		n.inputs = append(n.inputs, sensors[s].bind(n))
 	}
+	had, err := n.have(t.Outputs)
+	if err != nil {
+		return nil, err
+	}
 	n.genes = make([]float64, n.geneCount())
-	n.in, n.near = make([]float64, len(n.inputs)+n.hidden), make([]nearest, len(n.wants))
-	for o, weights := range [outputCount]map[string]float64{outputX: t.X, outputY: t.Y, outputSpecial: t.Special} {
-		for _, name := range slices.Sorted(maps.Keys(weights)) {
-			i := slices.Index(t.Inputs, name)
-			if name == biasName {
-				i = len(n.inputs) + n.hidden
-			}
-			if w := weights[name]; i < 0 || math.Abs(w) > weightBound || w != w {
-				return nil, fmt.Errorf("weight %q = %g: not an input or %s, or past %g", name, w, biasName, weightBound)
-			}
-			n.genes[n.output(o)+i] = weights[name]
+	n.in, n.out, n.near = make([]float64, len(n.inputs)+n.hidden), make([]float64, len(n.units)), make([]nearest, len(n.wants))
+
+	for _, unit := range slices.Sorted(maps.Keys(weights)) {
+		o := slices.Index(n.units, unit)
+		if o < 0 {
+			return nil, fmt.Errorf("%s: the network lists no output of that unit", unit)
+		}
+		if err := n.write(n.genes[n.output(o):n.output(o+1)], weights[unit], names, true); err != nil {
+			return nil, fmt.Errorf("%s: %w", unit, err)
 		}
 	}
-	sum := sha256.Sum256(fmt.Appendf(nil, "%d %s %d", layoutVersion, strings.Join(t.Inputs, ","), t.Hidden))
+	if len(t.Units) > n.hidden {
+		return nil, fmt.Errorf("units: %d tables of weights for %d hidden units", len(t.Units), n.hidden)
+	}
+	for h, unit := range t.Units {
+		if err := n.write(n.genes[n.unit(h):n.unit(h+1)], unit, names, false); err != nil {
+			return nil, fmt.Errorf("units[%d]: %w", h, err)
+		}
+	}
+
+	// The outputs are named only where one is left out: the digest of a network
+	// with them all is the one its populations are kept under
+	layout := fmt.Appendf(nil, "%d %s %d", layoutVersion, strings.Join(names, ","), t.Hidden)
+	if len(had) < len(outputs) {
+		layout = fmt.Appendf(layout, " %s", strings.Join(had, ","))
+	}
+	sum := sha256.Sum256(layout)
 	n.digest = hex.EncodeToString(sum[:6])
 	return n, nil
 }
 
+// have gives the network the outputs listed, every one where none is, and returns
+// their names: their units in the order of at, as its genes hold them, and what
+// acts on each in the order Steer does
+func (n *network) have(listed []string) (had []string, err error) {
+	var at [len(outputs)]int
+	for place := range outputs {
+		for o, row := range outputs {
+			if row.at == place && (len(listed) == 0 || slices.Contains(listed, row.name)) {
+				at[o] = len(n.units)
+				n.units = append(n.units, row.units...)
+			}
+		}
+	}
+	for o, row := range outputs {
+		if len(listed) == 0 || slices.Contains(listed, row.name) {
+			had = append(had, row.name)
+			n.acts = append(n.acts, acting{at[o], len(row.units), row.act})
+		}
+	}
+	for i, name := range listed {
+		if !slices.Contains(had, name) || slices.Contains(listed[:i], name) {
+			return nil, fmt.Errorf("outputs: %q is no output, or is named twice", name)
+		}
+	}
+	return had, nil
+}
+
+// write sets the weights a table gives in one unit's row of genes: an input's by
+// its name, the row's last by bias, and those an output gives the hidden units,
+// in their order, by hidden
+func (n *network) write(row []float64, raw any, names []string, output bool) error {
+	table, ok := raw.(map[string]any)
+	if !ok {
+		return errors.New("is no table of weights")
+	}
+	for _, key := range slices.Sorted(maps.Keys(table)) {
+		at, values := slices.Index(names, key), []any{table[key]}
+		switch {
+		case key == biasName:
+			at = len(row) - 1
+		case key == hiddenName && output:
+			at = len(names)
+			if values, ok = table[key].([]any); !ok || len(values) > n.hidden {
+				return fmt.Errorf("%s: wants a weight a hidden unit, %d at most", hiddenName, n.hidden)
+			}
+		}
+		if at < 0 {
+			return fmt.Errorf("weight %q: not an input, %s or an output's %s", key, biasName, hiddenName)
+		}
+		for i, value := range values {
+			w, ok := floatValue(value)
+			if !ok || math.Abs(w) > weightBound || w != w {
+				return fmt.Errorf("weight %q = %v: no number within %g of zero", key, value, weightBound)
+			}
+			row[at+i] = w
+		}
+	}
+	return nil
+}
+
+// floatValue reads a number as the TOML parser produces one
+func floatValue(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int64:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	}
+	return 0, false
+}
+
 // geneCount is how many weights the layout holds
-func (n *network) geneCount() int { return n.output(outputCount) }
+func (n *network) geneCount() int { return n.output(len(n.units)) }
 
 // unit is where hidden unit h's genes start: its input weights, then its bias
 func (n *network) unit(h int) int { return h * (len(n.inputs) + 1) }
 
-// output is where output o's genes start: its direct weights, its hidden units'
-// and its bias
+// output is where output unit o's genes start: its direct weights, its hidden
+// units' and its bias
 func (n *network) output(o int) int { return n.unit(n.hidden) + o*(len(n.inputs)+n.hidden+1) }
 
 // blocks are the genes that work only together: each hidden unit's own with the
-// weights the outputs give it, and each output's direct weights with its bias
+// weights the outputs give it, and each output unit's direct weights with its bias
 func (n *network) blocks() [][]int {
 	width := len(n.inputs)
-	blocks := make([][]int, 0, n.hidden+outputCount)
+	blocks := make([][]int, 0, n.hidden+len(n.units))
 	for h := range n.hidden {
 		var block []int
-		for o := range outputCount {
+		for o := range n.units {
 			block = append(block, n.output(o)+width+h)
 		}
 		for i := range width + 1 {
@@ -158,7 +281,7 @@ func (n *network) blocks() [][]int {
 		}
 		blocks = append(blocks, block)
 	}
-	for o := range outputCount {
+	for o := range n.units {
 		block := []int{n.output(o) + width + n.hidden}
 		for i := range width {
 			block = append(block, n.output(o)+i)
@@ -171,7 +294,7 @@ func (n *network) blocks() [][]int {
 // playing is a network of its own for one driver, whose weights a learner replaces
 func (n *network) playing() *network {
 	c := *n
-	c.genes, c.in, c.near = slices.Clone(n.genes), make([]float64, len(n.in)), make([]nearest, len(n.near))
+	c.genes, c.in, c.out, c.near = slices.Clone(n.genes), make([]float64, len(n.in)), make([]float64, len(n.out)), make([]nearest, len(n.near))
 	return &c
 }
 
@@ -189,8 +312,8 @@ func (n *network) read(m *mind) {
 	}
 }
 
-// pass runs the inputs read through the network and returns its outputs
-func (n *network) pass() (out [outputCount]float64) {
+// pass runs the inputs read through the network and returns its units' sums
+func (n *network) pass() []float64 {
 	width := len(n.inputs)
 	in, hid := n.in[:width], n.in[width:]
 	for h := range hid {
@@ -201,32 +324,45 @@ func (n *network) pass() (out [outputCount]float64) {
 		}
 		hid[h] = math.Tanh(sum)
 	}
-	for o := range out {
+	for o := range n.out {
 		row := n.genes[n.output(o):]
 		sum := row[width+n.hidden]
 		for i, v := range n.in {
 			sum += row[i] * v
 		}
-		out[o] = sum
+		n.out[o] = sum
 	}
-	return out
+	return n.out
 }
 
-// steer plays network i for an update: it reads the network's inputs through the
-// view around the cursor, then acts on each output in turn for as long as the
-// step has room
-func (m *mind) steer(i int) {
-	m.steered[i] = true
-	if !m.frame() || m.room < 1 {
-		return
-	}
-	n := m.nets[i]
-	n.read(m)
-	out := n.pass()
-	for _, o := range outputs {
-		if !o.act(m, out[o.at:o.at+o.units]) {
+// bound is a network a Steer lists and the guard that has it steer, nil for one
+// that always does
+type bound struct {
+	net   int
+	while fsm.GuardFunc[*mind]
+}
+
+// steer plays, for an update, the first network of order whose binding holds: it
+// reads that network's inputs through the view around the cursor, then acts on
+// each of its outputs in turn for as long as the step has room
+func (m *mind) steer(order []bound) {
+	for _, b := range order {
+		if b.while != nil && !b.while(m, nil, nil) {
+			continue
+		}
+		m.steered[b.net] = true
+		if !m.frame() || m.room < 1 {
 			return
 		}
+		n := m.nets[b.net]
+		n.read(m)
+		out := n.pass()
+		for _, a := range n.acts {
+			if !a.act(m, out[a.at:a.at+a.units]) {
+				return
+			}
+		}
+		return
 	}
 }
 
@@ -240,17 +376,46 @@ func (m *mind) frame() bool {
 	return cursor && ok
 }
 
-// compileSteer resolves the network a Steer names among the graph's, which a graph
-// declaring one may leave out
-func compileSteer(nets []*network) func(*steerPayload) (int, error) {
-	return func(p *steerPayload) (int, error) {
-		i := slices.IndexFunc(nets, func(n *network) bool { return n.name == p.Network })
-		if p.Network == "" && len(nets) == 1 {
-			i = 0
+// compileSteer resolves the networks a Steer names among the graph's, one or a
+// list in the order they are tried, each with its binding of whiles; a graph
+// declaring one network may leave the name out, and one with no binding always
+// steers, so only a list's last may have none
+func compileSteer(nets []*network, whiles []fsm.GuardFunc[*mind]) func(*steerPayload) ([]bound, error) {
+	return func(p *steerPayload) ([]bound, error) {
+		names, ok := []string{""}, true
+		switch v := p.Network.(type) {
+		case nil:
+			if len(nets) == 1 {
+				names[0] = nets[0].name
+			}
+		case string:
+			names[0] = v
+		case []any:
+			names = make([]string, len(v))
+			for i := range v {
+				if names[i], ok = v[i].(string); !ok {
+					break
+				}
+			}
+		default:
+			ok = false
 		}
-		if i < 0 {
-			return 0, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", p.Network)
+		if !ok || len(names) == 0 {
+			return nil, fmt.Errorf("network must be a network's name or a list of them, got %v", p.Network)
 		}
-		return i, nil
+		order := make([]bound, len(names))
+		for k, name := range names {
+			i := slices.IndexFunc(nets, func(n *network) bool { return n.name == name })
+			switch {
+			case i < 0:
+				return nil, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", name)
+			case slices.Contains(names[:k], name):
+				return nil, fmt.Errorf("network %q is listed twice", name)
+			case k > 0 && order[k-1].while == nil:
+				return nil, fmt.Errorf("network %q never steers: %q before it has no while, so always does", name, names[k-1])
+			}
+			order[k] = bound{i, whiles[i]}
+		}
+		return order, nil
 	}
 }

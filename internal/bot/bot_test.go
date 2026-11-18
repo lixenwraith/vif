@@ -26,6 +26,8 @@ import (
 // author watching, so every reference, key and value is checked when it is parsed.
 func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 	const region = "\n[regions.play]\ninitial = \"A\"\n"
+	// a always steers and b only while the scenario's boss region runs
+	const two = "[network.a]\ninputs = [\"column\"]\n[network.b]\ninputs = [\"column\"]\nwhile = { name = \"InState\", args = { region = \"boss\" } }"
 	for _, tt := range []struct{ doc, want string }{
 		{"[systems]\ndisabled_systems = []" + region + "[states.A]", `unknown table "systems"`},
 		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `[bot]: unknown key "actions_per_minute"`},
@@ -98,8 +100,26 @@ on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" i
 		{"[network]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: "inputs" is no table: a network is named`},
 		{"[network.\"../a\"]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: name "../a" is not lowercase letters`},
 		{"[network.a]\ninputs = [\"column\", \"radar\"]" + region + "[states.A]", `[network]: a: inputs: "radar" is no sensor`},
-		{"[network.a]\ninputs = [\"column\"]\ny = { energy = 1.0 }" + region + "[states.A]", `[network]: a: weight "energy" = 1: not an input or bias`},
-		{"[network.a]\ninputs = [\"column\"]\nspecial = { column = 4.5 }" + region + "[states.A]", `[network]: a: weight "column" = 4.5`},
+		{"[network.a]\ninputs = [\"column\"]\ny = { energy = 1.0 }" + region + "[states.A]", `[network]: a: y: weight "energy": not an input`},
+		{"[network.a]\ninputs = [\"column\"]\nspecial = { column = 4.5 }" + region + "[states.A]", `[network]: a: special: weight "column" = 4.5`},
+		{"[network.a]\ninputs = [\"column\"]\nx = { column = \"far\" }" + region + "[states.A]", `weight "column" = far: no number within 4 of zero`},
+		{"[network.a]\ninputs = [\"column\"]\nhidden = 1\nx = { hidden = [1.0, 2.0] }" + region + "[states.A]", "x: hidden: wants a weight a hidden unit, 1 at most"},
+		{"[network.a]\ninputs = [\"column\"]\nhidden = 1\nunits = [{ column = 1.0 }, { column = 1.0 }]" + region + "[states.A]", "units: 2 tables of weights for 1 hidden units"},
+		{"[network.a]\ninputs = [\"column\"]\nhidden = 1\nunits = [{ hidden = [1.0] }]" + region + "[states.A]", `units[0]: weight "hidden": not an input`},
+		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\", \"jump\"]" + region + "[states.A]", `outputs: "jump" is no output`},
+		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]\nspecial = { bias = 1.0 }" + region + "[states.A]", "special: the network lists no output of that unit"},
+		{"[bot]\ninputs = [\"column\"]\n[network.a]\ninputs = [\"column\"]" + region + "[states.A]", `inputs: "column" is no sensor, or is named twice`},
+		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"StateTimeExceeds\", args = { ms = 5 } }" + region + "[states.A]", "[network]: a: while: guard 'StateTimeExceeds': reads the state it guards"},
+		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"Own\", args = { field = \"entity\" } }" + region + "[states.A]", "sees no payload"},
+		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"InState\" }" + region + "[states.A]", "while: guard 'InState': requires 'region'"},
+		{two + region + `[states.A]
+on_update = [{ action = "Steer", payload = { network = ["a", "c"] } }]`, `network "c" is none of the graph's`},
+		{two + region + `[states.A]
+on_update = [{ action = "Steer", payload = { network = ["b", "b"] } }]`, `network "b" is listed twice`},
+		{two + region + `[states.A]
+on_update = [{ action = "Steer", payload = { network = ["a", "b"] } }]`, `network "b" never steers: "a" before it has no while`},
+		{two + region + `[states.A]
+on_update = [{ action = "Steer", payload = { network = 3 } }]`, "network must be a network's name or a list of them"},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -626,30 +646,106 @@ y = { species_y = 1.0 }`), 2)
 	}
 }
 
-// TestANetworkAddsItsHiddenUnitsToItsDirectTerm: an output is its direct weights
-// over the inputs, its weights over the hidden units' tanh, and its bias.
+// TestANetworkAddsItsHiddenUnitsToItsDirectTerm: an output's unit is its direct
+// weights over the inputs, its weights over the hidden units' tanh, and its bias,
+// and a graph writes them all: a unit's by input name, hidden and bias, and each
+// hidden unit's as a table of units, none of which an input's name may be.
 func TestANetworkAddsItsHiddenUnitsToItsDirectTerm(t *testing.T) {
 	g, err := ParseGraph("net", []byte(steering(`inputs = ["column", "energy"]
 hidden = 1
-x = { column = 2.0, bias = 0.25 }
-y = { energy = -1.0 }
-special = { column = 1.0, bias = -0.5 }`)))
+units = [{ column = 1.0, energy = -2, bias = 0.5 }]
+x = { column = 2.0, bias = 0.25, hidden = [3.0] }
+y = { energy = -1.0, hidden = [-1] }
+special = { column = 1.0, bias = -0.5, hidden = [2.0] }`)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	n := g.nets[0].playing()
-	copy(n.genes[n.unit(0):], []float64{1, -2, 0.5}) // the unit's two input weights and its bias
-	n.genes[n.output(outputX)+2], n.genes[n.output(outputY)+2], n.genes[n.output(outputSpecial)+2] = 3, -1, 2
 	n.in[0], n.in[1] = 0.5, 0.25
 	out := n.pass()
 	unit := math.Tanh(1*0.5 - 2*0.25 + 0.5)
-	for o, want := range [outputCount]float64{2*0.5 + 3*unit + 0.25, -0.25 - unit, 0.5 + 2*unit - 0.5} {
+	for o, want := range []float64{2*0.5 + 3*unit + 0.25, -0.25 - unit, 0.5 + 2*unit - 0.5} {
 		if math.Abs(out[o]-want) > 1e-12 {
-			t.Fatalf("output %d is %g, want %g", o, out[o], want)
+			t.Fatalf("unit %s is %g, want %g", n.units[o], out[o], want)
 		}
 	}
-	if len(n.genes) != 1*(2+1)+outputCount*(2+1+1) {
-		t.Fatalf("%d genes for two inputs, one hidden unit and three outputs", len(n.genes))
+	if len(n.genes) != 1*(2+1)+3*(2+1+1) {
+		t.Fatalf("%d genes for two inputs, one hidden unit and three output units", len(n.genes))
+	}
+	for _, s := range sensors {
+		if s.name == biasName || s.name == hiddenName {
+			t.Fatalf("sensor %s takes the name a table of weights gives its %s", s.name, s.name)
+		}
+	}
+}
+
+// TestALayoutIsWhatItsNetworkReadsHidesAndAsksFor: a network reads the document's
+// inputs ahead of its own, and an output it does not list has no unit among its
+// genes; a population is kept under the digest of all three, which names the
+// outputs only where one is left out.
+func TestALayoutIsWhatItsNetworkReadsHidesAndAsksFor(t *testing.T) {
+	layout := func(bot, table string) *network {
+		t.Helper()
+		g, err := ParseGraph("net", []byte(strings.Replace(steering(table), "[bot]\n", "[bot]\n"+bot+"\n", 1)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g.nets[0]
+	}
+	own := layout("", `inputs = ["column", "energy"]`)
+	shared := layout(`inputs = ["column"]`, "inputs = [\"energy\"]\ny = { column = 1.5 }")
+	every := layout("", "inputs = [\"column\", \"energy\"]\noutputs = [\"move\", \"special\"]")
+	move := layout("", "inputs = [\"column\", \"energy\"]\noutputs = [\"move\"]")
+	if shared.digest != own.digest || every.digest != own.digest || move.digest == own.digest {
+		t.Fatalf("layouts %s as listed, %s with an input shared, %s with every output listed and %s with move alone: want the first three one layout and the last another",
+			own.digest, shared.digest, every.digest, move.digest)
+	}
+	if got := shared.genes[shared.output(1)]; got != 1.5 {
+		t.Fatalf("y's weight on the shared column is %g, want the 1.5 written", got)
+	}
+	if !slices.Equal(own.units, []string{"x", "y", "special"}) || !slices.Equal(move.units, []string{"x", "y"}) || len(move.genes) != 2*(2+1) {
+		t.Fatalf("units %v of every output and %v of move alone, in %d genes", own.units, move.units, len(move.genes))
+	}
+}
+
+// TestSteerPlaysTheFirstNetworkItListsWhoseWhileHolds: a Steer over a list asks
+// each network's while in turn, once an update, and plays the first that holds,
+// one with none always; InState holds while the scenario's region is in a state
+// it names.
+func TestSteerPlaysTheFirstNetworkItListsWhoseWhileHolds(t *testing.T) {
+	w, ctx := soloWorld(10, 2)
+	fight, asked := false, 0
+	w.Resources.Scenario.Bind(nil, func(region string, states []string) bool {
+		asked++
+		return fight && region == "boss" && slices.Equal(states, []string{"BossFight"})
+	})
+	d, rec := botFor(t, ctx, `[bot]
+actions_per_second = 20
+
+[network.fly]
+inputs = ["column"]
+x = { bias = 0.1 }
+
+[network.kraken]
+inputs = ["column"]
+x = { bias = -0.1 }
+while = { name = "InState", args = { region = "boss", states = ["BossFight"] } }
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "Steer", payload = { network = ["kraken", "fly"] } }]
+`, 2)
+	fight = true
+	if _, err := d.Step(); err != nil {
+		t.Fatal(err)
+	}
+	minX, _, maxX, _, _ := ctx.World.Resources.Config.VisibleMapRect()
+	reach := int(math.Round(0.1 * float64(maxX-minX+1)))
+	want := []input.Intent{{Type: input.IntentMouseMove, X: 10 + reach, Y: 2, MapCell: true}, {Type: input.IntentMouseMove, X: 10 - reach, Y: 2, MapCell: true}}
+	if !slices.Equal(rec.got, want) || asked != 2 {
+		t.Fatalf("steered %+v asking the scenario %d times, want fly's move right, then kraken's left once its state came, asked once an update", rec.got, asked)
 	}
 }
 
@@ -1243,16 +1339,14 @@ x = { bias = 0.1 }
 [network.kraken]
 inputs = ["column"]
 x = { bias = -0.1 }
+while = { name = "HasTarget", args = { target = "kraken" } }
 `+strings.Join(keys, "\n")+`
 
 [regions.play]
 initial = "A"
 
 [states.A]
-on_update = [
-    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
-    { action = "Steer", payload = { network = "fly" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
-]
+on_update = [{ action = "Steer", payload = { network = ["kraken", "fly"] } }]
 `))
 	if err != nil {
 		t.Fatal(err)
