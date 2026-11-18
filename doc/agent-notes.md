@@ -888,6 +888,12 @@ Libraries · Branches.
 - A scan a table calls is told its visitor as an interface whose value the mind
   or the network already holds: a closure handed through a table escapes, an
   allocation a scan, which `TestASteerAndASightingAllocateNothing` holds at none.
+- A steer is timed in the game, not in a loop: a field read of an entity after
+  its scan runs cold there, 15 to 20 ns where a benchmark over a standing scene
+  reads 2, as does the same read taken a second time in the game. Six such
+  inputs cost `cave`'s raid 0.11 µs a steer and its benchmark 0.01. The reading
+  is a scratch copy whose `mind.steer` times `read` and `pass`, both binaries on
+  one seed and tick.
 - What a population fields is played held out by learners attached not alone
   (`bot.Learn`, `alone` false), which field and never save, each on its file's
   path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at
