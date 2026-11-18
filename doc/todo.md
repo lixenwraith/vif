@@ -232,18 +232,22 @@ A scenario is to carry the bots made for its map, among its own files, and the
 user root's `bot/` to hold a player's alone: what they made, changed or trained.
 The catalogue a network reads through has landed with its rows
 ([Bot catalogue](bot-catalogue.md)): no `loot`, which homes on its owner and
-whose kinds are many, and `threat` a target alone. Decided (Lixen, 2026-11-18),
-a PR a step in this order:
+whose kinds are many, and `threat` a target alone. So has the bot document
+([Bots](bots.md#networks-and-learning)): a network's `while`, a `Steer` over a
+list, `InState`, `outputs`, `[bot] inputs` and every weight written. A copy of
+`cave`'s graph with `kraken` bound to `boss` in `BossFight`, the two steered as
+a list and their first inputs the document's, kept its populations' bytes on
+two seeds of 600,000 ticks, so its scenario needs no change and its score none.
+Decided (Lixen, 2026-11-18), a PR a step in this order:
 
-- **The bot document.** A network may say `while`, a guard binding it to a state
-  of the scenario, and `Steer` take an ordered list, the first whose binding
-  holds steering; `InState { region, states }` reads the scenario's own
-  machine. `cave`'s `kraken` bound to `boss` in `BossFight` kept its populations'
-  bytes on two seeds of 600,000 ticks, so its scenario needs no change and its
-  score none. With it `outputs`, which leaves one out, `[bot] inputs`, read
-  first by every network of the document, and weights written whole in TOML:
-  each output by input name with `hidden` and `bias`, and `[[units]]`. Whether
-  a scenario exposes values of its own is decided at this step.
+- **Cave's pay and its start weights**, a PR each, the pay first. A raider's
+  kill pays twelve times its hit points (`killWorth`, the data species'
+  branch), and `cave`'s graph writes the weights its networks start from, seven
+  of `raid` and five of `kraken`, no `special` and no hidden unit's: from
+  nothing the search does not reach the gun
+  ([below](#train-a-network-bot-live-in-cave)). The layout takes its next
+  version once for both, and each is shown the only change by a scratch build
+  without it keeping main's population bytes.
 - **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
   scenario: templates, which play only while the player has no bot of that name
   and whose weights are the author's start for a learner. With no name, `-bot`,
@@ -263,10 +267,31 @@ a PR a step in this order:
 - **Cave.** Its bot moves from the embedded graphs into its scenario, which
   takes the next `network.ProtocolVersion`; its networks, digests and
   population files stay.
+- **A move that names a place**, not built: `outputs` leaves room for one. An
+  output's units are its own and a network has those of the outputs it lists,
+  so a move to a place in the view takes `move`'s place in a list, where `move`
+  is an offset from the ship. Networks that list none keep `special` and
+  `move`. A five-minute probe from nothing left the edges, 42% of the raid in
+  the outer tenths where it was 96%, and scored no better.
 
-`learner.go` and a round's scoring are untouched throughout, so a learner in a
-run takes an import or a clear from its next run. The population file stays
-JSON: one cut short never parses, where a TOML one can read as fewer members.
+`learner.go` is untouched throughout, and a round's scoring but for that pay,
+so a learner in a run takes an import or a clear from its next run. The
+population file stays JSON: one cut short never parses, where a TOML one can
+read as fewer members.
+
+### Let a scenario expose values of its own to a bot
+
+- Priority: P3
+- Affected files: `internal/bot` (the catalogue), `internal/engine/resource.go`,
+  `internal/fsm`, `internal/resource/scenario.go`
+- Prerequisite: [a scenario's bots](#have-a-scenario-describe-the-bots-that-play-it)
+
+A network reads the world and its `while` the states of the scenario's regions,
+and neither a variable of the scenario's own, as `cave`'s `raid_rank` or
+`cave_speed`, though `ScenarioResource` lends them to behavior programs. An
+input over one needs a scale its scenario declares, and a bot listing it plays
+only scenarios that do, so it waits on a scenario carrying its bots and on
+`-check` holding a bot to its scenario.
 
 ### Train a network bot live in `cave`
 
@@ -1004,8 +1029,9 @@ reads and asks for. Missing:
   one of the scenario's own (a program, a loot kind).
 - **The document's shape.** The keys of the entry (`entryKeys` and the hand
   readers of `[map]`, `[content]` and `[navigation]`), of a region, a state, a
-  transition and an action's modifiers, and of a program and its `[prototype]`,
-  each with its kind, as `dialect.Fields` gives an argument's.
+  transition and an action's modifiers, of a program and its `[prototype]`, and
+  of a bot document's `[bot]` and `[network.<name>]`, each with its kind, as
+  `dialect.Fields` gives an argument's.
 - **The systems.** The names a scenario toggles and what each requires, which
   `-check` holds a scenario to and nothing lists.
 - **The status rows.** What `StatusIntCompare` and `StatusToVar` may read lives in
