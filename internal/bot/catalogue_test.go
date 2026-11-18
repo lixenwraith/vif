@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/machine"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // everySensor is a graph whose one network lists every sensor
@@ -47,9 +48,9 @@ func readings(t *testing.T, ctx *engine.GameContext) map[string]float64 {
 }
 
 // TestTheSensorsReadWhatTheViewShows: each sensor is an offset from the cursor
-// scaled to the view, of the three nearest of its kind the view shows, nearest
-// first, the rock's edges at the cursor's column and ahead, and zero for what is
-// not sighted.
+// scaled to the view, of the nearest of its kind the view shows, nearest first,
+// with what the kind knows of each, the rock's edges and the walls about the
+// cursor, and the bot's own; what is not sighted reads zero.
 func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	w, ctx := soloWorld(16, 10)
 	cfg := w.Resources.Config
@@ -59,7 +60,13 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	width, height := maxX-minX+1, maxY-minY+1
 	own := w.Resources.Player.Entity
 	w.Components.Energy.SetComponent(own, component.EnergyComponent{Current: -energyHalf})
-	w.Components.Heat.SetComponent(own, component.HeatComponent{Current: heatHalf})
+	w.Components.Heat.SetComponent(own, component.HeatComponent{Current: heatHalf, Overheat: parameter.HeatMaxOverheat / 4, EmberActive: true})
+	w.Components.Shield.SetComponent(own, component.ShieldComponent{Active: true})
+	w.Components.Boost.SetComponent(own, component.BoostComponent{Active: true, Remaining: time.Second, TotalDuration: 4 * time.Second})
+	// A gun on a path of four levels holds a charge a level
+	loadout := component.WeaponComponent{GunLevels: 4}
+	loadout.Charges[component.WeaponRod], loadout.Charges[component.WeaponGun] = parameter.WeaponMaxChargeRod/2, 3
+	w.Components.Weapon.SetComponent(own, loadout)
 
 	cols := make([]engine.RockColumn, cfg.MapWidth)
 	for x := range cols {
@@ -70,17 +77,21 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	w.Positions.SetRock(component.WallBlockCursor, 0, cols)
 
 	// Each kind has one at 9,10, nearer than any the view shows and left of it
-	species := func(x, y int, enraged bool) {
-		place(w, core.DomainShared, x, y, func(e core.Entity) {
+	species := func(x, y int, enraged bool) core.Entity {
+		return place(w, core.DomainShared, x, y, func(e core.Entity) {
 			w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, IsEnraged: enraged})
 		})
 	}
-	// and of the four the view shows the farthest is dropped
 	species(30, 10, false)
 	species(60, 10, false)
-	species(24, 12, true)
+	nearest := species(24, 12, true)
 	species(40, 6, false)
 	species(9, 10, true)
+	// The nearest has hit points, a body of several cells and a way it moves
+	body, _ := w.Components.Combat.GetPtr(nearest)
+	body.HitPoints = hitsHalf
+	w.Components.Header.SetComponent(nearest, component.HeaderComponent{MemberEntries: make([]component.MemberEntry, sizeHalf)})
+	w.Components.Kinetic.SetComponent(nearest, component.KineticComponent{Kinetic: physics.Kinetic{VelX: rateHalf, VelY: -3 * rateHalf}})
 	for i, b := range []component.BehaviorComponent{
 		{Landing: true, TargetX: 30, TargetY: 12},
 		{Landing: true, TargetX: 18, TargetY: 6, Machine: machine.Instance[component.BehaviorState]{Elapsed: 300 * time.Millisecond, Duration: 1200 * time.Millisecond}},
@@ -92,13 +103,35 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	// A Kraken's body at 40,14 covers the cells its members stand on: of those the
 	// view shows 22,12 is the nearest, 9,10 lying left of it
 	kraken := place(w, core.DomainShared, 40, 14, func(e core.Entity) {
-		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25})
+		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25, MaxHitPoints: 4 * hitsHalf})
+		w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: 3 * hitsHalf})
+		w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: -rateHalf}})
 		var header component.HeaderComponent
 		for _, cell := range [][2]int{{30, 14}, {22, 12}, {9, 10}} {
 			member := place(w, core.DomainShared, cell[0], cell[1], func(core.Entity) {})
 			header.MemberEntries = append(header.MemberEntries, component.MemberEntry{Entity: member})
 		}
 		w.Components.Header.SetComponent(e, header)
+	})
+
+	// A hostile bullet and missile, a player's own bullet nearer than either, another
+	// cursor, text, gold, a nugget, and a wall on the cursor's row
+	place(w, core.DomainShared, 20, 10, func(e core.Entity) {
+		w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
+		w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: -3 * rateHalf}})
+	})
+	place(w, core.DomainShared, 17, 10, func(e core.Entity) { w.Components.Bullet.SetComponent(e, component.BulletComponent{}) })
+	place(w, core.DomainShared, 16, 14, func(e core.Entity) { w.Components.Missile.SetComponent(e, component.MissileComponent{Hostile: true}) })
+	place(w, core.DomainShared, 26, 10, func(e core.Entity) { w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: 1}) })
+	place(w, core.DomainPlayer, 18, 8, func(e core.Entity) {
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
+	})
+	place(w, core.DomainPlayer, 16, 4, func(e core.Entity) {
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'g', Type: component.GlyphGold})
+	})
+	place(w, core.DomainPlayer, 12, 10, func(e core.Entity) { w.Components.Nugget.SetComponent(e, component.NuggetComponent{Char: 'n'}) })
+	place(w, core.DomainShared, 36, 10, func(e core.Entity) {
+		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
 	})
 
 	across := func(cells int) float64 { return float64(cells) / float64(width) }
@@ -114,9 +147,20 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		"ceiling": down(1 - 10), "floor": down(cfg.MapHeight - 3 - 10),
 		"ceiling_near": down(4 - 10), "floor_near": down(15 - 10),
 		"ceiling_far": down(7 - 10), "floor_far": down(12 - 10),
+		// The rock above and below, the view's left edge and the wall
+		"wall_up": down(1 - 10), "wall_down": down(cfg.MapHeight - 3 - 10),
+		"wall_left": across(minX - 1 - 16), "wall_right": across(36 - 16),
 		"species_enraged": 1, "landing_soon": 0.25, // a quarter of its warning has run
+		"species_hp": 0.5, "species_size": 0.5, "species_vx": 0.5, "species_vy": -0.75,
+		"species2_size": 1.0 / (1 + sizeHalf), "species3_size": 1.0 / (1 + sizeHalf), "species5_size": 1.0 / (1 + sizeHalf),
+		// A Kraken is a species too, the fourth nearest by its body
+		"species4_hp": 0.75, "species4_size": 3.0 / (3 + sizeHalf), "species4_vx": -0.5,
 		"kraken_x": across(40 - 16), "kraken_y": down(14 - 10), "kraken_reach": 0.25,
-		"column": 2*float64(16-minX)/float64(width-1) - 1, "energy": 0.5, "heat": 0.5,
+		"kraken_hp": 0.75, "kraken_health": 0.75, "kraken_vx": -0.5,
+		"bullet_vx": -0.75,
+		"column":    2*float64(16-minX)/float64(width-1) - 1, "row": 2*float64(10-minY)/float64(height-1) - 1,
+		"energy": 0.5, "heat": 0.5, "overheat": 0.25, "ember": 1, "shield": 1, "boost": 0.25,
+		"weapon_rod": 0.5, "weapon_gun": 0.75,
 	}
 	want["kraken_near_x"], want["kraken_near_y"] = near(22-16, 12-10)
 	// at is a thing dx, dy cells from the cursor, read under prefix
@@ -127,8 +171,16 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	at("species", 8, 2)
 	at("species2", 14, 0)
 	at("species3", 24, -4)
+	at("species4", 24, 4)
+	at("species5", 44, 0)
 	at("landing", 2, -4)
 	at("landing2", 14, 2)
+	at("bullet", 4, 0)
+	at("missile", 0, 4)
+	at("cursor", 10, 0)
+	at("glyph", 2, -2)
+	at("gold", 0, -6)
+	at("nugget", -4, 0)
 	differ := func(what string) {
 		t.Helper()
 		got := readings(t, ctx)
@@ -149,7 +201,7 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	at("landing3", 14, 2)
 	want["landing_soon"], want["landing2_soon"] = 0.8, 0.25
 	differ("with a Kraken charging")
-	if on := sight(0, 0, float64(width), float64(height), false); on[fieldNearX] != 1 || on[fieldNearY] != 0 {
+	if on := sight(0, 0, float64(width), float64(height)); on[fieldNearX] != 1 || on[fieldNearY] != 0 {
 		t.Fatalf("a thing on the cursor's cell reads a nearness of %g, %g, want it beside the cursor on the right", on[fieldNearX], on[fieldNearY])
 	}
 }
@@ -205,7 +257,7 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 // TestEveryInputReadsWithinItsScale: whatever the world holds, a sensor reads a
 // number from its scale's least to 1, bar the body of a Kraken, which may stand
 // past the view that shows one of its legs; and with nothing to sight, every
-// kind's sensors and the ship's counts read 0.
+// kind's sensors and what the bot holds read 0.
 func TestEveryInputReadsWithinItsScale(t *testing.T) {
 	past := map[string]bool{}
 	for _, row := range kinds {
@@ -233,10 +285,45 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 			}
 			w.Positions.SetRock(component.WallBlockCursor, 0, cols)
 		}
+		moving := func(e core.Entity) {
+			w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: rng.NormFloat64() * 100, VelY: rng.NormFloat64() * 100}})
+		}
+		w.Components.Shield.SetComponent(own, component.ShieldComponent{Active: rng.IntN(2) == 0})
+		w.Components.Boost.SetComponent(own, component.BoostComponent{Active: rng.IntN(2) == 0,
+			Remaining: time.Duration(rng.IntN(9)) * time.Second, TotalDuration: time.Duration(rng.IntN(5)) * time.Second})
+		loadout := component.WeaponComponent{GunLevels: rng.IntN(5)}
+		for t := range loadout.Charges {
+			loadout.Charges[t] = rng.IntN(20)
+		}
+		w.Components.Weapon.SetComponent(own, loadout)
 		for range rng.IntN(7) {
 			x, y := cell()
 			place(w, core.DomainShared, x, y, func(e core.Entity) {
-				w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, IsEnraged: rng.IntN(2) == 0})
+				w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm,
+					IsEnraged: rng.IntN(2) == 0, HitPoints: rng.IntN(5000) - 10})
+				w.Components.Header.SetComponent(e, component.HeaderComponent{MemberEntries: make([]component.MemberEntry, rng.IntN(70))})
+				moving(e)
+			})
+		}
+		for range rng.IntN(12) {
+			x, y := cell()
+			place(w, core.DomainShared, x, y, func(e core.Entity) {
+				switch rng.IntN(6) {
+				case 0:
+					w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
+					moving(e)
+				case 1:
+					w.Components.Missile.SetComponent(e, component.MissileComponent{Hostile: true})
+					moving(e)
+				case 2:
+					w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: 1})
+				case 3:
+					w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphType(rng.IntN(5))})
+				case 4:
+					w.Components.Nugget.SetComponent(e, component.NuggetComponent{Char: 'n'})
+				case 5:
+					w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
+				}
 			})
 		}
 		for range rng.IntN(5) {
@@ -249,8 +336,10 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 			x, y := cell()
 			tx, ty := cell()
 			place(w, core.DomainShared, x, y, func(e core.Entity) {
-				w.Components.Kraken.SetComponent(e, component.KrakenComponent{State: component.KrakenState(rng.IntN(4)),
+				w.Components.Kraken.SetComponent(e, component.KrakenComponent{State: component.KrakenState(rng.IntN(4)), MaxHitPoints: rng.IntN(300),
 					StateRemaining: time.Duration(rng.Int64N(int64(2 * parameter.KrakenSpinDuration))), TargetX: float64(tx) + 0.5, TargetY: float64(ty) + 0.5, AttackT: rng.Float64()})
+				w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: rng.IntN(400)})
+				moving(e)
 				var header component.HeaderComponent
 				for range rng.IntN(12) {
 					mx, my := cell()
@@ -267,11 +356,20 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 		}
 	}
 
-	// The rock's edges are the view's own rows there, and the column is the cursor's
+	// The terrain is then the view's own edges, and the cursor still has its place
+	terrain := map[string]bool{}
+	for _, edge := range edges {
+		for _, place := range places {
+			terrain[edge.name+place.suffix] = true
+		}
+	}
+	for _, wall := range walls {
+		terrain[wall.name] = true
+	}
 	_, ctx := soloWorld(10, 2)
 	got := readings(t, ctx)
 	for _, s := range sensors {
-		if v := got[s.name]; v != 0 && s.scale != scalePlace && s.scale != scaleDown {
+		if v := got[s.name]; v != 0 && s.scale != scalePlace && !terrain[s.name] {
 			t.Errorf("with nothing to sight %s reads %g, want 0", s.name, v)
 		}
 	}
@@ -316,6 +414,9 @@ func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
 	}
 	for _, row := range places {
 		rows["place "+strconv.Quote(row.suffix)] = row.doc
+	}
+	for _, row := range walls {
+		rows["wall "+row.name] = row.doc
 	}
 	for _, row := range self {
 		rows["own "+row.name] = row.doc
@@ -395,8 +496,15 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 ### Fields
 
 `)
+	// scaled names a row's scale, with the half a count or a rate reads at
+	scaled := func(s scale, half int) string {
+		if half > 0 {
+			return scales[s].name + " at " + strconv.Itoa(half)
+		}
+		return scales[s].name
+	}
 	for _, row := range fields {
-		item("", code(row.name)+", "+scales[row.scale].name+": "+row.doc+".")
+		item("", code(row.name)+", "+scaled(row.scale, row.half)+": "+row.doc+".")
 	}
 	b.WriteString("\n### The rock\n\n")
 	names := []string{}
@@ -412,13 +520,17 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 		}
 		item("", code(at...)+": "+row.doc+".")
 	}
+	b.WriteString("\n### Walls\n\nEach is an offset from the cursor, to the cell past the view's edge where none\nit shows blocks:\n\n")
+	for _, row := range walls {
+		scale := scaleDown
+		if row.dx != 0 {
+			scale = scaleAcross
+		}
+		item("", code(row.name)+", "+scales[scale].name+": "+row.doc+".")
+	}
 	b.WriteString("\n### The bot's own\n\n")
 	for _, row := range self {
-		scale := scales[row.scale].name
-		if row.half > 0 {
-			scale += " at " + strconv.Itoa(row.half)
-		}
-		item("", code(row.name)+", "+scale+": "+row.doc+".")
+		item("", code(row.name)+", "+scaled(row.scale, row.half)+": "+row.doc+".")
 	}
 	b.WriteString("\n### Scales\n\n")
 	for _, row := range scales {

@@ -132,3 +132,12 @@ type WeaponComponent struct {
 	GunPath   [parameter.GunPathMax]GunLevel
 	GunLevels int
 }
+
+// ChargeCap is the charges the loadout holds of a kind at most: its spec's, or a
+// charge per level of the path a gun climbs
+func (w *WeaponComponent) ChargeCap(t WeaponType) int {
+	if w.GunLevels > 0 && WeaponSpecs[t].Delivery == DeliveryTracer {
+		return w.GunLevels
+	}
+	return WeaponSpecs[t].MaxCharges
+}

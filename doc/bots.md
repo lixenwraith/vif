@@ -360,13 +360,15 @@ on_update = [
   of a file's name.
 - `inputs`: the sensors read, in the order the weights take them, each named in
   the [catalogue](bot-catalogue.md#inputs): the nearest of a kind by rank and
-  field (`species_x`, `species2_near_y`, `landing3_soon`), the rock's edges at
-  the cursor's column and ahead, and the bot's own column, energy and heat.
-  Each reads the cells the view shows and keeps to its scale, and what is not
-  sighted reads 0. A `Steer` scans the world for the kinds its network's inputs
-  name and for no other, and allocates nothing: in `cave` its reading and its
-  pass take 1.3 µs while raiders fly and 4 µs with a Kraken up, whose members
-  it walks, of a tick's 190.
+  field (`species_x`, `species2_near_y`, `bullet_vx`, `landing3_soon`), the
+  rock's edges at the cursor's column and ahead, the walls about the cursor,
+  and the bot's own, from its place in the view to its weapons. Each reads the
+  cells the view shows and keeps to its scale, and what is not sighted reads 0.
+  A `Steer` scans the world for the kinds its network's inputs name and for no
+  other, and allocates nothing: in `cave` its reading and its pass take 1.2 µs
+  while raiders fly and 3.7 µs with a Kraken up, whose members it walks, of a
+  tick's 167. What a kind knows is read of a thing's entity as an input asks, a
+  lookup each.
   - An offset grows with distance, so only a nearness lets one weight back off
     what is close and leave alone what is far.
   - `cave` flies three raiders at most and any may charge or teleport, so its

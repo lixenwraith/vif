@@ -13,15 +13,20 @@ its `target`, nearest the cursor over the whole world; a network reads the
 nearest ones the view shows, each by its fields.
 
 - `glyph`: typeable text: a glyph neither gold nor part of a composite. A
-  target.
-- `gold`: a gold sequence member. A target.
-- `nugget`: a nugget. A target.
+  target. A network reads the 8 nearest, each by `x`, `y`, `near_x`, `near_y`.
+- `gold`: a gold sequence member. A target. A network reads the 8 nearest, each
+  by `x`, `y`, `near_x`, `near_y`.
+- `nugget`: a nugget. A target. A network reads the 8 nearest, each by `x`, `y`,
+  `near_x`, `near_y`.
 - `species`: a combat entity other than a cursor or a tower. A target. A network
-  reads the 3 nearest, each by `x`, `y`, `near_x`, `near_y`, `enraged`.
+  reads the 8 nearest, each by `x`, `y`, `near_x`, `near_y`, `enraged`, `hp`,
+  `size`, `vx`, `vy`.
 - `kraken`: a Kraken, by its body, which may stand past a view that shows a leg;
   its nearness is that of the nearest cell it covers, legs and all. A target. A
-  network reads the nearest, by `x`, `y`, `near_x`, `near_y`, `reach`.
-- `cursor`: another participant's cursor. A target.
+  network reads the nearest, by `x`, `y`, `near_x`, `near_y`, `reach`, `hp`,
+  `health`, `vx`, `vy`.
+- `cursor`: another participant's cursor. A target. A network reads the 8
+  nearest, each by `x`, `y`, `near_x`, `near_y`.
 - `threat`: a species, a hostile bullet or a hostile missile, all weighted
   alike. A target.
 - `button`: a scenario's button, or with key the one on that key, at its cell
@@ -29,8 +34,12 @@ nearest ones the view shows, each by its fields.
 - `random`: a cell the view shows; PointAt only. A target.
 - `landing`: a cell something is about to land on: a raider's landing marker,
   where its charge or teleport ends, or the cell a Kraken's charge ends on while
-  it spins up and charges. A network reads the 3 nearest, each by `x`, `y`,
+  it spins up and charges. A network reads the 8 nearest, each by `x`, `y`,
   `near_x`, `near_y`, `soon`.
+- `bullet`: a hostile bullet. A network reads the 8 nearest, each by `x`, `y`,
+  `near_x`, `near_y`, `vx`, `vy`.
+- `missile`: a hostile missile. A network reads the 8 nearest, each by `x`, `y`,
+  `near_x`, `near_y`, `vx`, `vy`.
 
 ## Inputs
 
@@ -48,6 +57,11 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 - `soon`, share: how soon it lands, from 0 as its warning starts to 1 as the
   body leaves for it.
 - `reach`, share: how far out its striking legs are.
+- `hp`, half at 32: the hit points it has left.
+- `health`, share: the hit points it has left, of those it rose with.
+- `size`, half at 16: the cells its body covers.
+- `vx`, rate at 20: the cells a second it moves across.
+- `vy`, rate at 20: the cells a second it moves down.
 
 ### The rock
 
@@ -62,12 +76,36 @@ Each is read at a column, by what its name ends in:
 - `ceiling_near`, `floor_near`: the column an eighth of the view ahead.
 - `ceiling_far`, `floor_far`: the column a quarter of the view ahead.
 
+### Walls
+
+Each is an offset from the cursor, to the cell past the view's edge where none
+it shows blocks:
+
+- `wall_up`, down: the first cell above the cursor that blocks it.
+- `wall_down`, down: the first cell below the cursor that blocks it.
+- `wall_left`, across: the first cell left of the cursor that blocks it.
+- `wall_right`, across: the first cell right of the cursor that blocks it.
+
 ### The bot's own
 
 - `column`, place: the cursor's place across the view, -1 at its left edge and 1
   at its right.
+- `row`, place: the cursor's place down the view, -1 at its top edge and 1 at
+  its bottom.
 - `energy`, half at 1000: its energy, whichever its polarity.
 - `heat`, half at 10: its heat.
+- `overheat`, share: its overheat, of what lights its ember.
+- `ember`, flag: 1 while its ember burns.
+- `shield`, flag: 1 while its shield is up.
+- `boost`, share: its boost, by the time it has left of what it was lit for.
+- `weapon_rod`, share: its rod, by the charges it holds of those it may.
+- `weapon_launcher`, share: its launcher, by the charges it holds of those it
+  may.
+- `weapon_disruptor`, share: its disruptor, by the charges it holds of those it
+  may.
+- `weapon_turret`, share: its turret, by the charges it holds of those it may.
+- `weapon_emitter`, share: its emitter, by the charges it holds of those it may.
+- `weapon_gun`, share: its gun, by the charges it holds of those it may.
 
 ### Scales
 
@@ -83,6 +121,8 @@ Each is read at a column, by what its name ends in:
 - share, 0 to 1: how much of its full it stands at.
 - half, 0 to 1: a count c read as c/(c+half): 0 with none and toward 1, a half
   at the count its row names.
+- rate, -1 to 1: a rate v read as v/(|v|+half): 0 at rest and toward 1 either
+  way, a half at the rate its row names.
 
 ## Outputs
 
