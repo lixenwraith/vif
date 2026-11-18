@@ -126,19 +126,24 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	if driver == nil {
 		return bot.Stats{}, err
 	}
-	stats := driver.Stats()
-	stats.Games = games
 	// Where the graph ended the run, the games beside play to the tick its own
 	// reached, so what the run kept follows from its seed
 	end := uint64(0)
 	if quit {
-		end = stats.Ticks
+		end = driver.Stats().Ticks
 	}
 	driver.End(end)
-	err = errors.Join(err, beside.close(&stats))
+	if beside != nil {
+		beside.done.Wait()
+	}
 	for _, l := range learners {
 		err = errors.Join(err, l.Close())
 	}
+	// Read once every game has stopped and the learners have closed, so the run
+	// reports what its files hold
+	stats := driver.Stats()
+	stats.Games = games
+	err = errors.Join(err, beside.close(&stats))
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "games", games, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,

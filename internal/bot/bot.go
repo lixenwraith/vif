@@ -410,9 +410,13 @@ func (d *Driver) Step() (more bool, err error) {
 		if d.stats.Ticks >= g.end.Load() {
 			return false, nil
 		}
-		// A game that plays no further holds none of the rest back
+		// A game that plays no further holds none of the rest back, and the run's
+		// own ends the learning at its tick before a game waiting on it can pass it
 		defer func() {
 			if !more || err != nil {
+				if d.game == 0 {
+					d.End(d.stats.Ticks)
+				}
 				g.reach(d.game, gone)
 			}
 		}()
@@ -484,10 +488,10 @@ func (d *Driver) count() {
 }
 
 // Learn has each driver play the learners' genomes on its networks, a round each,
-// as one of the games that learn from them together. While alone reports the
-// bots play by themselves every learner plays a candidate, scored by the ticks
-// of the round that are its network's. Otherwise, as in a session, each plays
-// what it fields.
+// as one of the games that learn from them together, the first the run's own,
+// whose end is theirs. While alone reports the bots play by themselves every
+// learner plays a candidate, scored by the ticks of the round that are its
+// network's. Otherwise, as in a session, each plays what it fields.
 func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
 	var order *games
 	if len(drivers) > 1 {

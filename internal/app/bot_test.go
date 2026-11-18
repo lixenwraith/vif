@@ -352,6 +352,7 @@ func TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame(t *testing.T) {
 // learning run, each a run of its own on a seed drawn from the run's, teach one
 // population a network, and one seed and one count of games keep the same
 // populations however the cores ran them, to the tick the graph ended the run at.
+// What the run reports of its learners is what those files hold.
 func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
@@ -403,6 +404,10 @@ on_enter = [{ action = "Intent", payload = { name = "quit" } }]
 	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks > games*uint64(ticks+2) || raid.Scored < games {
 		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d its graph or the run's own quit at, and a round of each scored",
 			st.Games, st.Ticks, raid.Scored, games, ticks)
+	}
+	var file struct{ Rounds int }
+	if err := json.Unmarshal([]byte(first), &file); err != nil || file.Rounds != raid.Rounds {
+		t.Fatalf("the run reports %d rounds of raid and its file holds %d, err %v", raid.Rounds, file.Rounds, err)
 	}
 	if _, second := kept("second"); second != first {
 		t.Fatal("two runs of one seed and one count of games kept populations that differ")

@@ -1435,15 +1435,21 @@ func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
 	}
 }
 
-// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game
-// reached, and the games beside it, which play on as their cores allow, stop at
-// that tick and score no round past it, so what the run kept follows from its seed.
+// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game's
+// graph quit at, and the games beside it, which play on as their cores allow,
+// stop at that tick and score no round past it, however late the run says so
+// again, so what the run kept follows from its seed.
 func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 	const games, ticks = 4, 300
-	never := func(int) int { return 0 }
-	turns, rounds := together(t, games, never, inTurn(ticks))
+	quit := func(game int) int {
+		if game == 0 {
+			return ticks
+		}
+		return 0
+	}
+	turns, rounds := together(t, games, quit, inTurn(0))
 	for range 20 {
-		beside, scored := together(t, games, never, func(drivers []*Driver) {
+		beside, scored := together(t, games, quit, func(drivers []*Driver) {
 			var wg sync.WaitGroup
 			for _, d := range drivers[1:] {
 				wg.Go(func() {
@@ -1451,10 +1457,10 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 					}
 				})
 			}
-			for range ticks {
-				drivers[0].Step()
+			for more := true; more; more, _ = drivers[0].Step() {
 				runtime.Gosched()
 			}
+			time.Sleep(200 * time.Microsecond) // a run closes its game before it ends the learning
 			drivers[0].End(ticks)
 			wg.Wait()
 		})
