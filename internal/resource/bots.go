@@ -219,6 +219,9 @@ func createBot(o Options, sc Scenario, dir, name string, rest []string) (string,
 func importBot(o Options, sc Scenario, dir, source, name string, networks []string) (string, error) {
 	path := filepath.Join(dir, name+".toml")
 	data, err := os.ReadFile(path)
+	if !paths.IsKeymapName(name) {
+		err = errors.New("a bot is named, not given by a path")
+	}
 	if err != nil {
 		return "", fmt.Errorf("bot %s is no bot of yours to write into; create it first: %w", name, err)
 	}

@@ -672,8 +672,10 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || !strings.Contains(told, "mine.flight.fly") {
 		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and the population that still plays", w, told, err)
 	}
-	if told, err := verb("import", "pilot", "none"); err == nil {
-		t.Errorf("import made a bot that was not there: %s", told)
+	for _, name := range []string{"none", "../bot/mine"} {
+		if told, err := verb("import", "pilot", name); err == nil {
+			t.Errorf("import wrote into %s, no bot of the player's by name: %s", name, told)
+		}
 	}
 	if told, err := verb("import", "pilot", "mine", "raid"); err == nil {
 		t.Errorf("import took a network its source lacks: %s", told)
