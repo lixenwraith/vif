@@ -164,7 +164,11 @@ func listBots(o Options, sc Scenario, dir string) []string {
 			}
 			learned = append(learned, told)
 		}
-		if len(learned) == 0 {
+		switch {
+		case dir == "": // a host that keeps no population
+			lines = append(lines, fmt.Sprintf("%s (%s)", name, whose[i]))
+			continue
+		case len(learned) == 0:
 			learned = []string{"nothing learned in " + sc.Shown()}
 		}
 		lines = append(lines, fmt.Sprintf("%s (%s): %s", name, whose[i], strings.Join(learned, "; ")))
