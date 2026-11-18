@@ -401,11 +401,12 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 
 - Each network has a learner of its own, the `StreamingEngine` of
   `lixenwraith/genetic` ([AI §3](ai-physics-and-evolution.md#3-genetic-library))
-  with one evaluation in flight: an archive of the 32 best genomes scored. A
-  population's first 32 rounds play genomes drawn at random, each weight three
-  hundredths of its bound about zero; after them children are mostly one
-  parent's, mixed a hidden unit or an output at a time, three in a hundred of
-  their weights stepped. A member's score is the mean of its rounds, and every
+  with one evaluation in flight: an archive of the 32 best genomes scored.
+  Where its graph writes no weight a population's first 32 rounds play genomes
+  drawn at random, each weight three hundredths of its bound about zero; where
+  it writes some the population starts from them alone. Children are mostly
+  one parent's, mixed a hidden unit or an output at a time, three in a hundred
+  of their weights stepped. A member's score is the mean of its rounds, and every
   third candidate is the best member short of eight rounds again, so what tops
   the archive is proved or falls.
 - The learners explore in turn. One plays a candidate and the rest the members

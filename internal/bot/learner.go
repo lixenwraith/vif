@@ -16,9 +16,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// What the learner searches by. A population's first learnPool rounds play genomes
-// drawn at random, each weight learnSpread of its bound about the one written by
-// hand, zero where none is. A step is a share of a weight's range: a new population starts at
+// What the learner searches by. Where its graph writes no weight a population's
+// first learnPool rounds play genomes drawn at random, each weight learnSpread of
+// its bound about zero. A step is a share of a weight's range: a new population starts at
 // learnStep and settles at learnStepFloor. Every learnRepeat-th candidate is an
 // archive member again, a member with learnProven rounds behind its score is one a
 // run fields, and learnRecent rounds are what the recent score looks back over.
@@ -84,19 +84,20 @@ type Learner struct {
 	layout string
 	seed   []float64
 
-	slots  []slot         // what each game has in play
-	rng    *rand.Rand     // what a population's first genomes are drawn from
-	drawn  int            // candidates taken
-	seeded bool           // the hand-written genome has played this run, or holds no weight to try
-	scored int            // rounds scored this run
-	rounds int            // and since the population began
-	recent float64        // their mean, the latest learnRecent weighing most
-	step   float64        // the mutation step in force
-	born   map[uint64]int // the round each archive member entered at, by its genes
-	saved  time.Time
-	dirty  bool
-	failed error // what keeps the population from its store, which Close reports
-	untold error // what Lost has yet to hear
+	slots   []slot         // what each game has in play
+	rng     *rand.Rand     // what a population's first genomes are drawn from
+	drawn   int            // candidates taken
+	seeded  bool           // the hand-written genome has played this run, or holds no weight to try
+	written bool           // the graph writes weights, which a population then starts from
+	scored  int            // rounds scored this run
+	rounds  int            // and since the population began
+	recent  float64        // their mean, the latest learnRecent weighing most
+	step    float64        // the mutation step in force
+	born    map[uint64]int // the round each archive member entered at, by its genes
+	saved   time.Time
+	dirty   bool
+	failed  error // what keeps the population from its store, which Close reports
+	untold  error // what Lost has yet to hear
 
 	// stats is the progress as the last round left it, which any goroutine reads
 	// while the games play
@@ -149,7 +150,8 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
 		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
 	l.rng = rand.New(rand.NewPCG(vmath.DeriveSeed(seed, "bot.learner."+name), vmath.DeriveSeed(seed, "bot.learner.draw")))
-	l.seeded = !slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
+	l.written = slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
+	l.seeded = !l.written
 	l.stats.Store(&LearnStats{Network: name})
 	var kept population
 	if store != nil {
@@ -203,10 +205,20 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	return l, nil
 }
 
-// draw is a genome drawn at random about the hand-written one
+// draw is a genome to start from: every weight drawn at random where the graph
+// writes none, and where it writes some, those with a child's share stepped.
+// Every weight of a written start drawn about it filled the archive with copies
+// that flew worse, and the start was lost among them.
 func (l *Learner) draw() []float64 {
 	genes := slices.Clone(l.seed)
+	one := -1
+	if l.written {
+		one = l.rng.IntN(len(genes)) // a start handed back unchanged would be no candidate
+	}
 	for i := range genes {
+		if l.written && i != one && l.rng.Float64() >= learnRate {
+			continue
+		}
 		genes[i] = min(max(genes[i]+l.rng.NormFloat64()*learnSpread*weightBound, -weightBound), weightBound)
 	}
 	return genes
@@ -271,7 +283,7 @@ func (l *Learner) take(game int, explore bool) []float64 {
 		switch {
 		case !l.seeded:
 			genes, s.id = slices.Clone(l.seed), l.engine.BeginEvaluation(l.seed)
-		case l.rounds+l.flying() < learnPool:
+		case !l.written && l.rounds+l.flying() < learnPool:
 			genes = l.draw()
 			s.id = l.engine.BeginEvaluation(genes)
 		case l.drawn%learnRepeat == 0:
