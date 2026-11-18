@@ -21,6 +21,7 @@ import (
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -85,23 +86,22 @@ func RunScript(cfg Config, host Host, path string) (journal.ScriptStats, error) 
 }
 
 // RunBot plays this instance's own seat with a bot graph: a name or a path, which
-// cfg.Resources resolves. It is otherwise a script run, and presented, it keeps real
-// time unless -speed says otherwise. It reports its counters however it stops,
-// summed over the games a learning run played (BotGames).
+// cfg.Resources and its scenario resolve, or none for the scenario's own bot. It is
+// otherwise a script run, and presented, it keeps real time unless -speed says
+// otherwise. It reports its counters however it stops, summed over the games a
+// learning run played (BotRun).
 func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
-	graph, err := membership.LoadBotGraph(cfg.Resources, spec)
+	graph, games, err := botRun(cfg, spec)
 	if err != nil {
 		return bot.Stats{}, err
 	}
-	games, err := botGames(cfg, graph)
-	if err != nil {
-		return bot.Stats{}, err
-	}
-	name := graph.Name
+	name := spec
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
-	cfg.Play = botPlay(cfg.Play, graph)
+	if graph != nil {
+		name, cfg.Play = graph.Name, botPlay(cfg.Play, graph)
+	}
 	run := runConfig{Config: cfg, host: host}
 	var (
 		driver   *bot.Driver
@@ -110,6 +110,16 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 		beside   *sideGames
 	)
 	quit, err := runDriven(run, "bot", name, func(a *App) (pacedSource, error) {
+		if graph == nil {
+			// The session joined carries the scenario, and so its bots
+			var err error
+			if graph, err = membership.LoadBotGraph(a.cfg.Resources, a.scenario, spec); err != nil {
+				return nil, err
+			}
+			name = graph.Name
+			a.world.RunSafe(func() { a.cfg.Play = botPlay(a.cfg.Play, graph) })
+			a.applyPlay()
+		}
 		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
 		driver, played = d, a
 		if err == nil {
@@ -152,27 +162,46 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	return stats, err
 }
 
-// BotGames is how many games RunBot plays spec's graph in at once
-func BotGames(cfg Config, spec string) (int, error) {
-	graph, err := membership.LoadBotGraph(cfg.Resources, spec)
-	if err != nil {
-		return 0, err
+// BotRun names the graph RunBot plays for spec and how many games it plays it in
+// at once; no name for a run that joins, whose session's scenario resolves it
+func BotRun(cfg Config, spec string) (name string, games int, err error) {
+	graph, games, err := botRun(cfg, spec)
+	if graph != nil {
+		name = graph.Name
 	}
-	return botGames(cfg, graph)
+	return name, games, err
+}
+
+// botRun resolves the graph a bot's run plays against cfg's scenario, and its count
+// of games. A joining run's graph is nil: the session it joins carries its
+// scenario, which may be what names the bot, so it resolves once joined.
+func botRun(cfg Config, spec string) (*bot.Graph, int, error) {
+	var graph *bot.Graph
+	if cfg.Membership.JoinAddress == "" {
+		sc, err := resource.LoadScenario(cfg.Resources)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scenario: %w", err)
+		}
+		if graph, err = membership.LoadBotGraph(cfg.Resources, sc, spec); err != nil {
+			return nil, 0, err
+		}
+	}
+	games, err := botGames(cfg, graph != nil && graph.Settings.Learn)
+	return graph, games, err
 }
 
 // botGames is how many games a bot's run plays at once: one, but for a headless
 // run alone and flat out whose graph learns, which plays cfg.Games, all teaching
 // the graph's learners. Where it names none that is one more than the cores,
 // as a game waiting its turn to close a round leaves its core to another.
-func botGames(cfg Config, g *bot.Graph) (int, error) {
+func botGames(cfg Config, learns bool) (int, error) {
 	paced, err := scriptPacing(cfg)
 	if err != nil {
 		return 0, err
 	}
 	m := cfg.Membership
 	switch {
-	case !g.Settings.Learn || cfg.Mode == ModeScript || paced || m.HostAddress != "" || m.JoinAddress != "" || len(m.Bots) > 0:
+	case !learns || cfg.Mode == ModeScript || paced || m.HostAddress != "" || m.JoinAddress != "" || len(m.Bots) > 0:
 		if cfg.Games > 1 {
 			return 0, fmt.Errorf("-games %d: only a -headless bot alone and flat out whose graph learns plays more than one game", cfg.Games)
 		}

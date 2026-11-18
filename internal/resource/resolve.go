@@ -253,16 +253,25 @@ func UpgradeKeymap(o Options) string {
 	return "Keymap brought up to date: " + strings.Join(notes, "; ")
 }
 
+// DefaultBot is the generic bot shipped, bound to no scenario
+const DefaultBot = "default"
+
 // BotGraph resolves a bot graph by path or by name: an existing file wins, and a
-// name finds bot/<name>.toml under the configured roots, then the embedded copy.
-// A graph is a participant's own, like its keymap, so -d does not pin it. It
-// returns the document and the name the graph goes by.
-func BotGraph(o Options, spec string) ([]byte, string, error) {
-	if info, err := os.Stat(spec); err == nil && !info.IsDir() {
+// name finds bot/<name>.toml under the configured roots, the player's own, then the
+// bot sc carries of that name, then the embedded copy. No name is the scenario's
+// own bot, the first it lists, or DefaultBot where it lists none. A graph is a
+// participant's, so -d does not pin it. Returns the document and the graph's name.
+func BotGraph(o Options, sc Scenario, spec string) ([]byte, string, error) {
+	if spec == "" {
+		spec = DefaultBot
+		if own := sc.Bots(); len(own) > 0 {
+			spec = own[0]
+		}
+	} else if info, err := os.Stat(spec); err == nil && !info.IsDir() {
 		data, err := os.ReadFile(spec)
 		return data, strings.TrimSuffix(filepath.Base(spec), ".toml"), err
 	}
-	if spec == "" || (!paths.IsScenarioName(spec) || filepath.Base(spec) != spec) && paths.ExternalFiles() {
+	if (!paths.IsScenarioName(spec) || filepath.Base(spec) != spec) && paths.ExternalFiles() {
 		return nil, "", fmt.Errorf("bot graph %q not found", spec)
 	}
 	file := spec + ".toml"
@@ -270,18 +279,21 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		data, err := os.ReadFile(p)
 		return data, spec, err
 	}
+	if data, ok := sc.Bot(spec); ok {
+		return data, spec, nil
+	}
 	// Preserve named overrides while old built-in names share the current policy.
 	if spec == "roam" || spec == "patrol" {
-		file, spec = "default.toml", "default"
+		file, spec = "default.toml", DefaultBot
 	}
 	data, err := fs.ReadFile(asset.DefaultBots, file)
 	switch {
 	case err == nil:
 		return data, spec, nil
 	case !paths.ExternalFiles():
-		return nil, "", fmt.Errorf("bot graph %q not found: a browser holds only the embedded graphs", spec)
+		return nil, "", fmt.Errorf("bot graph %q not found: a browser holds only the embedded graphs and its scenario's", spec)
 	}
-	return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root or embedded", spec)
+	return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root, in scenario %s or embedded", spec, sc.Shown())
 }
 
 // Files supplies the ordered configuration roots to FileService. Resolution

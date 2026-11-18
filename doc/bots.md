@@ -8,16 +8,17 @@ rules. Bots are cooperative: they play beside people against the environment.
 ## Quick start
 
 ```sh
-vif -bot                              # you and one default bot
-vif -bot 2:default                    # you and two bots
+vif -bot                              # you and one bot: the scenario's own, or default
+vif -bot 2:default                    # you and two default bots
 vif -host :7777 -bot 2                # host with two bots; others may join
 vif -join 127.0.0.1:7777              #   joining it from another terminal
 vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
 vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot -watch -size fit             #   on a map the size of this terminal
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
-vif -s cave -bot cave -watch          # watch a network bot learn the cave
-vif -s cave -bot cave -headless -speed max   # the same flat out on every core, kept at each Ctrl-C
+vif -s cave -bot -watch               # watch cave's own bot fly it, learning on as it goes
+vif -s cave -bot -headless -speed max # the same flat out on every core, kept at each Ctrl-C
+vif -s cave -bot seed -headless -speed max   # learn from its start written by hand instead
 vif -replay <journal>                 # replay what it recorded
 vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room for people
 vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, in no seat
@@ -27,7 +28,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 
 | Flag | Effect |
 |---|---|
-| `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
+| `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; no count is one, and no graph the scenario's own bot, `default` where it carries none ([Writing a graph](#writing-a-graph)). |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
@@ -38,7 +39,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-host`, `-join` | Keep your player; bots join beside you. |
 | `-config-dir <dir>` | The first root searched for `bot/<name>.toml`. |
 | `-j` | Journal this process's front instance: your player, or the watched or headless bot. |
-| `-check` | Validate every bot graph in the configuration roots and the embedded ones, with the rest of the configuration. |
+| `-check` | Validate every bot graph in the configuration roots, the scenario's own and the embedded ones, with the rest of the configuration. |
 
 ## Compositions
 
@@ -136,9 +137,31 @@ identify cursors for this session only, and a dropped player's slot may be reuse
 
 A graph resolves as a path, then as `bot/<name>.toml` under `-config-dir`, the user
 root, the checkout's `wad/` beside a `bin/` binary, `/usr/local/etc/vif` and
-`/etc/vif`, then as the embedded copy. `make install-config` installs the embedded
-`default` into the user root. `roam` and `patrol` load `default` unless a root holds
-a file of that name. `-d` does not pin bot graphs.
+`/etc/vif`, a player's own; then as the bot of that name the run's scenario
+carries; then as the embedded `default`, the generic bot, bound to no scenario.
+`make install-config` installs `default` into the user root. `roam` and `patrol`
+load `default` unless a root holds a file of that name. `-d` does not pin bot
+graphs.
+
+A scenario carries the bots made for its map among its own files, which its entry
+lists, as `cave`'s does:
+
+```toml
+bots = ["bot/cave.toml", "bot/seed.toml"]
+```
+
+- Each is a bot document, named by its file as a root's `bot/<name>.toml` is, one
+  word with no dot. They are part of the scenario: digested with it, sent with it
+  to a session's guests, parsed by `-check`.
+- The first is the scenario's own bot: what a seat that names no graph plays, from
+  `-bot`, `-bot 2`, `:bot add` and `:bot add 2` alike. A scenario that lists none
+  has `default` play.
+- A player's bot of the same name plays in the scenario's place, so a copy in a
+  root is how one is changed; what any of them learns is kept in the user root
+  ([The population file](#the-population-file)).
+- A run that joins a session resolves its graphs once it has joined, against the
+  session's scenario. A seat held over a change of scenario whose graph the new
+  one does not carry plays the new one's own.
 
 ### Document
 
@@ -338,9 +361,9 @@ A graph may declare networks: policies whose weights are numbers a search can
 tune, where a graph's states are not. `Steer` reads a network's sensors, runs
 them through it and points the cursor at the cell its outputs name. A graph whose
 scenario plays in phases gives each a network, bound by its `while` to the
-states it is for, and steers by a list of them. The shipped
-[`cave`](../internal/asset/bot/cave.toml) flies the `cave` scenario by two, `raid`
-while its raiders fly and `kraken` while its Kraken is up, which share next to
+states it is for, and steers by a list of them. The `cave` scenario's own bot,
+[`cave`](../wad/scenario/base/cave/bot/cave.toml), flies it by two, `raid` while
+its raiders fly and `kraken` while its Kraken is up, which share next to
 nothing, each picked by a guard on a `Steer` of its own. A network needs the
 pointer free, and a bot's run starts on the embedded `[play]`'s pointer whatever
 the player's own says, and on the auto-fire its `[bot]` names. `cave` takes
@@ -405,20 +428,18 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   has no weights. Each unit of an output, `special`, `x` and `y`, is the direct
   sum of its weights over the inputs plus the hidden units' and its bias, a
   weight within 4 either side of zero.
-- No weight is written: `cave` leaves its networks' to the learner, which draws
-  them at random and keeps what plays best, so nothing it does was put there by
-  hand, the use of its heat among it. The shipped
-  [`seed`](../internal/asset/bot/seed.toml) is the same two networks
-  with a start written by hand, twelve direct weights that hold the nearest
-  raider's row, back off what is near and keep to the middle: a seed to train
-  a model for `cave` from, since from nothing the search did not reach the gun.
-  Over 100 rounds of seeds 101 to 104 it fields 27,614, and what runs learn
-  from it is [below](#the-population-file). A graph may write any: a unit's
-  table (`x`, `y`, `special`) gives its weight from each input by name, its
-  `bias` and, as `hidden`, a weight a hidden unit in their order, and `units`
-  lists a table a hidden unit, its weight from each input and its `bias`. What
-  is written is every run's first candidate and what is not is zero: with no
-  weight and no population a network asks for nothing and the ship holds still.
+- A graph may write any weight: a unit's table (`x`, `y`, `special`) gives its
+  weight from each input by name, its `bias` and, as `hidden`, a weight a hidden
+  unit in their order, and `units` lists a table a hidden unit, its weight from
+  each input and its `bias`. What is written is every run's first candidate and
+  what is not is zero: with no weight and no population a network asks for
+  nothing and the ship holds still. The cave scenario's two bots are the same two
+  networks: [`seed`](../wad/scenario/base/cave/bot/seed.toml) writes a start by
+  hand, twelve direct weights that hold the nearest raider's row, back off what
+  is near and keep to the middle, and `cave` a model learned from it, the member
+  each network's population fielded, 119 of its 540 weights not zero. Over 100
+  rounds of seeds 101 to 104 `seed` fields 27,614 and `cave` 300,260, 85 of them
+  closed at the graph's limit; what runs learn is [below](#the-population-file).
   - A move is an offset from the ship in view widths and heights, taken each
     update. A positive weight on a thing's offset closes that share of the gap
     an update: in `cave` 0.6 to 1.2 on `species_y` all hold a raider's row.
@@ -537,10 +558,10 @@ A run that ends without keeping what it learned ends with that error.
 
 What a run learns in `cave` is read by what it fields held out: 100 rounds of
 seeds 101 to 104 with no learner, each closed at the graph's limit. From
-[`seed`](../internal/asset/bot/seed.toml)'s weights, which field 27,614
-themselves with a median of 33,174 and reach the Kraken in 73 rounds, four
-games' three million ticks, two minutes on four cores; from nothing, where a
-ship that holds still scores 159, one game's 600,000:
+`seed`'s weights, which field 27,614 themselves with a median of 33,174 and
+reach the Kraken in 73 rounds, four games' three million ticks, two minutes on
+four cores; from nothing, `cave`'s graph with no weight written, where a ship
+that holds still scores 159, one game's 600,000:
 
 ```
                    rounds scored      fields            reach the   Krakens
@@ -555,6 +576,10 @@ nothing      1      864      125     6115     2726              30       35
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
+- `cave`'s own weights are what a longer run of five games learned from `seed`'s:
+  they field a mean of 300,260 and a median of 374,046, reach the Kraken in 88
+  rounds and shoot down 767, and its half hour, 36,000 ticks, closes 85 rounds
+  of the 100.
 - What the learners fielded while they explored in turn, a round each scored
   whole, and what longer runs did then, is in the
   [todo](todo.md#train-a-network-bot-live-in-cave).
@@ -597,7 +622,8 @@ unattended.
 
 | Symptom | Fix |
 |---|---|
-| `bot graph "x" not found as a path, in a configuration root or embedded` | Check the name and `-config-dir`, or give a path. |
+| `bot graph "x" not found as a path, in a configuration root, in scenario <name> or embedded` | Check the name and `-config-dir`, or give a path; a scenario's bot is found only in a run of that scenario. |
+| `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place; installs before the scenario carried its bots left one there, which `make install-config` names. Remove it. |
 | `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
 | A `roam` or `patrol` bot plays an old policy | An installed file of that name shadows `default`: use `-bot default` or update the file. |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |

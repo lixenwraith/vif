@@ -1,18 +1,17 @@
 package bot
 
 import (
-	"io/fs"
 	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -374,12 +373,12 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 }
 
 // TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder: a layout's digest names the
-// populations it fits, so the shipped cave's two stand until its networks are
-// changed on purpose, which starts every population kept for them over; its
-// seed's are the same, so what is learned from the seed is a model cave takes.
+// populations it fits, so the two of the cave scenario's cave stand until its
+// networks are changed on purpose, which starts every population kept for them
+// over; its seed's are the same, so what is learned from the seed cave takes.
 func TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder(t *testing.T) {
 	for _, name := range []string{"cave", "seed"} {
-		data, err := fs.ReadFile(asset.DefaultBots, name+".toml")
+		data, err := os.ReadFile(filepath.Join("..", "..", "wad", "scenario", "base", "cave", "bot", name+".toml"))
 		if err != nil {
 			t.Fatal(err)
 		}

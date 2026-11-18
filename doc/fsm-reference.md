@@ -70,6 +70,7 @@ as JSON.
 ```toml
 description = "A short description for scenario selection."
 macro_files = ["macros.toml"]       # Macro libraries, relative to this file
+bots = ["bot/pilot.toml"]           # The bots made for this map, relative to this file; a seat naming no graph plays the first
 
 [content]                           # The scenario's own corpus, carried in its container: the run types it, not its content root
 files = ["lessons.toml"]            # Corpus files, relative to this file

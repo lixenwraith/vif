@@ -136,7 +136,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	a := mustHeadless(t, fixtureSeed, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	graph, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, a.scenario, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestAWatchedBotsPauseKeyHoldsTheSessionItHosts(t *testing.T) {
 	a := mustHeadless(t, fixtureSeed, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	graph, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, a.scenario, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,17 +14,18 @@ skip host discovery and use embedded assets.
 
 `wad/` mirrors the installed tree exactly, so installing it is a copy and
 `vif -config-dir wad` plays the repository checkout without installing
-anything. The embedded keymaps, bot graphs and `vif.toml` have no `wad/` copy: they
-are installed from `internal/asset/input/`, `internal/asset/bot/` and
-`internal/asset/vif.toml`, so the file the binary falls back to and the file a user
-edits are one source.
+anything. The embedded keymaps, the generic bot graph and `vif.toml` have no
+`wad/` copy: they are installed from `internal/asset/input/`,
+`internal/asset/bot/` and `internal/asset/vif.toml`, so the file the binary
+falls back to and the file a user edits are one source. A scenario's own bots
+are files of the scenario, as `cave`'s in `wad/scenario/base/cave/bot/`.
 
 ```text
 wad/                            internal/asset/
 ├── scenario/                    ├── scenario/  fallback scenario
 │   └── base/   the shipped      ├── content/   fallback corpus
 │               scenarios        ├── input/     built-in and vim keymaps
-├── content/    typing corpus    ├── bot/       shipped bot graphs
+├── content/    typing corpus    ├── bot/       the generic bot graph
 └── image/      .aimg assets     ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
@@ -51,7 +52,7 @@ Unix-like targets `internal/paths` lists, not on macOS or Windows.
 vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    scenarios, each rooted at scenario.toml, in groups
-│   ├── base/    the shipped ones; cave/behavior/ holds its programs
+│   ├── base/    the shipped ones; cave/behavior/ holds its programs, cave/bot/ its bots
 │   ├── downloads/  what sessions' hosts sent, when the player saves it
 │   ├── main/    optional default override
 │   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
@@ -59,14 +60,15 @@ vif/
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
 ├── image/       .aimg wall assets
-└── bot/         bot graphs, one <name>.toml each, and in the user root what
-                 a learning one keeps, <graph>.<scenario>.<network>.json
+└── bot/         a player's bot graphs, one <name>.toml each, and in the user root
+                 what a learning one keeps, <graph>.<scenario>.<network>.json
 ```
 
 A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies
 below it is its own: its region, macro and behavior program files sit beside the
 entry or below it, as the shipped `cave` keeps its raiders' programs in
-`behavior/` ([FSM reference](fsm-reference.md#behavior-programs)). Any other
+`behavior/` ([FSM reference](fsm-reference.md#behavior-programs)) and the bots made
+for it in `bot/` ([Bots](bots.md#writing-a-graph)). Any other
 directory is a group of scenarios and groups, to any depth, so a player can file
 their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed
 over, and a link counts as a scenario but is not read as a group. A scenario is

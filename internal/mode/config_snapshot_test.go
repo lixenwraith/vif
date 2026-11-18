@@ -147,7 +147,8 @@ func TestAnOpOnADisabledIdAnswersWithItsReason(t *testing.T) {
 
 // TestAFailedSubmitKeepsItsErrorAndASuccessfulOneClosesTheMenu: a submit the run
 // refuses leaves its error on the form, as a sentence, until the next op; one that
-// succeeds closes the menu, fields left out taking their defaults.
+// succeeds closes the menu, fields left out taking their defaults: a blank policy
+// seats the scenario's own bot.
 func TestAFailedSubmitKeepsItsErrorAndASuccessfulOneClosesTheMenu(t *testing.T) {
 	ctx, r, session := nativeMenu(t)
 	session.err = errors.New("address in use")
@@ -162,7 +163,7 @@ func TestAFailedSubmitKeepsItsErrorAndASuccessfulOneClosesTheMenu(t *testing.T) 
 	}
 	session.err = nil
 	r.MenuOp(MenuOp{"submit", "multiplayer/#Bots/add", `["2"]`})
-	if configMenu(ctx) != nil || ctx.GetMode() != core.ModeNormal || !slices.Equal(session.calls, []string{"add 2:default"}) {
+	if configMenu(ctx) != nil || ctx.GetMode() != core.ModeNormal || !slices.Equal(session.calls, []string{"add 2:"}) {
 		t.Fatalf("a submit that succeeded: menu open %v, mode %v, calls %q", configMenu(ctx) != nil, ctx.GetMode(), session.calls)
 	}
 }

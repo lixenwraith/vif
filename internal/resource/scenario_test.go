@@ -22,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/paths"
 )
 
 // writeScenario lays down a two-file scenario under dir and returns its root.
@@ -510,6 +511,72 @@ func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 	_, err := ReadScenario("typo", fsys, "scenario.toml")
 	if err == nil || !strings.Contains(err.Error(), `entry "scenario.toml": unknown key "descripton"`) {
 		t.Fatalf("error %v", err)
+	}
+}
+
+// TestAScenarioCarriesItsBotsAsFilesOfItsOwn: the bot documents an entry's bots
+// lists are carried and digested as a region file is and travel in the canonical
+// form. A name finds the player's own bot, then the scenario's, then the embedded
+// one, and no name the scenario's first, or default where it lists none.
+func TestAScenarioCarriesItsBotsAsFilesOfItsOwn(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	root := t.TempDir()
+	dir := writeScenario(t, filepath.Join(root, "scenario", "flight"), scenarioRegion)
+	write := func(name, body string) {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := func(bots string) {
+		write("scenario/flight/scenario.toml", "bots = "+bots+"\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	}
+	entry(`["bot/pilot.toml", "bot/spare.toml"]`)
+	write("scenario/flight/bot/pilot.toml", "# pilot")
+	write("scenario/flight/bot/spare.toml", "# spare")
+	write("scenario/flight/pilot.toml", "# another pilot")
+
+	sc, o := read(t, dir), Options{Dir: root}
+	copied, err := UnmarshalScenario("flight", sc.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []Scenario{sc, copied} {
+		if s.Files() != 4 || !slices.Equal(s.Bots(), []string{"pilot", "spare"}) {
+			t.Fatalf("the scenario holds %d files and bots %v; want the entry, the region and its two bots in the entry's order", s.Files(), s.Bots())
+		}
+		for spec, want := range map[string]string{"": "pilot", "pilot": "pilot", "spare": "spare"} {
+			if data, name, err := BotGraph(o, s, spec); err != nil || name != want || string(data) != "# "+want {
+				t.Fatalf("bot %q = %q named %q, %v; want the scenario's %s", spec, data, name, err, want)
+			}
+		}
+	}
+	if data, name, err := BotGraph(o, Scenario{}, ""); err != nil || name != DefaultBot || len(data) == 0 {
+		t.Fatalf("no name in a scenario that carries no bot = %q, %v; want the embedded %s", name, err, DefaultBot)
+	}
+	if _, _, err := BotGraph(o, Scenario{}, "spare"); err == nil {
+		t.Fatal("another scenario's bot was found by its name")
+	}
+	write("bot/pilot.toml", "# mine")
+	if data, _, err := BotGraph(o, sc, ""); err != nil || string(data) != "# mine" {
+		t.Fatalf("with a bot of the player's own named as the scenario's = %q, %v; want the player's", data, err)
+	}
+
+	for fault, bots := range map[string]string{
+		"a file the scenario lacks":   `["bot/none.toml"]`,
+		"a name listed twice":         `["bot/pilot.toml", "pilot.toml"]`,
+		"a name that is not one word": `["bot/my.pilot.toml"]`,
+		"no list":                     `"bot/pilot.toml"`,
+	} {
+		write("scenario/flight/bot/my.pilot.toml", "# dotted")
+		entry(bots)
+		if _, err := LoadScenario(Options{Scenario: dir}); err == nil {
+			t.Errorf("%s: the scenario loaded", fault)
+		}
 	}
 }
 

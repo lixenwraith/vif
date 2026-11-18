@@ -38,15 +38,15 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// playBot runs one embedded graph solo for n ticks on a fresh headless instance,
+// playBot runs one shipped graph solo for n ticks on a fresh headless instance,
 // journaling into capture when one is given, and returns the instance, still open.
-// The graph is read from the binary rather than resolved, so no installed copy
+// The graph is read from what ships rather than resolved, so no installed copy
 // stands in for it.
 func playBot(t *testing.T, name string, seed uint64, n int, capture *journal.Capture) (*App, bot.Stats) {
 	t.Helper()
-	data, err := fs.ReadFile(asset.DefaultBots, name+".toml")
-	if err != nil {
-		t.Fatal(err)
+	data, ok := shippedGraphs(t)[name]
+	if !ok {
+		t.Fatalf("no shipped graph %s", name)
 	}
 	graph, err := bot.ParseGraph(name, data)
 	if err != nil {
@@ -64,8 +64,8 @@ func playBot(t *testing.T, name string, seed uint64, n int, capture *journal.Cap
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A graph that learns writes no weight, so it acts on what a learner draws: its
-	// last network's here, kept nowhere, as no round ends to pass the turn on
+	// A graph that learns acts on what a learner hands it: its last network's here,
+	// kept nowhere
 	if networks := graph.Networks(); graph.Settings.Learn {
 		l, err := bot.NewLearner(graph, networks[len(networks)-1], a.Seed(), 1, nil)
 		if err != nil {
@@ -128,7 +128,7 @@ func TestAMapCellPointerReachesOnlyWhatTheViewportShows(t *testing.T) {
 // a deterministic world, so one seed journals one run, for every shipped graph.
 func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 	t.Parallel()
-	for _, name := range shippedGraphs(t) {
+	for _, name := range slices.Sorted(maps.Keys(shippedGraphs(t))) {
 		var runs [2][]event.JournalRecord
 		for i := range runs {
 			capture := journal.NewCapture()
@@ -146,24 +146,106 @@ func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 	}
 }
 
-// shippedGraphs names every embedded bot graph.
-func shippedGraphs(t *testing.T) []string {
+// shippedGraphs is every bot graph that ships, by name: the embedded ones and those
+// a scenario of the checkout's wad carries for its map.
+func shippedGraphs(t *testing.T) map[string][]byte {
 	t.Helper()
-	files, err := fs.Glob(asset.DefaultBots, "*.toml")
-	if err != nil || len(files) == 0 {
+	graphs, err := shipped()
+	if err != nil || len(graphs) == 0 {
 		t.Fatalf("no shipped graphs: %v", err)
 	}
-	for i, file := range files {
-		files[i] = strings.TrimSuffix(file, ".toml")
-	}
-	return files
+	return graphs
 }
 
-// TestEveryShippedGraphPlays: each embedded graph loads, acts, and never queues more
-// than its rate releases.
+var shipped = sync.OnceValues(func() (map[string][]byte, error) {
+	graphs := map[string][]byte{}
+	files, err := fs.Glob(asset.DefaultBots, "*.toml")
+	for _, file := range files {
+		if graphs[strings.TrimSuffix(file, ".toml")], err = fs.ReadFile(asset.DefaultBots, file); err != nil {
+			return nil, err
+		}
+	}
+	for _, scenario := range resource.Scenarios(resource.Options{Dir: soakRoot})[1:] {
+		sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: scenario})
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range sc.Bots() {
+			graphs[name], _ = sc.Bot(name)
+		}
+	}
+	return graphs, err
+})
+
+// TestASeatNamingNoGraphPlaysItsScenariosOwnBot: a seat given no graph plays the
+// first bot its run's scenario carries, and default in a scenario that carries
+// none. One held over from the run this one replaces, whose graph this scenario
+// does not carry, plays the scenario's own, where a bot named at the start and
+// not found fails it.
+func TestASeatNamingNoGraphPlaysItsScenariosOwnBot(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	root := t.TempDir()
+	writeScenario(t, root, "bare", "A scenario that carries no bot.")
+	dir := writeScenario(t, root, "flight", "A scenario with a bot of its own.")
+	body, err := os.ReadFile(filepath.Join(dir, "scenario.toml"))
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "scenario.toml"), append([]byte("bots = [\"bot/pilot.toml\"]\n"), body...), 0o600)
+	}
+	if err == nil {
+		err = os.Mkdir(filepath.Join(dir, "bot"), 0o755)
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "bot", "pilot.toml"), []byte("[regions.play]\ninitial = \"A\"\n[states.A]\n"), 0o600)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := func(scenario string, bots ...string) runConfig {
+		return runConfig{Config: Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight, Mode: ModeHeadless,
+			Resources: resource.Options{Dir: root, Scenario: scenario}, Membership: Membership{Bots: bots}}}
+	}
+	// A driven run that seats as a player's does
+	play := func(rc runConfig) *App {
+		a, err := newDriven(rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.cfg.Mode = ModePlay
+		tickUntilCursor(t, a)
+		return a
+	}
+	graphs := func(a *App) (names []string) {
+		for _, seat := range a.ctx.SessionCtl.Bots() {
+			names = append(names, seat.Graph)
+		}
+		return names
+	}
+	for scenario, want := range map[string]string{"flight": "pilot", "bare": DefaultBotGraph} {
+		a := play(config(scenario))
+		a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("") })
+		if got := graphs(a); err != nil || !slices.Equal(got, []string{want}) {
+			t.Errorf("in %s a seat naming no graph plays %v, %v; want %s", scenario, got, err, want)
+		}
+		a.Close()
+	}
+
+	if _, err := newSessionApp(config("bare", "pilot")); err == nil || !strings.Contains(err.Error(), `"pilot" not found`) {
+		t.Fatalf("a run starting with a bot its scenario does not carry = %v; want it refused by that name", err)
+	}
+	held := config("bare", "pilot", "")
+	held.wiring.membership.BotsCarried = true
+	a := play(held)
+	defer a.Close()
+	if err := a.membership.SeatBots(); err != nil || !slices.Equal(graphs(a), []string{DefaultBotGraph, DefaultBotGraph}) {
+		t.Fatalf("seats held over into a scenario without their bot play %v, %v; want its own, %s", graphs(a), err, DefaultBotGraph)
+	}
+}
+
+// TestEveryShippedGraphPlays: each graph that ships, embedded or a scenario's,
+// loads, acts, and never queues more than its rate releases.
 func TestEveryShippedGraphPlays(t *testing.T) {
 	t.Parallel()
-	for _, name := range shippedGraphs(t) {
+	for _, name := range slices.Sorted(maps.Keys(shippedGraphs(t))) {
 		a, st := playBot(t, name, fixtureSeed, 1200, nil)
 		a.Close()
 		if st.Injected == 0 || st.Dropped != 0 {
@@ -209,10 +291,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := shippedGraphs(t)["cave"]
 	graph, err := bot.ParseGraph("cave", data)
 	if err != nil {
 		t.Fatal(err)
@@ -275,10 +354,7 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := shippedGraphs(t)["cave"]
 	// Two seconds are forty ticks, well before the first raider's first charge
 	graph, err := bot.ParseGraph("cave", []byte(strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 2", 1)))
 	if err != nil || graph.Settings.RoundSeconds != 2 {
@@ -345,11 +421,11 @@ func TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame(t *testing.T) {
 		"hosting":    {learns, Config{Membership: Membership{HostAddress: ":7777"}}, 1},
 		"seating":    {learns, Config{Membership: Membership{Bots: []string{"default"}}}, 1},
 	} {
-		if got, err := botGames(tt.cfg, tt.graph); got != tt.want || err != nil {
+		if got, err := botGames(tt.cfg, tt.graph.Settings.Learn); got != tt.want || err != nil {
 			t.Errorf("%s: %d games, err %v, want %d", name, got, err, tt.want)
 		}
 		if tt.cfg.Games = 2; tt.want == 1 {
-			if _, err := botGames(tt.cfg, tt.graph); err == nil {
+			if _, err := botGames(tt.cfg, tt.graph.Settings.Learn); err == nil {
 				t.Errorf("%s: two games were not refused", name)
 			}
 		}
@@ -373,10 +449,7 @@ func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	data, err := fs.ReadFile(asset.DefaultBots, "cave.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := shippedGraphs(t)["cave"]
 	// Rounds of fifteen seconds, eight a game before the graph quits at two minutes
 	const games, ticks = 3, 2 * time.Minute / parameter.GameUpdateInterval
 	graph := strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 15", 1) + `
@@ -448,7 +521,7 @@ func driveRun(t *testing.T, kind string, cfg runConfig, graph string, hold func(
 	if cfg.Resources == (resource.Options{}) {
 		cfg.Resources = resource.Options{Embedded: true}
 	}
-	g, err := membership.LoadBotGraph(cfg.Resources, graph)
+	g, err := membership.LoadBotGraph(cfg.Resources, resource.Scenario{}, graph)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,7 +998,7 @@ func TestASeatsRunsListInTheOrderItsSeatsCame(t *testing.T) {
 // whose loop takes its fork into a session of its own and seats its bots again there.
 func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 	t.Parallel()
-	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, resource.Scenario{}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -994,7 +1067,7 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	waitForCursors(t, host, 2)
 	cfg := Config{Membership: Membership{JoinAddress: addr}, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}}
-	g, err := membership.LoadBotGraph(cfg.Resources, "patrol")
+	g, err := membership.LoadBotGraph(cfg.Resources, resource.Scenario{}, "patrol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1438,7 +1511,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 	a, _ := playBot(t, DefaultBotGraph, fixtureSeed, 10, nil)
 	defer a.Close()
-	g, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	g, err := membership.LoadBotGraph(a.cfg.Resources, a.scenario, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}

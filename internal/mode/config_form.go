@@ -46,7 +46,7 @@ var configForms = map[string]configFormSpec{
 		label: "Add bots", description: "Seat local bots in this session. A solo run opens a session only they can join; host first to invite remote players.", command: "bot",
 		fields: []configFormField{
 			{"Count", "1", "Number of bots to add. Each bot occupies a player slot.", inputNumber},
-			{"Policy", "default", "Policy graph name or path; blank uses default. Bots belong to this run and leave with it.", inputText},
+			{"Policy", "", "Policy graph name or path; blank is the scenario's own bot, or default where it carries none. Bots belong to this run and leave with it.", inputText},
 		},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			n, err := strconv.Atoi(strings.TrimSpace(f.Value(0)))

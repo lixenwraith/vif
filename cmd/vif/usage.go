@@ -48,7 +48,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d (with -serve, guests only, 1..%d); unset holds the whole roster; with a -join site, the one requested",
 				parameter.MaxPlayers, parameter.MaxPlayers)},
-			{names: []string{"bot"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you (default 1:default); -host/-join keep your player"},
+			{names: []string{"bot"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you: one where no count is given, the scenario's own bot where no graph is, default where it carries none; -host/-join keep your player"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares"},
 			{names: []string{"slow-window"}, arg: "<dur>",
@@ -394,9 +394,12 @@ saying fill = false at its top gains none of the built-in bindings when a run
 brings it up to date.
 .TP
 .I bot/<name>.toml
-Bot graphs that \-bot and :bot add name; a path also works. The default and
-cave graphs are compiled in and resolve last. A graph that learns keeps a
-population for each of its networks beside them in the user root, as
+A player's own bot graphs, which \-bot and :bot add name; a path also works.
+A scenario carries the bots made for its map among its own files, found by
+name after the player's, and a seat that names no graph plays the first of
+them. The default graph is compiled in and resolves last, for a scenario that
+carries none. A graph that learns keeps a population for each of its networks
+beside the player's graphs in the user root, as
 <graph>.<scenario>.<network>.json.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif

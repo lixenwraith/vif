@@ -43,7 +43,7 @@ func Check(o Options, w io.Writer) error {
 	if err := checkContent(o, sc, w); err != nil {
 		return err
 	}
-	return checkBots(o, w)
+	return checkBots(o, sc, w)
 }
 
 func checkKeymap(o Options, w io.Writer) error {
@@ -274,9 +274,10 @@ func checkContent(o Options, sc Scenario, w io.Writer) error {
 	return nil
 }
 
-// checkBots parses every graph a name can resolve to, in each root and embedded, so
-// a broken one fails here rather than when -bot or :bot add first loads it.
-func checkBots(o Options, w io.Writer) error {
+// checkBots parses every graph a name can resolve to, in each root, in the
+// scenario and embedded, so a broken one fails here rather than when -bot or
+// :bot add first loads it.
+func checkBots(o Options, sc Scenario, w io.Writer) error {
 	var faults []error
 	// Globbed inside the directory, so a root's own path is never read as a pattern
 	parse := func(fsys fs.FS, where func(file string) string) {
@@ -296,6 +297,14 @@ func checkBots(o Options, w io.Writer) error {
 	for _, root := range newResolver(o).roots {
 		dir := filepath.Join(root, paths.BotDirName)
 		parse(os.DirFS(dir), func(file string) string { return filepath.Join(dir, file) })
+	}
+	for _, name := range sc.Bots() {
+		data, _ := sc.Bot(name)
+		if _, err := bot.ParseGraph(name, data); err != nil {
+			faults = append(faults, fmt.Errorf("scenario %s: %w", sc.Shown(), err))
+			continue
+		}
+		fmt.Fprintf(w, "bot ok: scenario %s %s\n", sc.Shown(), name)
 	}
 	parse(asset.DefaultBots, func(file string) string { return "embedded " + strings.TrimSuffix(file, ".toml") })
 	return errors.Join(faults...)

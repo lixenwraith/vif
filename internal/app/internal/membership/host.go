@@ -320,7 +320,7 @@ func (c Control) AddBot(graph string) error {
 	case c.m.world.Watches():
 		return errors.New("a run that spectates holds no place a bot could play from")
 	}
-	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
+	specs, err := BotSpecs(cmp.Or(graph, "1"))
 	if err != nil {
 		return err
 	}

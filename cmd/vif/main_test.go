@@ -264,8 +264,8 @@ func TestSessionFlags(t *testing.T) {
 	if err := (sessionFlags{join: "host.example:7777", players: 4}).validateInvocation(false, false, ""); err == nil {
 		t.Fatal("a joining guest accepted a host lobby cap")
 	}
-	if bots, err := app.BotSpecs("2"); err != nil || !slices.Equal(bots, []string{app.DefaultBotGraph, app.DefaultBotGraph}) {
-		t.Fatalf("-bot 2 seats %v, %v", bots, err)
+	if bots, err := app.BotSpecs("2"); err != nil || !slices.Equal(bots, []string{"", ""}) {
+		t.Fatalf("-bot 2 seats %q, %v; want two seats naming no graph, each its scenario's own bot", bots, err)
 	}
 	if bots, err := app.BotSpecs("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
 		t.Fatalf("-bot 1:patrol seats %v, %v", bots, err)

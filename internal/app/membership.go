@@ -302,10 +302,18 @@ func newSessionApp(cfg runConfig) (*App, error) {
 		return nil, err
 	}
 	// Before anything is built, so a graph that does not resolve fails in front of
-	// the operator. Each seat parses its own copy when it is added.
-	for _, spec := range cfg.Membership.Bots {
-		if _, err := membership.LoadBotGraph(cfg.Resources, spec); err != nil {
-			return nil, err
+	// the operator. Each seat parses its own copy when it is added. A joining run
+	// learns its scenario from its session and one that replaces another seats what
+	// that held, so theirs resolve as they are seated.
+	if len(cfg.Membership.Bots) > 0 && cfg.Membership.JoinAddress == "" && !cfg.wiring.membership.BotsCarried {
+		sc, err := resource.LoadScenario(cfg.Resources)
+		if err != nil {
+			return nil, fmt.Errorf("scenario: %w", err)
+		}
+		for _, spec := range cfg.Membership.Bots {
+			if _, err := membership.LoadBotGraph(cfg.Resources, sc, spec); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if cfg.Membership.JoinAddress != "" {

@@ -269,13 +269,13 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if roots := Files(o).Roots; len(roots) == 0 || roots[0] != root {
 		t.Fatalf("file roots = %v, want operator root %q first", roots, root)
 	}
-	if data, name, err := BotGraph(o, "roam"); err != nil || string(data) != "fixture" || name != "roam" {
+	if data, name, err := BotGraph(o, Scenario{}, "roam"); err != nil || string(data) != "fixture" || name != "roam" {
 		t.Fatalf("bot graph = %q named %q, %v; want the root's fixture", data, name, err)
 	}
-	if data, _, err := BotGraph(o, "patrol"); err != nil || len(data) == 0 || string(data) == "fixture" {
+	if data, _, err := BotGraph(o, Scenario{}, "patrol"); err != nil || len(data) == 0 || string(data) == "fixture" {
 		t.Fatalf("a graph the root lacks = %q, %v; want the embedded one", data, err)
 	}
-	if _, _, err := BotGraph(o, "missing"); err == nil {
+	if _, _, err := BotGraph(o, Scenario{}, "missing"); err == nil {
 		t.Fatal("a bot graph no root or binary holds was resolved")
 	}
 }
