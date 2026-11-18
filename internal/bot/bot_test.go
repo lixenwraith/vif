@@ -1049,8 +1049,9 @@ func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
 
 // TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound: a first round
 // good enough to enter only qualifies its genome, which plays again and enters,
-// or not, on that round alone, as the first was picked for its luck. The
-// hand-written genome plays first, whatever the store kept.
+// or not, on that round alone, as the first was picked for its luck; it is a
+// round counted and kept all the same. The hand-written genome plays first,
+// whatever the store kept.
 func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
@@ -1061,7 +1062,8 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 		for i := range learnPool {
 			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(200 - i), Rounds: 1})
 		}
-		l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
+		store := keeping(t, net.digest, full...)
+		l, err := NewLearner(g, "fly", 1, 1, store)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1070,8 +1072,9 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 			l.settle(0, score, true)
 			last = l.take(0, true)
 		}
-		if st := l.Stats(); st.Scored != len(scores) {
-			t.Fatalf("%d rounds scored of %d played", st.Scored, len(scores))
+		var kept population
+		if err := errors.Join(l.Close(), json.Unmarshal(store.doc, &kept)); err != nil || l.Stats().Scored != len(scores) || kept.Rounds != learnPool+len(scores) {
+			t.Fatalf("%d rounds scored and %d kept of %d played on %d, closing with %v", l.Stats().Scored, kept.Rounds, len(scores), learnPool, err)
 		}
 		return first, last, func(score float64) bool {
 			return slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool { return c.Score == score })
@@ -1122,9 +1125,122 @@ func TestARoundInFlightCountsTowardAMembersProof(t *testing.T) {
 	}
 }
 
-// TestAPopulationStartsFromTheWeightsItsGraphWrites: a written start drawn about
-// on every weight filled the archive with copies that flew worse, and the start
-// was lost among them, so what a run fielded after learning scored under it.
+// TestACandidateTheArchiveHoldsIsThatMemberAgain: a genome the archive holds is
+// no new one to qualify, as the hand-written genome of a kept population is, so
+// its round joins the member's mean whichever way it went.
+func TestACandidateTheArchiveHoldsIsThatMemberAgain(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	for _, round := range []float64{100, 6000} {
+		full := []member{{Genes: slices.Clone(net.genes), Score: 3000, Rounds: 10}}
+		for i := range learnPool - 1 {
+			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(2000 - i), Rounds: 1})
+		}
+		l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.take(0, true)
+		l.settle(0, round, true)
+		if best := l.engine.Snapshot().Members[0]; !slices.Equal(best.Data, net.genes) || best.Count != 11 || best.Score != genetic.MeanScore(3000, round, 10) {
+			t.Fatalf("a round of %g leaves the best member at %g over %d: want the hand-written one, its ten rounds at 3000 and this one", round, best.Score, best.Count)
+		}
+	}
+}
+
+// TestARoundIsScoredThoughTheEngineDroppedItsEvaluation: the engine's table gives
+// an evaluation's slot to a newer one where eight fill its window, as nine games
+// can while one plays short rounds, and the round that outlasted them is scored.
+func TestARoundIsScoredThoughTheEngineDroppedItsEvaluation(t *testing.T) {
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const games = 9
+	l, err := NewLearner(g, "fly", 1, games, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := slices.Clone(l.take(0, true))
+	for game := 1; game < games-1; game++ {
+		l.take(game, true)
+	}
+	for round := 0; l.engine.Stats().Evicted == 0; round++ {
+		if round == 1000 {
+			t.Fatal("no evaluation in flight was dropped, so the round to score is not the one this test is of")
+		}
+		l.take(games-1, true)
+		l.settle(games-1, float64(round%7), true)
+	}
+	for !l.settle(0, 1e9, true) {
+		l.take(0, true)
+	}
+	if !l.holds(long) {
+		t.Fatal("the genome in flight since the first round, scored above every other, is not in the archive")
+	}
+}
+
+// TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds: a member played
+// again may be pushed off by another game's entry before its round closes. It
+// re-enters on the mean of its rounds with this one, not on this one alone as a
+// new genome would.
+func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	var full []member
+	for i := range learnPool {
+		full = append(full, member{Genes: genome(float64(i+1) / 100), Score: float64(1000 - i), Rounds: learnProven})
+	}
+	tail := &full[learnPool-1]
+	tail.Rounds = 3
+	l, err := NewLearner(g, "fly", 1, 2, keeping(t, net.digest, full...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take(0, true)
+	l.settle(0, 1, true) // the hand-written genome, scored under them all
+	l.drawn = learnRepeat - 1
+	if again := l.take(0, true); !slices.Equal(again, tail.Genes) {
+		t.Fatalf("the repeat is %v, want the one member short of its proof", again[:1])
+	}
+	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.99)), 990.5)
+	if l.holds(tail.Genes) {
+		t.Fatal("another game's entry did not push the member off the archive")
+	}
+	l.settle(0, 5000, true)
+	want := genetic.MeanScore(tail.Score, 5000, tail.Rounds)
+	if !slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool {
+		return slices.Equal(c.Data, tail.Genes) && c.Score == want
+	}) {
+		t.Fatalf("the member is not back at %g, the mean of its three rounds at %g and one of 5000", want, tail.Score)
+	}
+}
+
+// TestADamagedCountOfRoundsStillSaves: a kept document whose rounds read below
+// none counts from none, or the recent mean divides by nothing and no save of
+// the run can be written.
+func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
+	g, _, _ := learning(t)
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, Rounds: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLearner(g, "fly", 1, 1, &memory{doc: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take(0, true)
+	l.settle(0, 45, true)
+	if err := l.Close(); err != nil || l.rounds != 1 {
+		t.Fatalf("a round on a document of -1 rounds closes with %v at %d rounds, want it kept as the first", err, l.rounds)
+	}
+}
+
+// TestAPopulationStartsFromTheWeightsItsGraphWrites: a population whose graph
+// writes weights plays them first and then their children, a weight or few
+// stepped, as a start drawn about on every weight is lost among copies that fly
+// worse.
 func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
 	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)))
 	if err != nil {
