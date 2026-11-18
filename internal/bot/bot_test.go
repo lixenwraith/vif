@@ -1217,6 +1217,44 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 	}
 }
 
+// TestASaveLeavesAPopulationFurtherOnAsItIs: two runs may learn one population, a
+// watched one opened beside a headless one. The file is the one's with more
+// rounds: a save onto more fails, said once and reported as the run ends, and
+// passes once this run is the one further on.
+func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
+	g, _, _ := learning(t)
+	store := &memory{}
+	var runs [2]*Learner
+	for i := range runs {
+		var err error
+		if runs[i], err = NewLearner(g, "fly", uint64(i+1), 1, store); err != nil {
+			t.Fatal(err)
+		}
+	}
+	play := func(l *Learner, rounds int) error {
+		for range rounds {
+			l.take(0, true)
+			l.settle(0, 45, true)
+		}
+		return l.Close()
+	}
+	said := 0
+	runs[1].Lost = func(error) { said++ }
+	if err := play(runs[0], 5); err != nil {
+		t.Fatal(err)
+	}
+	further := string(store.doc)
+	for _, rounds := range []int{3, 1} {
+		if err := play(runs[1], rounds); err == nil || string(store.doc) != further {
+			t.Fatalf("a save %d rounds behind the file closed with %v: want it refused and the file as it was", 5-runs[1].rounds, err)
+		}
+	}
+	var kept population
+	if err := errors.Join(play(runs[1], 2), json.Unmarshal(store.doc, &kept)); err != nil || kept.Rounds != 6 || said != 1 {
+		t.Fatalf("a run a round further on kept %d rounds, closing with %v, having said %d times it could not: want its six kept and one notice", kept.Rounds, err, said)
+	}
+}
+
 // TestADamagedCountOfRoundsStillSaves: a kept document whose rounds read below
 // none counts from none, or the recent mean divides by nothing and no save of
 // the run can be written.

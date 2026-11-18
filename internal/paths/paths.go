@@ -252,14 +252,21 @@ func (f PlaceFile) Load() ([]byte, error) {
 }
 
 func (f PlaceFile) Store(data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o700); err != nil {
+	dir := filepath.Dir(f.Path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := f.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// A temporary file of its own, as FileStore's, so two runs never tear one another's
+	tmp, err := os.CreateTemp(dir, filepath.Base(f.Path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, f.Path)
+	defer os.Remove(tmp.Name()) // nothing once renamed
+	_, err = tmp.Write(data)
+	if err = errors.Join(err, tmp.Sync(), tmp.Close()); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), f.Path)
 }
 
 func stateDir(kind string) string {

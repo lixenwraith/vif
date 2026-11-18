@@ -392,6 +392,9 @@ func (l *Learner) save() {
 	}
 	data, err := json.Marshal(doc)
 	if err == nil {
+		err = l.ahead()
+	}
+	if err == nil {
 		err = l.store.Store(data)
 	}
 	l.saved = time.Now() // [wall]
@@ -408,6 +411,22 @@ func (l *Learner) save() {
 	if l.Saved != nil {
 		l.Saved(l.Stats())
 	}
+}
+
+// ahead is the failure of a save onto a population of this layout that holds
+// more rounds: another run's, further on, which keeps the file
+func (l *Learner) ahead() error {
+	var kept struct {
+		Version, Rounds int
+		Layout          string
+	}
+	if data, err := l.store.Load(); err != nil || json.Unmarshal(data, &kept) != nil {
+		return nil
+	}
+	if kept.Version == populationVersion && kept.Layout == l.layout && kept.Rounds > l.rounds {
+		return fmt.Errorf("another run has it %d rounds further on", kept.Rounds-l.rounds)
+	}
+	return nil
 }
 
 // tell has Lost hear what it has yet to
