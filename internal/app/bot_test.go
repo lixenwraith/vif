@@ -343,6 +343,45 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if scored := raid().Scored; outcomes != scored || kept.Rounds != scored || kept.Layout == "" {
 		t.Fatalf("%d outcomes kept of %d rounds under layout %q, want the %d its candidates played out", outcomes, kept.Rounds, kept.Layout, scored)
 	}
+
+	// Proved, a member is what export writes into the bot's document and list tells
+	var pop struct {
+		Version int     `json:"version"`
+		Layout  string  `json:"layout"`
+		Rounds  int     `json:"rounds"`
+		Recent  float64 `json:"recent"`
+		Members []struct {
+			Score  float64   `json:"score"`
+			Rounds int       `json:"rounds"`
+			Genes  []float64 `json:"genes"`
+		} `json:"members"`
+	}
+	if err := json.Unmarshal(doc, &pop); err != nil {
+		t.Fatal(err)
+	}
+	pop.Members[0].Rounds, pop.Members[0].Genes[0] = 50, 0.015625
+	if doc, err = json.Marshal(pop); err == nil {
+		err = os.WriteFile(filepath.Join(paths.PopulationDir(), "cave.cave.raid.json"), doc, 0o600)
+	}
+	sc, lerr := resource.LoadScenario(opts)
+	if err != nil || lerr != nil {
+		t.Fatal(err, lerr)
+	}
+	file := filepath.Join(dir, "exported.toml")
+	if _, err := resource.BotFiles(opts, sc, []string{"export", "cave", file}); err != nil {
+		t.Fatal(err)
+	}
+	exported, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model, err := bot.ParseGraph("cave", exported)
+	if err != nil || !slices.Equal(model.Weights()["raid"], pop.Members[0].Genes) || !slices.Equal(model.Weights()["kraken"], graph.Weights()["kraken"]) {
+		t.Fatalf("the exported bot does not write raid's proved member and kraken as it was written: %v", err)
+	}
+	if lines, err := resource.BotFiles(opts, sc, []string{"list"}); err != nil || !strings.Contains(strings.Join(lines, "\n"), "over 50") {
+		t.Fatalf("list tells %q, %v; want the member raid fields", lines, err)
+	}
 }
 
 // TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds

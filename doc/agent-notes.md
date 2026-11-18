@@ -287,6 +287,9 @@ Libraries · Branches.
   run is built on through `drive`, whose `build` is handed the App and ends the run
   before it presents by returning an error (`TestABotAlonePlaysOneMapWatchedOrNot`),
   and a run's size from its journal's anchor (`journal.NewCapture().Anchors()`).
+- A watched run's viewer's input never passes the interactive loop's
+  `inputTick`: `player.route` hands it to the router, so what a player's input
+  does besides, as saving a changed `[play]`, is done there for a watched run.
 - A presentation's size is read once by what keeps it
   ([Runtime §1](runtime.md#1-process-modes)), so a host whose size settles after
   it opens waits for it in `Init` (`window.settle`, `browser.Open`'s `fitted`) and
@@ -931,14 +934,14 @@ Libraries · Branches.
   name in a root's `bot/` plays in its place, as an install before the move
   left one. A held-out harness built earlier refuses a scenario whose entry has
   a key it does not know: run it on a copy of `wad/` taken before the change.
-- A model is landed in a bot document by a scratch test in `internal/bot`: it
-  parses the document, takes `members[fielded]` of each population file, writes
-  `[[network.<name>.units]]` and a table an output unit with every weight not
-  zero (`strconv.FormatFloat(w, 'g', -1, 64)`), and parses the result back to
-  the same `math.Float64bits`. A population written by another tool is raised
-  to this `version` in a copy by a JSON round trip, not by `sed`: its spacing
-  is its writer's. The document then replays the population's held-out rounds
-  line for line with no learner.
+- A model is landed in a bot document by `-bot export <bot> <file>`, which
+  writes what each population fields over the bot's own document
+  (`bot.Graph.Document`: every weight not zero, parsed back to the same
+  `math.Float64bits`). A population written by another tool is raised to this
+  `version` in a copy by a JSON round trip, not by `sed`: its spacing is its
+  writer's. The document then replays the population's held-out rounds line
+  for line with no learner. `toml.Document.Delete` takes a table with the
+  comment block above it.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.
@@ -960,14 +963,25 @@ Libraries · Branches.
   environment variable names: unset, its run keeps main's population bytes;
   set, it plays as the file's ablation does, round for round. What a raider's
   kill pays is probed the same way in `mind.killWorth`.
-- The i-th held-out round of one seed is one game for every member, whatever
-  the rounds before it did: a new game draws its streams from the root seed and
-  a counter that advances once a game (`RandResource.NextSession`). Rounds so
-  pair across members by seed and index, and a round's variance splits by game
-  and by member. A five-game run stops at a count of ticks by a graph whose
-  stop region quits at a fifth of it in game time, every game ending at the
-  tick the run's own reached; its `actions` can differ by a few between two
-  runs of one seed, its population bytes not.
+- The i-th held-out round of one seed draws one game's streams for every
+  member (`RandResource.NextSession`, a counter that advances once a game), but
+  it does not pair them: with one `raid` network and two `kraken` ones, round 5
+  of seed 101 ran its half hour under one and was crushed at tick 211 under the
+  other, 2 rounds of 100 scoring alike. Read a mean with its spread, 11,000
+  to 14,000 over 100 rounds of a model that closes 85 at the limit. A five-game
+  run stops at a count of ticks by a graph whose stop region quits at a fifth
+  of it in game time, every game ending at the tick the run's own reached; its
+  `actions` can differ by a few between two runs of one seed, its population
+  bytes not.
+- A rule that changes what a learner plays or fields is read three ways, each
+  on several seeds, since one says nothing: from nothing, a game's 600,000
+  ticks and a hold of seconds, six seeds a rule in five minutes on four cores,
+  a game a core (2,304 beside 6,640 on one seed, the six means 4% apart); from
+  `seed`'s weights; and on a population already good, `cave`'s own, where the
+  best of eight rounds fielded 257,385 for its 300,260. `-bot create <name>`
+  writes the graph with no weight that from nothing starts on.
+- `Driver.Stats` takes the world lock: a harness reads it before its own
+  `World.RunSafe`, never inside, or the run hangs with nothing printed.
 - One member is played alone from a population of it only, kept in a
   `bot.Store` in memory with its rounds raised to eight, which the learner then
   fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A
@@ -991,10 +1005,10 @@ Libraries · Branches.
   and from weights that fielded 12,170 it fielded 4,863 after five minutes.
   Whether the start is still in the archive is one look at its members' zero
   weights.
-- A population moves to a graph that reads its inputs and more by a zero weight
-  for each added input in every unit's row, and the new `layout`: four learned
-  under 901ac22's inputs, widened to the `*_soon` readings `cave` and
-  `cave_seed` take, replayed their 60 held-out rounds round for round.
+- A model moves to a graph that reads its inputs and more by `-bot import`,
+  a zero weight for each added input in every unit's row (`bot.Graph.Fit`):
+  four learned under 901ac22's inputs, widened so to the `*_soon` readings
+  `cave` takes, replayed their 60 held-out rounds round for round.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what

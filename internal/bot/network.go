@@ -55,6 +55,7 @@ type binding struct {
 // bias, then each output unit's direct weights, hidden weights and bias.
 type network struct {
 	name   string
+	names  []string // its inputs' names, in the order its genes take them
 	inputs []reading
 	wants  []want   // the kinds its inputs read, each to the furthest rank one asks for
 	units  []string // its outputs' units, in the order its genes hold them
@@ -139,7 +140,7 @@ func parseNetwork(name string, raw map[string]any, shared []string) (*network, e
 	if len(names) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(names), t.Hidden)
 	}
-	n := &network{name: name, hidden: t.Hidden, while: t.While}
+	n := &network{name: name, names: names, hidden: t.Hidden, while: t.While}
 	for i, name := range names {
 		s := slices.IndexFunc(sensors, func(row sensor) bool { return row.name == name })
 		if s < 0 || slices.Contains(names[:i], name) {

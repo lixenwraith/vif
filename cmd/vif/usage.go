@@ -48,7 +48,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d (with -serve, guests only, 1..%d); unset holds the whole roster; with a -join site, the one requested",
 				parameter.MaxPlayers, parameter.MaxPlayers)},
-			{names: []string{"bot"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you: one where no count is given, the scenario's own bot where no graph is, default where it carries none; -host/-join keep your player"},
+			{names: []string{"bot"}, arg: "[N[:graph]|graph|verb ...]", hint: "Add bots alongside you: one where no count is given, the scenario's own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares"},
 			{names: []string{"slow-window"}, arg: "<dur>",
@@ -321,7 +321,8 @@ the session shares its address with the other players. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
 :player drop <slot> removes one and keeps it out. Bots adds local bots by count and policy graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
-<slot> removes your bot, or any bot when hosting. Slots accept decimal 10,
+<slot> removes your bot, or any bot when hosting. Its Bot files row takes a verb
+of :bot that keeps bot files. Slots accept decimal 10,
 hexadecimal A or 0xA for the cursor marked A. Host before adding bots to solo
 play if remote players should join; otherwise bots open a session only they can
 join. Forms use Up/Down between fields, Left/Right and Home/End to move the text
@@ -400,7 +401,17 @@ name after the player's, and a seat that names no graph plays the first of
 them. The default graph is compiled in and resolves last, for a scenario that
 carries none. A graph that learns keeps a population for each of its networks
 beside the player's graphs in the user root, as
-<graph>.<scenario>.<network>.json.
+<graph>.<scenario>.<network>.json. The words after \-bot are those after :bot:
+a count or a graph, with add or without, seats bots, and \-bot with a verb that
+keeps these files acts and exits. list names every bot a seat can play with
+what each has learned in the scenario; create <name> writes a bot of the
+player's, the scenario's own with no weight, or after import <source>
+[network...] that source with every weight or those networks' alone; import
+<source> <name> [network...] gives a bot of the player's a source's weights;
+export <bot>[.<scenario>] <file> writes a bot with what its populations field;
+clear <bot>[.<scenario>[.<network>]] removes populations, which then start
+over. A source is a bot as a seat names one, or another scenario's,
+<scenario>[.<bot>].
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif
 System configuration roots, in that order;

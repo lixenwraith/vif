@@ -587,9 +587,9 @@ func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	stopTicking()
-	injectExCommand(t, a, "bot")
+	injectExCommand(t, a, "bot list")
 	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "slot 1 default") {
-		t.Fatalf(":bot reports %q", got)
+		t.Fatalf(":bot list reports %q", got)
 	}
 }
 

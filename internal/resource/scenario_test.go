@@ -19,6 +19,7 @@ import (
 	"testing/fstest"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
@@ -577,6 +578,161 @@ func TestAScenarioCarriesItsBotsAsFilesOfItsOwn(t *testing.T) {
 		if _, err := LoadScenario(Options{Scenario: dir}); err == nil {
 			t.Errorf("%s: the scenario loaded", fault)
 		}
+	}
+}
+
+// flyer is a bot of two networks, fly and kraken, each with the table given
+func flyer(fly, kraken string) string {
+	return "# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
+		"\n[network.kraken]\ninputs = [\"row\"]\noutputs = [\"move\"]\n" + kraken +
+		"\n[regions.play]\ninitial = \"A\"\n\n[states.A]\non_update = [{ action = \"Steer\", payload = { network = \"fly\" } }]\n"
+}
+
+// botFixture is a root holding the scenario flight, which carries the bots pilot
+// and spare, an empty user root, and what the verbs of a run of flight are given
+func botFixture(t *testing.T) (o Options, sc Scenario, user string, verb func(words ...string) (string, error)) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	root := t.TempDir()
+	dir := writeScenario(t, filepath.Join(root, "scenario", "flight"), scenarioRegion)
+	for name, body := range map[string]string{
+		"scenario.toml":  "bots = [\"bot/pilot.toml\", \"bot/spare.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n",
+		"bot/pilot.toml": flyer("x = { column = -0.5, energy = 0.25 } # by hand", "[network.kraken.y]\nrow = -1.0\n"),
+		"bot/spare.toml": flyer("y = { heat = 0.75 }", ""),
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	o, sc = Options{Dir: root}, read(t, dir)
+	return o, sc, paths.PopulationDir(), func(words ...string) (string, error) {
+		lines, err := BotFiles(o, sc, words)
+		return strings.Join(lines, "\n"), err
+	}
+}
+
+// weights reads the genomes the bot document at path writes, a network a name
+func weights(t *testing.T, path string) bot.Weights {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := bot.ParseGraph("read", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g.Weights()
+}
+
+// TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork: create writes a bot
+// of the player's, the scenario's own with no weight or a source's with every
+// weight or the networks' asked, and import gives one that exists a source's. A
+// source is a bot as a seat names one, or another scenario's by its address.
+func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
+	o, sc, user, verb := botFixture(t)
+	pilot, _ := sc.Bot("pilot")
+	nonzero := func(genes []float64) bool { return slices.ContainsFunc(genes, func(w float64) bool { return w != 0 }) }
+	at := func(name string) string { return filepath.Join(user, name+".toml") }
+
+	if _, err := verb("create", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	if w := weights(t, at("mine")); len(w) != 2 || nonzero(w["fly"]) || nonzero(w["kraken"]) {
+		t.Fatalf("a bot created alone writes %v; want its scenario's own two networks with no weight", w)
+	}
+	if _, err := verb("create", "whole", "import", "pilot"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(at("whole")); !bytes.Equal(got, pilot) {
+		t.Fatalf("a bot created from a source is not its document:\n%s", got)
+	}
+	if _, err := verb("create", "part", "import", "pilot", "kraken"); err != nil {
+		t.Fatal(err)
+	}
+	want := weights(t, at("whole"))
+	if w := weights(t, at("part")); nonzero(w["fly"]) || !slices.Equal(w["kraken"], want["kraken"]) {
+		t.Fatalf("a bot created with kraken's weights alone writes %v", w)
+	}
+	for _, name := range []string{"mine", "list", "2", "a.b", "../out"} {
+		if told, err := verb("create", name); err == nil {
+			t.Errorf("create %s was taken: %s", name, told)
+		}
+	}
+
+	// What mine learned in flight outranks the weights it is given until cleared
+	if err := os.WriteFile(filepath.Join(user, "mine.flight.fly.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	told, err := verb("import", "pilot", "mine", "fly")
+	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || !strings.Contains(told, "mine.flight.fly") {
+		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and the population that still plays", w, told, err)
+	}
+	for _, name := range []string{"none", "../bot/mine"} {
+		if told, err := verb("import", "pilot", name); err == nil {
+			t.Errorf("import wrote into %s, no bot of the player's by name: %s", name, told)
+		}
+	}
+	if told, err := verb("import", "pilot", "mine", "raid"); err == nil {
+		t.Errorf("import took a network its source lacks: %s", told)
+	}
+
+	// From a run of another scenario, flight's bots are found by its address
+	for source, heat := range map[string]bool{"flight": false, "flight.spare": true} {
+		lines, err := BotFiles(o, Scenario{}, []string{"create", "far" + strings.ReplaceAll(source, ".", ""), "import", source})
+		if err != nil {
+			t.Fatalf("%s: %v, %v", source, lines, err)
+		}
+		if w := weights(t, at("far"+strings.ReplaceAll(source, ".", ""))); nonzero(w["kraken"]) == heat {
+			t.Errorf("a bot created from %s writes %v; want that scenario's bot", source, w)
+		}
+	}
+}
+
+// TestWhatBotsLearnedIsListedAndClearedByAddress: list names every bot a seat can
+// play, a player's first, clear removes the populations below an address and no
+// other, and export writes a bot no population proves as its document.
+func TestWhatBotsLearnedIsListedAndClearedByAddress(t *testing.T) {
+	_, sc, user, verb := botFixture(t)
+	if _, err := verb("create", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	told, err := verb("list")
+	names := regexp.MustCompile(`(?m)^(\S+) \(([^)]+)\)`).FindAllStringSubmatch(told, -1)
+	if err != nil || len(names) != 4 || names[0][1] != "mine" || names[0][2] != "yours" || names[1][1] != "pilot" || names[3][2] != "shipped" {
+		t.Fatalf("list tells %q, %v; want mine, the scenario's two and the shipped one", told, err)
+	}
+
+	kept := []string{"mine.flight.fly", "mine.flight.kraken", "mine.other.fly", "mine2.flight.fly"}
+	for _, stem := range kept {
+		if err := os.WriteFile(filepath.Join(user, stem+".json"), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if told, err := verb("clear", "mine.flight"); err != nil || !strings.Contains(told, "mine.flight.fly, mine.flight.kraken") {
+		t.Fatalf("clear told %q, %v", told, err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(user, "*.json")); len(left) != 2 {
+		t.Fatalf("clear mine.flight left %v; want another scenario's and another bot's", left)
+	}
+	if told, err := verb("clear", "mine.flight"); err == nil {
+		t.Errorf("clear of nothing kept told %q", told)
+	}
+
+	file := filepath.Join(t.TempDir(), "out", "pilot.toml")
+	pilot, _ := sc.Bot("pilot")
+	if _, err := verb("export", "pilot", file); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); !bytes.Equal(got, pilot) {
+		t.Fatalf("a bot nothing proved was exported as:\n%s", got)
+	}
+	if told, err := verb("export", "./pilot.toml", file); err == nil {
+		t.Errorf("export took a file for a bot: %s", told)
 	}
 }
 

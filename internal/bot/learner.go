@@ -275,8 +275,8 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 // take is the genome game's next round plays. Exploring, it is the candidate the
 // game has in flight until that is settled, then the next: a hand-written genome
 // until a round has scored it, one drawn at random while the population is new,
-// and every learnRepeat-th the best member short of learnProven rounds again,
-// those in flight counted, so the archive's top is proved or falls. Else, the fielded.
+// and every learnRepeat-th a member again, to prove a guess or test the title.
+// Else, the fielded.
 func (l *Learner) take(game int, explore bool) []float64 {
 	l.tell()
 	s := &l.slots[game]
@@ -296,11 +296,19 @@ func (l *Learner) take(game int, explore bool) []float64 {
 			genes = l.draw()
 			s.id = l.engine.BeginEvaluation(genes)
 		case l.drawn%learnRepeat == 0:
-			unproved := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool {
-				return c.Count+l.playing(c.Data) < learnProven
-			})
-			if unproved >= 0 {
-				genes, s.id = members[unproved].Data, l.engine.BeginEvaluation(members[unproved].Data)
+			// By turns the member short of its proof the archive trusts most, and the less
+			// played of the fielded and its rival, so a title is tested while it is held
+			again := -1
+			for i, c := range members {
+				if c.Count+l.playing(c.Data) < learnProven && (again < 0 || trusted(c, l.recent) > trusted(members[again], l.recent)) {
+					again = i
+				}
+			}
+			if rival := l.rival(members); rival >= 0 && (again < 0 || l.drawn/learnRepeat%2 == 1) {
+				again = rival
+			}
+			if again >= 0 {
+				genes, s.id = members[again].Data, l.engine.BeginEvaluation(members[again].Data)
 			} else {
 				genes, s.id = l.engine.Reevaluate()
 			}
@@ -349,10 +357,10 @@ func (l *Learner) playing(genes []float64) (n int) {
 	return n
 }
 
-// field is the genome a round plays where no candidate does, of the archive's
-// members best first: the best its rounds have proved, since one enters on a round or two
-// and the top of an archive is its luckiest, or the hand-written one. It brings
-// the stats, and the round each member entered at, up to the archive as it stands.
+// field is the genome a round plays where no candidate does: the member fielded
+// (fieldedOf), since one enters on a round or two and the top of an archive is
+// its luckiest, or the hand-written one. It brings the stats, and the round each
+// member entered at, up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
 	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
 	born := make(map[uint64]int, len(members))
@@ -367,12 +375,46 @@ func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float
 		if i == 0 {
 			st.Best = c.Score
 		}
-		if st.FieldedRounds == 0 && c.Count >= learnProven {
-			st.Fielded, st.FieldedRounds, fielded = c.Score, c.Count, c.Data
-		}
+	}
+	if f, _ := fieldedOf(members, l.recent); f >= 0 {
+		st.Fielded, st.FieldedRounds, fielded = members[f].Score, members[f].Count, members[f].Data
 	}
 	l.born = born
 	l.stats.Store(&st)
+	return fielded
+}
+
+// trusted is a member's mean as its rounds are trusted for: weighed with
+// learnProven rounds at the population's recent mean, so a few lucky rounds do
+// not outrank many good ones.
+func trusted(c genetic.Candidate[[]float64, float64], recent float64) float64 {
+	return (c.Score*float64(c.Count) + recent*learnProven) / float64(c.Count+learnProven)
+}
+
+// fieldedOf is the member a run fields, the most trusted of those learnProven
+// rounds have proved, and the next most trusted, its rival; -1 for none.
+func fieldedOf(members []genetic.Candidate[[]float64, float64], recent float64) (fielded, rival int) {
+	fielded, rival = -1, -1
+	for i, c := range members {
+		switch {
+		case c.Count < learnProven:
+		case fielded < 0 || trusted(c, recent) > trusted(members[fielded], recent):
+			fielded, rival = i, fielded
+		case rival < 0 || trusted(c, recent) > trusted(members[rival], recent):
+			rival = i
+		}
+	}
+	return fielded, rival
+}
+
+// rival is the member a round tests the title on: of the fielded and its rival
+// the one with fewer rounds, those in flight counted, and -1 while none is proved
+func (l *Learner) rival(members []genetic.Candidate[[]float64, float64]) int {
+	fielded, rival := fieldedOf(members, l.recent)
+	rounds := func(i int) int { return members[i].Count + l.playing(members[i].Data) }
+	if rival >= 0 && rounds(rival) < rounds(fielded) {
+		return rival
+	}
 	return fielded
 }
 
@@ -384,10 +426,8 @@ func (l *Learner) save() {
 	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: l.step, Fielded: -1}
 	members := l.engine.Snapshot().Members
 	l.field(members)
-	for i, c := range members {
-		if doc.Fielded < 0 && c.Count >= learnProven {
-			doc.Fielded = i
-		}
+	doc.Fielded, _ = fieldedOf(members, l.recent)
+	for _, c := range members {
 		doc.Members = append(doc.Members, member{Score: c.Score, Rounds: c.Count, Born: l.born[genomeKey(c.Data)], Genes: c.Data})
 	}
 	data, err := json.Marshal(doc)

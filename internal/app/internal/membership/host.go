@@ -51,10 +51,19 @@ func (c Control) DropBot(slot int) error {
 func (c Control) RemoveBot(id uint64) error { return c.m.removeSeat(id) }
 func (c Control) BotSummary() string        { return c.m.seatsSummary() }
 func (c Control) Bots() []engine.BotSeat    { return c.m.botSeats() }
-func (c Control) HostError() error          { return c.m.hostErrorLocked() }
-func (c Control) JoinError() error          { return c.m.joinErrorLocked() }
-func (c Control) Leave() error              { return c.m.leaveLocked() }
-func (c Control) LeaveError() error         { return c.m.leaveErrorLocked() }
+
+// BotFiles keeps bot files for this run's scenario; list ends with the run's seats
+func (c Control) BotFiles(words []string) ([]string, error) {
+	lines, err := resource.BotFiles(c.m.run.Resources(), *c.m.scenario, words)
+	if err == nil && words[0] == "list" {
+		lines = append(lines, c.m.seatsSummary())
+	}
+	return lines, err
+}
+func (c Control) HostError() error  { return c.m.hostErrorLocked() }
+func (c Control) JoinError() error  { return c.m.joinErrorLocked() }
+func (c Control) Leave() error      { return c.m.leaveLocked() }
+func (c Control) LeaveError() error { return c.m.leaveErrorLocked() }
 
 // SetPassphrase sets what this run's doors take and its dials show: the phrase
 // given, or one made for "new" or none, returned to be shown once. A run in a

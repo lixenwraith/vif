@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"slices"
 	"strings"
@@ -1017,33 +1018,34 @@ func TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce(t *testing.T) {
 	}
 }
 
-// TestEveryThirdCandidateIsTheBestMemberYetToBeProved: a member's score is a guess
-// until its rounds prove it, so the repeats go to the best one short of them,
-// which a run fields once it has them.
-func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
+// TestRepeatsTestTheTitleAndProveTheBestGuessByTurns: every third candidate is a
+// member again, by turns the less played of the fielded and its rival, the two
+// most trusted, and the most trusted short of its proof. What is fielded is the
+// most trusted of the proved: a few lucky rounds do not unseat many good ones.
+func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest,
 		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
-		member{Genes: genome(0.2), Score: 40, Rounds: learnProven},
-		member{Genes: genome(0.3), Score: 30, Rounds: 1}))
+		member{Genes: genome(0.2), Score: 60, Rounds: learnProven},
+		member{Genes: genome(0.3), Score: 50, Rounds: 4 * learnProven},
+		member{Genes: genome(0.4), Score: 30, Rounds: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.2)) {
-		t.Fatalf("fields %v, want the member its rounds have proved", fielded[:1])
+	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.3)) {
+		t.Fatalf("fields %v, want the member of many rounds over the luckier one of few", fielded[:1])
 	}
-	// Two repeats bring the best member's rounds to learnProven, or one and a child
-	// bred its copy
-	for i := range 2 * learnRepeat {
-		if candidate := l.take(0, true); i+1 == learnRepeat && !slices.Equal(candidate, genome(0.1)) {
-			t.Fatalf("candidate %d is %v, want the best member short of its rounds", i+1, candidate[:1])
+	for i, want := range [][]float64{genome(0.2), genome(0.1)} {
+		for l.drawn%learnRepeat != learnRepeat-1 {
+			l.take(0, true)
+			l.settle(0, 20, true)
 		}
-		l.settle(0, 20, true)
-	}
-	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.1)) {
-		t.Fatalf("with those rounds fields %v, want the member they proved, still the best", fielded[:1])
+		if candidate := l.take(0, true); !slices.Equal(candidate, want) {
+			t.Fatalf("repeat %d is %v, want %v: the fielded's rival, the less played, then the most trusted short of its proof", i+1, candidate[:1], want[:1])
+		}
+		l.settle(0, 60, true)
 	}
 }
 
@@ -1200,7 +1202,7 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 	}
 	l.take(0, true)
 	l.settle(0, 1, true) // the hand-written genome, scored under them all
-	l.drawn = learnRepeat - 1
+	l.drawn = 2*learnRepeat - 1
 	if again := l.take(0, true); !slices.Equal(again, tail.Genes) {
 		t.Fatalf("the repeat is %v, want the one member short of its proof", again[:1])
 	}
@@ -1684,5 +1686,136 @@ func TestALearnersCandidateWaitsForTheRoundItsNetworkSteers(t *testing.T) {
 	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 1 || slices.Equal(plays(1), kraken.seed) || !slices.Equal(plays(0), waiting) {
 		t.Fatalf("a round at the Kraken: fly scored %d and kraken %d: want kraken's candidate scored and its next dealt, and fly's still in flight",
 			fly.Stats().Scored, kraken.Stats().Scored)
+	}
+}
+
+// weighing is a graph of two networks whose table is given, each steering in turn
+func weighing(t *testing.T, name, fly, kraken string) *Graph {
+	t.Helper()
+	g, err := ParseGraph(name, []byte("# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\n"+fly+
+		"\n[network.kraken]\n"+kraken+"\n[regions.play]\ninitial = \"A\"\n\n[states.A] # steers\non_update = [{ action = \"Steer\", payload = { network = \"fly\" } }]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// TestADocumentWritesTheWeightsItIsGivenAndReadsThemBack: a genome written into a
+// bot's document replaces the weights it wrote, every other line kept, and reads
+// back bit for bit, whatever the weights; with none it is a bot that starts from
+// nothing.
+func TestADocumentWritesTheWeightsItIsGivenAndReadsThemBack(t *testing.T) {
+	g := weighing(t, "pilot", "inputs = [\"energy\", \"heat\"]\nhidden = 3\nx = { column = -0.5, hidden = [0.25] } # by hand\nunits = [{ energy = 1.0 }]",
+		"inputs = [\"row\"]\noutputs = [\"move\"]\n[network.kraken.y]\nrow = -1.0\n")
+	rng := rand.New(rand.NewPCG(1, 2))
+	for round := range 50 {
+		w := g.Weights()
+		for _, genes := range w {
+			for i := range genes {
+				switch rng.IntN(3) {
+				case 0:
+					genes[i] = 0
+				case 1:
+					genes[i] = (rng.Float64()*2 - 1) * weightBound
+				default:
+					genes[i] = math.Float64frombits(rng.Uint64()>>12|0x3f10000000000000) * float64(rng.IntN(3)-1)
+				}
+			}
+		}
+		if round == 0 {
+			w = g.Bare()
+		}
+		text, err := g.Document(w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := ParseGraph("pilot", text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, genes := range back.Weights() {
+			if !slices.EqualFunc(genes, w[name], func(a, b float64) bool { return math.Float64bits(a) == math.Float64bits(b) }) {
+				t.Fatalf("round %d: network %s reads back %v for %v", round, name, genes, w[name])
+			}
+		}
+		for _, kept := range []string{"# a bot that flies", "[states.A] # steers", "inputs = [\"energy\", \"heat\"]"} {
+			if !strings.Contains(string(text), kept) {
+				t.Fatalf("round %d: the document lost %q:\n%s", round, kept, text)
+			}
+		}
+		if round == 0 && (strings.Contains(string(text), "units") || strings.Contains(string(text), "by hand") || strings.Contains(string(text), "network.kraken.y")) {
+			t.Fatalf("a bot with no weight still writes some:\n%s", text)
+		}
+	}
+}
+
+// TestABotTakesAnothersWeightsByNameOrNothing: one bot takes another's network by
+// its inputs' names and its units' places, so the two steer alike on the readings
+// they share, whatever order and whatever more the taker reads. A network, an
+// input, an output or a hidden unit the taker lacks fits nothing.
+func TestABotTakesAnothersWeightsByNameOrNothing(t *testing.T) {
+	from := weighing(t, "source", "inputs = [\"energy\", \"heat\"]\nhidden = 2\nx = { column = -0.5, energy = 0.3, hidden = [0.25, -1.5], bias = 0.1 }\ny = { heat = 2.0 }\n"+
+		"special = { hidden = [0.0, 1.0], bias = -0.2 }\nunits = [{ energy = 1.0, bias = 0.5 }, { column = -2.0, heat = 0.7 }]",
+		"inputs = [\"row\"]\ny = { row = -1.0 }")
+	to := weighing(t, "taker", "inputs = [\"row\", \"heat\", \"energy\"]\nhidden = 3\nx = { row = 3.0 }", "inputs = [\"row\"]")
+	w, err := to.Fit(from, "fly")
+	if err != nil || len(w) != 1 {
+		t.Fatalf("taking one network gave %d, %v", len(w), err)
+	}
+	a, b := from.net("fly").playing(), to.net("fly").playing()
+	b.genes = w["fly"]
+	rng := rand.New(rand.NewPCG(3, 4))
+	for range 100 {
+		column, energy, heat := rng.Float64()*2-1, rng.Float64(), rng.Float64()
+		copy(a.in, []float64{column, energy, heat})
+		copy(b.in, []float64{column, rng.Float64()*2 - 1, heat, energy})
+		if got, want := slices.Clone(b.pass()), a.pass(); !slices.Equal(got, want) {
+			t.Fatalf("the taker steers %v where its source steers %v", got, want)
+		}
+	}
+	// kraken's y, the second of its units, reads column and then row
+	if all, err := to.Fit(from); err != nil || len(all) != 2 || all["kraken"][4] != -1 {
+		t.Fatalf("taking every network gave %v, %v", all, err)
+	}
+	for fault, taker := range map[string]*Graph{
+		"an input it lacks":      weighing(t, "taker", "inputs = [\"energy\"]\nhidden = 2", "inputs = [\"row\"]"),
+		"a hidden unit it lacks": weighing(t, "taker", "inputs = [\"energy\", \"heat\"]\nhidden = 1", "inputs = [\"row\"]"),
+		"an output it lacks":     weighing(t, "taker", "inputs = [\"energy\", \"heat\"]\nhidden = 2\noutputs = [\"move\"]", "inputs = [\"row\"]"),
+	} {
+		if _, err := taker.Fit(from, "fly"); err == nil {
+			t.Errorf("%s: the weights were taken", fault)
+		}
+	}
+	if _, err := to.Fit(from, "none"); err == nil {
+		t.Error("a network neither has was taken")
+	}
+}
+
+// TestWhatAPopulationFieldsIsReadWhateverScoredIt: a population's document gives
+// its rounds and the first member eight rounds have proved, for the layout it was
+// kept under and none other, whatever version scored it: a model is its genes.
+func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	doc := func(version int, layout string) *memory {
+		data, err := json.Marshal(population{Version: version, Layout: layout, Rounds: 70, Recent: 12.5, Members: []member{
+			{Genes: genome(0.1), Score: 90, Rounds: 2}, {Genes: genome(0.2), Score: 60, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &memory{doc: data}
+	}
+	for _, version := range []int{1, populationVersion} {
+		k, ok, err := g.Kept("fly", doc(version, net.digest))
+		if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Members != 3 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
+			t.Fatalf("version %d: kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", version, k, ok, err)
+		}
+	}
+	if _, ok, err := g.Kept("fly", doc(populationVersion, "another")); ok || err != nil {
+		t.Fatalf("a population of another layout was read: %v, %v", ok, err)
+	}
+	if _, ok, err := g.Kept("fly", &memory{}); ok || err != nil {
+		t.Fatalf("no population was read as one: %v, %v", ok, err)
 	}
 }
