@@ -34,6 +34,31 @@ func TestLoadRefusesParentCycle(t *testing.T) {
 	}
 }
 
+// TestARegionIsInItsActiveStateAndThoseItIsWithin: In holds for a running region's
+// active state and the states that one is within, for any state where none is
+// named, and for no region that does not run.
+func TestARegionIsInItsActiveStateAndThoseItIsWithin(t *testing.T) {
+	m, trace, err := loadMachine(t, "[regions.r]\ninitial = \"Leaf\"\n[regions.idle]\n[states.Outer]\n[states.Leaf]\nparent = \"Outer\"\n[states.Other]\n")
+	if err == nil {
+		err = m.Init(trace)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		region string
+		states []string
+		want   bool
+	}{
+		{"r", nil, true}, {"r", []string{"Leaf"}, true}, {"r", []string{"Other", "Outer"}, true},
+		{"r", []string{"Other"}, false}, {"idle", nil, false}, {"none", nil, false},
+	} {
+		if got := m.In(c.region, c.states); got != c.want {
+			t.Errorf("region %s in %v: %v, want %v", c.region, c.states, got, c.want)
+		}
+	}
+}
+
 func TestLoadFailsWithoutStates(t *testing.T) {
 	_, _, err := loadMachine(t, "[regions.r]\ninitial = \"A\"\n")
 	if err == nil || !strings.Contains(err.Error(), "'A'") {

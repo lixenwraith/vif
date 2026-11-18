@@ -146,8 +146,8 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never ([Networks and learning](#networks-and-learning)). |
-| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden` and, if any, weights written by hand. |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never. `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
+| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs`, the `while` that has it steer and, if any, weights written by hand. |
 | `[regions.<name>]` | `initial` only. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -167,7 +167,7 @@ Allowance left idle builds up to one second's worth.
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
-| `Steer` | `network`: the `[network.<name>]` to run, which a graph with one may leave out | a pointer move to the cell that network names, after the special attack where it asks for it |
+| `Steer` | `network`: the `[network.<name>]` to run, or a list of them, the first whose `while` holds running; a graph with one may leave it out | a pointer move to the cell that network names, after the special attack where it asks for it |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`) or that opens the command line
@@ -201,6 +201,7 @@ or no cell gains ground.
 | `InMode` | `mode`: `normal`, `visual`, `insert`, `search`, `command`, `overlay` | the router is in that mode |
 | `Chance` | `percent`, 1..100 | a draw from the bot's own stream |
 | `Idle` | none | the intent queue is empty |
+| `InState` | `region`, `states` | the scenario's region runs and, where `states` names any, is in one of them or in a state within one |
 | `Own` | `field` | that event payload field names the bot's own cursor |
 
 ### Targets
@@ -335,39 +336,58 @@ are the baseline to beat. It appends a `stop` region (states `StopWait` and
 A graph may declare networks: policies whose weights are numbers a search can
 tune, where a graph's states are not. `Steer` reads a network's sensors, runs
 them through it and points the cursor at the cell its outputs name. A graph whose
-scenario plays in phases gives each a network and steers by the one its guards
-pick: the shipped [`cave`](../internal/asset/bot/cave.toml) flies the `cave`
-scenario by two, `raid` while its raiders fly and `kraken` while its Kraken is
-up, which share next to nothing. A network needs the pointer free, and a bot's
-run starts on the embedded `[play]`'s pointer whatever the player's own says, and
-on the auto-fire its `[bot]` names. `cave` takes `main`, the gun alone: the
-special attack fired unasked spends in a game's first seconds the heat that
-outlasts the energy, and what its blasts happen to catch is luck in the score.
+scenario plays in phases gives each a network, bound by its `while` to the
+states it is for, and steers by a list of them. The shipped
+[`cave`](../internal/asset/bot/cave.toml) flies the `cave` scenario by two, `raid`
+while its raiders fly and `kraken` while its Kraken is up, which share next to
+nothing, each picked by a guard on a `Steer` of its own. A network needs the
+pointer free, and a bot's run starts on the embedded `[play]`'s pointer whatever
+the player's own says, and on the auto-fire its `[bot]` names. `cave` takes
+`main`, the gun alone: the special attack fired unasked spends in a game's
+first seconds the heat that outlasts the energy, and what its blasts happen to
+catch is luck in the score.
 
 ```toml
+[bot]
+inputs = ["ceiling", "floor", "column"]
+
+[network.kraken]
+while = { name = "InState", args = { region = "boss", states = ["BossFight"] } }
+inputs = ["kraken_near_x", "kraken_near_y"]
+outputs = ["move"]
+x = { kraken_near_x = -1.0, column = -0.1 }
+
 [network.raid]
 hidden = 6
-inputs = ["ceiling", "floor", "species_x", "species_y", "species_near_x", "column"]
+inputs = ["species_x", "species_y", "species_near_x"]
+y = { species_y = 0.9, hidden = [0.5] }
+units = [{ species_near_x = 1.0, bias = -0.2 }]
 
 [states.Fly]
-on_update = [
-    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
-    { action = "Steer", payload = { network = "raid" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
-]
+on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
 ```
 
 - A network's name is lowercase letters, digits and underscores, as it is part
   of a file's name.
-- `inputs`: the sensors read, in the order the weights take them, each named in
-  the [catalogue](bot-catalogue.md#inputs): the nearest of a kind by rank and
-  field (`species_x`, `species2_near_y`, `bullet_vx`, `landing3_soon`), the
-  rock's edges at the cursor's column and ahead, the walls about the cursor,
-  and the bot's own, from its place in the view to its weapons. Each reads the
-  cells the view shows and keeps to its scale, and what is not sighted reads 0.
-  A `Steer` scans the world for the kinds its network's inputs name and for no
-  other, and allocates nothing: in `cave` its reading and its pass take 1.2 µs
-  while raiders fly and 3.7 µs with a Kraken up, whose members it walks, of a
-  tick's 167. What a kind knows is read of a thing's entity as an input asks, a
+- `while`: the guard that has the network steer, written `{ name, args }` as
+  `And` lists one. It is asked of no state of the graph, so a guard of a state's
+  time (`StateTimeExceeds`) or of an event's payload is refused at load.
+  `InState` binds a network to the scenario's own states. A `Steer` plays a
+  network only while its `while` holds, and over a list asks each in turn,
+  once an update, and plays the first whose does; a network with none always
+  steers, so only a list's last may have none.
+- `inputs`: the sensors read, in the order the weights take them, after those
+  `[bot] inputs` lists for every network of the graph. Each is named in the
+  [catalogue](bot-catalogue.md#inputs): the nearest of a kind by rank and field
+  (`species_x`, `species2_near_y`, `bullet_vx`, `landing3_soon`), the rock's
+  edges at the cursor's column and ahead, the first cell that blocks the cursor
+  each way, and the bot's own, from its place in the view to its weapons. Each
+  reads the cells the view shows and keeps to its scale, and what is not
+  sighted reads 0. A `Steer` scans the world for the kinds its network's inputs
+  name and for no other, and allocates nothing: in `cave` its reading and its
+  pass take 1.2 µs while raiders fly and 3.8 µs with a Kraken up, whose members
+  it walks, of a tick's 180. A scan tells the one field it holds of each thing,
+  as a species' `enraged`; an input reads any other of the thing's entity, a
   lookup each.
   - An offset grows with distance, so only a nearness lets one weight back off
     what is close and leave alone what is far.
@@ -379,17 +399,29 @@ on_update = [
     Kraken.
   - Loot has no sensor: a drop homes on its owner, so its place steers nothing.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
-- The outputs are the [catalogue's](bot-catalogue.md#outputs), `special` and
-  `move`. Each of their units, `special`, `x` and `y`, is the direct sum of its
-  weights over the inputs plus the hidden units' and its bias, a weight within 4
-  either side of zero.
+- `outputs`: those it has of the [catalogue's](bot-catalogue.md#outputs),
+  `special` and `move` when it lists none. One left out is never asked for and
+  has no weights. Each unit of an output, `special`, `x` and `y`, is the direct
+  sum of its weights over the inputs plus the hidden units' and its bias, a
+  weight within 4 either side of zero.
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
-  hand, the use of its heat among it. A graph may still write some, as the
-  tables `x`, `y` and `special` of a network, each an output's weights from the
-  inputs it names and its `bias`; they are then every run's first candidate.
-  With no weight and no population a network asks for nothing and the ship
-  holds still.
+  hand, the use of its heat among it. A graph may write any: a unit's table
+  (`x`, `y`, `special`) gives its weight from each input by name, its `bias`
+  and, as `hidden`, a weight a hidden unit in their order, and `units` lists a
+  table a hidden unit, its weight from each input and its `bias`. What is
+  written is every run's first candidate and what is not is zero: with no
+  weight and no population a network asks for nothing and the ship holds still.
+  - A move is an offset from the ship in view widths and heights, taken each
+    update. A positive weight on a thing's offset closes that share of the gap
+    an update: in `cave` 0.6 to 1.2 on `species_y` all hold a raider's row.
+  - A negative weight on an offset runs the ship to the rock. Back off through
+    a nearness, and pair it with a centring term, `column` across and
+    `ceiling` and `floor` down, or the ship pins to an edge.
+  - Zero is holding still, and a small bias a steady drift: a move is a cell
+    once it reaches half of one, 0.0042 in `x` and 0.014 in `y` on the 119
+    columns and 36 rows a headless bot's screen shows. Leave every weight not
+    meant unwritten.
 
 ### Learning
 
@@ -456,8 +488,8 @@ steered in it, the whole round for `raid` and from the Kraken's rise for
 A network's population is kept in the user root as
 `bot/<graph>.<scenario>.<network>.json`, written each half minute of play and as
 the run stops; a browser keeps none. Removing the file starts that population
-over, as does a change of layout (`inputs` or `hidden`), which the file's
-`layout` digest names.
+over, as does a change of layout (the inputs read, `hidden`, or an output left
+out), which the file's `layout` digest names.
 
 - `rounds`: every round scored since the population began, over all its runs.
 - `recent`: their mean lately, and `step`: the mutation step in force, which the
