@@ -181,7 +181,7 @@ func (n *network) read(m *mind) {
 	for i, w := range n.wants {
 		near := &n.near[i]
 		near.m, near.want, near.n = m, w, 0
-		clear(near.at[:w.ranks])
+		clear(near.spots[:w.ranks])
 		kinds[w.kind].scan(m, near)
 	}
 	for i, read := range n.inputs {
