@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/toml/macro"
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -253,6 +254,8 @@ type Driver struct {
 	seen      []event.GameEvent
 	fitness   int64
 	observing atomic.Bool
+	// owed is what each death the bot's world predicted weighs once it is proved
+	owed map[core.Entity]int64
 
 	// earned is fitness without its defeats, and travelled the columns the cave has
 	// scrolled under the bot. The round in play began at roundTick with roundEarned
@@ -337,27 +340,29 @@ func (d *Driver) observe(ev event.GameEvent) {
 	if !d.observing.Load() {
 		return
 	}
-	if ev.Phase != event.PhasePredicted {
-		for _, row := range fitness {
-			if row.event == ev.Type && (row.owner == "" || d.mind.owns(ev.Payload, row.owner)) &&
-				(row.when == "" || payloadTrue(ev.Payload, row.when)) {
-				weight := row.weight
-				switch row.weigh {
-				case weighKill:
-					weight = d.mind.killWorth(ev.Payload, weight)
-				case weighEnd:
-					// A round ends once, however often its last hits lift and drop
-					// the defeat before the new game, and a crush is a defeat too
-					if d.downed {
-						continue
-					}
-					d.downed = true
-				}
-				d.fitness += weight
-				if row.weigh != weighEnd {
-					d.earned += weight
-				}
+	for _, row := range fitness {
+		if row.event != ev.Type || row.owner != "" && !d.mind.owns(ev.Payload, row.owner) ||
+			row.when != "" && !payloadTrue(ev.Payload, row.when) {
+			continue
+		}
+		weight := row.weight
+		if row.weigh == weighKill {
+			weight = d.killWeight(ev, weight)
+		}
+		if ev.Phase == event.PhasePredicted {
+			continue
+		}
+		// A round ends once, however often its last hits lift and drop the defeat
+		// before the new game, and a crush is a defeat too
+		if row.weigh == weighEnd {
+			if d.downed {
+				continue
 			}
+			d.downed = true
+		}
+		d.fitness += weight
+		if row.weigh != weighEnd {
+			d.earned += weight
 		}
 	}
 	if d.machine.Reacts(ev.Type) {
@@ -379,6 +384,28 @@ const (
 	bountyFloor = 0.25
 	killPay     = 12
 )
+
+// killWeight is what a kill's event weighs. A death the bot's world only predicted
+// is weighed as it is seen, while its entity stands to be read, and that held for
+// the event that proves it, which comes once the entity is gone.
+func (d *Driver) killWeight(ev event.GameEvent, weight int64) int64 {
+	p, ok := ev.Payload.(*event.SpeciesKilledPayload)
+	if !ok {
+		return weight
+	}
+	if held, ok := d.owed[p.Entity]; ok && ev.Type == event.EventSpeciesKillConfirmed {
+		delete(d.owed, p.Entity)
+		return held
+	}
+	weight = d.mind.killWorth(p, weight)
+	if ev.Phase == event.PhasePredicted {
+		if d.owed == nil {
+			d.owed = make(map[core.Entity]int64)
+		}
+		d.owed[p.Entity] = weight
+	}
+	return weight
+}
 
 // killWorth is what a kill weighs. A data species' is killPay times the hit points
 // its program gives it, what it took to shoot down. A Kraken's is the ticks its
@@ -544,7 +571,10 @@ func (d *Driver) deal() {
 // never did keeps its candidate for the round that reaches it.
 func (d *Driver) closeRound(played bool) {
 	var earned int64
-	d.ctx.World.RunSafe(func() { earned, d.downed = d.earned, false })
+	d.ctx.World.RunSafe(func() {
+		earned, d.downed = d.earned, false
+		clear(d.owed) // a prediction is dropped with the game it was made in
+	})
 	score := float64(d.travelled-d.roundTravelled) + float64(earned-d.roundEarned)
 	d.roundTick, d.roundEarned, d.roundTravelled = d.stats.Ticks, earned, d.travelled
 	d.stats.Rounds++

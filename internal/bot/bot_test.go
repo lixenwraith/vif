@@ -1624,7 +1624,8 @@ func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
 
 // TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied: a Kraken shot down at
 // four hit points a second or faster earns the ticks that pace takes, a slower
-// kill the share its pace is of that, and never less than a quarter.
+// kill the share its pace is of that, and never less than a quarter. A kill only
+// predicted is weighed then and paid once proved.
 func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
 	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
@@ -1645,6 +1646,19 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	}
 	if got, want := d.Stats().Fitness, par+par/2+par/4; got != want {
 		t.Fatalf("three Krakens shot down in 20, 60 and 600 seconds weigh %d, want %d: par's %d ticks, half and a quarter", got, want, par)
+	}
+	// A session's guest predicts the death and is paid as it is proved, the Kraken gone
+	kraken := place(w, core.DomainShared, 40, 10, func(e core.Entity) {
+		w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 120, Time: 20})
+	})
+	killed := &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesKraken, Entity: kraken}
+	rec.dispatch = []event.GameEvent{{Type: event.EventSpeciesKilled, Payload: killed, Phase: event.PhasePredicted}}
+	d.Step()
+	w.DestroyEntity(kraken)
+	rec.dispatch = []event.GameEvent{{Type: event.EventSpeciesKillConfirmed, Payload: killed}}
+	d.Step()
+	if got, want := d.Stats().Fitness, 2*par+par/2+par/4; got != want {
+		t.Fatalf("a predicted kill proved after its Kraken is gone brings the weight to %d, want %d, par's ticks more", got, want)
 	}
 }
 
