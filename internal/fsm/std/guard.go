@@ -12,7 +12,7 @@ import (
 
 func registerCoreGuards[T any](m *fsm.Machine[T]) {
 	// StateTimeExceeds passes once the region has been in its state for 'ms'
-	m.RegisterGuard("StateTimeExceeds", func(a *msArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterStateGuard("StateTimeExceeds", func(a *msArgs) (fsm.GuardFunc[T], error) {
 		if a.Ms <= 0 {
 			return nil, fmt.Errorf("'ms' must be positive, got %d", a.Ms)
 		}
@@ -64,12 +64,11 @@ func static[T any](m *fsm.Machine[T], name string, g fsm.GuardFunc[T]) {
 
 func registerStaticGuards[T any](m *fsm.Machine[T]) {
 	static(m, "AlwaysTrue", func(T, *fsm.RegionState, any) bool { return true })
-	static(m, "StateTimeExceeds10s", func(_ T, region *fsm.RegionState, _ any) bool {
-		return region.TimeInState > 10*time.Second
-	})
-	static(m, "StateTimeExceeds2s", func(_ T, region *fsm.RegionState, _ any) bool {
-		return region.TimeInState > 2*time.Second
-	})
+	for name, d := range map[string]time.Duration{"StateTimeExceeds10s": 10 * time.Second, "StateTimeExceeds2s": 2 * time.Second} {
+		m.RegisterStateGuard(name, func(*struct{}) (fsm.GuardFunc[T], error) {
+			return func(_ T, region *fsm.RegionState, _ any) bool { return region.TimeInState > d }, nil
+		})
+	}
 }
 
 // === Status Guards ===

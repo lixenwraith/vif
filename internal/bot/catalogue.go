@@ -35,11 +35,12 @@ const (
 	targetCount = kindLanding
 )
 
-// thing is one of a kind as its scan finds it: the cell it stands on and its
-// entity, a body's its header, of which what its kind knows is read
+// thing is one of a kind as its scan finds it: the cell it stands on, its entity,
+// a body's its header, and told, the field its kind's row has the scan tell
 type thing struct {
 	x, y   int
 	entity core.Entity
+	told   float64
 }
 
 // visitor is told each thing a kind's scan finds
@@ -47,13 +48,15 @@ type visitor interface{ visit(thing) }
 
 // kinds is indexed by kind: the name a graph uses and the scan that visits each
 // one the world holds, and for a kind a network reads, how many of the nearest
-// it may read and what one knows beyond where it is. A button is a rectangle a
-// scenario lays out and random a cell, so neither is scanned.
+// it may read and what one knows beyond where it is: tells, which its scan reads
+// off the component it walks, none where zero, and the rest, read of the entity.
+// A button is a rectangle a scenario lays out and random a cell: neither is scanned.
 var kinds = [kindCount]struct {
 	name   string
 	scan   func(m *mind, to visitor)
 	ranks  int
 	covers bool // a network sights it by the nearest cell its members cover
+	tells  field
 	knows  []field
 	doc    string
 }{
@@ -62,7 +65,7 @@ var kinds = [kindCount]struct {
 			c := m.ctx.World.Components
 			c.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
 				if g.Type != component.GlyphGold && !c.Member.HasEntity(e) && m.ctx.World.Positions.IsTypeable(e) {
-					m.at(e, to)
+					m.at(e, 0, to)
 				}
 				return true
 			})
@@ -71,7 +74,7 @@ var kinds = [kindCount]struct {
 		scan: func(m *mind, to visitor) {
 			m.ctx.World.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
 				if g.Type == component.GlyphGold {
-					m.at(e, to)
+					m.at(e, 0, to)
 				}
 				return true
 			})
@@ -79,23 +82,24 @@ var kinds = [kindCount]struct {
 	kindNugget: {name: "nugget", doc: "a nugget",
 		scan: func(m *mind, to visitor) {
 			for _, e := range m.ctx.World.Components.Nugget.Entities() {
-				m.at(e, to)
+				m.at(e, 0, to)
 			}
 		}, ranks: rankMax},
 	kindSpecies: {name: "species", doc: "a combat entity other than a cursor or a tower",
-		scan: scanSpecies, ranks: rankMax, knows: []field{fieldEnraged, fieldHits, fieldSize, fieldVX, fieldVY}},
+		scan: scanSpecies, ranks: rankMax, tells: fieldEnraged, knows: []field{fieldEnraged, fieldHits, fieldSize, fieldVX, fieldVY}},
 	kindKraken: {name: "kraken", doc: "a Kraken, by its body, which may stand past a view that shows a leg; its nearness is that of the nearest cell it covers, legs and all",
 		scan: func(m *mind, to visitor) {
-			for _, e := range m.ctx.World.Components.Kraken.Entities() {
-				m.at(e, to)
-			}
-		}, ranks: 1, covers: true, knows: []field{fieldReach, fieldHits, fieldHealth, fieldVX, fieldVY}},
+			m.ctx.World.Components.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
+				m.at(e, k.AttackT, to)
+				return true
+			})
+		}, ranks: 1, covers: true, tells: fieldReach, knows: []field{fieldReach, fieldHits, fieldHealth, fieldVX, fieldVY}},
 	kindCursor: {name: "cursor", doc: "another participant's cursor",
 		scan: func(m *mind, to visitor) {
 			own := m.ctx.World.Resources.Player.Entity
 			for _, e := range m.ctx.World.Components.Cursor.Entities() {
 				if e != own {
-					m.at(e, to)
+					m.at(e, 0, to)
 				}
 			}
 		}, ranks: rankMax},
@@ -112,17 +116,21 @@ var kinds = [kindCount]struct {
 			c := m.ctx.World.Components
 			c.Behavior.Each(func(e core.Entity, b *component.BehaviorComponent) bool {
 				if b.Landing {
-					to.visit(thing{b.TargetX, b.TargetY, e})
+					to.visit(thing{b.TargetX, b.TargetY, e, b.Machine.Progress()})
 				}
 				return true
 			})
 			c.Kraken.Each(func(e core.Entity, k *component.KrakenComponent) bool {
-				if k.State == component.KrakenSpin || k.State == component.KrakenMove {
-					to.visit(thing{int(k.TargetX), int(k.TargetY), e})
+				switch k.State {
+				case component.KrakenSpin:
+					spun := 1 - k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds()
+					to.visit(thing{int(k.TargetX), int(k.TargetY), e, min(max(spun, 0), 1)})
+				case component.KrakenMove:
+					to.visit(thing{int(k.TargetX), int(k.TargetY), e, 1})
 				}
 				return true
 			})
-		}, ranks: rankMax, knows: []field{fieldSoon}},
+		}, ranks: rankMax, tells: fieldSoon, knows: []field{fieldSoon}},
 	kindBullet: {name: "bullet", doc: "a hostile bullet",
 		scan: scanBullets, ranks: rankMax, knows: []field{fieldVX, fieldVY}},
 	kindMissile: {name: "missile", doc: "a hostile missile",
@@ -133,7 +141,7 @@ var kinds = [kindCount]struct {
 func scanSpecies(m *mind, to visitor) {
 	m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
 		if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
-			m.at(e, to)
+			m.at(e, flag(c.IsEnraged), to)
 		}
 		return true
 	})
@@ -142,7 +150,7 @@ func scanSpecies(m *mind, to visitor) {
 func scanBullets(m *mind, to visitor) {
 	m.ctx.World.Components.Bullet.Each(func(e core.Entity, b *component.BulletComponent) bool {
 		if b.Hostile {
-			m.at(e, to)
+			m.at(e, 0, to)
 		}
 		return true
 	})
@@ -151,17 +159,17 @@ func scanBullets(m *mind, to visitor) {
 func scanMissiles(m *mind, to visitor) {
 	m.ctx.World.Components.Missile.Each(func(e core.Entity, missile *component.MissileComponent) bool {
 		if missile.Hostile {
-			m.at(e, to)
+			m.at(e, 0, to)
 		}
 		return true
 	})
 }
 
-// at tells to of the thing e is at the cell it stands on; an entity with no place
-// is none
-func (m *mind) at(e core.Entity, to visitor) {
+// at tells to of the thing e is at the cell it stands on, with what its scan
+// tells of it; an entity with no place is none
+func (m *mind) at(e core.Entity, told float64, to visitor) {
 	if pos, ok := m.ctx.World.Positions.GetPosition(e); ok {
-		to.visit(thing{pos.X, pos.Y, e})
+		to.visit(thing{pos.X, pos.Y, e, told})
 	}
 }
 
@@ -197,8 +205,8 @@ const (
 )
 
 // fields is indexed by field: the name an input ends in, its scale with the half
-// of a count's or a rate's, what it reads, and for what a kind knows how it is
-// read of a thing's entity, as an input asks
+// of a count's or a rate's, what it reads, and of, how one a scan does not tell
+// is read of a thing's entity, as an input asks
 var fields = [fieldCount]struct {
 	name  string
 	scale scale
@@ -206,35 +214,13 @@ var fields = [fieldCount]struct {
 	doc   string
 	of    func(m *mind, e core.Entity) float64
 }{
-	fieldX:     {name: "x", scale: scaleAcross, doc: "its offset across"},
-	fieldY:     {name: "y", scale: scaleDown, doc: "its offset down"},
-	fieldNearX: {name: "near_x", scale: scaleNear, doc: "its nearness across"},
-	fieldNearY: {name: "near_y", scale: scaleNear, doc: "its nearness down"},
-	fieldEnraged: {name: "enraged", scale: scaleFlag, doc: "1 while it is enraged",
-		of: func(m *mind, e core.Entity) float64 {
-			c, ok := m.ctx.World.Components.Combat.GetPtr(e)
-			return flag(ok && c.IsEnraged)
-		}},
-	fieldSoon: {name: "soon", scale: scaleShare, doc: "how soon it lands, from 0 as its warning starts to 1 as the body leaves for it",
-		of: func(m *mind, e core.Entity) float64 {
-			if k, ok := m.ctx.World.Components.Kraken.GetPtr(e); ok {
-				if k.State != component.KrakenSpin {
-					return 1
-				}
-				return min(max(1-k.StateRemaining.Seconds()/parameter.KrakenSpinDuration.Seconds(), 0), 1)
-			}
-			if b, ok := m.ctx.World.Components.Behavior.GetPtr(e); ok {
-				return b.Machine.Progress()
-			}
-			return 0
-		}},
-	fieldReach: {name: "reach", scale: scaleShare, doc: "how far out its striking legs are",
-		of: func(m *mind, e core.Entity) float64 {
-			if k, ok := m.ctx.World.Components.Kraken.GetPtr(e); ok {
-				return k.AttackT
-			}
-			return 0
-		}},
+	fieldX:       {name: "x", scale: scaleAcross, doc: "its offset across"},
+	fieldY:       {name: "y", scale: scaleDown, doc: "its offset down"},
+	fieldNearX:   {name: "near_x", scale: scaleNear, doc: "its nearness across"},
+	fieldNearY:   {name: "near_y", scale: scaleNear, doc: "its nearness down"},
+	fieldEnraged: {name: "enraged", scale: scaleFlag, doc: "1 while it is enraged"},
+	fieldSoon:    {name: "soon", scale: scaleShare, doc: "how soon it lands, from 0 as its warning starts to 1 as the body leaves for it"},
+	fieldReach:   {name: "reach", scale: scaleShare, doc: "how far out its striking legs are"},
 	fieldHits: {name: "hp", scale: scaleHalf, half: hitsHalf, doc: "the hit points it has left",
 		of: func(m *mind, e core.Entity) float64 {
 			if c, ok := m.ctx.World.Components.Combat.GetPtr(e); ok {
@@ -373,10 +359,17 @@ func (v *view) shown(x, y int) bool { return x >= v.minX && x <= v.maxX && y >= 
 type nearest struct {
 	m *mind
 	want
-	n    int
-	dist [rankMax]int
-	who  [rankMax]core.Entity // each one's entity, of which what its kind knows is read
-	at   [rankMax]sighted
+	n     int
+	spots [rankMax]spot
+}
+
+// spot is one thing a network keeps of a kind: how far it is, where, what its
+// scan told of it, and its entity, of which what the scan does not tell is read
+type spot struct {
+	dist   int
+	at     sighted
+	told   float64
+	entity core.Entity
 }
 
 func (k *nearest) visit(t thing) {
@@ -397,7 +390,8 @@ func (k *nearest) visit(t thing) {
 		cell := sight(x-v.from.X, y-v.from.Y, v.width, v.height)
 		s[fieldNearX], s[fieldNearY] = cell[fieldNearX], cell[fieldNearY]
 	}
-	k.at[i], k.who[i] = s, t.entity
+	kept := &k.spots[i]
+	kept.at, kept.told, kept.entity = s, t.told, t.entity
 }
 
 // place makes room among the nearest for a thing at dist2 d and returns its rank,
@@ -406,13 +400,13 @@ func (k *nearest) place(d int) int {
 	i := k.n
 	if i < k.ranks {
 		k.n++
-	} else if i--; d >= k.dist[i] {
+	} else if i--; d >= k.spots[i].dist {
 		return -1
 	}
-	for ; i > 0 && d < k.dist[i-1]; i-- {
-		k.at[i], k.who[i], k.dist[i] = k.at[i-1], k.who[i-1], k.dist[i-1]
+	for ; i > 0 && d < k.spots[i-1].dist; i-- {
+		k.spots[i] = k.spots[i-1]
 	}
-	k.dist[i] = d
+	k.spots[i].dist = d
 	return i
 }
 
@@ -472,22 +466,22 @@ func (m *mind) rock(place int) [2]float64 {
 	return v.rocks[place]
 }
 
-// walls are the ways a network reads how far the cursor may go before a cell
-// blocks it
-var walls = [...]struct {
+// blocks are the ways a network reads how far the cursor may go before a cell
+// blocks it: a wall, the rock or the map's edge
+var blocks = [...]struct {
 	name   string
 	dx, dy int
 	doc    string
 }{
-	{"wall_up", 0, -1, "the first cell above the cursor that blocks it"},
-	{"wall_down", 0, 1, "the first cell below the cursor that blocks it"},
-	{"wall_left", -1, 0, "the first cell left of the cursor that blocks it"},
-	{"wall_right", 1, 0, "the first cell right of the cursor that blocks it"},
+	{"block_up", 0, -1, "the first cell above the cursor that blocks it"},
+	{"block_down", 0, 1, "the first cell below the cursor that blocks it"},
+	{"block_left", -1, 0, "the first cell left of the cursor that blocks it"},
+	{"block_right", 1, 0, "the first cell right of the cursor that blocks it"},
 }
 
-// wall is the offset of the first cell that blocks the cursor along dx, dy: the
+// block is the offset of the first cell that blocks the cursor along dx, dy: the
 // cell past the view's edge where none it shows does
-func (m *mind) wall(dx, dy int) float64 {
+func (m *mind) block(dx, dy int) float64 {
 	v := &m.view
 	x, y := v.from.X+dx, v.from.Y+dy
 	for v.shown(x, y) && !m.ctx.World.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockCursor) {
@@ -597,7 +591,7 @@ type sensor struct {
 }
 
 // sensors is every name a network's inputs take: the rock's edges by place, the
-// walls about the cursor, each kind's nearest by rank and field, the second and
+// blocks about the cursor, each kind's nearest by rank and field, the second and
 // later carrying their rank in the name, and the bot's own
 var sensors = func() (rows []sensor) {
 	// halved names the half a count's or a rate's line reads at
@@ -613,13 +607,13 @@ var sensors = func() (rows []sensor) {
 				func(*network) reading { return func(m *mind, _ *network) float64 { return m.rock(p)[e] } }})
 		}
 	}
-	for _, w := range walls {
+	for _, b := range blocks {
 		scale := scaleDown
-		if w.dx != 0 {
+		if b.dx != 0 {
 			scale = scaleAcross
 		}
-		rows = append(rows, sensor{w.name, scale, w.doc,
-			func(*network) reading { return func(m *mind, _ *network) float64 { return m.wall(w.dx, w.dy) } }})
+		rows = append(rows, sensor{b.name, scale, b.doc,
+			func(*network) reading { return func(m *mind, _ *network) float64 { return m.block(b.dx, b.dy) } }})
 	}
 	for k := range kindCount {
 		for rank := range kinds[k].ranks {
@@ -634,13 +628,16 @@ var sensors = func() (rows []sensor) {
 				rows = append(rows, sensor{prefix + "_" + fields[f].name, fields[f].scale,
 					"the " + ordinals[rank] + " " + kinds[k].name + ": " + halved(fields[f].doc, fields[f].half),
 					func(n *network) reading {
-						slot := n.asks(k, rank+1)
-						if f < fieldsWhere {
-							return func(_ *mind, n *network) float64 { return n.near[slot].at[rank][f] }
+						slot, of := n.asks(k, rank+1), fields[f].of
+						switch {
+						case f < fieldsWhere:
+							return func(_ *mind, n *network) float64 { return n.near[slot].spots[rank].at[f] }
+						case f == kinds[k].tells:
+							return func(_ *mind, n *network) float64 { return n.near[slot].spots[rank].told }
 						}
 						return func(m *mind, n *network) float64 {
 							if near := &n.near[slot]; rank < near.n {
-								return fields[f].of(m, near.who[rank])
+								return of(m, near.spots[rank].entity)
 							}
 							return 0
 						}
@@ -654,29 +651,19 @@ var sensors = func() (rows []sensor) {
 	return rows
 }()
 
-// The units of a network's outputs, in the order its weights hold them: the
-// offset Steer points at, across and down, and special
-const (
-	outputX = iota
-	outputY
-	outputSpecial
-	outputCount
-)
-
-// unitNames is indexed by unit: the table a graph writes an output's weights in
-var unitNames = [outputCount]string{outputX: "x", outputY: "y", outputSpecial: "special"}
-
 // outputs is what a network asks for, in the order Steer acts on it: a key ahead
-// of the move, as a hand presses one on its way. at is where an output's units
-// stand among a network's, and act reports whether the step has room for more.
+// of the move, as a hand presses one on its way. units names the tables a graph
+// writes an output's weights in, a unit each, which a network's weights hold in
+// the order of at, and act reports whether the step has room for more.
 var outputs = [...]struct {
-	name      string
-	at, units int
-	doc       string
-	act       func(m *mind, out []float64) bool
+	name  string
+	at    int
+	units []string
+	doc   string
+	act   func(m *mind, out []float64) bool
 }{
-	{"special", outputSpecial, 1, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial},
-	{"move", outputX, 2, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point},
+	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial},
+	{"move", 0, []string{"x", "y"}, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point},
 }
 
 // specialIntent is how a network asks for the special attack, as a key does
@@ -733,7 +720,7 @@ func Catalogue() (l Listing) {
 		l.Inputs = append(l.Inputs, Input{s.name, scales[s.scale].name, s.doc})
 	}
 	for _, o := range outputs {
-		l.Outputs = append(l.Outputs, Output{o.name, unitNames[o.at : o.at+o.units], o.doc})
+		l.Outputs = append(l.Outputs, Output{o.name, o.units, o.doc})
 	}
 	for _, s := range scales {
 		l.Scales = append(l.Scales, Scale{s.name, s.doc})

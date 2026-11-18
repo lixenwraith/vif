@@ -76,15 +76,16 @@ Each is read at a column, by what its name ends in:
 - `ceiling_near`, `floor_near`: the column an eighth of the view ahead.
 - `ceiling_far`, `floor_far`: the column a quarter of the view ahead.
 
-### Walls
+### Blocks
 
+A block is a cell the cursor may not enter: a wall, the rock or the map's edge.
 Each is an offset from the cursor, to the cell past the view's edge where none
 it shows blocks:
 
-- `wall_up`, down: the first cell above the cursor that blocks it.
-- `wall_down`, down: the first cell below the cursor that blocks it.
-- `wall_left`, across: the first cell left of the cursor that blocks it.
-- `wall_right`, across: the first cell right of the cursor that blocks it.
+- `block_up`, down: the first cell above the cursor that blocks it.
+- `block_down`, down: the first cell below the cursor that blocks it.
+- `block_left`, across: the first cell left of the cursor that blocks it.
+- `block_right`, across: the first cell right of the cursor that blocks it.
 
 ### The bot's own
 

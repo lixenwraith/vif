@@ -313,8 +313,9 @@ type (
 	textPayload struct {
 		Text string `toml:"text"`
 	}
+	// steerPayload's network is one network's name or a list of them
 	steerPayload struct {
-		Network string `toml:"network"`
+		Network any `toml:"network"`
 	}
 	hasTargetArgs struct {
 		Target string `toml:"target"`
@@ -334,12 +335,17 @@ type (
 	ownArgs struct {
 		Field string `toml:"field"`
 	}
+	inStateArgs struct {
+		Region string   `toml:"region"`
+		States []string `toml:"states"`
+	}
 )
 
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
-// bot's own view, and the bot's actions and guards; Steer resolves among nets.
-func register(m *fsm.Machine[*mind], nets []*network) {
+// bot's own view, and the bot's actions and guards; Steer resolves among nets,
+// each bound by its guard of whiles.
+func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mind]) {
 	std.Register(m, std.Host[*mind]{
 		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
@@ -388,7 +394,7 @@ func register(m *fsm.Machine[*mind], nets []*network) {
 		m.push(input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
 	})
 	m.RegisterAction("PointAt", compilePointAt, (*mind).pointAt)
-	m.RegisterAction("Steer", compileSteer(nets), (*mind).steer)
+	m.RegisterAction("Steer", compileSteer(nets, whiles), (*mind).steer)
 
 	m.RegisterGuard("HasTarget", func(a *hasTargetArgs) (fsm.GuardFunc[*mind], error) {
 		t, key, err := guardTarget(a.Target, a.Key)
@@ -411,6 +417,15 @@ func register(m *fsm.Machine[*mind], nets []*network) {
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			return m.ctx.GetMode() == core.GameMode(mode)
+		}, nil
+	})
+	// InState reads the scenario's own machine, where the generic guards read the graph's
+	m.RegisterGuard("InState", func(a *inStateArgs) (fsm.GuardFunc[*mind], error) {
+		if a.Region == "" {
+			return nil, errors.New("requires 'region'")
+		}
+		return func(m *mind, _ *fsm.RegionState, _ any) bool {
+			return m.ctx.World.Resources.Scenario.In(a.Region, a.States)
 		}, nil
 	})
 	m.RegisterGuard("Chance", func(a *chanceArgs) (fsm.GuardFunc[*mind], error) {
