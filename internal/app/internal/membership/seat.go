@@ -1,7 +1,6 @@
 package membership
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"net"
@@ -24,10 +23,12 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// DefaultBotGraph is the graph a bot seat plays when none is named.
-const DefaultBotGraph = "default"
+// DefaultBotGraph is the generic graph shipped, which a seat that names none plays
+// where its scenario carries no bot of its own.
+const DefaultBotGraph = resource.DefaultBot
 
-// BotSpecs is shared by CLI flags and :bot add; empty or a zero count means no request.
+// BotSpecs is shared by CLI flags and :bot add; empty or a zero count means no
+// request. A seat given no graph has the empty spec: its scenario's own bot.
 func BotSpecs(spec string) ([]string, error) {
 	if spec == "" {
 		return nil, nil
@@ -40,12 +41,13 @@ func BotSpecs(spec string) ([]string, error) {
 	if err != nil || n < 0 || n > parameter.MaxPlayers {
 		return nil, fmt.Errorf("bots %q: use a graph or N[:graph], with N at most %d", spec, parameter.MaxPlayers)
 	}
-	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
+	return slices.Repeat([]string{graph}, n), nil
 }
 
-// LoadBotGraph resolves and parses one graph spec, a name or a path.
-func LoadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
-	data, name, err := resource.BotGraph(o, spec)
+// LoadBotGraph resolves and parses one graph spec for a run of sc: a name, a path,
+// or nothing for the scenario's own bot.
+func LoadBotGraph(o resource.Options, sc resource.Scenario, spec string) (*bot.Graph, error) {
+	data, name, err := resource.BotGraph(o, sc, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +140,13 @@ func (m *Membership) SeatBots() error {
 	var err error
 	m.world.RunSafe(func() {
 		for _, spec := range m.cfg.Bots {
-			if err = m.addSeatLocked(spec); err != nil {
+			err = m.addSeatLocked(spec)
+			if err != nil && m.wiring.BotsCarried && spec != "" {
+				// A seat held over into a scenario that does not carry its bot plays this one's
+				m.log.Warn("session", "msg", "a bot's graph is not this scenario's", "graph", spec, "error", err.Error())
+				err = m.addSeatLocked("")
+			}
+			if err != nil {
 				return
 			}
 		}
@@ -150,7 +158,7 @@ func (m *Membership) SeatBots() error {
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
 func (m *Membership) addSeatLocked(spec string) error {
-	graph, err := LoadBotGraph(m.run.Resources(), spec)
+	graph, err := LoadBotGraph(m.run.Resources(), *m.scenario, spec)
 	if err != nil {
 		return err
 	}

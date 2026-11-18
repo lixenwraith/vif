@@ -67,6 +67,7 @@ type Scenario struct {
 	entry   string
 	files   []scenarioFile
 	content []string // the corpus files [content] names, each one of files
+	bots    []string // the bot documents bots names, each one of files, in its order
 	digest  string
 }
 
@@ -277,6 +278,30 @@ func (s Scenario) Content() (fs.FS, bool) {
 	return scenarioFS{files: files}, true
 }
 
+// Bots names the bots the scenario carries for its map, in the order its entry
+// lists them: the first is the scenario's own, which a seat that names none plays
+func (s Scenario) Bots() []string {
+	names := make([]string, len(s.bots))
+	for i, file := range s.bots {
+		names[i] = botName(file)
+	}
+	return names
+}
+
+// Bot is the document of the scenario's bot name, false when it carries none so named
+func (s Scenario) Bot(name string) ([]byte, bool) {
+	for _, file := range s.bots {
+		if botName(file) == name {
+			i := slices.IndexFunc(s.files, func(f scenarioFile) bool { return f.name == file })
+			return s.files[i].data, true
+		}
+	}
+	return nil, false
+}
+
+// botName is the name a bot document's file gives it, as a root's bot/<name>.toml does
+func botName(file string) string { return strings.TrimSuffix(path.Base(file), ".toml") }
+
 // Marshal writes the canonical form: the one the digest is taken over and the one
 // a transfer carries. One format rather than two, so a copy that verifies is by
 // construction the copy that was hashed. Compression belongs to the transport.
@@ -377,7 +402,7 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 }
 
 // entryKeys are the top-level keys a scenario entry may hold
-var entryKeys = []string{"behaviors", "content", "description", "drops", "keymap", "loot", "macro_files",
+var entryKeys = []string{"behaviors", "bots", "content", "description", "drops", "keymap", "loot", "macro_files",
 	"macros", "map", "maps", "max_players", "min_players", "navigation", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
@@ -438,6 +463,11 @@ func (s *Scenario) validate() error {
 			return err
 		}
 	}
+	if list, exists := doc["bots"]; exists {
+		if err := s.readBots(list); err != nil {
+			return err
+		}
+	}
 	if table, exists := doc["map"]; exists {
 		if err := s.readMap(table); err != nil {
 			return err
@@ -489,6 +519,34 @@ func (s *Scenario) readContent(v any) error {
 			return fmt.Errorf("content %q repeats a file name", name)
 		}
 		s.content = append(s.content, full)
+	}
+	return nil
+}
+
+// readBots reads bots: the bot documents the entry names relative to itself, each
+// one of the scenario's files and unique by the name its file gives it. A document
+// is parsed where a seat takes it and by -check, so a scenario plays without one.
+func (s *Scenario) readBots(v any) error {
+	list, ok := v.([]any)
+	if !ok {
+		return errors.New("bots must be an array of file names")
+	}
+	s.bots = nil
+	for _, item := range list {
+		file, ok := item.(string)
+		if !ok {
+			return errors.New("bots must be an array of file names")
+		}
+		full := path.Join(path.Dir(s.entry), file)
+		switch name := botName(full); {
+		case !slices.ContainsFunc(s.files, func(f scenarioFile) bool { return f.name == full }):
+			return fmt.Errorf("bot %q is not one of the files", file)
+		case !paths.IsKeymapName(name):
+			return fmt.Errorf("bot %q: its file's name is the bot's, one word with no dot", file)
+		case slices.ContainsFunc(s.bots, func(b string) bool { return botName(b) == name }):
+			return fmt.Errorf("bot %q repeats a bot's name", file)
+		}
+		s.bots = append(s.bots, full)
 	}
 	return nil
 }

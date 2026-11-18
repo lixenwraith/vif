@@ -337,17 +337,19 @@ func sayNotice() {
 // plays until its graph quits, in as many games as it learns from at once, and
 // hosting it waits in the lobby for players.
 func botNotice(cfg app.Config, spec string) {
-	games, err := app.BotGames(cfg, spec)
+	name, games, err := app.BotRun(cfg, spec)
+	// A joining run's bot is named by the session's scenario once it is in
+	who := strings.TrimSpace("Bot " + cmp.Or(name, spec))
 	switch {
 	case err != nil: // RunBot refuses the graph or the count, and says so
 	case cfg.Membership.HostAddress != "":
-		fmt.Printf("Bot %s hosting %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.HostAddress)
+		fmt.Printf("%s hosting %s (headless); Ctrl-C stops it\n", who, cfg.Membership.HostAddress)
 	case cfg.Membership.JoinAddress != "":
-		fmt.Printf("Bot %s joining %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.JoinAddress)
+		fmt.Printf("%s joining %s (headless); Ctrl-C stops it\n", who, cfg.Membership.JoinAddress)
 	case games > 1:
-		fmt.Printf("Bot %s running headless in %d games; Ctrl-C stops it\n", spec, games)
+		fmt.Printf("%s running headless in %d games; Ctrl-C stops it\n", who, games)
 	default:
-		fmt.Printf("Bot %s running headless; Ctrl-C stops it\n", spec)
+		fmt.Printf("%s running headless; Ctrl-C stops it\n", who)
 	}
 }
 
@@ -704,7 +706,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		"Ceiling on the roster, itself included (2..%d; with -serve, guests only, 1..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers, parameter.MaxPlayers))
 	fs.StringVar(&f.bot, "bot", "", fmt.Sprintf(
-		"Add bots using [N[:graph]|graph] (default 1:%s)", app.DefaultBotGraph))
+		"Add bots using [N[:graph]|graph]: one where no count is given, and the scenario's own bot where no graph is, %s for a scenario that carries none",
+		app.DefaultBotGraph))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, listen at this address so this run can take the session over, "+
 			"whatever [play] takeover says; the session shares what is bound with its players. "+
