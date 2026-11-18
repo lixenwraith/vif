@@ -785,6 +785,121 @@ rounds with no kill, %
 - So the first cave's pay holds the search off the gun: paid 100 a kill one
   run in four took it within run C's ticks, and none of run C's four did.
 
+Run H, stopped with the fix: run F with `raid` reading `ceiling`, `floor`,
+`species_x`, `species_y`, `species_near_x` and `column` through no hidden unit,
+21 weights, and `kraken` as shipped. Seeds 1 and 2 ran to run C's ticks and
+were held out as F was; seed 3 stopped at 32.2 of its 33.7 million ticks, not
+held out, and seed 4 did not run:
+
+```
+                                seed 1       2
+fielded, held out
+  run H                          10901   11292
+  run F                           2043    1852
+kills before the Kraken, median
+  run H                              8       4
+  run F                              0       0
+rounds that meet the Kraken, of 60
+  run H                             13      13
+  run F                              0       0
+raid in the outer tenths, %
+  run H                             97      96
+```
+
+- Where F took no gun on those seeds, H took it on both. The reading fixed
+  before the run wants three seeds of four, so two leave it undecided, and
+  its ship still keeps to the rock's edges, as a run from nothing does
+  ([above](#have-a-scenario-describe-the-bots-that-play-it)).
+
+Runs I and J did not run: from nothing with a kill paid 100 to the learner
+and `special` free, J with x and y naming a place in the view. Nor did the
+re-read of the outer tenths on 60 rounds, but for the hand weights: 7% of the
+raid there, as on 20 to 40 rounds.
+
+Run G learned from the hand weights before the fix, so it read the lost start
+(above) and not the learner, and is cited nowhere. Run K is that run on main
+after the fix: the graph of 901ac22 less the `ticks` main no longer reads,
+`learn` on, `special` free in both networks, a kill paid its hit points as it
+was then, five games stopped at run C's ticks and copies taken by ticks as
+before. With no weight written the fix keeps the population bytes of the main
+before it, five games and two million ticks on seeds 1 and 2, and main, with
+the bot document since, keeps the fix's on seed 1, from nothing and from that
+graph. Held out beside the hand weights unlearned, which field 11,896 over the
+60 rounds as before, its standard error 1,116 and its median 13,525, lose 16
+rounds before the first Kraken and kill a median 21 before it. The same rounds
+paid 96 a kill, which play the same, close the table, where the hand weights
+field 27,154 with a median of 33,047:
+
+```
+                                seed 1       2       3       4
+run K, 31.6 to 33.7 million ticks
+  raid: rounds                    1138    1073    1896    1252
+    recent                       32115  111568  105662   48693
+    fielding                     62763  332141  156782  147566
+      over                           8       8       8       8
+  kraken: rounds                   989     889    1668     992
+    recent                       34710   99547   82905   47895
+    fielding                     61570  310932  330100  119537
+      over                           8       8       8       8
+  fielded, held out              53113  260594  223843   86438
+    its median                   57614  332000  332047   97782
+  lost before the Kraken             5       8       8       7
+  kills before it, median           20      19      20      19
+  Krakens down a round             5.4     7.6     7.2     6.1
+  five or more down                 54      52      51      53
+  rounds at the limit                3      50      44      12
+  special held off: fielded      23032  193953  157984    9093
+    its median                   33759  332974   55574     555
+    lost before the Kraken          21      22      25      51
+  paid 96 a kill: fielded        84633  296637  259003  118570
+    its median                   91959  373684  373570  134122
+```
+
+```
+millions of ticks              2       5      10      20
+copies, fielded
+  seed 1                   23320   40206   51676   50291
+  seed 2                   12536   44264   69935  148232
+  seed 3                   29639   25995   29185   66903
+  seed 4                   14261   46517   36047   50554
+lost before the Kraken, of 40
+  seed 1                      13       3       1       2
+  seed 2                      10       8       2      11
+  seed 3                       1       8       3       8
+  seed 4                       3       5      16      14
+```
+
+- The learner climbs from the hand weights on every seed: what K fields is
+  over theirs by 12 to 15 standard errors of the difference under either pay,
+  its median 4 to 25 times theirs paid 8 and 3 to 11 times paid 96, and it
+  loses 5 to 8 rounds before the first Kraken where they lose 16.
+- With `special` held off in both networks the same members lose 21 to 51
+  rounds there, more than the hand weights' 16, and down fewer Krakens than
+  with it: K passes the first cave more often than they do by the blast. Past
+  it, seeds 1 to 3 last to the limit without one in 35 to 38 rounds of 60.
+
+What K's members do with the special, as reading A:
+
+```
+                                      seed 1       2       3       4
+before the first Kraken
+  asks a round                           5.9     6.9    16.5    11.0
+  blasts a round, median                   6       7     6.5      10
+  a raider within 15 cells, %
+    at its asks                           12      17      10      32
+    at any tick                            4       4       5       5
+  asked, of always on, at heat 0, %       12       -      57       5
+    at heat 10 or more, %                  1       2       1       3
+heat as the Kraken rises, median          15      14    16.5      11
+rounds that spent all their heat          42       0      44      39
+```
+
+- It blasts 6 to 10 times before the first Kraken, where a person blasts once
+  or twice, asked as raiders crowd the ship, seed 1's also as its energy runs
+  low, a median 14,594 at its asks against 31,547. It meets the Kraken with 11
+  to 16.5 heat where the hand weights, which never ask, keep 20. Seed 3 asks
+  most at heat 0, where an ask does nothing; seed 2 never runs out.
+
 The rest was read while the graph wrote its weights by hand and a round scored
 its ticks, a Kraken's fight aside. Games that learn together, in ticks a second
 on a four-core machine by the cores they were given, where one game plays
@@ -850,9 +965,10 @@ What remains:
   run learns the special as a trigger in place of flying: it asks when raiders
   crowd the ship or charge, about ten blasts in the first cave, and most at
   heat 0, where an ask does nothing, so nothing in it holds heat back (above).
-  A person's use rests on flying that cave, which no run learned on the
-  shipped score; paid 100 a kill, one did without the special (run F). Unread
-  until one does with it.
+  From the hand weights, which fly that cave, the learner adds 6 to 10 blasts
+  before the first Kraken, asked as raiders crowd the ship, and leans on them:
+  held off, its members lose more rounds there than the hand weights. It meets
+  the Kraken with 11 to 16.5 heat of their 20 (run K).
 - **How fast it learns.** From nothing, what five games field after two
   million ticks, two minutes on four cores, is what they field after 25, and
   one game fields after 22 minutes, six million ticks, about what five games
@@ -947,7 +1063,8 @@ What remains:
   keeps 86 to 97% of a comparison's variance. The first cave pays a tick where
   a kill pays 8, so held to flying the search lasts and kills nothing; paid
   100 a kill, one run in four took the gun and passed the cave in 11 rounds of
-  60 (run F). To decide: what a kill pays in the first cave, 100 being a probe
+  60 (run F). From the hand weights, after the fix, it climbs on every seed
+  (run K). To decide: what a kill pays in the first cave, 100 being a probe
   and no proposal, and whether a candidate is judged on the 50 to 75 rounds
   that tell near-copies apart, or by an evolution strategy with a step per
   gene, an engine of its own in `lixenwraith/genetic`, which averages many
