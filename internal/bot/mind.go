@@ -23,7 +23,7 @@ type mind struct {
 	rng   *vmath.FastRand
 	queue *intentQueue
 	// nets are the graph's policies, which Steer runs by index, and steered which of
-	// them have played since the round began. tick is the driver's, and special the
+	// them have since the driver last took it. tick is the driver's, and special the
 	// tick from which a network may ask for the special attack again.
 	nets    []*network
 	steered []bool

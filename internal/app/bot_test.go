@@ -230,7 +230,7 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The learners explore in turn, so raid's candidate is scored within two rounds
+	// raid steers every round from its start, so the first to end scores its candidate
 	raid := func() bot.LearnStats {
 		st := d.Stats().Learn
 		return st[slices.IndexFunc(st, func(l bot.LearnStats) bool { return l.Network == "raid" })]
@@ -268,7 +268,8 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 
 // TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds
 // has a solo learning run close a round the game has not ended by then, with a new
-// game, and score its candidate on what the round came to.
+// game, and score its candidate on what the round came to: the columns of its own
+// game's ticks, one each here, and none of the tick the new game began on or at.
 func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -298,10 +299,17 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	}
 	bot.Learn(func() bool { return true }, []*bot.Learner{raid}, d)
 	const rounds = 3
+	played := uint64(0)
+	d.Round = func(n uint64, score float64) {
+		if score != float64(played) {
+			t.Errorf("round %d scored %g, want the %d columns of the ticks its game played", n, score, played)
+		}
+	}
 	for d.Stats().Rounds < rounds {
 		if more, err := d.Step(); !more || err != nil || d.Stats().Ticks > 400 {
 			t.Fatalf("tick %d: more %v, err %v, %d rounds", d.Stats().Ticks, more, err, d.Stats().Rounds)
 		}
+		played = a.world.Resources.Game.State.GetGameTicks()
 	}
 	const limit = 2 * time.Second / parameter.GameUpdateInterval
 	if st := d.Stats(); st.Ticks < rounds*uint64(limit) || st.Ticks > rounds*uint64(limit+3) || raid.Stats().Scored != rounds {
@@ -352,6 +360,7 @@ func TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame(t *testing.T) {
 // learning run, each a run of its own on a seed drawn from the run's, teach one
 // population a network, and one seed and one count of games keep the same
 // populations however the cores ran them, to the tick the graph ended the run at.
+// What the run reports of its learners is what those files hold.
 func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
 	dir := t.TempDir()
 	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
@@ -398,9 +407,15 @@ on_enter = [{ action = "Intent", payload = { name = "quit" } }]
 	}
 	st, first := kept("first")
 	raid := st.Learn[slices.IndexFunc(st.Learn, func(l bot.LearnStats) bool { return l.Network == "raid" })]
-	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks%games != 0 || raid.Scored < games {
-		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d the run's own quit at, and a round of each scored",
+	// A game ahead of the run's own as that quits has played on, a tick here, so
+	// the ticks summed are no function of the seed as the populations are
+	if st.Games != games || st.Ticks < games*uint64(ticks) || st.Ticks > games*uint64(ticks+2) || raid.Scored < games {
+		t.Fatalf("%d games played %d ticks and scored raid %d rounds, want %d games, each to the tick past %d its graph or the run's own quit at, and a round of each scored",
 			st.Games, st.Ticks, raid.Scored, games, ticks)
+	}
+	var file struct{ Rounds int }
+	if err := json.Unmarshal([]byte(first), &file); err != nil || file.Rounds != raid.Rounds {
+		t.Fatalf("the run reports %d rounds of raid and its file holds %d, err %v", raid.Rounds, file.Rounds, err)
 	}
 	if _, second := kept("second"); second != first {
 		t.Fatal("two runs of one seed and one count of games kept populations that differ")

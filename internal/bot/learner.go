@@ -16,12 +16,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// What the learner searches by. Where its graph writes no weight a population's
-// first learnPool rounds play genomes drawn at random, each weight learnSpread of
-// its bound about zero. A step is a share of a weight's range: a new population starts at
-// learnStep and settles at learnStepFloor. Every learnRepeat-th candidate is an
-// archive member again, a member with learnProven rounds behind its score is one a
-// run fields, and learnRecent rounds are what the recent score looks back over.
+// What the learner searches by. A population whose graph writes no weight plays
+// learnPool genomes drawn learnSpread of a weight's bound about zero first. A step
+// is a share of a weight's range, learnStep at first and learnStepFloor settled.
+// Every learnRepeat-th candidate is an archive member again, learnProven rounds
+// prove a member a run fields, and the recent score looks back learnRecent rounds.
 const (
 	learnPool      = 32
 	learnSpread    = 0.03
@@ -38,8 +37,9 @@ const (
 	// learnSaveEvery is the least wall time between two saves of a population in play
 	learnSaveEvery = 30 * time.Second
 
-	// populationVersion names the layout of the document a population is kept as
-	populationVersion = 2
+	// populationVersion names the document a population is kept as and how its
+	// rounds were scored: one kept under another starts over
+	populationVersion = 3
 )
 
 // Store keeps one population's document: Load returns what was kept, nothing for
@@ -112,12 +112,14 @@ type Learner struct {
 }
 
 // slot is the genome one game has in play: its evaluation, zero while it plays
-// unscored, and whether this is a new candidate's first round, which only
-// qualifies it
+// unscored, whether this is a new candidate's first round, which only qualifies
+// it, and for an archive member played again the score and rounds it had
 type slot struct {
 	genes []float64
 	id    genetic.EvalID
 	fresh bool
+	mean  float64
+	count int
 }
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
@@ -166,7 +168,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	}
 	var members []genetic.Candidate[[]float64, float64]
 	if kept.Version == populationVersion && kept.Layout == l.layout {
-		l.rounds, l.recent = kept.Rounds, kept.Recent
+		l.rounds, l.recent = max(kept.Rounds, 0), kept.Recent
 		l.step = min(max(kept.Step, learnStepFloor), learnStepCeil)
 		for _, m := range kept.Members {
 			if len(m.Genes) == len(l.seed) && m.Rounds > 0 {
@@ -182,7 +184,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	}
 	perturb := &genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}
 	cfg := genetic.DefaultStreamingConfig()
-	// Four slots a game, as the engine asks, so no evaluation in flight is evicted for a newer
+	// Four slots a game, as the engine asks; one in flight may still be evicted (settle)
 	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, 4*games)
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, l.step
 	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
@@ -206,9 +208,8 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 }
 
 // draw is a genome to start from: every weight drawn at random where the graph
-// writes none, and where it writes some, those with a child's share stepped.
-// Every weight of a written start drawn about it filled the archive with copies
-// that flew worse, and the start was lost among them.
+// writes none, and where it writes some, those with a child's share stepped, as
+// a written start is lost among copies drawn about its every weight.
 func (l *Learner) draw() []float64 {
 	genes := slices.Clone(l.seed)
 	one := -1
@@ -246,6 +247,7 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 		l.scored++
 		l.rounds++
 		l.recent += (score - l.recent) / float64(min(l.rounds, learnRecent))
+		l.dirty = true
 		if st := l.engine.Stats(); s.fresh && st.Size == learnPool && score > st.WorstScore {
 			s.fresh = false
 			held := l.Stats()
@@ -253,8 +255,16 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 			l.stats.Store(&held)
 			return false
 		}
-		l.engine.CompleteEvaluation(s.id, score)
-		l.seeded, l.dirty = true, true
+		// A member that left the archive with this round in flight comes back, if at
+		// all, on the mean of its rounds, not on this one as a new genome would
+		if s.count > 0 && !l.holds(s.genes) {
+			score = genetic.MeanScore(s.mean, score, s.count)
+		}
+		// The engine evicts an evaluation in flight once eight newer fill its window,
+		// as nine games can, so the round is scored under one begun as it closes
+		l.engine.AbandonEvaluation(s.id)
+		l.engine.CompleteEvaluation(l.engine.BeginEvaluation(s.genes), score)
+		l.seeded = true
 	} else if s.id != 0 {
 		l.engine.AbandonEvaluation(s.id)
 	}
@@ -266,8 +276,7 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 // game has in flight until that is settled, then the next: a hand-written genome
 // until a round has scored it, one drawn at random while the population is new,
 // and every learnRepeat-th the best member short of learnProven rounds again,
-// those in flight counted, so what tops the archive is proved or falls. Otherwise
-// it is the member fielded.
+// those in flight counted, so the archive's top is proved or falls. Else, the fielded.
 func (l *Learner) take(game int, explore bool) []float64 {
 	l.tell()
 	s := &l.slots[game]
@@ -276,7 +285,7 @@ func (l *Learner) take(game int, explore bool) []float64 {
 	}
 	l.settle(game, 0, false)
 	members := l.engine.Snapshot().Members
-	s.genes, s.fresh = l.field(members), explore
+	*s = slot{genes: l.field(members), fresh: explore}
 	if explore {
 		l.drawn++
 		var genes []float64
@@ -295,19 +304,29 @@ func (l *Learner) take(game int, explore bool) []float64 {
 			} else {
 				genes, s.id = l.engine.Reevaluate()
 			}
-			s.fresh = s.id == 0
 		}
 		if s.id == 0 {
 			genes, s.id = l.engine.Propose()
 		}
 		if s.id != 0 {
 			s.genes = genes
+			// One the archive holds is that member again, whatever drew it, and none to qualify
+			if i := slices.IndexFunc(members, func(c genetic.Candidate[[]float64, float64]) bool { return slices.Equal(c.Data, genes) }); i >= 0 {
+				s.fresh, s.mean, s.count = false, members[i].Score, members[i].Count
+			}
 		}
 	}
 	if l.dirty && time.Since(l.saved) >= learnSaveEvery { // [wall]
 		l.save()
 	}
 	return s.genes
+}
+
+// holds reports whether genes is an archive member as the archive stands
+func (l *Learner) holds(genes []float64) bool {
+	return slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool {
+		return slices.Equal(c.Data, genes)
+	})
 }
 
 // flying counts the games with a candidate in flight
@@ -373,6 +392,9 @@ func (l *Learner) save() {
 	}
 	data, err := json.Marshal(doc)
 	if err == nil {
+		err = l.ahead()
+	}
+	if err == nil {
 		err = l.store.Store(data)
 	}
 	l.saved = time.Now() // [wall]
@@ -389,6 +411,22 @@ func (l *Learner) save() {
 	if l.Saved != nil {
 		l.Saved(l.Stats())
 	}
+}
+
+// ahead is the failure of a save onto a population of this layout that holds
+// more rounds: another run's, further on, which keeps the file
+func (l *Learner) ahead() error {
+	var kept struct {
+		Version, Rounds int
+		Layout          string
+	}
+	if data, err := l.store.Load(); err != nil || json.Unmarshal(data, &kept) != nil {
+		return nil
+	}
+	if kept.Version == populationVersion && kept.Layout == l.layout && kept.Rounds > l.rounds {
+		return fmt.Errorf("another run has it %d rounds further on", kept.Rounds-l.rounds)
+	}
+	return nil
 }
 
 // tell has Lost hear what it has yet to

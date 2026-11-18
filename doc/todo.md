@@ -240,14 +240,18 @@ a list and their first inputs the document's, kept its populations' bytes on
 two seeds of 600,000 ticks, so its scenario needs no change and its score none.
 Decided (Lixen, 2026-11-18), a PR a step in this order:
 
-- **Cave's trained model.** The shipped `cave_seed` is `cave`'s two networks
+- **Cave's trained model.** The shipped `seed` is `cave`'s two networks
   with a start written by hand, seven weights of `raid` and five of `kraken`
   ([below](#train-a-network-bot-live-in-cave)), a bot of its own to train
   from. `cave` is to carry a model trained from it, the member a run fields,
   held out, and the scenario both as its bots, the seed under its own label.
   A layout stays as it is, so what is written or exported stays valid, and
   both keep one; `cave` from nothing is held by the byte check and the seed by
-  what it fields on seeds 101 to 104, 27,614 with a median of 33,174.
+  what it fields on seeds 101 to 104, 27,614 with a median of 33,174. Models
+  trained from those weights exist, the owner's to land (the measuring
+  thread's run K: four seeds of five games, held out over 60 rounds at medians
+  of 91,959 to 373,684, read before exploring went by phase). Next (Lixen,
+  2026-11-18): `cave` carries two bot documents and training goes on from them.
 - **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
   scenario: templates, which play only while the player has no bot of that name
   and whose weights are the author's start for a learner. With no name, `-bot`,
@@ -255,13 +259,19 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   `default` where the scenario carries none, as if it were named; `-bot default`
   is the generic one shipped, bound to no scenario, which a player may change or
   train. A population stays `bot/<name>.<scenario>.<network>.json`, one a
-  network.
+  network. A bot document's `round_seconds` is its own: at `cave`'s 36,000
+  ticks the best models are cut off in most rounds.
 - **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
   <source>]`, `import`, `export`, `clear` and `list`, a source being a
   scenario's bot, one network of it alone or a file, so one population is taken
   from a scenario and another started fresh. A document naming an input or a
-  unit the bot lacks lands nothing. `list` names each population's rounds,
-  recent mean and the member it fields, on the menu's Bots page too. Their
+  unit the bot lacks lands nothing, and one whose inputs are fewer than the
+  network's lands with zero for the rest: models learned on 36 and 14 inputs
+  replay round for round on the shipped 39 and 15, zero on each
+  `landing*_soon`. A model is its genes and not its scores, so a member goes
+  by its layout, never by a population's `version`. `list` names each
+  population's rounds, recent mean and the member it fields, on the menu's
+  Bots page too. Their
   first use is the member a population fields written as the document a
   scenario's bot carries, every weight of it, 378 for `raid` and 162 for
   `kraken`, read back the same genome bit for bit.
@@ -277,9 +287,11 @@ Decided (Lixen, 2026-11-18), a PR a step in this order:
   `move`. A five-minute probe from nothing left the edges, 42% of the raid in
   the outer tenths where it was 96%, and scored no better.
 
-`learner.go` and a round's scoring are untouched throughout, so a learner in a
-run takes an import or a clear from its next run. The population file stays
-JSON: one cut short never parses, where a TOML one can read as fewer members.
+These steps leave `learner.go` and a round's scoring as they stand, what a read
+of them found being fixed ahead of the steps
+([below](#train-a-network-bot-live-in-cave)), so a learner in a run takes an
+import or a clear from its next run. The population file stays JSON: one cut
+short never parses, where a TOML one can read as fewer members.
 
 ### Let a scenario expose values of its own to a bot
 
@@ -318,9 +330,9 @@ built so:
   the use of its heat in the first cave among it.
 - **A network a phase.** `raid` steers while the raiders fly and `kraken` while
   the Kraken is up, picked by a guard on the world, each with a learner and a
-  population of its own; they explore in turn, one a candidate and the rest
-  what they field, and a candidate is scored from where its network first
-  steered.
+  population of its own. Both play a candidate, each scored by the ticks its
+  network steered: `kraken` from the Kraken's rise to its death or the round's
+  end, `raid` all the rest.
 - **A round scores how far it travelled**, the columns its cave scrolled, and
   what it earned, never its time: a clock that closes a round could be
   outlasted, as by hopping about a Kraken barely scratched. The scroll halts
@@ -1032,10 +1044,46 @@ What remains:
     moves what is fielded 1.7 times, or a Kraken a round. A row's runs learned
     on 800 to 1,010 rounds, a seventh of the ticks of the equal-time runs
     above.
-  - Not read: a rank by the median; both learners exploring at once against in
-    turn; any row at the equal-time runs' 35 million ticks, where what a run
-    fields reaches the limit; and any row from nothing, where only the spread a
-    first genome is drawn with was tried, on two seeds (the table above).
+  - Not read: a rank by the median; any row at the equal-time runs' 35 million
+    ticks, where what a run fields reaches the limit; and any row from nothing,
+    where only the spread a first genome is drawn with was tried, on two seeds
+    (the table above).
+  - Every figure above was read with the learners exploring in turn, a round
+    each scored whole from where its network first steered. Both exploring at
+    once, each scored by its own network's ticks, as built since: from `seed`'s
+    weights four games' three million ticks, from nothing one game's 600,000,
+    what each fields held out over 100 rounds of seeds 101 to 104, where
+    `seed`'s own weights field 27,614 and a still ship 159:
+
+    ```
+                         rounds scored      fields            reach the  Krakens
+    start      seed      raid   kraken     mean   median  Kraken of 100     down
+    in turn
+      seed's      1       325      276    53852    60184             87      419
+                  2       372      325    51435    55947             81      410
+                  3       202      147   113776   126384             72      518
+      nothing     1       536       64     3029     2230             22        0
+                  2       792       50     2614     2002             18        0
+    by phase
+      seed's      1       814      408    51440    46982             98      423
+                  2       767      437    51679    52348             93      421
+                  3       570      305   140138   127276             97      633
+      nothing     1       864      125     6115     2726             30       35
+                  2       774      115     6640     3340             28       39
+    ```
+
+    From `seed` the means are not told apart, a geometric mean of 68,051
+    against 71,954, and the rounds lost in the first cave fall from 20 in 100
+    to 4. From nothing what is fielded doubles, and `kraken`, which in turn had
+    no member eight rounds proved, fields one.
+  - Not built, from a read of the learner. The archive ranks a member's mean
+    against a new genome's one round, and of one genome's rounds 61 in 100
+    score over its own mean (`seed`'s 27,614, a deviation of 18,425), so a
+    full archive drops proved members for lucky ones. A step at the floor
+    moves a weight 0.24, a normal draw of 0.03 of its range of 8. And from a
+    written start a hidden unit does nothing until a weight into it and one
+    out of it have both moved, each alone a child that plays as its parent:
+    258 of `raid`'s 378 weights in `seed` wait on drift.
 - **A page's store.** A browser keeps no population: `bot.Store` is a document's
   bytes, so one kept in the page's storage as its settings are
   (`browser.KeepSettings`), for each graph, scenario and network, handed over at
@@ -1049,8 +1097,9 @@ What remains:
   [Have a scenario describe the bots that play it](#have-a-scenario-describe-the-bots-that-play-it).
   Beside it, the `:bot` list and the menu's Bots page name no population; a
   watched run's menu still turns auto-fire or the pointer off under the bot,
-  which its rounds then score, and writes that back as the player's own; and
-  two runs learning one graph in one scenario each save over the other's files.
+  which its rounds then score, and writes that back as the player's own. Two
+  runs learning one graph in one scenario keep the file of the one further on;
+  what the other learned is not merged into it.
 - **Reading rounds.** `script/test.sh botfitness` sums fitness over a fixed time
   on the embedded scenario and `td`; rounds are read by a scratch test
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs

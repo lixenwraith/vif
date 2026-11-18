@@ -1049,8 +1049,9 @@ func TestEveryThirdCandidateIsTheBestMemberYetToBeProved(t *testing.T) {
 
 // TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound: a first round
 // good enough to enter only qualifies its genome, which plays again and enters,
-// or not, on that round alone, as the first was picked for its luck. The
-// hand-written genome plays first, whatever the store kept.
+// or not, on that round alone, as the first was picked for its luck; it is a
+// round counted and kept all the same. The hand-written genome plays first,
+// whatever the store kept.
 func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
@@ -1061,7 +1062,8 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 		for i := range learnPool {
 			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(200 - i), Rounds: 1})
 		}
-		l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
+		store := keeping(t, net.digest, full...)
+		l, err := NewLearner(g, "fly", 1, 1, store)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1070,8 +1072,9 @@ func TestACandidateThatWouldEnterAFullArchiveIsScoredByItsNextRound(t *testing.T
 			l.settle(0, score, true)
 			last = l.take(0, true)
 		}
-		if st := l.Stats(); st.Scored != len(scores) {
-			t.Fatalf("%d rounds scored of %d played", st.Scored, len(scores))
+		var kept population
+		if err := errors.Join(l.Close(), json.Unmarshal(store.doc, &kept)); err != nil || l.Stats().Scored != len(scores) || kept.Rounds != learnPool+len(scores) {
+			t.Fatalf("%d rounds scored and %d kept of %d played on %d, closing with %v", l.Stats().Scored, kept.Rounds, len(scores), learnPool, err)
 		}
 		return first, last, func(score float64) bool {
 			return slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool { return c.Score == score })
@@ -1122,9 +1125,160 @@ func TestARoundInFlightCountsTowardAMembersProof(t *testing.T) {
 	}
 }
 
-// TestAPopulationStartsFromTheWeightsItsGraphWrites: a written start drawn about
-// on every weight filled the archive with copies that flew worse, and the start
-// was lost among them, so what a run fielded after learning scored under it.
+// TestACandidateTheArchiveHoldsIsThatMemberAgain: a genome the archive holds is
+// no new one to qualify, as the hand-written genome of a kept population is, so
+// its round joins the member's mean whichever way it went.
+func TestACandidateTheArchiveHoldsIsThatMemberAgain(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	for _, round := range []float64{100, 6000} {
+		full := []member{{Genes: slices.Clone(net.genes), Score: 3000, Rounds: 10}}
+		for i := range learnPool - 1 {
+			full = append(full, member{Genes: slices.Repeat([]float64{float64(i+1) / 100}, len(net.genes)), Score: float64(2000 - i), Rounds: 1})
+		}
+		l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.take(0, true)
+		l.settle(0, round, true)
+		if best := l.engine.Snapshot().Members[0]; !slices.Equal(best.Data, net.genes) || best.Count != 11 || best.Score != genetic.MeanScore(3000, round, 10) {
+			t.Fatalf("a round of %g leaves the best member at %g over %d: want the hand-written one, its ten rounds at 3000 and this one", round, best.Score, best.Count)
+		}
+	}
+}
+
+// TestARoundIsScoredThoughTheEngineDroppedItsEvaluation: the engine's table gives
+// an evaluation's slot to a newer one where eight fill its window, as nine games
+// can while one plays short rounds, and the round that outlasted them is scored.
+func TestARoundIsScoredThoughTheEngineDroppedItsEvaluation(t *testing.T) {
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const games = 9
+	l, err := NewLearner(g, "fly", 1, games, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := slices.Clone(l.take(0, true))
+	for game := 1; game < games-1; game++ {
+		l.take(game, true)
+	}
+	for round := 0; l.engine.Stats().Evicted == 0; round++ {
+		if round == 1000 {
+			t.Fatal("no evaluation in flight was dropped, so the round to score is not the one this test is of")
+		}
+		l.take(games-1, true)
+		l.settle(games-1, float64(round%7), true)
+	}
+	for !l.settle(0, 1e9, true) {
+		l.take(0, true)
+	}
+	if !l.holds(long) {
+		t.Fatal("the genome in flight since the first round, scored above every other, is not in the archive")
+	}
+}
+
+// TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds: a member played
+// again may be pushed off by another game's entry before its round closes. It
+// re-enters on the mean of its rounds with this one, not on this one alone as a
+// new genome would.
+func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	var full []member
+	for i := range learnPool {
+		full = append(full, member{Genes: genome(float64(i+1) / 100), Score: float64(1000 - i), Rounds: learnProven})
+	}
+	tail := &full[learnPool-1]
+	tail.Rounds = 3
+	l, err := NewLearner(g, "fly", 1, 2, keeping(t, net.digest, full...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take(0, true)
+	l.settle(0, 1, true) // the hand-written genome, scored under them all
+	l.drawn = learnRepeat - 1
+	if again := l.take(0, true); !slices.Equal(again, tail.Genes) {
+		t.Fatalf("the repeat is %v, want the one member short of its proof", again[:1])
+	}
+	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.99)), 990.5)
+	if l.holds(tail.Genes) {
+		t.Fatal("another game's entry did not push the member off the archive")
+	}
+	l.settle(0, 5000, true)
+	want := genetic.MeanScore(tail.Score, 5000, tail.Rounds)
+	if !slices.ContainsFunc(l.engine.Snapshot().Members, func(c genetic.Candidate[[]float64, float64]) bool {
+		return slices.Equal(c.Data, tail.Genes) && c.Score == want
+	}) {
+		t.Fatalf("the member is not back at %g, the mean of its three rounds at %g and one of 5000", want, tail.Score)
+	}
+}
+
+// TestASaveLeavesAPopulationFurtherOnAsItIs: two runs may learn one population, a
+// watched one opened beside a headless one. The file is the one's with more
+// rounds: a save onto more fails, said once and reported as the run ends, and
+// passes once this run is the one further on.
+func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
+	g, _, _ := learning(t)
+	store := &memory{}
+	var runs [2]*Learner
+	for i := range runs {
+		var err error
+		if runs[i], err = NewLearner(g, "fly", uint64(i+1), 1, store); err != nil {
+			t.Fatal(err)
+		}
+	}
+	play := func(l *Learner, rounds int) error {
+		for range rounds {
+			l.take(0, true)
+			l.settle(0, 45, true)
+		}
+		return l.Close()
+	}
+	said := 0
+	runs[1].Lost = func(error) { said++ }
+	if err := play(runs[0], 5); err != nil {
+		t.Fatal(err)
+	}
+	further := string(store.doc)
+	for _, rounds := range []int{3, 1} {
+		if err := play(runs[1], rounds); err == nil || string(store.doc) != further {
+			t.Fatalf("a save %d rounds behind the file closed with %v: want it refused and the file as it was", 5-runs[1].rounds, err)
+		}
+	}
+	var kept population
+	if err := errors.Join(play(runs[1], 2), json.Unmarshal(store.doc, &kept)); err != nil || kept.Rounds != 6 || said != 1 {
+		t.Fatalf("a run a round further on kept %d rounds, closing with %v, having said %d times it could not: want its six kept and one notice", kept.Rounds, err, said)
+	}
+}
+
+// TestADamagedCountOfRoundsStillSaves: a kept document whose rounds read below
+// none counts from none, or the recent mean divides by nothing and no save of
+// the run can be written.
+func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
+	g, _, _ := learning(t)
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, Rounds: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLearner(g, "fly", 1, 1, &memory{doc: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take(0, true)
+	l.settle(0, 45, true)
+	if err := l.Close(); err != nil || l.rounds != 1 {
+		t.Fatalf("a round on a document of -1 rounds closes with %v at %d rounds, want it kept as the first", err, l.rounds)
+	}
+}
+
+// TestAPopulationStartsFromTheWeightsItsGraphWrites: a population whose graph
+// writes weights plays them first and then their children, a weight or few
+// stepped, as a start drawn about on every weight is lost among copies that fly
+// worse.
 func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
 	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)))
 	if err != nil {
@@ -1319,15 +1473,21 @@ func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
 	}
 }
 
-// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game
-// reached, and the games beside it, which play on as their cores allow, stop at
-// that tick and score no round past it, so what the run kept follows from its seed.
+// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game's
+// graph quit at, and the games beside it, which play on as their cores allow,
+// stop at that tick and score no round past it, however late the run says so
+// again, so what the run kept follows from its seed.
 func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 	const games, ticks = 4, 300
-	never := func(int) int { return 0 }
-	turns, rounds := together(t, games, never, inTurn(ticks))
+	quit := func(game int) int {
+		if game == 0 {
+			return ticks
+		}
+		return 0
+	}
+	turns, rounds := together(t, games, quit, inTurn(0))
 	for range 20 {
-		beside, scored := together(t, games, never, func(drivers []*Driver) {
+		beside, scored := together(t, games, quit, func(drivers []*Driver) {
 			var wg sync.WaitGroup
 			for _, d := range drivers[1:] {
 				wg.Go(func() {
@@ -1335,10 +1495,10 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 					}
 				})
 			}
-			for range ticks {
-				drivers[0].Step()
+			for more := true; more; more, _ = drivers[0].Step() {
 				runtime.Gosched()
 			}
+			time.Sleep(200 * time.Microsecond) // a run closes its game before it ends the learning
 			drivers[0].End(ticks)
 			wg.Wait()
 		})
@@ -1411,31 +1571,29 @@ func (r *recorder) rounds(t *testing.T, d *Driver, ticks ...int) {
 	}
 }
 
-// TestALearnerIsScoredFromWhereItsNetworkFirstSteered: the learner trying a
-// candidate takes the round from the tick its network first steered in it, the
-// ticks and what they earned since; the others' fielded members are not scored.
-func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
+// TestALearnerIsScoredByTheTicksItsNetworkSteered: a round's ticks and what they
+// earned are the network's that steered last, so one that steers only while a
+// Kraken is up is scored by the fight and the other by the rest of the round.
+func TestALearnerIsScoredByTheTicksItsNetworkSteered(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	rec.rounds(t, d, 4)
-	if got := fly.Stats().Recent; got != 4 || kraken.Stats().Scored != 0 {
-		t.Fatalf("four ticks steered with no Kraken: fly scored %g and kraken %d rounds, want 4 and none", got, kraken.Stats().Scored)
-	}
-	// Kraken's turn. A kill is worth 5: one lands before the Kraken rises, two
-	// ticks in, and one after
+	// A kill is worth 5: one lands in fly's first two ticks and one in the three a
+	// Kraken is up for, before the round's last two
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
 	for range 2 {
 		d.Step()
 	}
-	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
-	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
+	up := place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	rec.dispatch = []event.GameEvent{kill, {}, {}}
 	for range 3 {
 		d.Step()
 	}
-	if st := kraken.Stats(); st.Scored != 1 || st.Recent != 3+5 || fly.Stats().Scored != 1 {
-		t.Fatalf("kraken scored %d rounds at %g and fly %d: want one of 8, the three ticks from the Kraken's rise and the kill after it, and fly's fielded member unscored",
-			st.Scored, st.Recent, fly.Stats().Scored)
+	w.DestroyEntity(up)
+	rec.rounds(t, d, 2)
+	if f, k := fly.Stats(), kraken.Stats(); f.Scored != 1 || f.Recent != 4+5 || k.Scored != 1 || k.Recent != 3+5 {
+		t.Fatalf("fly scored %d rounds at %g and kraken %d at %g: want one each, fly's four ticks and its kill, 9, and kraken's three and its own, 8",
+			f.Scored, f.Recent, k.Scored, k.Recent)
 	}
 }
 
@@ -1444,7 +1602,7 @@ func TestALearnerIsScoredFromWhereItsNetworkFirstSteered(t *testing.T) {
 // that fought it, which what it shot down pays.
 func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
-	rec.rounds(t, d, 4) // fly's turn: the tick that starts the graph and four steered
+	rec.rounds(t, d, 4) // five columns: the tick that starts the graph and four steered
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
 	for range 2 {
@@ -1466,7 +1624,8 @@ func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
 
 // TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied: a Kraken shot down at
 // four hit points a second or faster earns the ticks that pace takes, a slower
-// kill the share its pace is of that, and never less than a quarter.
+// kill the share its pace is of that, and never less than a quarter. A kill only
+// predicted is weighed then and paid once proved.
 func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
 	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
@@ -1488,36 +1647,42 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	if got, want := d.Stats().Fitness, par+par/2+par/4; got != want {
 		t.Fatalf("three Krakens shot down in 20, 60 and 600 seconds weigh %d, want %d: par's %d ticks, half and a quarter", got, want, par)
 	}
+	// A session's guest predicts the death and is paid as it is proved, the Kraken gone
+	kraken := place(w, core.DomainShared, 40, 10, func(e core.Entity) {
+		w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 120, Time: 20})
+	})
+	killed := &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesKraken, Entity: kraken}
+	rec.dispatch = []event.GameEvent{{Type: event.EventSpeciesKilled, Payload: killed, Phase: event.PhasePredicted}}
+	d.Step()
+	w.DestroyEntity(kraken)
+	rec.dispatch = []event.GameEvent{{Type: event.EventSpeciesKillConfirmed, Payload: killed}}
+	d.Step()
+	if got, want := d.Stats().Fitness, 2*par+par/2+par/4; got != want {
+		t.Fatalf("a predicted kill proved after its Kraken is gone brings the weight to %d, want %d, par's ticks more", got, want)
+	}
 }
 
-// TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField: one learner plays a
-// candidate, the hand-written genome first, and the rest the members they field.
-// The turn passes as a round settles the candidate, and at once where the round
-// never reached the explorer's network, whose candidate goes unscored.
-func TestLearnersExploreInTurnWhileTheRestPlayWhatTheyField(t *testing.T) {
+// TestALearnersCandidateWaitsForTheRoundItsNetworkSteers: alone, every learner
+// plays a candidate, the hand-written genome first. A round scores those whose
+// networks steered in it, and the candidate of one that never did plays on
+// until a round reaches its network.
+func TestALearnersCandidateWaitsForTheRoundItsNetworkSteers(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	written := func(i int) bool { return slices.Equal(d.mind.nets[i].genes, d.learners[i].seed) }
-
-	rec.rounds(t, d, 2)
-	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
-		t.Fatalf("after fly's hand-written genome is scored: explorer %d, fly scored %d: want kraken's turn on its own hand-written genome and fly fielding",
-			d.explorer, fly.Stats().Scored)
+	plays := func(i int) []float64 { return d.mind.nets[i].genes }
+	if !slices.Equal(plays(0), fly.seed) || !slices.Equal(plays(1), kraken.seed) {
+		t.Fatal("the first round does not play each learner's hand-written genome")
 	}
-	rec.rounds(t, d, 2)
-	if d.explorer != 0 || fly.Stats().Scored != 1 || kraken.Stats().Scored != 0 || written(0) {
-		t.Fatalf("a round with no Kraken: explorer %d, fly scored %d, kraken %d: want neither scored and fly's turn again, on a candidate",
-			d.explorer, fly.Stats().Scored, kraken.Stats().Scored)
+	rec.rounds(t, d, 2, 2)
+	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 0 || kraken.flying() != 1 || !slices.Equal(plays(1), kraken.seed) {
+		t.Fatalf("two rounds with no Kraken: fly scored %d and kraken %d: want both rounds fly's and kraken's first candidate still in flight",
+			fly.Stats().Scored, kraken.Stats().Scored)
 	}
 	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
+	waiting := slices.Clone(plays(0))
 	rec.rounds(t, d, 2)
-	if d.explorer != 1 || fly.Stats().Scored != 1 || !written(0) || !written(1) {
-		t.Fatalf("a round at the Kraken: explorer %d, fly scored %d: want fly's candidate dropped unscored and kraken's turn on its hand-written genome",
-			d.explorer, fly.Stats().Scored)
-	}
-	rec.rounds(t, d, 2)
-	if d.explorer != 0 || kraken.Stats().Scored != 1 || fly.Stats().Scored != 1 {
-		t.Fatalf("a second round at the Kraken: explorer %d, kraken scored %d, fly %d: want kraken's candidate scored and fly's turn",
-			d.explorer, kraken.Stats().Scored, fly.Stats().Scored)
+	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 1 || slices.Equal(plays(1), kraken.seed) || !slices.Equal(plays(0), waiting) {
+		t.Fatalf("a round at the Kraken: fly scored %d and kraken %d: want kraken's candidate scored and its next dealt, and fly's still in flight",
+			fly.Stats().Scored, kraken.Stats().Scored)
 	}
 }
