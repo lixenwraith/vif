@@ -879,8 +879,9 @@ Libraries · Branches.
   its own `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a
   `stop` region that quits at a game time, as `botfitness` appends one. 36,000
   ticks of one game reach no Kraken; 600,000 score twenty or more of its rounds.
-  The line's `actions` of several games moves by one from run to run, a game's
-  own quit counted or not: compare the files.
+  The line's `actions` and ticks of several games move by one from run to run,
+  a game ahead of the run's own having played past its quit: compare the files,
+  and hold a test of the sums to a bound.
 - A rewritten reader of the world is proven where it reads: a copy of the tree
   keeps the old one beside the new under other names, `mind.steer` reads every
   sensor both ways and stops at the first that differs by `math.Float64bits`,
@@ -904,6 +905,25 @@ Libraries · Branches.
 - A form a bot document takes is proven on `cave` before `cave` takes it: a
   copy of its graph written that way, as with `[bot] inputs`, a `while` and a
   `Steer` over a list, leaves main's population bytes.
+- A tick can run no system. One whose opening settle dispatches a new game
+  asked for between ticks ends there, and `App.InputTick` settles one ahead of
+  the tick when the step injected input, so that tick is the new game's first.
+  What a system leaves for a tick, as `Cave.Steps`, is cleared as the tick
+  opens, and a driver closes its round before it counts such a tick.
+- `genetic`'s table of evaluations in flight evicts by a window of eight slots
+  from an id's home, whatever its capacity, and completing an evicted id does
+  nothing. A host whose evaluations outlive a lap of ids keeps the genome and
+  completes under an evaluation begun as the round closes (`Learner.settle`).
+- A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
+  script that puts each fix's lines back and runs the one test of its rule,
+  which must fail. A test of the games' order that would hang without its fix
+  is given the late `End` a run makes, so it fails instead.
+- A population kept under an older `version` is fielded by a newer binary from
+  a copy with its `version` raised. Where play did not change its held-out
+  rounds repeat the older binary's to the tick, which proves the harness too.
+  Main's binary and the branch's are read from `seed` in six minutes a seed on
+  four cores: two each to train four games' three million ticks, one each to
+  hold what they field out over 100 rounds.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.
