@@ -29,6 +29,7 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | Flag | Effect |
 |---|---|
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; no count is one, and no graph the scenario's own bot, `default` where it carries none ([Writing a graph](#writing-a-graph)). |
+| `-bot <verb> …` | Keep bot files and exit: `list`, `create`, `import`, `export` or `clear` with what follows it ([A player's bot files](#a-players-bot-files)). |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
@@ -92,7 +93,7 @@ into the session it joins, and `:leave` takes them out of one with the run.
 |---|---|
 | `:bot [N[:graph]\|graph]`, `:bot add …` | Seat more bots, one where no count is given; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
-| `:bot list` | Every bot a seat can play with what it has learned here, then this run's bots: slot, graph, joining or leaving. |
+| `:bot list` | Every graph a seat can play with what it has learned here, then this run's bots: slot, graph, joining or leaving. |
 | `:bot create`, `import`, `export`, `clear` | Keep a player's bot files ([below](#a-players-bot-files)). |
 | `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3`, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
@@ -114,44 +115,47 @@ operator's, whatever the run presents.
 
 ### A player's bot files
 
-A player's bots are the user root's `bot/<name>.toml`, beside what every bot
-learned ([The population file](#the-population-file)). The verbs that keep them
-print a line each, in a run as status messages the console lists; a browser has
-no files and reads `Bot files unavailable in a browser`, `list` excepted.
+The user root's `bot/` holds a player's own graphs, `<name>.toml`, beside what
+every graph learned ([The population file](#the-population-file)). The verbs
+that keep them take a fixed count of words and print a line each, in a run as
+status messages the console lists; a browser has no files and reads `Bot files
+unavailable in a browser`, `list` excepted.
 
-- `list`: each bot a seat can play, yours first, then the installed, the
+- `list`: each graph a seat can play, yours first, then the installed, the
   scenario's and the shipped `default`, with each population it keeps in the
   run's scenario: `raid 814 rounds, recent 51440, fields 140138 over 12`.
-- `create <name>`: a new bot of yours, the scenario's own with no weight, which
-  learns from nothing. A name is one word that is no count and no verb.
-  - `create <name> import <source>` copies the source's document whole.
-  - `create <name> import <source> <network>...` copies it with the weights of
-    those networks alone, so one population starts from a scenario's and
-    another fresh: `-s cave -bot create mine import cave kraken`.
-- `import <source> <name> [network...]`: writes a source's weights, every
-  network's or those named, into a bot of yours that exists
+- `create <name>`: a new graph of yours, the scenario's own with no weight,
+  which learns from nothing. A name is one word that is no count and no verb.
+  - `create <name> import <graph>` copies that graph's document whole.
+  - `create <name> import <graph>.<network>` copies it with the weights of
+    that network alone, so one population starts from a scenario's and another
+    fresh: `-s cave -bot create mine import cave.kraken`.
+- `import <graph>[.<network>] <name>`: writes a graph's weights, every
+  network's or the one's named, into a graph of yours that exists
   (`bot.Graph.Fit`).
   - A weight goes by its input's name, its output's and its hidden unit's place;
-    one the bot has and the source lacks is zero.
-  - A network, an input, an output or a hidden unit the bot lacks lands
-    nothing: a network is taken whole or not at all.
-  - What a population of the bot already kept still plays, and learns on, the
+    one yours has and the other lacks is zero.
+  - A network, an input, an output or a hidden unit yours lacks lands nothing:
+    a network is taken whole or not at all.
+  - What a population of yours already kept still plays, and learns on, the
     new weights a candidate among its members; `clear` it to start from them.
-- `export <bot>[.<scenario>] <file>`: the bot's document with, for each
-  network, the member its population fields in that scenario, the run's where
-  none is named, and what it wrote where none is proved: a file a scenario
-  carries as its bot, or another player imports. It reads back the same genome
-  bit for bit (`bot.Graph.Document`), each weight not zero written, a hidden
-  unit a `[[network.<n>.units]]` table and an output a `[network.<n>.<unit>]`
-  one, at the document's end.
-- `clear <bot>[.<scenario>[.<network>]]`: removes the populations below the
-  address, which start over. A run learning one keeps it again as it saves.
+- `export <graph>[.<network>] <file>`: the graph's document with the member
+  each of its populations fields in the run's scenario, or the one network's
+  named, and what it wrote where none is proved: a file a scenario carries as
+  its bot, or another player imports. It reads back the same genome bit for
+  bit (`bot.Graph.Document`), each weight not zero written, a hidden unit a
+  `[[network.<n>.units]]` table and an output a `[network.<n>.<unit>]` one, at
+  the document's end.
+- `clear <graph>[.<network>]`: removes what the graph of that name learned in
+  the run's scenario, every network's population or the one's named, which
+  start over. A run learning one keeps it again as it saves.
 
-A source is a bot as a seat names one, a file's path among them, or, where no
-such bot is found, another scenario's: `<scenario>` for its own and
-`<scenario>.<bot>` for any it carries, as `cave.seed`. A member is its genes,
-whatever scored them: `export` reads a population of any `version` whose
-`layout` is the network's.
+`<graph>` is a graph as `-bot` names one, by its name or a file's path, or
+failing that a scenario's name, for that scenario's own bot. `.<network>` after
+it is one of its `[network.<name>]`, and `<name>` a graph of yours by its name.
+The scenario is never written: it is the run's, `-s` on the command line. A
+member is its genes, whatever scored them: `export` reads a population of any
+`version` whose `layout` is the network's.
 
 ## Telling cursors apart
 
@@ -192,22 +196,23 @@ carries; then as the embedded `default`, the generic bot, bound to no scenario.
 load `default` unless a root holds a file of that name. `-d` does not pin bot
 graphs.
 
-A scenario carries the bots made for its map among its own files, which its entry
-lists, as `cave`'s does:
+A scenario carries the graphs made for its map among its own files, its bots,
+which its entry lists, as `cave`'s does:
 
 ```toml
 bots = ["bot/cave.toml", "bot/seed.toml"]
 ```
 
-- Each is a bot document, named by its file as a root's `bot/<name>.toml` is, one
-  word with no dot. They are part of the scenario: digested with it, sent with it
-  to a session's guests, parsed by `-check`.
+- Each is a graph, named by its file as a root's `bot/<name>.toml` is, one word
+  with no dot. They are part of the scenario: digested with it, sent with it to
+  a session's guests, parsed by `-check`.
 - The first is the scenario's own bot: what a seat that names no graph plays, from
-  `-bot`, `-bot 2`, `:bot add` and `:bot add 2` alike. A scenario that lists none
-  has `default` play.
-- A player's bot of the same name plays in the scenario's place, so a copy in a
-  root is how one is changed; what any of them learns is kept in the user root
-  ([The population file](#the-population-file)).
+  `-bot`, `-bot 2`, `:bot` and `:bot 2` alike. A scenario that lists none has
+  `default` play.
+- A player's graph of the same name plays in the scenario's place, so a copy is
+  how one is changed, which `create <name> import <graph>` writes
+  ([A player's bot files](#a-players-bot-files)); what any of them learns is
+  kept in the user root ([The population file](#the-population-file)).
 - A run that joins a session resolves its graphs once it has joined, against the
   session's scenario. A seat held over a change of scenario whose graph the new
   one does not carry plays the new one's own.
@@ -724,7 +729,7 @@ unattended.
 | `bot graph "x" not found as a path, in a configuration root, in scenario <name> or embedded` | Check the name and `-config-dir`, or give a path; a scenario's bot is found only in a run of that scenario. |
 | `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place; installs before the scenario carried its bots left one there, which `make install-config` names. Remove it. |
 | `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
-| A `roam` or `patrol` bot plays an old policy | An installed file of that name shadows `default`: use `-bot default` or update the file. |
+| A `roam` or `patrol` bot plays an old graph | An installed file of that name shadows `default`: use `-bot default` or update the file. |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
 | `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
 | `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
@@ -741,4 +746,4 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 - [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave):
   what the learner still lacks
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
-- [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)
+- [Teach a bot its player's style, for an auto-pilot](todo.md#teach-a-bot-its-players-style-for-an-auto-pilot)

@@ -189,14 +189,15 @@ wait. Slots may be reused once a departed player is dropped.
 
 ### Bots
 
-**Add bots** takes a count and policy graph name or path. `default` is the shipped
-policy; a blank policy also uses it. Policies follow the normal config-root
-resolution rules. Each bot occupies a player slot and leaves when its holder
-leaves. Both hosts and guests can bring bots. The rows below list this run's bots,
-including joining and leaving states: **Remove &lt;slot&gt;: &lt;policy&gt;** drops
-one, its hexadecimal slot matching its cursor label, and **Cancel joining** stops a
-pending one, marked leaving until its admission unwinds. Bots held by another
-player are outside this list.
+**Add bots** takes a count and a graph, by its name or a path. A blank graph is
+the scenario's own bot, or the shipped `default` where the scenario carries none,
+and a name resolves as `-bot` resolves one ([Bots](bots.md#writing-a-graph)). Each
+bot occupies a player slot and leaves when its holder leaves. Both hosts and
+guests can bring bots. The rows below list this run's bots, including joining and
+leaving states: **Remove &lt;slot&gt;: &lt;graph&gt;** drops one, its hexadecimal
+slot matching its cursor label, and **Cancel joining** stops a pending one, marked
+leaving until its admission unwinds. Bots held by another player are outside this
+list.
 
 Adding bots to a solo game opens a session only they can join, in a browser too.
 To invite remote players, **host at the intended listening address before adding
