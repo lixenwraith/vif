@@ -874,7 +874,20 @@ Libraries · Branches.
 - Whether a change leaves the search alone is read by bytes: one seed and one
   count of ticks leave the same population files, between two runs of one count
   of games and, for one game, between main's test binary built in a worktree and
-  the branch's (`sha256sum`).
+  the branch's (`sha256sum`). Two binaries read it with no harness: each plays
+  `-headless -speed max -seed N -games G` on `-config-dir <checkout>/wad` under
+  its own `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a
+  `stop` region that quits at a game time, as `botfitness` appends one. 36,000
+  ticks of one game reach no Kraken; 600,000 score twenty or more of its rounds.
+  The line's `actions` of several games moves by one from run to run, a game's
+  own quit counted or not: compare the files.
+- A rewritten reader of the world is proven where it reads: a copy of the tree
+  keeps the old one beside the new under other names, `mind.steer` reads every
+  sensor both ways and stops at the first that differs by `math.Float64bits`,
+  and the copy's own population bytes say it played as main did.
+- A scan a table calls is told its visitor as an interface whose value the mind
+  or the network already holds: a closure handed through a table escapes, an
+  allocation a scan, which `TestASteerAndASightingAllocateNothing` holds at none.
 - What a population fields is played held out by learners attached not alone
   (`bot.Learn`, `alone` false), which field and never save, each on its file's
   path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at

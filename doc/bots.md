@@ -205,17 +205,8 @@ or no cell gains ground.
 
 ### Targets
 
-| Target | Is |
-|---|---|
-| `glyph` | typeable text: a glyph neither gold nor part of a composite |
-| `gold` | a gold sequence member |
-| `nugget` | a nugget |
-| `species` | a combat entity other than a cursor or a tower |
-| `kraken` | a Kraken, by its body |
-| `threat` | a species, a hostile bullet or a hostile missile, all weighted alike |
-| `cursor` | another participant's cursor |
-| `button` | a scenario's button, or with `key` the one on that key, at its cell nearest the cursor |
-| `random` | a cell the view shows; `PointAt` only |
+A target is one of the kinds the [catalogue](bot-catalogue.md#kinds) marks as
+one, the nearest of it to the cursor.
 
 Distance counts rows twice, as the terminal draws them. `HasTarget` and `OnTarget`
 see the whole local world; `PointAt` reaches only what the view shows. On a map
@@ -247,7 +238,8 @@ over the bot's own machine, status guards over the bot's own registry (bare keys
 such as `heat.current` are its own slot, `player.<n>.*` any slot), and config
 guards over its own view. Actions that write the world are refused at load:
 `EmitEvent`, `EnableSystem`, `DisableSystem`, `ReconcileSystems`. `vif -schema`
-lists the bot's vocabulary, these left out, beside the scenario's.
+lists the bot's vocabulary, these left out, beside the scenario's, and what a
+network reads and asks for.
 
 ### Timing and randomness
 
@@ -366,43 +358,29 @@ on_update = [
 
 - A network's name is lowercase letters, digits and underscores, as it is part
   of a file's name.
-- `inputs`: the sensors read, in the order the weights take them. Each reads the
-  cells the view shows: an offset is from the cursor's cell, in view widths
-  across and view heights down, and what is not sighted reads 0.
-  - `ceiling`, `floor`: the rock's edges above and below the cursor's column,
-    the view's own rows where no rock stands, as at `cave`'s Kraken, where they
-    are the map's edges; `ceiling_near` and `floor_near` an eighth of the view
-    ahead, `ceiling_far` and `floor_far` a quarter.
-  - `species_x`, `species_y`, `species_enraged`: the nearest species, as the
-    `species` target counts them, and 1 while it is enraged; `species2_*` the
-    second nearest and `species3_*` the third. `cave` flies three raiders at
-    most and any may charge or teleport, so its network lists all three: the
-    nearest two would drop one for no reason its charge knows.
-  - `species_near_x`, `species_near_y`, and the same of `species2` and
-    `species3`: that species' nearness, a vector toward it 1 long beside the
-    cursor and falling to nothing a quarter of the view's width away, rows
-    counted twice. An offset grows with distance, so only a nearness lets one
-    weight back off what is close and leave alone what is far.
-  - `landing_x`, `landing_y`, `landing_near_x`, `landing_near_y`: the nearest
-    cell something is about to land on and its nearness, a raider's landing
-    marker, where its charge or teleport ends, or the cell a Kraken's charge
-    will end on while it spins up and charges. `landing_soon` is how soon, from
-    0 as the warning starts to 1 as the body leaves for it, which a player
-    watches too. `landing2_*` and `landing3_*` are the next two, so every
-    landing a cave can hold is read.
-  - `kraken_x`, `kraken_y`: the Kraken's body; `kraken_near_x`, `kraken_near_y`
-    the nearness of the nearest cell it covers, legs and all; `kraken_reach` how
-    far out its striking legs are, 0 to 1.
-  - `column`: the cursor's place across the view, -1 at its left edge, 1 at its
-    right.
-  - `energy`: 0 with none, a half at 1,000, toward 1; `heat`: a half at 10.
+- `inputs`: the sensors read, in the order the weights take them, each named in
+  the [catalogue](bot-catalogue.md#inputs): the nearest of a kind by rank and
+  field (`species_x`, `species2_near_y`, `landing3_soon`), the rock's edges at
+  the cursor's column and ahead, and the bot's own column, energy and heat.
+  Each reads the cells the view shows and keeps to its scale, and what is not
+  sighted reads 0. A `Steer` scans the world for the kinds its network's inputs
+  name and for no other, and allocates nothing: in `cave` its reading and its
+  pass take 1.3 µs while raiders fly and 4 µs with a Kraken up, whose members
+  it walks, of a tick's 190.
+  - An offset grows with distance, so only a nearness lets one weight back off
+    what is close and leave alone what is far.
+  - `cave` flies three raiders at most and any may charge or teleport, so its
+    network lists all three and their three landings: the nearest two would
+    drop one for no reason its charge knows. How soon a landing lands is what a
+    player watches too.
+  - The rock's edges are the map's own where no rock stands, as at `cave`'s
+    Kraken.
   - Loot has no sensor: a drop homes on its owner, so its place steers nothing.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
-- The outputs are three, each the direct sum of its weights over the inputs plus
-  the hidden units' and its bias, a weight within 4 either side of zero:
-  - `x` and `y` are an offset in view widths and heights, kept to the view.
-  - `special` asks for the special attack while it is positive, ahead of the
-    move and as often as auto-fire would.
+- The outputs are the [catalogue's](bot-catalogue.md#outputs), `special` and
+  `move`. Each of their units, `special`, `x` and `y`, is the direct sum of its
+  weights over the inputs plus the hidden units' and its bias, a weight within 4
+  either side of zero.
 - No weight is written: `cave` leaves its networks' to the learner, which draws
   them at random and keeps what plays best, so nothing it does was put there by
   hand, the use of its heat among it. A graph may still write some, as the
@@ -586,7 +564,7 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 ## Not built yet
 
-- [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
+- [Have a scenario describe the bots that play it](todo.md#have-a-scenario-describe-the-bots-that-play-it)
 - [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave):
   what the learner still lacks
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
