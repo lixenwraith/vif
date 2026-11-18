@@ -522,9 +522,11 @@ one game         3887    4556    4753    3159
 - Half the rounds or more are lost in the first cave, where the hand weights
   lose a quarter, and what five games field after two million ticks is about
   what they field after 25: a game on every core gets there sooner, no further.
-- It finds the special attack and leans on it, about ten blasts in the first
-  cave, the first as the raiders close, and held off it loses every round
-  there; it holds no heat back
+- It learns the special attack as a trigger in place of flying: a blast clears
+  the screen wherever the ship is, and it asks when raiders crowd it or one is
+  about to charge, about ten blasts in the first cave. Held off, what it fields
+  scores 250 to 1,500, where a ship that holds still scores 165, and loses
+  every round there. It asks most at heat 0, where an ask does nothing
   ([todo](todo.md#train-a-network-bot-live-in-cave)).
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the

@@ -877,8 +877,8 @@ Libraries · Branches.
   the branch's (`sha256sum`).
 - What a population fields is played held out by learners attached not alone
   (`bot.Learn`, `alone` false), which field and never save, each on its file's
-  path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at an
-  empty directory. `App.Reset(false)` closes a round at the graph's limit,
+  path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at
+  an empty directory. `App.Reset(false)` closes a round at the graph's limit,
   `Driver.Round` reads its score, and an `Instance` wrapping the App, whose
   `SetDispatchTap` calls the test's tap ahead of the driver's, counts what ended
   it: `EventKrakenSpawnRequest` for a Kraken met, its `EventSpeciesKilled` for
@@ -888,12 +888,20 @@ Libraries · Branches.
   bias negative in every member, the genes each hidden unit's inputs and bias,
   then `x`, `y` and `special`, each its inputs, hidden units and bias. `Inject`
   merges members whose genes then match, so check that the member fielded keeps
-  its score and rounds.
-- A learning run's ticks at a save are in nothing the binary prints: run it with
-  `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game whose `tick`
-  is the length of the run it ended, at about 1.5% of the rate, and sum those by
-  the log's time to each save. Copy the population files as their mtime moves to
-  keep what the run fielded along the way.
+  its score and rounds. To hold it off in a learning run, a scratch copy of the
+  tree has `mind.steer` skip the ask for the network an environment variable
+  names: unset, its run keeps main's population bytes; set, it plays as the
+  file's ablation does, round for round.
+- One member is played alone from a population of it only, kept in a
+  `bot.Store` in memory with its rounds raised to eight, which the learner then
+  fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A
+  population's draws are what one game learning in the harness holds once
+  `raid`'s `Scored` reaches 32, kept by `Close` into such a store.
+- A learning run's ticks at a save are in nothing the binary prints: run it
+  with `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game whose
+  `tick` is the length of the run it ended, at about 1.5% of the rate, and sum
+  those by the log's time to each save. Copy the population files as their
+  mtime moves to keep what the run fielded along the way.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what
@@ -933,9 +941,10 @@ Libraries · Branches.
   taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
   the 10 a game starts with in its first seconds, on blasts wherever dust lies.
   The same weights score 1,644 a round with it and 2,406 on `main`. A special
-  costs its heat only where it blasts, and it turns the scenery's dark glyphs to
-  dust first, so in the first cave nearly every one blasts 200 to 240 cells of
-  the 256 a blast holds. `explosion.triggered` counts those cells and a
+  costs its heat only where it blasts, and it first turns every dark glyph the
+  player owns to dust anywhere on the map, at no distance from the ship, so in
+  the first cave nearly every one blasts 200 to 240 cells of the 256 a blast
+  holds, a screen clear. `explosion.triggered` counts those cells and a
   missile's explosions, reset each game. A defeat is energy and heat both at
   nothing, so a lost round ends at heat 0: read what blasts left by what a
   round had, 10 and its loot, less its blasts.
