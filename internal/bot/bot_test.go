@@ -1026,6 +1026,33 @@ func TestARoundInFlightCountsTowardAMembersProof(t *testing.T) {
 	}
 }
 
+// TestAPopulationStartsFromTheWeightsItsGraphWrites: a written start drawn about
+// on every weight filled the archive with copies that flew worse, and the start
+// was lost among them, so what a run fielded after learning scored under it.
+func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLearner(g, "fly", 1, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for round := range learnPool {
+		genes := l.take(0, true)
+		changed := 0
+		for i, w := range genes {
+			if w != l.seed[i] {
+				changed++
+			}
+		}
+		if round == 0 && changed != 0 || changed > len(genes)/2 {
+			t.Fatalf("round %d plays a genome %d of %d weights off the written one, want the written weights first and their children after", round+1, changed, len(genes))
+		}
+		l.settle(0, float64(round+1), true)
+	}
+}
+
 // TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom: a population with no
 // rounds behind it has nothing to breed from, so its first learnPool rounds play
 // genomes drawn about the hand-written one, zero where a graph writes none, each
