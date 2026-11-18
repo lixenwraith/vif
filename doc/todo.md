@@ -615,6 +615,112 @@ genes apart, mean, %               1.4    1.5    1.3    1.1
   outweighs what sets the members apart: the stall is selection's, with the
   special or without it.
 
+What the runs earn before the first Kraken: the same held-out rounds again,
+with the raiders the ship shot down. The cave's gun fires one shot forward at
+its first level, so a kill takes the raider's row where a dodge leaves it; a
+kill pays 8 where a tick pays 1, and the twelfth brings the Kraken:
+
+```
+                                seed 1      2      3      4
+kills, median
+  row 2, as fielded                 14     13   17.5     14
+  row 2, held off                    0      0      0      0
+  run C                              0      0      0      0
+rounds with none, %
+  row 2, as fielded                 13      0      0      0
+  row 2, held off                   90     95     88     90
+  run C                             93     77     62     75
+  run C's copy at 2 million         95     90     90    100
+    5                               98     82     90     92
+    10                              98     82     68     90
+    20                             100     78     75     85
+```
+
+- The hand weights kill a median 21 there and none in no round. Held off,
+  row 2's members kill almost nothing, and so does run C at every copy: every
+  such row scores its median tick less 5, earning nothing and paid only for
+  lasting. Row 2 as fielded kills by its blasts.
+
+What the same games for a candidate and its parent would buy, from reading B's
+rounds: of a round's variance among a population's members, the part its game
+explains, the part its member does and what is left, and the correlation of
+two members' scores over the same games. Round i of a seed is one game for
+every member, its streams drawn from the root seed and the game's number:
+
+```
+                                seed 1      2      3      4
+row 2
+  the game, %                        4      9      9     10
+  the member, %                      2      1      0      2
+  left, %                           94     89     91     89
+  two members' correlation        0.05   0.10   0.09   0.11
+run C
+  the game, %                       14      3      7     10
+  the member, %                      0      2      2      1
+  left, %                           86     96     91     88
+  two members' correlation        0.15   0.07   0.08   0.15
+```
+
+- Two members on one game part as soon as they differ, and what follows
+  decides the round: a paired comparison keeps 86 to 97% of an unpaired one's
+  variance, so the same games would buy a tenth at most. A member is 0 to 2%
+  of a round, so its mean reaches half reliability after 50 to 75 rounds,
+  paired or not, and in two populations of eight never, where a learner proves
+  one on eight. Random draws are 36 and 40% member, told apart in two rounds.
+
+Run F, a probe and no proposal: run C again with a raider's kill worth 100 to
+the learner in place of its hit points, a constant the scratch copy reads from
+the environment, each seed stopped at run C's ticks by a stop region and its
+copies taken by ticks as before. Held out on the shipped score, a kill worth its
+hit points again, with `raid`'s special held off:
+
+```
+                                seed 1       2       3       4
+run F, 31.6 to 33.7 million ticks
+  raid: rounds                   13797   13147   16854    4969
+    recent                        1561    1769    1091    4072
+    fielding                      3857    4280    2989   15504
+      over                          10       8      10      12
+  kraken: rounds                    12       0      47     385
+  fielded, held out               2043    1852    1483    7202
+    its median                    1403    1298     820    2699
+  lost before the Kraken            60      60      60      49
+    the median tick they end      1408    1303     825    2131
+  kills before it, mean            1.2     0.1     1.3     7.6
+    rounds with none, %             72      92      73      38
+  rounds at the limit                0       0       0       1
+run C, the same seeds
+  fielded, held out               1355    1940    2370    1762
+  lost before the Kraken            60      59      60      60
+  kills before it, mean            0.1     0.8     1.9     0.8
+    rounds with none, %             93      77      62      75
+```
+
+```
+millions of ticks              2       5      10      20
+copies, fielded
+  seed 1                     910    1217    1392    1457
+  seed 2                     854     944    1315    1845
+  seed 3                     893    1054    1000    1001
+  seed 4                    3538    4647    5993    6806
+lost before the Kraken, of 40
+  seeds 1 to 3                40      40      40      40
+  seed 4                      39      37      32      35
+rounds with no kill, %
+  seed 1                     100      93      98      78
+  seed 2                     100     100      95      90
+  seed 3                      95      83      85      88
+  seed 4                      45      38      40      30
+```
+
+- On seed 4 the first reading fixed before the run holds: paid for kills its
+  members take the gun from two million ticks on, and what it fields kills a
+  median 3 before the Kraken, 21 to 23 in each of the 11 rounds of 60 that
+  reach it, one of them lasting to the limit, where run C on that seed passed
+  none. On seeds 1 to 3, F plays as C did.
+- So the first cave's pay holds the search off the gun: paid 100 a kill one
+  run in four took it within run C's ticks, and none of run C's four did.
+
 The rest was read while the graph wrote its weights by hand and a round scored
 its ticks, a Kraken's fight aside. Games that learn together, in ticks a second
 on a four-core machine by the cores they were given, where one game plays
@@ -680,8 +786,9 @@ What remains:
   run learns the special as a trigger in place of flying: it asks when raiders
   crowd the ship or charge, about ten blasts in the first cave, and most at
   heat 0, where an ask does nothing, so nothing in it holds heat back (above).
-  A person's use rests on flying that cave, which no run learned, with the
-  special or without it: unread until one does.
+  A person's use rests on flying that cave, which no run learned on the
+  shipped score; paid 100 a kill, one did without the special (run F). Unread
+  until one does with it.
 - **How fast it learns.** From nothing, what five games field after two
   million ticks, two minutes on four cores, is what they field after 25, and
   one game fields after 22 minutes, six million ticks, about what five games
@@ -769,14 +876,18 @@ What remains:
   ([agent notes](agent-notes.md#measuring)). A code species' kill still weighs
   5, the Kraken's aside: its hit points want a table.
 - **The archive stalls from nothing** in the first cave, with the special and
-  without it (above). Its members become near-copies that 24 rounds do not
-  tell apart, and its own score picks among them by luck; held to flying, the
-  search learns to last longer there and still loses every round. The next
-  step the evidence points to, not yet run: the same games for a candidate and
-  the member it came from, so that a candidate is judged by its own change and
-  not by the game's luck, which is all 24 rounds of near-copies show. An
-  evolution strategy with a step per gene, an engine of its own in
-  `lixenwraith/genetic`, only if that stalls too.
+  without it (above). Its members become near-copies, each 0 to 2% of a
+  round's variance, that 24 rounds do not tell apart, and its own score picks
+  among them by luck. The same games for a candidate and its parent would buy
+  little: two members on one game part as soon as they differ, and pairing
+  keeps 86 to 97% of a comparison's variance. The first cave pays a tick where
+  a kill pays 8, so held to flying the search lasts and kills nothing; paid
+  100 a kill, one run in four took the gun and passed the cave in 11 rounds of
+  60 (run F). To decide: what a kill pays in the first cave, 100 being a probe
+  and no proposal, and whether a candidate is judged on the 50 to 75 rounds
+  that tell near-copies apart, or by an evolution strategy with a step per
+  gene, an engine of its own in `lixenwraith/genetic`, which averages many
+  rounds into one step.
 
 What `lixenwraith/genetic` measured on a stand-in, a 148-weight network of this
 shape on a noisy scrolling game, twelve seeds a row and 12,000 rounds each, read

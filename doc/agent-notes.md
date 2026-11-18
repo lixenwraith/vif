@@ -902,9 +902,18 @@ Libraries · Branches.
   then `x`, `y` and `special`, each its inputs, hidden units and bias. `Inject`
   merges members whose genes then match, so check that the member fielded keeps
   its score and rounds. To hold it off in a learning run, a scratch copy of the
-  tree has `mind.steer` skip the ask for the network an environment variable
-  names: unset, its run keeps main's population bytes; set, it plays as the
-  file's ablation does, round for round.
+  tree has `mind.steer` skip the `special` row of `outputs` for the network an
+  environment variable names: unset, its run keeps main's population bytes;
+  set, it plays as the file's ablation does, round for round. What a raider's
+  kill pays is probed the same way in `mind.killWorth`.
+- The i-th held-out round of one seed is one game for every member, whatever
+  the rounds before it did: a new game draws its streams from the root seed and
+  a counter that advances once a game (`RandResource.NextSession`). Rounds so
+  pair across members by seed and index, and a round's variance splits by game
+  and by member. A five-game run stops at a count of ticks by a graph whose
+  stop region quits at a fifth of it in game time, every game ending at the
+  tick the run's own reached; its `actions` can differ by a few between two
+  runs of one seed, its population bytes not.
 - One member is played alone from a population of it only, kept in a
   `bot.Store` in memory with its rounds raised to eight, which the learner then
   fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A
