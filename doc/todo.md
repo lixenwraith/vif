@@ -323,6 +323,25 @@ whose luck held are still there, which is why a candidate enters on a second
 round and eight prove a member. Auto-fire's special attack spent in a game's
 first seconds the heat that is the ship's last buffer.
 
+A written start is learned from, where for a time it was lost. Since `cave`
+began from nothing a population's first 32 rounds drew every weight about its
+start, the written one too: the archive filled with copies that flew worse and
+the start left it. From the weights last written by hand, which field 12,170
+with a median of 13,573 over 100 rounds of seeds 101 to 104, five minutes of
+five games on seed 1, 8.5 and 9.9 million ticks, fielded held out:
+
+```
+                                  fielded   median   reach the Kraken
+every weight drawn about them        4863     1018          34 of 100
+starting from them alone            40865    32688           57 of 60
+```
+
+- Drawn about, no member of the archive was the written one, the oldest born
+  at round 235, and what it fielded had drifted: 0.11 of bias down, four rows
+  an update, and `species_near_x` at -0.09 for -0.25.
+- Any run that learned from written weights between the two is a reading of
+  the lost start, not of the learner.
+
 From nothing, what one game fields after three million ticks, seven minutes of
 a core, over 40 rounds of four seeds it never played, each closed at the limit,
 by the spread its first genomes were drawn with:

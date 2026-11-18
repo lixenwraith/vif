@@ -930,6 +930,12 @@ Libraries · Branches.
   `tick` is the length of the run it ended, at about 1.5% of the rate, and sum
   those by the log's time to each save. Copy the population files as their
   mtime moves to keep what the run fielded along the way.
+- A change to how a population starts is read from a written start as well as
+  from nothing, by what it fields held out beside the start itself: drawing
+  every weight about the start passed every test and read well from nothing,
+  and from weights that fielded 12,170 it fielded 4,863 after five minutes.
+  Whether the start is still in the archive is one look at its members' zero
+  weights.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what
