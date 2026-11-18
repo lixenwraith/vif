@@ -179,8 +179,10 @@ func (n *network) playing() *network {
 // name the nearest things, found once, then each input in the weights' order
 func (n *network) read(m *mind) {
 	for i, w := range n.wants {
-		n.near[i] = nearest{m: m, kind: w.kind, ranks: w.ranks}
-		kinds[w.kind].scan(m, &n.near[i])
+		near := &n.near[i]
+		near.m, near.want, near.n = m, w, 0
+		clear(near.at[:w.ranks])
+		kinds[w.kind].scan(m, near)
 	}
 	for i, read := range n.inputs {
 		n.in[i] = read(m, n)
