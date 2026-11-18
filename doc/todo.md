@@ -248,7 +248,7 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
   undone by that run's next save.
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and with the title tested
-  ([Bots](bots.md#learning)) a run no longer fields a worse member than it
+  ([Bots](bots.md#learning)) no run measured fielded a worse member than it
   began with. What limits it, measured over 100 held-out rounds:
   - **The score has a ceiling.** A round closed at its half hour pays by the
     Krakens shot down in it, 375,000 for nine, 214,000 for eight and 132,000
@@ -264,24 +264,36 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
     two crushed, and shoots nine Krakens down in 80.
   - **A nudge in the pay**, tried in a scratch tree and not built: a learner
     is paid no column scrolled while a block stands within two rows above or
-    below its ship. Under the rule that fielded the best of eight rounds, on
-    seed 1, three million ticks then fielded 313,827 with ten rounds lost
-    early and fifteen million 323,960 with six, where the same runs unnudged
-    fielded 257,385 and 295,609. It is `cave`'s own knowledge in the bot
-    package's scoring: a bot document would declare it, as it does `while`.
+    below its ship. Under the rule that fielded the best of eight rounds it
+    is crushed less and fields no more for it, within what luck moves: after
+    three million ticks 313,827 on seed 1 and 287,986 on seed 2, five rounds
+    and one crushed and ten and twelve lost early, and after fifteen million
+    on seed 1 323,960, four crushed and six lost. It is `cave`'s own
+    knowledge in the bot package's scoring: a bot document would declare it,
+    as it does `while`.
+  - **A lower limit does not help.** Trained with rounds closed at 150
+    seconds, where the early losses are, three million ticks fielded 20,441
+    on seed 1 and 107,101 on seed 2: `kraken` is scored on fights cut before
+    the kill pays, and `raid` on its first cave alone. That `raid` beside
+    `cave`'s own `kraken` fielded 315,649 on seed 1, four rounds lost early,
+    none crushed and 96 at the limit, and the 107,101 on seed 2, twenty lost.
   - **The archive ranks by raw mean**, so a member whose mean many rounds
     have brought down to what it is worth sinks below newcomers one lucky
-    round put there, and the one fielded stood 29th of 32 after fifteen
-    million ticks: pushed off, its title passes to the next most trusted. An
-    archive ranked by the trusted mean keeps it, and needs newcomers let in
-    at its foot.
-  - **Something crosses a new game.** Every round starts its ship alike, its
-    cell, energy and heat, and yet one `raid` network flew a game of seed 101
-    differently from its tick 150 on by which `kraken` had flown the game
-    before: through its half hour under one, and to the left edge and crushed
-    at tick 211 under the other. What a new game leaves as it was, in the bot
-    or the world, is not found, and the change to a bot's death wants it
-    settled: until then held-out rounds do not pair by index.
+    round put there: after fifteen million ticks `raid`'s fielded stood 30th
+    and 32nd of 32, and `kraken` on seed 2 kept no proved member, each one
+    tested to its first lost round having left an archive of 32 at the
+    limit's score. Pushed off, a title passes to the next proved, or to the
+    weights written. The archive wants ranking by the trusted mean, a
+    newcomer let in at its foot on what its round claims: a rank hook in
+    `lixenwraith/genetic`, or the fielded member held outside the archive.
+  - **Something crosses a new game.** Two runs of one `raid` network started
+    games 4 and 5 of seed 101 alike, cell, energy and heat, and to tick 100
+    flew them alike, then apart by which `kraken` had flown the games before:
+    game 5 through its half hour under one, and to the left edge and crushed
+    at tick 211 under the other. A game after a crush starts a cell or two
+    from where one after the limit does. What a new game leaves as it was, in
+    the bot or the world, is not found, and the change to a bot's death wants
+    it settled: until then held-out rounds do not pair by index.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **A scenario's bot held to its scenario by `-check`**: an `InState` that names

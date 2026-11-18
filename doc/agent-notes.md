@@ -973,6 +973,15 @@ Libraries · Branches.
   of it in game time, every game ending at the tick the run's own reached; its
   `actions` can differ by a few between two runs of one seed, its population
   bytes not.
+- A rule that changes what a learner plays or fields is read three ways, each
+  on several seeds, since one says nothing: from nothing, a game's 600,000
+  ticks and a hold of seconds, six seeds a rule in five minutes on four cores,
+  a game a core (2,304 beside 6,640 on one seed, the six means 4% apart); from
+  `seed`'s weights; and on a population already good, `cave`'s own, where the
+  best of eight rounds fielded 257,385 for its 300,260. `-bot create <name>`
+  writes the graph with no weight that from nothing starts on.
+- `Driver.Stats` takes the world lock: a harness reads it before its own
+  `World.RunSafe`, never inside, or the run hangs with nothing printed.
 - One member is played alone from a population of it only, kept in a
   `bot.Store` in memory with its rounds raised to eight, which the learner then
   fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A

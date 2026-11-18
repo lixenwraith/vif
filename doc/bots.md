@@ -540,7 +540,9 @@ end, and all the rest for `raid`.
   settles at 0.03 as its best stops improving.
 - A round the game has not ended within the graph's `round_seconds` is closed
   as far as it came, by a new game the run asks for, so a candidate nothing
-  beats is scored and the next one plays. `cave` takes half an hour.
+  beats is scored and the next one plays. `cave` takes half an hour: a limit
+  under a fight's length scores it before its kill pays, and with 150 seconds
+  its own model learned on to one that fields 20,441 for 300,260.
 - A run in a session does not learn, since any participant's defeat ends every
   round there: its bots, seats among them, play what is fielded. A round an
   operator ends (`:n`) scores nothing.
@@ -614,18 +616,27 @@ seeds 101 to 104 with no learner, each closed at the graph's limit. From
 `seed`'s weights, which field 27,614 themselves with a median of 33,174 and
 reach the Kraken in 73 rounds, four games' three million ticks, two minutes on
 four cores; from nothing, `cave`'s graph with no weight written, where a ship
-that holds still scores 159, one game's 600,000:
+that holds still scores 159, one game's 600,000. Each beside what the rule
+before this one fielded, the best mean of eight rounds; `reach` is the rounds
+of 100 that meet a Kraken:
 
 ```
-                   rounds scored      fields            reach the   Krakens
-start     seed     raid   kraken     mean   median   Kraken of 100     down
-seed's       1      814      408    51440    46982              98      423
-             2      767      437    51679    52348              93      421
-             3      570      305   140138   127276              97      633
-nothing      1      864      125     6115     2726              30       35
-             2      774      115     6640     3340              28       39
+                    the best of eight          the most trusted
+start     seed     mean   median   reach     mean   median   reach
+seed's       1    51440    46982      98    52588    59824      93
+             2    51679    52348      93    87882    80992      92
+             3   140138   127276      97   113267    86658      99
+nothing      1     6115     2726      30     6435     2874      25
+             2     6640     3340      28     2304     1694      15
+             3     3325     2845      33     4431     2703      18
+             4     5029     3428      28     4603     2405      19
+             5     2968     2358      19     4384     2944      25
+             6     3365     2990      18     4104     2530      25
 ```
 
+- A start learns as well under either, one seed with another: from `seed`'s
+  the three means come to 81,086 and 84,579, from nothing the six to 4,574 and
+  4,377. What the rule changes is what a population already good fields, below.
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
@@ -649,7 +660,7 @@ cave's own weights           300260   374046     12
 the best of eight        1   257385   219311      6   295609   373815     15
                          2   300260   374046     12
 the most trusted         1   300260   374046     12   330680   374835      5
-                         2   300260   374046     12
+                         2   300260   374046     12   324772   374859      8
 ```
 
 - Every run adds its rounds to the population, a few seconds' as well: two runs
@@ -658,10 +669,19 @@ the most trusted         1   300260   374046     12   330680   374835      5
   half an hour, and a run stopped inside one scores nothing for it.
 - After three million ticks the most trusted is still `cave`'s own, by then
   tested over 20 to 25 rounds, which bring its `raid` from the 56,000 to 59,000
-  its first eight scored to 51,000 to 54,000. The best of eight had on seed 1 fielded a
-  `raid` its eight rounds put at 67,316, a Kraken slower in most rounds.
-- After fifteen million the title has passed: `raid`'s to a member 73 rounds
-  have tested, 18 weights from `cave`'s, and `kraken`'s to one of ten.
+  its first eight scored to 51,000 to 54,000. The best of eight had on seed 1
+  fielded a `raid` its eight rounds put at 67,316, a Kraken slower in most
+  rounds.
+- After fifteen million `raid`'s title has passed, to a member 73 rounds have
+  tested on seed 1, 18 weights from `cave`'s, and one of 16 on seed 2. Both
+  lose fewer rounds early, and neither stands off the rock: within a row of
+  it 80 ticks in 100, as `cave`'s own.
+- The archive still ranks by the plain mean, so a member many rounds have
+  brought down to what it is worth can be pushed off by newcomers one round
+  put above it, and its title passes to the next proved or, with none, to the
+  weights the graph wrote: `kraken` ended seed 2 so, every member at the
+  limit's score on a round or two
+  ([todo](todo.md#have-a-scenario-describe-the-bots-that-play-it)).
 
 A watched run at speed 1 shows the play, and a headless one flat out fills the
 files.
