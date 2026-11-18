@@ -956,6 +956,10 @@ Libraries · Branches.
   and from weights that fielded 12,170 it fielded 4,863 after five minutes.
   Whether the start is still in the archive is one look at its members' zero
   weights.
+- A population moves to a graph that reads its inputs and more by a zero weight
+  for each added input in every unit's row, and the new `layout`: four learned
+  under 901ac22's inputs, widened to the `*_soon` readings `cave` and
+  `cave_seed` take, replayed their 60 held-out rounds round for round.
 - A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
   doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
   median of 48,271, of another 201,735 and 319,994. Read the median and what
