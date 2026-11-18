@@ -220,16 +220,55 @@ follow the redesign.
 
 ## Bots
 
-### Expose a bot difficulty knob
+### Have a scenario describe the bots that play it
 
-- Priority: P3
-- Affected files: `internal/app/internal/membership/seat.go`, `cmd/vif`,
-  `internal/mode/config_form.go`, `tool/vif-router`
+- Priority: P1
+- Affected files: `internal/bot`, `internal/fsm/file_loader.go`,
+  `internal/resource/scenario.go`, `internal/app/internal/membership/seat.go`,
+  `internal/app/script.go`, `internal/mode/commands.go`, `cmd/vif`
+- Guide: [Bots](bots.md#networks-and-learning), [Bot catalogue](bot-catalogue.md)
 
-`actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
-such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
-menu share it; graph variants per level; or a ceiling the driver clamps every
-graph to. The fleet request carries it once the site exposes one.
+A scenario is to carry the bots made for its map, among its own files, and the
+user root's `bot/` to hold a player's alone: what they made, changed or trained.
+The catalogue a network reads through has landed with the sensors `cave` had
+([Bot catalogue](bot-catalogue.md)). Decided (Lixen, 2026-11-18), a PR a step
+in this order:
+
+- **The catalogue's rows.** Kinds `bullet`, `missile`, `cursor`, `glyph`, `gold`
+  and `nugget` beside today's, a species' and a Kraken's hit points and a
+  species' size, the ranks to eight, the terrain about the cursor, and more of
+  the bot's own: its row, shield, boost and weapons. No `loot`, which homes on
+  its owner and whose kinds are many, and `threat` stays a target alone.
+- **The bot document.** A network may say `while`, a guard binding it to a state
+  of the scenario, and `Steer` take an ordered list, the first whose binding
+  holds steering; `InState { region, states }` reads the scenario's own
+  machine. `cave`'s `kraken` bound to `boss` in `BossFight` kept its populations'
+  bytes on two seeds of 600,000 ticks, so its scenario needs no change and its
+  score none. With it `outputs`, which leaves one out, `[bot] inputs`, read
+  first by every network of the document, and weights written whole in TOML:
+  each output by input name with `hidden` and `bias`, and `[[units]]`. Whether
+  a scenario exposes values of its own is decided at this step.
+- **A scenario's bots.** `[bots]` in the entry, each inline or a file of the
+  scenario: templates, which play only while the player has no bot of that name
+  and whose weights are the author's start for a learner. `-bot` with no name
+  plays the scenario's bot, and `-bot default` the generic one shipped, bound to
+  no scenario, which a player may change or train. A population stays
+  `bot/<name>.<scenario>.<network>.json`, one a network.
+- **The verbs**, the same words after `:bot` and `-bot`: `create <name> [import
+  <source>]`, `import`, `export`, `clear` and `list`, a source being a
+  scenario's bot, one network of it alone or a file, so one population is taken
+  from a scenario and another started fresh. A document naming an input or a
+  unit the bot lacks lands nothing. `list` names each population's rounds,
+  recent mean and the member it fields, on the menu's Bots page too.
+- **The default bot as the stress test**: every input loaded into its generic
+  network and measured, then the hooks it does not need unplugged.
+- **Cave.** Its bot moves from the embedded graphs into its scenario, which
+  takes the next `network.ProtocolVersion`; its networks, digests and
+  population files stay.
+
+`learner.go` and a round's scoring are untouched throughout, so a learner in a
+run takes an import or a clear from its next run. Whether the population file
+moves from JSON to TOML waits on a reading of the two.
 
 ### Train a network bot live in `cave`
 
@@ -720,7 +759,7 @@ What remains:
   `bot.Learn`'s `alone` is the seam, and its stores need one writer.
 - **The operator's side**, its `:bot clear`, `export` and `import`, is an item of
   its own:
-  [Clear, export and import a bot's populations](#clear-export-and-import-a-bots-populations).
+  [Have a scenario describe the bots that play it](#have-a-scenario-describe-the-bots-that-play-it).
   Beside it, the `:bot` list and the menu's Bots page name no population; a
   watched run's menu still turns auto-fire or the pointer off under the bot,
   which its rounds then score, and writes that back as the player's own; and
@@ -758,40 +797,6 @@ separable CMA-ES on the mean of three          3290
   `lo` is the step it runs at: 0.02 ended level with the best fixed step and 0.005
   stalled.
 
-### Clear, export and import a bot's populations
-
-- Priority: P2
-- Affected files: `internal/mode/commands.go`, `internal/app`,
-  `internal/bot/learner.go`, `internal/paths`
-- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
-- Guide: [Bots](bots.md#the-population-file), [Bots](bots.md#commands-and-the-menu)
-
-A population is one network's of one graph in one scenario, kept as
-`bot/<graph>.<scenario>.<network>.json`, and nothing starts one over or moves one
-between players but handling the file. Three `:bot` commands name populations as
-the files do, `cave.cave.kraken` for one, and a shorter name for all under it:
-`cave.cave` a graph's in a scenario, `cave` a graph's everywhere.
-
-- `:bot clear <name>` starts those populations over: their files go, and a
-  learner of this run on one of them begins again from the weights written by
-  hand, or its next save brings the file back.
-- `:bot export <name>` writes them as one TOML document: for each its graph,
-  scenario and network, its layout with the `inputs` and `hidden` count it stands
-  for, and its rounds, step and members as the file holds them.
-  `lixenwraith/toml` marshals a struct by its tags. Decide where it lands: not
-  `bot/<name>.toml` of a root, which resolves as a graph and `-check` refuses.
-- `:bot import <file> [name]` patches the files with all the document holds, or
-  the part `name` picks. A population is refused, by name, unless the graph is
-  one this player has, the graph has that network, and its layout is that
-  network's now, as `network.digest` gives it; one that is refused leaves the
-  rest to be taken. Its scenario need not be one this player has or has played,
-  so a bot trained elsewhere patches one's own. A learner of this run takes the
-  import as it would the file at its start.
-
-Decide whether a headless run takes the same three as flags, since a trainer has
-no command line, and what `:bot` lists of a population: its rounds, its recent
-mean and the member it fields.
-
 ### Draw a watched run's wait on its screen
 
 - Priority: P3
@@ -820,9 +825,11 @@ learns with a game on every core, each round a new game of its seed.
 `lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
 scenarios and seeds, fixed for the run since the batch engine never scores an
 elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run
-depends only on its seed, so evaluation needs no mesh. Decide where trained values
-ship, and whether a graph's own constants become genes too: a `[bot.params]`
-table, or bounded macro parameters shared with the editor's macro metadata. Bot
+depends only on its seed, so evaluation needs no mesh. Trained values ship as the
+weights of a scenario's bot
+([above](#have-a-scenario-describe-the-bots-that-play-it)). Decide whether a
+graph's own constants become genes too: a `[bot.params]` table, or bounded macro
+parameters shared with the editor's macro metadata. Bot
 genomes never enter the in-game genetic registry, which captures carry. Fitness
 weighs no nugget, since nothing pushes `EventNuggetCollected`: push it in
 `NuggetSystem.collectNugget` and drop that function's own `statCollected`
@@ -875,7 +882,8 @@ takes `max_players = 1`; and `scenarioTrees`' list goes with the rule's move.
 
 The editor's forms and pickers come from one description, the one `-schema`
 prints, and it holds too little for them: 209 events with their fields, the names
-of 38 enums and three vocabularies with their arguments. Missing:
+of 38 enums, three vocabularies with their arguments and what a bot's network
+reads and asks for. Missing:
 
 - **An event's class and line.** Nothing says an event is local, shared or a
   crossing, or what it does, though its type's comment holds both, so nothing

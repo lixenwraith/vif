@@ -57,6 +57,8 @@ Focused references:
 
 - [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
+- [Bot catalogue](bot-catalogue.md) lists what a bot graph targets and what its
+  networks read and ask for, rendered from the code's tables.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the prioritized running work list for every area.
 - [Agent notes](agent-notes.md) holds what agents learned working on the
@@ -101,13 +103,15 @@ changing a subsystem, update the source that actually owns its shape.
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | the audio module's `bank/*.toml` ([`lixenwraith/audio/bank`](https://github.com/lixenwraith/audio/tree/main/bank)) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
+| Bot targets, a network's inputs and outputs | the tables in `internal/bot/catalogue.go` | `bot.Catalogue` for `-schema`, `doc/bot-catalogue.md` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |
 
-Run `make generate` after changing a manifest or generator input, and
+Run `make generate` after changing a manifest or generator input,
 `VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated` after changing a flag or
-the manual's prose.
+the manual's prose, and `VIF_WRITE_GENERATED=1 go test ./internal/bot -run
+Reference` after changing a row of the bot catalogue.
 Do not edit a generated file by hand.
 
 ## Accuracy conventions

@@ -100,7 +100,8 @@ plus its behavior programs and loot, keymap, audio overrides, content and every 
 without starting the terminal game. `vif -schema` prints generated JSON describing
 known events and their payload fields, the names an enum field takes, the
 vocabularies of a scenario, a bot graph and a behavior program with their
-arguments, comparison operators and script-visible config fields.
+arguments, what a bot graph's network reads and asks for, comparison operators
+and script-visible config fields.
 
 ## 3. Root schema
 
