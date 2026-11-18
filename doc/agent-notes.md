@@ -934,7 +934,7 @@ Libraries · Branches.
   name in a root's `bot/` plays in its place, as an install before the move
   left one. A held-out harness built earlier refuses a scenario whose entry has
   a key it does not know: run it on a copy of `wad/` taken before the change.
-- A model is landed in a bot document by `-bot export <bot> <file>`, which
+- A model is landed in a bot document by `-bot export <graph> <file>`, which
   writes what each population fields over the bot's own document
   (`bot.Graph.Document`: every weight not zero, parsed back to the same
   `math.Float64bits`). A population written by another tool is raised to this

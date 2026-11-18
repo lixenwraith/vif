@@ -106,10 +106,10 @@ var BotVerbs = [][2]string{
 	{"add", "[N[:graph]|graph]"},
 	{"drop", "<slot>"},
 	{"list", ""},
-	{"create", "<name> [import <source> [network...]]"},
-	{"import", "<source> <name> [network...]"},
-	{"export", "<bot>[.<scenario>] <file>"},
-	{"clear", "<bot>[.<scenario>[.<network>]]"},
+	{"create", "<name> [import <graph>[.<network>]]"},
+	{"import", "<graph>[.<network>] <name>"},
+	{"export", "<graph>[.<network>] <file>"},
+	{"clear", "<graph>[.<network>]"},
 }
 
 // BotVerb splits the words after :bot and -bot into a verb and what follows it:

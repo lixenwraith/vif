@@ -319,7 +319,7 @@ A migrate session moves to a guest that turned Take over as host on, as
 :takeover on does; such a guest listens on a port in each session it joins, and
 the session shares its address with the other players. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
-:player drop <slot> removes one and keeps it out. Bots adds local bots by count and policy graph,
+:player drop <slot> removes one and keeps it out. Bots adds local bots by count and graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
 <slot> removes your bot, or any bot when hosting. Its Bot files row takes a verb
 of :bot that keeps bot files. Slots accept decimal 10,
@@ -403,15 +403,15 @@ carries none. A graph that learns keeps a population for each of its networks
 beside the player's graphs in the user root, as
 <graph>.<scenario>.<network>.json. The words after \-bot are those after :bot:
 a count or a graph, with add or without, seats bots, and \-bot with a verb that
-keeps these files acts and exits. list names every bot a seat can play with
-what each has learned in the scenario; create <name> writes a bot of the
-player's, the scenario's own with no weight, or after import <source>
-[network...] that source with every weight or those networks' alone; import
-<source> <name> [network...] gives a bot of the player's a source's weights;
-export <bot>[.<scenario>] <file> writes a bot with what its populations field;
-clear <bot>[.<scenario>[.<network>]] removes populations, which then start
-over. A source is a bot as a seat names one, or another scenario's,
-<scenario>[.<bot>].
+keeps these files acts and exits. list names every graph a seat can play with
+what each has learned in the scenario; create <name> writes a graph of the
+player's, the scenario's own with no weight, or after import <graph> that
+graph whole, or after import <graph>.<network> with that network's weights
+alone; import <graph>[.<network>] <name> gives a graph of the player's those
+weights; export <graph>[.<network>] <file> writes a graph with what its
+populations field; clear <graph>[.<network>] removes populations, which then
+start over. A graph is named as \-bot names one, or by a scenario's name for
+that scenario's own bot, and the scenario is the run's.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif
 System configuration roots, in that order;

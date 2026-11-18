@@ -27,9 +27,10 @@ func PopulationFile(graph, scenario, network string) string {
 }
 
 // BotFiles runs one of engine.BotVerbs that keeps bot files, its word first, for a
-// run of sc, and returns what it tells the operator, a line each. A player's bots
-// are the user root's bot/<name>.toml, beside what every bot learned, and a
-// source is a bot as a seat names one or another scenario's, <scenario>[.<bot>].
+// run of sc, and returns what it tells the operator, a line each. A player's
+// graphs are the user root's bot/<name>.toml, beside what every graph learned;
+// <graph>[.<network>] names a graph, or one network of it (addressed), and the
+// scenario its populations are of is sc.
 func BotFiles(o Options, sc Scenario, words []string) ([]string, error) {
 	verb, rest := "", words
 	if len(words) > 0 && words[0] != "add" && words[0] != "drop" {
@@ -44,14 +45,16 @@ func BotFiles(o Options, sc Scenario, words []string) ([]string, error) {
 	switch {
 	case verb == "list" && len(rest) == 0:
 		return listBots(o, sc, dir), nil
-	case verb == "create" && (len(rest) == 1 || len(rest) >= 3 && rest[1] == "import"):
-		told, err = createBot(o, sc, dir, rest[0], rest[1:])
-	case verb == "import" && len(rest) >= 2:
-		told, err = importBot(o, sc, dir, rest[0], rest[1], rest[2:])
+	case verb == "create" && len(rest) == 1:
+		told, err = createBot(o, sc, dir, rest[0], "", false)
+	case verb == "create" && len(rest) == 3 && rest[1] == "import":
+		told, err = createBot(o, sc, dir, rest[0], rest[2], true)
+	case verb == "import" && len(rest) == 2:
+		told, err = importBot(o, sc, dir, rest[0], rest[1])
 	case verb == "export" && len(rest) == 2:
 		told, err = exportBot(o, sc, rest[0], rest[1])
 	case verb == "clear" && len(rest) == 1:
-		told, err = clearBot(dir, rest[0])
+		told, err = clearBot(dir, sc, rest[0])
 	default:
 		return nil, errors.New("usage: bot " + cmp.Or(engine.BotUsage(verb), engine.BotUsage("")))
 	}
@@ -71,35 +74,38 @@ func graphOf(o Options, sc Scenario, spec string) (*bot.Graph, []byte, error) {
 	return g, data, err
 }
 
-// sourceOf resolves what a bot takes weights from: a bot as a seat of this run
-// names one, or where that finds none another scenario's by <scenario>[.<bot>],
-// its own with no bot named
-func sourceOf(o Options, sc Scenario, spec string) (*bot.Graph, []byte, error) {
+// found is the document of the graph spec names as a seat of this run loads one,
+// by name or path, or failing that of the own bot of the scenario spec names
+func found(o Options, sc Scenario, spec string) ([]byte, string, error) {
 	data, name, err := BotGraph(o, sc, spec)
-	for _, at := range []int{len(spec), strings.LastIndex(spec, ".")} {
-		if err == nil || at <= 0 {
-			continue
-		}
-		other := o
-		other.Scenario, other.Provided, other.Embedded = spec[:at], nil, false
-		osc, lerr := LoadScenario(other)
-		if lerr != nil {
-			continue
-		}
-		if name = strings.TrimPrefix(spec[at:], "."); name == "" && len(osc.Bots()) > 0 {
-			name = osc.Bots()[0]
-		}
-		var ok bool
-		if data, ok = osc.Bot(name); !ok {
-			return nil, nil, fmt.Errorf("scenario %s carries no bot %s", osc.Shown(), cmp.Or(name, "of its own"))
-		}
-		err = nil
+	if err == nil || spec == "" {
+		return data, name, err
+	}
+	other := o
+	other.Scenario, other.Provided, other.Embedded = spec, nil, false
+	if osc, lerr := LoadScenario(other); lerr == nil && len(osc.Bots()) > 0 {
+		data, _ = osc.Bot(osc.Bots()[0])
+		return data, osc.Bots()[0], nil
+	}
+	return nil, "", err
+}
+
+// addressed resolves <graph>[.<network>]: the graph the word names whole (found),
+// or else the one it names before its last dot and that graph's network after
+// it; network is "" where the word names a whole graph
+func addressed(o Options, sc Scenario, word string) (g *bot.Graph, text []byte, network string, err error) {
+	text, name, err := found(o, sc, word)
+	if at := strings.LastIndex(word, "."); err != nil && at > 0 {
+		network = word[at+1:]
+		text, name, err = found(o, sc, word[:at])
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	g, err := bot.ParseGraph(name, data)
-	return g, data, err
+	if g, err = bot.ParseGraph(name, text); err == nil && network != "" && !slices.Contains(g.Networks(), network) {
+		err = fmt.Errorf("bot %s has no network %s", g.Name, network)
+	}
+	return g, text, network, err
 }
 
 // stems lists the files of dir with the extension ext, each without it
@@ -176,10 +182,10 @@ func listBots(o Options, sc Scenario, dir string) []string {
 	return lines
 }
 
-// createBot writes a new bot of the player's: the scenario's own with no weight,
-// to learn from nothing, or after import the source named, whole, or with the
-// weights of the networks listed alone
-func createBot(o Options, sc Scenario, dir, name string, rest []string) (string, error) {
+// createBot writes a new graph of the player's: the scenario's own with no
+// weight, to learn from nothing, or taking, the one source addresses, whole or
+// with the weights of the network it names alone
+func createBot(o Options, sc Scenario, dir, name, source string, taking bool) (string, error) {
 	path := filepath.Join(dir, name+".toml")
 	if _, err := strconv.Atoi(name); !paths.IsKeymapName(name) || engine.BotUsage(name) != "" || err == nil {
 		return "", fmt.Errorf("bot %q: a bot's name is one word that is no path, no count and no word of :bot", name)
@@ -187,22 +193,15 @@ func createBot(o Options, sc Scenario, dir, name string, rest []string) (string,
 	if _, err := os.Lstat(path); err == nil {
 		return "", fmt.Errorf("bot %s is there already: %s", name, path)
 	}
-	source, networks, told := "", []string(nil), "with no weight, to learn from nothing"
-	if len(rest) > 0 {
-		source, networks = rest[1], rest[2:]
-		told = "with " + weightsOf(networks)
-	}
-	g, text, err := sourceOf(o, sc, source)
+	g, text, network, err := addressed(o, sc, source)
 	if err != nil {
 		return "", err
 	}
-	if len(rest) == 0 || len(networks) > 0 {
+	told := "with every weight"
+	if !taking || network != "" {
 		w := g.Bare()
-		for _, network := range networks {
-			if _, ok := w[network]; !ok {
-				return "", fmt.Errorf("bot %s has no network %s", g.Name, network)
-			}
-			w[network] = g.Weights()[network]
+		if told = "with no weight, to learn from nothing"; network != "" {
+			w[network], told = g.Weights()[network], "with the weights of "+network
 		}
 		if text, err = g.Document(w); err != nil {
 			return "", err
@@ -214,9 +213,10 @@ func createBot(o Options, sc Scenario, dir, name string, rest []string) (string,
 	return fmt.Sprintf("Bot %s created from %s %s: %s", name, g.Name, told, path), nil
 }
 
-// importBot writes into the player's bot name the weights of source's networks
-// listed, of each where none is, as its own networks take them (bot.Graph.Fit)
-func importBot(o Options, sc Scenario, dir, source, name string, networks []string) (string, error) {
+// importBot writes into the player's graph name the weights source addresses,
+// every network's or the one's it names, as name's own networks take them
+// (bot.Graph.Fit)
+func importBot(o Options, sc Scenario, dir, source, name string) (string, error) {
 	path := filepath.Join(dir, name+".toml")
 	data, err := os.ReadFile(path)
 	if !paths.IsKeymapName(name) {
@@ -229,9 +229,14 @@ func importBot(o Options, sc Scenario, dir, source, name string, networks []stri
 	if err != nil {
 		return "", err
 	}
-	from, _, err := sourceOf(o, sc, source)
+	from, _, network, err := addressed(o, sc, source)
 	if err != nil {
 		return "", err
+	}
+	var networks []string
+	told := "every weight"
+	if network != "" {
+		networks, told = []string{network}, "the weights of "+network
 	}
 	w, err := to.Fit(from, networks...)
 	if err != nil {
@@ -244,7 +249,7 @@ func importBot(o Options, sc Scenario, dir, source, name string, networks []stri
 	if err := (paths.FileStore{Path: path}).Store(text); err != nil {
 		return "", err
 	}
-	told := fmt.Sprintf("Bot %s took %s from %s", name, weightsOf(networks), from.Name)
+	told = fmt.Sprintf("Bot %s took %s from %s", name, told, from.Name)
 	// What a population kept outranks what the document writes until it is cleared
 	kept := slices.DeleteFunc(stems(dir, ".json"), func(stem string) bool {
 		_, network, _ := strings.Cut(strings.TrimPrefix(stem, name+"."), ".")
@@ -256,40 +261,28 @@ func importBot(o Options, sc Scenario, dir, source, name string, networks []stri
 	return told, nil
 }
 
-// weightsOf names the weights taken: the networks listed, or every one
-func weightsOf(networks []string) string {
-	if len(networks) == 0 {
-		return "every weight"
-	}
-	return "the weights of " + strings.Join(networks, ", ")
-}
-
-// exportBot writes to file the document of the bot address names with, for each
-// network, what its population fields in the scenario the address names, the
-// run's where it names none; a network with none proved keeps what is written
+// exportBot writes to file the document of the graph address names with what
+// its populations field in sc, each network's or the one's the address names; a
+// network none has proved keeps what the document writes
 func exportBot(o Options, sc Scenario, address, file string) (string, error) {
-	name, scenario, named := strings.Cut(address, ".")
-	if !named {
-		scenario = sc.Shown()
-	}
-	if !paths.IsKeymapName(name) {
-		return "", fmt.Errorf("bot %q: export names a bot, <bot>[.<scenario>], not a file", address)
-	}
-	g, text, err := graphOf(o, sc, name)
+	g, text, only, err := addressed(o, sc, address)
 	if err != nil {
 		return "", err
 	}
 	w, told := bot.Weights{}, make([]string, 0, len(g.Networks()))
 	for _, network := range g.Networks() {
-		k, ok, err := g.Kept(network, paths.PlaceFile{Path: PopulationFile(g.Name, scenario, network)})
+		if only != "" && network != only {
+			continue
+		}
+		k, ok, err := g.Kept(network, paths.PlaceFile{Path: PopulationFile(g.Name, sc.Shown(), network)})
 		switch {
 		case err != nil:
 			return "", err
 		case ok && k.Fielded != nil:
 			w[network] = k.Fielded
-			told = append(told, fmt.Sprintf("%s as fielded in %s, %.0f over %d rounds", network, scenario, k.Score, k.Proved))
+			told = append(told, fmt.Sprintf("%s as fielded in %s, %.0f over %d rounds", network, sc.Shown(), k.Score, k.Proved))
 		default:
-			told = append(told, network+" as written, none being proved in "+scenario)
+			told = append(told, network+" as written, none being proved in "+sc.Shown())
 		}
 	}
 	if len(w) > 0 {
@@ -303,12 +296,14 @@ func exportBot(o Options, sc Scenario, address, file string) (string, error) {
 	return fmt.Sprintf("Bot %s written to %s: %s", g.Name, file, strings.Join(told, "; ")), nil
 }
 
-// clearBot removes the populations address names, every one below a shorter
-// address, so what they learned starts over
-func clearBot(dir, address string) (string, error) {
+// clearBot removes what the graph address names by its name learned in sc, every
+// network's population or the one's the address names, so it starts over
+func clearBot(dir string, sc Scenario, address string) (string, error) {
+	graph, network, _ := strings.Cut(address, ".")
 	var cleared []string
 	for _, stem := range stems(dir, ".json") {
-		if stem != address && !strings.HasPrefix(stem, address+".") || strings.Count(stem, ".") < 2 {
+		kept, ok := strings.CutPrefix(stem, graph+"."+sc.Shown()+".")
+		if !ok || network != "" && kept != network {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, stem+".json")); err != nil {
@@ -317,7 +312,7 @@ func clearBot(dir, address string) (string, error) {
 		cleared = append(cleared, stem)
 	}
 	if len(cleared) == 0 {
-		return "", fmt.Errorf("no population of %s is kept in %s", address, dir)
+		return "", fmt.Errorf("no population of %s in %s is kept in %s", address, sc.Shown(), dir)
 	}
 	return "Cleared " + strings.Join(cleared, ", ") + "; a run learning one now keeps it again as it saves", nil
 }
