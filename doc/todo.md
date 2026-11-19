@@ -250,11 +250,12 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   files row; and `clear` in a run learning the population is undone by that
   run's next save.
 - **Training on from `main`'s model.** The embedded scenario's bot is
-  `default`'s graph with a walk two minutes of four games fielded, 133 rounds,
-  and no trainer has run on from it. A round pays by its Krakens, 50,000 each,
-  so its score moves in steps: the model fields 709,690 over 100 held-out
-  rounds, fourteen Krakens down in 78, and whether a walk brings a fifteenth
-  inside the half hour is not known ([Bots](bots.md#examples)).
+  `default`'s graph with a walk two runs of two minutes fielded, four games
+  each and 265 rounds in all. A round pays by its Krakens, 50,000 each, so its
+  score moves in steps: the model fields 708,665 over 100 held-out rounds,
+  fourteen Krakens down in 82, and a fifteenth can be had inside the half
+  hour, met in three of them and shot down in two
+  ([Bots](bots.md#examples)).
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and a run can field less than it began
   with: of eight read on the model before this one, two field 284,269 and
@@ -360,9 +361,15 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   - a bot of its own for each scenario, the embedded one first, carrying what
     `default` learns there as `cave` carries its model: what one scenario
     teaches loses in another, so `default` writes none;
-  - the special where heat is scarce. Auto-fire's or the network's is the
-    document's `auto_fire`, so learning `cave` takes a copy; a rule handing
-    it to a network once that has weights would let one document do both;
+  - the gun for a bot whose auto-fire is off: the special attack is every
+    shipped network's to ask for, and no output asks for the gun, which
+    auto-fire `main` fires for each of them;
+  - what an ask costs. Each is an action of the bot's rate, four a second of
+    `default`'s twelve while it asks always, and unlearned it fields 616,485
+    for 624,846 in the embedded scenario and a median of 5,331 for 9,341 over
+    twelve rounds of `td`. At sixteen a second it falls inside 3,000 ticks
+    of the embedded scenario, where auto-fire's special played fourteen to
+    twenty as twelve: not explained, so the rate is not raised to pay;
   - a round that needs no new game: closing the embedded one each half hour
     earns a tenth less than an unbroken game does, and waits on a death that
     resets none;
