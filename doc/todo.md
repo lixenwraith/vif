@@ -327,19 +327,18 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
       learners alike past a population's fifteenth round field 28,511 apart
       ([Bots](bots.md#the-population-file)). The widest gap is seed 1 after
       fifteen million ticks under the rival, alone and with the weight: over
-      200 rounds its pairs field 281,099 and 254,257 where main's fields
-      321,544, and lose 33 and 40 rounds before the first Kraken for 12.
+      200 rounds its pairs field 281,099 and 254,257 where the learner's as
+      built fields 321,544, and lose 33 and 40 before the first Kraken for 12.
     - Giving promise its turn passes the title on fewer rounds. As fifteen
-      million ticks end `raid`'s title has 55 and 72 rounds behind it under
-      main, 45 and 48 under the rival and 14 and 39 under the two together,
+      million ticks end `raid`'s title has 55 and 72 rounds behind it as
+      built, 45 and 48 under the rival and 14 and 39 under the two together,
       and `kraken`'s 40 and 32, 15 and 28, 11 and 19. A fielded `raid`'s
-      rounds score 65,000 to 71,000 or, lost before the first Kraken, 3,000
-      to 7,000, four in fifty, so its mean over 33 to 72 rounds carries
-      3,000 either way and fourteen with none lost say little: both of seed
-      1's pairs field a `raid` that took the title on the highest mean its
-      run saw, 55,864 over 45 rounds and 61,735 over 14. A `kraken`'s rounds
-      score the cap, 306,500, or less, and one took the title on fifteen at
-      the cap.
+      full round scores 65,000 to 71,000 and one lost before the first
+      Kraken 3,000 to 7,000, four in fifty, so its mean over 33 to 72 rounds
+      carries 3,000 either way and fourteen with none lost say little: both
+      of seed 1's pairs field a `raid` its own rounds put high, 55,864 over
+      45 and 61,735 over 14. A `kraken`'s rounds score the cap, 306,500, or
+      less, and one took the title on fifteen at the cap.
     - Owed before either is read again: a title that does not pass on the
       rounds that test promise, and rounds enough to tell its holders apart,
       where one candidate in six goes to the title's test.
