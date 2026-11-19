@@ -95,7 +95,9 @@ is structural, and an optional equality hook holds a genotype once, so the
 archive does not fill with clones of its best member. A repeat outcome replaces
 its genotype's score, which follows a changing objective, or under a merge hook
 folds into it with a count, as a running mean does for a noisy one that stays
-put; `Reevaluate` hands out the member scored longest ago. Outcome count
+put; `Reevaluate` hands out the member scored longest ago. A rank hook keeps the
+archive by keys its host gives in place of scores, as a bot's learner ranks by
+what a member's rounds prove ([Bots](bots.md#learning)). Outcome count
 advances generations, and a schedule may set the mutation rate and strength as
 each ends. The proposal ring is bounded; the pending table is
 open-addressed, an evaluation occupying one of the eight slots from its id's

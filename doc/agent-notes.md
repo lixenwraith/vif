@@ -982,6 +982,30 @@ Libraries · Branches.
   writes the graph with no weight that from nothing starts on.
 - `Driver.Stats` takes the world lock: a harness reads it before its own
   `World.RunSafe`, never inside, or the run hangs with nothing printed.
+- A relative `XDG_CONFIG_HOME` is no root, as the XDG rule has it: a learning
+  run under one keeps no population and says nothing. Name a run's fresh roots
+  by absolute paths.
+- A script a background arm is running is replaced by a rename, never edited
+  in place: bash reads a script as it goes, and one edited under a run played
+  that run again without its `env -i`, into the real home. Stopping an arm
+  hands its queue the next job at once, which the same stop then takes too: a
+  run that kept no population holds out a still ship, 159.
+- A cloud machine restarted three times in four hours of four games on four
+  cores, ending the run in flight and whatever `nohup` had started, and nothing
+  runs between a session's turns. Queue runs so a restart costs one, an arm
+  skipping the sets it has held out, play them at `nice -n 19`, and chain a
+  long run as legs, each on the populations the last kept.
+- A learner's archive is read by its events, not its file: a scratch
+  `learner.go` logging each scored round with its genome and what drew it,
+  and each member that enters, is proved or leaves, counts the tested members
+  a run lost (`raid` from `seed`'s under the plain mean: 11, 8 and 7, the most
+  tested over 50 rounds) and tells a criterion by what a member's first rounds
+  foretell of its later ones. With no option set it must keep main's bytes,
+  and the built learner the measured arm's.
+- From `seed`'s weights three seeds' mean is no measure: ten seeds field
+  42,704 to 113,267 after three million ticks, a mean of 58,005 and a median of
+  48,268, and only the two that learn `kraken`'s fight within the run pass
+  53,000.
 - One member is played alone from a population of it only, kept in a
   `bot.Store` in memory with its rounds raised to eight, which the learner then
   fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A
