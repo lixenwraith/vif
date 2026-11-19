@@ -1125,6 +1125,23 @@ Libraries · Branches.
 - A gameplay change is held against `cave`'s own bot learning alone, before
   and after on one seed: 200,000 ticks of it are 81,549 actions and a fitness
   of 1,838,475 on seed 1, which a trainer's populations rest on.
+- What a run fields as it stops is the pair holding its titles then, a lottery
+  wider than a hundred rounds' luck: two learners alike past a population's
+  fifteenth round fielded 28,511 apart after three million ticks on `cave`'s
+  weights and 31,722 the other way on another seed, and a second hundred rounds
+  moved ten pairs' means by 357 to 29,113. Read a learner's setting on six
+  seeds a start, and by the candidates' recent mean, which no luck picks.
+- Count the rounds behind a title before reading what it fields. Giving
+  promise its turn, by a lighter trust weight or a rival of the highest plain
+  mean, cleared the proved members left unplayed and passed `raid`'s title on
+  14 to 48 rounds for 55 to 72, and one seed lost forty thousand by it.
+- The weight at which a member's trusted mean foretells its next round level
+  is the start's more than the network's: 1.2 to 2.7 played on from written
+  weights, 5 to 7 from nothing, 3.5 over every run.
+- A bar a model must clear is set in standard errors read from its rows, not
+  in points. A round of `cave`'s model of 300,260 spreads 134,733 and one of
+  341,701 spreads 92,217, so 15,000 on each of two sets of 400 rounds passed a
+  real gain of 10,000 one time in eleven before and one in twenty after.
 - A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`:
   keep it out of commits (`.git/info/exclude`) and out of a search
   (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd`
