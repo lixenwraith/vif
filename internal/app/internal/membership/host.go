@@ -787,6 +787,7 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 	self := network.RosterEntry{
 		ID:   cmp.Or(link.PeerID(m.world.LocalParticipant()), engine.CoordinatorParticipant),
 		Slot: m.world.Resources.Player.LocalSlot(),
+		Bot:  m.wiring.Bot,
 	}
 
 	// The roster ceiling is the port's from here: an unset -players already means
@@ -1467,7 +1468,7 @@ func (m *Membership) crossArrivalLocked(id link.PeerID, slot uint8) {
 		return
 	}
 	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(m.sessionRoster[i].Holder),
-		Key: m.sessionRoster[i].Key, Name: m.sessionRoster[i].Name, Record: m.returning[id].record}
+		Bot: m.sessionRoster[i].Bot, Key: m.sessionRoster[i].Key, Name: m.sessionRoster[i].Name, Record: m.returning[id].record}
 	delete(m.returning, id)
 	m.sessionRoster[i].Away = false
 	m.awayOrder = slices.DeleteFunc(m.awayOrder, func(away link.PeerID) bool { return away == id })

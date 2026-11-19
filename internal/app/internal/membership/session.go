@@ -285,7 +285,8 @@ func (m *Membership) noteJoinerReport(id link.PeerID, report network.JoinerRepor
 		r.record = report.Record
 		m.returning[id] = r
 	}
-	m.sessionRoster[i].Holder = report.Holder
+	// A held participant is a bot whatever it reports; any other is one if it says so.
+	m.sessionRoster[i].Holder, m.sessionRoster[i].Bot = report.Holder, report.Holder != 0 || report.Bot
 	if report.Holder == 0 {
 		m.personJoined = true
 		if !m.firstPerson.Sized() && report.Sized() {
@@ -822,7 +823,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 		return network.SessionOffer{}, m.fullLocked()
 	}
 	assigned := m.nextParticipantLocked()
-	assigned.Holder, assigned.Account, assigned.Name = holder, account, name
+	assigned.Holder, assigned.Bot, assigned.Account, assigned.Name = holder, holder != 0, account, name
 	if len(keys) > 0 {
 		assigned.Key = keys[0]
 	}
@@ -1101,7 +1102,7 @@ func (m *Membership) giveBack(id link.PeerID) bool {
 // Caller holds sessionMu.
 func (m *Membership) openRosterLocked() {
 	if len(m.sessionRoster) == 0 {
-		m.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: m.hostSlot(), Key: m.ownKey()}}
+		m.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: m.hostSlot(), Bot: m.wiring.Bot, Key: m.ownKey()}}
 	}
 }
 

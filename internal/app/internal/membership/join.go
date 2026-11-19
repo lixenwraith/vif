@@ -199,7 +199,7 @@ func (m *Membership) configureSessionRoster(o network.SessionOffer, local link.P
 		}
 		m.ctx.PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 			Slot: p.Slot, Origin: t.Origin, X: t.X, Y: t.Y, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID), Holder: uint32(p.Holder),
-			Heat: t.Heat, Energy: t.Energy,
+			Bot: p.Bot, Heat: t.Heat, Energy: t.Energy,
 		}, event.OriginDebug)
 		m.scheduler.Settle()
 	}
@@ -275,7 +275,7 @@ func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 				c.Key = p.Key
 			}
 		default:
-			c.PeerID, c.Holder, c.Key = uint32(p.ID), uint32(p.Holder), p.Key
+			c.PeerID, c.Holder, c.Bot, c.Key = uint32(p.ID), uint32(p.Holder), p.Bot, p.Key
 			c.Control = component.ControlRemote
 			if p.ID == local {
 				c.Control = component.ControlLocal

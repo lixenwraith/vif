@@ -752,6 +752,9 @@ func encodeColumnsCursor(dst []byte, rows []StoreEntry[component.CursorComponent
 		dst = appendUint(dst, rows[i].Value.Holder)
 	}
 	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Bot)
+	}
+	for i := range rows {
 		dst = appendString(dst, rows[i].Value.Key)
 	}
 	for i := range rows {
@@ -778,6 +781,9 @@ func decodeColumnsCursor(r *columnReader) []StoreEntry[component.CursorComponent
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Holder, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Bot, r)
 	}
 	for i := range rows {
 		readString(&rows[i].Value.Key, r)

@@ -137,6 +137,80 @@ func TestAWraithNeitherLosesNorHoldsUpADefeat(t *testing.T) {
 	}
 }
 
+// defeatFold is a world rostering one cursor a payload, in slot order as participants
+// 1 on, with ask, which hands an event to the cursor system and to the meta system
+// that folds, then what the first raised to the second, and the fold's two keys.
+func defeatFold(t *testing.T, rostered ...event.CursorSpawnRequestPayload) (w *engine.World, ask func(event.EventType, any), keys func() (anyLost, all bool)) {
+	t.Helper()
+	w = engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
+	ask = func(et event.EventType, payload any) {
+		ev := event.GameEvent{Type: et, Payload: payload}
+		cursors.HandleEvent(ev)
+		meta.HandleEvent(ev)
+		for _, raised := range w.Resources.Event.Queue.Consume() {
+			meta.HandleEvent(raised)
+		}
+	}
+	for slot, p := range rostered {
+		p.Slot, p.X, p.Y, p.PeerID, p.Control = uint8(slot), 5+slot*10, 5, uint32(slot)+1, uint8(component.ControlRemote)
+		ask(event.EventCursorSpawnRequest, &p)
+	}
+	status := w.Resources.Status.Bools
+	return w, ask, func() (bool, bool) {
+		return status.Get("session.any_defeated").Load(), status.Get("session.all_defeated").Load()
+	}
+}
+
+// TestABotsDefeatEndsNoGameBesideAPerson: a seat's defeat and its crush leave both
+// keys unset while a person's cursor plays, and that person's defeat sets both.
+func TestABotsDefeatEndsNoGameBesideAPerson(t *testing.T) {
+	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
+	person, seat := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: seat, Defeated: true})
+	ask(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: seat})
+	if anyLost, all := keys(); anyLost || all {
+		t.Fatalf("a seat defeated and crushed beside a person: any defeated %t, all %t; want neither", anyLost, all)
+	}
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: person, Defeated: true})
+	if anyLost, all := keys(); !anyLost || !all {
+		t.Fatalf("the one person in play defeated: any defeated %t, all %t; want both", anyLost, all)
+	}
+}
+
+// TestABotsDefeatEndsTheGameWhereOnlyBotsPlay: with no person's cursor in play the
+// bots' decide as persons' would, a bot's own run's and its seat's alike.
+func TestABotsDefeatEndsTheGameWhereOnlyBotsPlay(t *testing.T) {
+	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{Bot: true}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(1), Defeated: true})
+	if anyLost, all := keys(); !anyLost || all {
+		t.Fatalf("one of two bots defeated with no person in play: any defeated %t, all %t; want any alone", anyLost, all)
+	}
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(0), Defeated: true})
+	if anyLost, all := keys(); !anyLost || !all {
+		t.Fatalf("both bots defeated with no person in play: any defeated %t, all %t; want both", anyLost, all)
+	}
+}
+
+// TestAPersonAwayAsAWraithIsNoPersonInPlay: a defeated bot ends the game as the
+// person beside it turns Wraith, the bot alone in play, and no longer once that
+// person has taken the Wraith back.
+func TestAPersonAwayAsAWraithIsNoPersonInPlay(t *testing.T) {
+	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Bot: true})
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(1), Defeated: true})
+	ask(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: 0})
+	if anyLost, all := keys(); !anyLost || !all {
+		t.Fatalf("a defeated bot beside a person's Wraith: any defeated %t, all %t; want both", anyLost, all)
+	}
+	ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Slot: 0, PeerID: 1, Control: uint8(component.ControlRemote)})
+	if anyLost, all := keys(); anyLost || all || w.Components.Wraith.CountEntities() != 0 {
+		t.Fatalf("the person back beside the defeated bot: any defeated %t, all %t, %d Wraith(s); want neither and none",
+			anyLost, all, w.Components.Wraith.CountEntities())
+	}
+}
+
 // A species strikes only the cursors this instance owns: a shield its members reach,
 // with the impact crossing, and a bare cursor on a member's cell unless the species
 // strikes shields alone.

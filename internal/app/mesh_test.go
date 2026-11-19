@@ -32,6 +32,13 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...link
 // the embedded assets do not ship.
 func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...link.PeerID) []*App {
 	t.Helper()
+	return meshRostered(t, cfg, n, links, nil, chain...)
+}
+
+// meshRostered is meshSessionOf on a roster admitted writes over before any
+// instance adopts it, as the admissions of its participants would have.
+func meshRostered(t *testing.T, cfg Config, n int, links [][2]int, admitted func([]network.RosterEntry), chain ...link.PeerID) []*App {
+	t.Helper()
 
 	if len(chain) == 0 {
 		for id := 2; id <= n; id++ {
@@ -51,6 +58,9 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...lin
 		keys[i] = network.NewKey()
 		offer.Roster = append(offer.Roster,
 			network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i), Key: keys[i].ID()})
+	}
+	if admitted != nil {
+		admitted(offer.Roster)
 	}
 
 	apps := make([]*App, n)

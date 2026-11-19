@@ -23,6 +23,7 @@ type CursorComponent struct {
 	// PeerID names the remote owner when Control is ControlRemote
 	PeerID uint32
 	Holder uint32 // Participant whose process holds this bot; zero for independent players.
+	Bot    bool   // A bot drives it: a held one, or the cursor of a run a graph plays.
 
 	// Key is the public half of the participant key its participant comes back with
 	// and signs under, which the roster a successor takes over reads from here. Name

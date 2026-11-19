@@ -320,6 +320,9 @@ func (a *App) initWorld() error {
 	if a.cfg.Membership.Watch {
 		a.world.Watch()
 	}
+	if a.cfg.wiring.membership.Bot {
+		a.world.DriveByBot()
+	}
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 	// A run reproducing a session draws that session's streams, and a session's
 	// streams are drawn one below the number it reports: construction draws them and

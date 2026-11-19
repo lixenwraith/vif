@@ -597,7 +597,11 @@ walks the chain like a survivor does and plays on through whichever participant
 relays for others (§5.1), forking when none does (`Reach.cutOff`,
 `NetworkSystem.sendUp`). It is a leaf unless `-listen`
 names an address, since it could not reach the host itself. The holder identity is retained in the roster and
-Shared cursor across captures, resets and succession. Hosts may remove any remote
+Shared cursor across captures, resets and succession, and beside it whether a bot
+drives the cursor (`CursorComponent.Bot`): every held one, whatever it reports, and
+a run a graph plays itself (`-bot`), which holds nothing and says so at its seat
+(`JoinerReport.Bot`) and of the cursor it boots (`SessionState.Bot`, a note its
+replay reads). Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 `:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
 Holder checks are structural; they do not authenticate a peer. The player's view of
@@ -952,7 +956,12 @@ builds it with the rest from the template (`PlayerResource.JoinRestore`).
 A notice dismisses only a seat, which its holder dropped; a player whose link
 closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
-A defeat is the players left: a Wraith neither loses nor holds one up.
+A defeat is the persons left in play: a Wraith neither loses nor holds one up, and
+nor does a bot beside a person, whose defeat or crush ends no game and leaves it
+playing where it stands. Where every cursor in play is a bot's, this node's or
+another's, they decide as persons would, so a person leaving a defeated bot behind
+ends the game (`World.DefeatDecides`, which the session's defeat keys and the
+scenario guard `PayloadCursorDecides` read).
 
 **Unheard.** A person whose relay left, with no other path found, is behind nobody
 who would see its link go. The authority keeps its own news of each participant,

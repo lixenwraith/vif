@@ -45,6 +45,10 @@ type Host[T any] struct {
 	// event.PayloadNames over a scenario's behavior programs; nil takes the code's
 	Names *dialect.Names
 
+	// CursorDecides reports whether the defeat of the cursor entity names decides
+	// the game, as the embedder's own defeat state has it
+	CursorDecides func(ctx T, entity int64) bool
+
 	// Refuse, when set, fails the load of an event or system action whose hook
 	// is nil with this reason, for an embedder whose scripts must not name what
 	// does nothing
