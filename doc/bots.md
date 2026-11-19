@@ -542,8 +542,8 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   networks: [`seed`](../wad/scenario/base/cave/bot/seed.toml) writes a start by
   hand, twelve direct weights that hold the nearest raider's row, back off what
   is near and keep to the middle, and `cave` a model learned from it, the member
-  each network's population fielded, 119 of its 540 weights not zero. Over 100
-  rounds of seeds 101 to 104 `seed` fields 27,614 and `cave` 300,260, 85 of them
+  each network's population fielded, 194 of its 540 weights not zero. Over 100
+  rounds of seeds 101 to 104 `seed` fields 27,614 and `cave` 341,701, 90 of them
   closed at the graph's limit; what runs learn is [below](#the-population-file).
   - A move is an offset from the ship in view widths and heights, taken each
     update. A positive weight on a thing's offset closes that share of the gap
@@ -717,10 +717,11 @@ nothing      1     6435     2874      75     7063     2970      70
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
-- `cave`'s own weights are what a longer run of five games learned from `seed`'s:
-  they field a mean of 300,260 and a median of 374,046, reach the Kraken in 88
-  rounds and shoot down 767, and its half hour, 36,000 ticks, closes 85 rounds
-  of the 100.
+- `cave`'s own weights are what a longer run of five games learned from `seed`'s,
+  and four runs of fifty minutes on from that: they field a mean of 341,701 and a
+  median of 373,798, reach the Kraken in 97 rounds and shoot down 854, and its
+  half hour, 36,000 ticks, closes 90 rounds of the 100. The tables below were
+  read on the model of their time, which fielded 300,260.
 - What the learners fielded while they explored in turn, a round each scored
   whole, and what longer runs did then, is in the
   [todo](todo.md#train-a-network-bot-live-in-cave).
