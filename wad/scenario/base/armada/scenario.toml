@@ -5,8 +5,8 @@ max_players = 16
 # A vertical scroller: the cursor is a ship by the bottom firing up alone, and the
 # stars stream down past it at three depths. The odd waves stand the armada's ranks
 # overhead, whose ships dive one by one and in salvos; the even ones send squadrons,
-# lines of ships flying a route drawn at random into a circle they lap, firing. A
-# ship shot down may drop a U, a lane more for the gun.
+# lines of ships flying a route drawn at random into a circle they lap, firing, and
+# every eighth the flagship. A ship shot down may drop a U, a lane more for the gun.
 
 # The eight columns' width with a margin, and the ranks' rows over a lane to dodge in
 [map]
@@ -387,6 +387,64 @@ frames = [
     { glyphs = ["/=[#]=\\", "|o-x-o|", " \\_V_/ "], fg = ["2003002", "2103012", " 00100 "], attr = ["       ", " B   B ", "       "] },
 ]
 
+# --- The flagship ---
+
+# The flagship leads every eighth wave: it crosses to its station over the top's
+# middle and circles it, its emitter laying a ray at the nearest cursor that fires
+# three quarters of a second after it shows, and every five seconds or so it
+# launches two wasps from under its hull, which fly the route last drawn. Tracers do
+# not push it; its 150 hit points take forty seconds under the gun, its life three minutes.
+[behaviors.flagship]
+initial = "Arrive"
+suspend = { guard = "Stunned" }
+
+[behaviors.flagship.prototype]
+entrance = "materialize"
+entrance_ms = 1200
+lifetime_ms = 180000
+drops = "wreck"
+combat = "swarm"
+width = 8
+height = 3
+header = { x = 3, y = 1 }
+hp = 150
+contact = { energy = 3000, heat = 30 }
+physics = { speed = 6.0, accel = 12.0, drag = 1.5 }
+attacks = { tracer = { knockback = false } }
+mount = { weapon = "emitter", interval_ms = 3000, spread_ms = 400, range = 1000, width = 3, energy = 400, heat = 6 }
+pattern_ms = 300
+fg = [{ r = 235, g = 235, b = 245 }, { r = 255, g = 90, b = 90 }, { r = 160, g = 160, b = 180 }, { r = 255, g = 150, b = 40 }]
+fg256 = 15
+bg256 = 0
+frames = [
+    { glyphs = ["/=[##]=\\", "<o=<>=o>", " \\_||_/ "], fg = ["20033002", "21033012", " 003300 "], attr = ["        ", " B    B ", "        "] },
+    { glyphs = ["/=[##]=\\", "<o=><=o>", " \\_||_/ "], fg = ["20033002", "21033012", " 003300 "], attr = ["        ", " B    B ", "        "] },
+]
+
+[behaviors.flagship.states.Arrive]
+duration_ms = 6000
+on_enter = [{ action = "Waypoint", payload = { x = 0.5, y = 0.16 } }]
+on_update = [{ action = "Home", payload = { to = "stored" } }]
+transitions = [
+    { trigger = "Tick", target = "Station", guard = "TargetDistance", guard_args = { to = "stored", op = "lte", cells = 3.0 } },
+    { trigger = "Timeout", target = "Station" },
+]
+
+# Its station, a slow wide circle; the bay holds the circle as it opens
+[behaviors.flagship.states.Station]
+flags = ["Armed"]
+on_enter = [{ action = "Waypoint", payload = { x = 0.5, y = 0.22 } }]
+on_update = [{ action = "Orbit", payload = { to = "stored", radius = 16.0, lap_ms = 14000, clockwise = true } }]
+transitions = [{ trigger = "Tick", target = "Launch", guard = "Chance", guard_args = { mean_ms = 5000 } }]
+
+[behaviors.flagship.states.Launch]
+duration_ms = 500
+flags = ["Armed"]
+on_enter = [{ action = "SpawnSpecies", payload = { species = "wasp", x = -3, y = 2 } }]
+cues = [{ at = 999, action = "SpawnSpecies", payload = { species = "wasp", x = 3, y = 2 } }]
+on_update = [{ action = "Orbit", payload = { to = "stored", radius = 16.0, lap_ms = 14000, clockwise = true } }]
+transitions = [{ trigger = "Timeout", target = "Station" }]
+
 # --- Loot ---
 
 # The U adds a lane to the gun, up to three. Every ship names the armada table, so
@@ -406,6 +464,15 @@ tiers = [
     { entries = [{ loot = "heat", rate = 0.02 }] },
     { unique = true, entries = [{ loot = "upgrade", rate = 0.1, fallback = 1 }] },
     { entries = [{ loot = "energy", rate = 0.1 }] },
+]
+
+# The flagship a player shoots down drops every player a U, a heat and two energy
+[drops.wreck]
+killer = "player"
+tiers = [
+    { unique = true, entries = [{ loot = "upgrade", rate = 1.0, fallback = 1 }] },
+    { entries = [{ loot = "heat", rate = 1.0 }] },
+    { entries = [{ loot = "energy", rate = 1.0, count = 2 }] },
 ]
 
 # --- Waves ---
@@ -458,7 +525,7 @@ transitions = [
 ]
 
 # The stars ease from the rush that brought the wave to the pace; the odd waves stand
-# the ranks, the even ones send squadrons
+# the ranks, every eighth brings the flagship and the other even ones send squadrons
 [states.Wave]
 parent = "Root"
 on_enter = [
@@ -466,9 +533,12 @@ on_enter = [
     { macro = "Drift", speed = "pace", ease_ms = 1500 },
     { action = "CopyVar", payload = { name = "odd", source_var = "wave" } },
     { action = "ModuloVar", payload = { name = "odd", delta = 2 } },
+    { action = "CopyVar", payload = { name = "eighth", source_var = "wave" } },
+    { action = "ModuloVar", payload = { name = "eighth", delta = 8 } },
 ]
 transitions = [
     { trigger = "Tick", target = "Formation", guard = "VarEquals", guard_args = { var = "odd", value = 1 } },
+    { trigger = "Tick", target = "Flagship", guard = "VarEquals", guard_args = { var = "eighth", value = 0 } },
     { trigger = "Tick", target = "Squadrons" },
 ]
 
@@ -514,6 +584,22 @@ transitions = [
         { name = "StatusIntCompare", args = { key = "behavior.raptor.left", since = "raptors_gone", op = "eq", value = 0 } },
         { name = "StatusIntCompare", args = { key = "behavior.bomber.left", since = "bombers_gone", op = "eq", value = 0 } },
     ] } },
+    { trigger = "Tick", target = "Cleared", guard = "And", guard_args = { guards = [{ macro = "WaveDone" }] } },
+]
+
+# The flagship rises at the top's middle; its fall strobes white, and the wave ends
+# once its last wasps are down or away
+[states.Flagship]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", origin = "top", payload = { program = "flagship", y = 1 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}: The Flagship" }, payload_vars = { message = "wave" } },
+]
+transitions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["flagship"] }, actions = [
+        { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 400 } },
+        { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "The Flagship Is Down" } },
+    ] },
     { trigger = "Tick", target = "Cleared", guard = "And", guard_args = { guards = [{ macro = "WaveDone" }] } },
 ]
 
