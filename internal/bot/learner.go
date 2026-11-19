@@ -18,17 +18,14 @@ import (
 
 // What the learner searches by. A population whose graph writes no weight plays
 // learnPool genomes drawn learnSpread of a weight's bound about zero first. A step
-// is a share of a weight's range, learnStep at first and learnStepFloor settled.
-// Every learnRepeat-th candidate is a member again, learnProven rounds prove one,
-// learnProbation slots stay with the unproved, and recent looks back learnRecent.
+// is learnStep of a weight's range. Every learnRepeat-th candidate is a member
+// again, learnProven rounds prove one, learnProbation slots stay with the
+// unproved, and recent looks back learnRecent.
 const (
 	learnPool      = 32
 	learnSpread    = 0.03
 	learnRate      = 0.03
-	learnStep      = 0.1
-	learnStepFloor = 0.03
-	learnStepCeil  = 0.2
-	learnStepTurn  = 1.5
+	learnStep      = 0.03
 	learnKeep      = 0.9
 	learnRepeat    = 3
 	learnProven    = 8
@@ -52,8 +49,8 @@ type Store interface {
 
 // population is the document a learner keeps: its archive in its order, the
 // proved first, and what reads it without the code. Rounds is every round scored
-// since the population began, Recent their mean lately, Step the mutation step in
-// force, and Fielded the member a run that is not learning plays, -1 with none.
+// since the population began, Recent their mean lately, Step the mutation step,
+// and Fielded the member a run that is not learning plays, -1 with none.
 type population struct {
 	Version int      `json:"version"`
 	Layout  string   `json:"layout"`
@@ -93,7 +90,6 @@ type Learner struct {
 	scored  int            // rounds scored this run
 	rounds  int            // and since the population began
 	recent  float64        // their mean, the latest learnRecent weighing most
-	step    float64        // the mutation step in force
 	born    map[uint64]int // the round each archive member entered at, by its genes
 	saved   time.Time
 	dirty   bool
@@ -125,8 +121,8 @@ type slot struct {
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
 // and since its population began, their recent mean, which no luck picked, the
-// step in force, its archive's size and its first member's score, and the score
-// and rounds of the member it fields, zero while none is proven.
+// step, its archive's size and its first member's score, and the score and
+// rounds of the member it fields, zero while none is proven.
 type LearnStats struct {
 	Network       string
 	Scored        int
@@ -150,7 +146,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 		return nil, fmt.Errorf("bot %s: no [network.%s] to learn", g.Name, name)
 	}
 	n := g.nets[i]
-	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes), step: learnStep,
+	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes),
 		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
 	l.rng = rand.New(rand.NewPCG(vmath.DeriveSeed(seed, "bot.learner."+name), vmath.DeriveSeed(seed, "bot.learner.draw")))
 	l.written = slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
@@ -170,7 +166,6 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	var members []genetic.Candidate[[]float64, float64]
 	if kept.Version == populationVersion && kept.Layout == l.layout {
 		l.rounds, l.recent = max(kept.Rounds, 0), kept.Recent
-		l.step = min(max(kept.Step, learnStepFloor), learnStepCeil)
 		for _, m := range kept.Members {
 			if len(m.Genes) == len(l.seed) && m.Rounds > 0 {
 				l.born[genomeKey(m.Genes)] = m.Born
@@ -187,7 +182,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	cfg := genetic.DefaultStreamingConfig()
 	// Four slots a game, as the engine asks; one in flight may still be evicted (settle)
 	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, 4*games)
-	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, l.step
+	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, learnStep
 	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
 		// The engine draws its own only while it holds under two members, which take fills first
@@ -198,12 +193,6 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l.engine.SetEqual(slices.Equal[[]float64])
 	l.engine.SetMerge(genetic.MeanScore[float64])
 	l.engine.SetRank(l.rank)
-	adapt := genetic.AdaptiveStrength[float64](learnRate, l.step, learnStepFloor, learnStepCeil, learnStepTurn)
-	l.engine.SetSchedule(func(generation int, stats genetic.PoolStats[float64]) (float64, float64) {
-		rate, step := adapt(generation, stats)
-		l.step = step
-		return rate, step
-	})
 	l.engine.Inject(members, 0)
 	l.engine.Start()
 	return l, nil
@@ -362,7 +351,7 @@ func (l *Learner) playing(genes []float64) (n int) {
 // hand-written one. It brings the stats, and the round each member entered at,
 // up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
-	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
+	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: learnStep, Size: len(members)}
 	born := make(map[uint64]int, len(members))
 	fielded := slices.Clone(l.seed)
 	for i, c := range members {
@@ -457,7 +446,7 @@ func (l *Learner) save() {
 	if l.store == nil {
 		return
 	}
-	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: l.step, Fielded: -1}
+	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: learnStep, Fielded: -1}
 	members := l.engine.Snapshot().Members
 	l.field(members)
 	doc.Fielded, _ = fieldedOf(members, l.recent)

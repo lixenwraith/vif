@@ -602,8 +602,8 @@ end, and all the rest for `raid`.
     ranks above it, and the one just proved where it does not.
   - A run fields the first of the proved, and with none the weights its graph
     wrote, if any; its rival is the next of them.
-- A step is a share of a weight's range: a new population starts at 0.1 and
-  settles at 0.03 as its best stops improving.
+- A step is a share of a weight's range, 0.03 from a population's first round
+  to its last.
 - A round the game has not ended within the graph's `round_seconds` is closed
   as far as it came, by a new game the run asks for, so a candidate nothing
   beats is scored and the next one plays. `cave` takes half an hour: a limit
@@ -648,8 +648,8 @@ out), which the file's `layout` digest names, and one of what a round scores,
 which its `version` counts.
 
 - `rounds`: every round scored since the population began, over all its runs.
-- `recent`: their mean lately, and `step`: the mutation step in force, which the
-  next run takes up.
+- `recent`: their mean lately, and `step`: the mutation step, 0.03 in every
+  population.
 - `members`: the archive in its order, the proved first with the most trusted
   at their head, then those on probation, the most trusted first. It is no
   generation: a proved member stays until nine are proved and it is the last
@@ -779,10 +779,56 @@ seed 2  raid     1 proved, the 32nd over 16            8 proved, the 1st over 72
 - A candidate that entered on its first round, with no second, fielded 48,109
   from `seed`'s where 64,839 with one: two rounds in three then go to the
   first rounds of new candidates, most of them worse than their parents.
-- The trusted mean's weight errs to the long tested, and the title is tested
-  only against the next most trusted: after forty-five million ticks a `raid`
-  at 66,694 over eight rounds stands third and no turn plays it again
+- The title is tested only against the next most trusted, so a proved member
+  of few rounds and a higher mean waits unplayed: after fifteen million ticks
+  five such `raid` members on each seed, the stalest 277 and 753 rounds. A
+  lighter trust weight and a rival picked by its plain mean each play them,
+  and a run fields no more for either
   ([todo](todo.md#have-a-scenario-describe-the-bots-that-play-it)).
+
+The step was a schedule's before it was fixed, `AdaptiveStrength` of the
+library: 0.1 at first, raised half again by a generation whose first member's
+mean beat every one before it and lowered as much by any other, between 0.03
+and 0.2. Under a rank that mean seldom rises, so the step stood at 0.03 for 98
+rounds in 100 of `raid`'s and 96 of `kraken`'s over fifteen million ticks on
+`cave`'s weights, for 72 to 93 from `seed`'s, and from nothing for 79 to 97 of
+`raid`'s and 48 to 78 of `kraken`'s few. Read against a step fixed there and
+at twice it, held out as above, the first two on six seeds after three
+million ticks on `cave`'s, and from nothing the mean of twelve seeds' figures:
+
+```
+                         the schedule       a step of 0.03       a step of 0.06
+start       seed    mean  median lost    mean  median lost    mean  median lost
+cave's   3M    1  300260  374046   12  300260  374046   12  300260  374046   12
+               2  318164  373067    6  289653  374390   11  299122  372228   13
+               3  324291  374762    6  312240  374734    6
+               4  306624  374361   10  338346  375424    5
+               5  304351  373616    3  300260  374046   12
+               6  311924  374956   10  305472  374622   11
+        15M    1  321365  374498    7  300506  373816    9  308296  373422    5
+               2  318164  373067    6  330904  374540    4  300260  374046   12
+seed's   3M    1   47746   60407   18   71593   64868    4   55241   60512    3
+               2   68569   62922    0   61391   61010    9   46639   44706    3
+               3   78865   87994    9   69461   64770    6   80613   88358    7
+nothing     1-12    5466    2753   76    5585    3012   71    5671    2715   75
+```
+
+- No start tells the schedule from a step of 0.03. On `cave`'s after three
+  million ticks six seeds field 310,936 and 307,705, from `seed`'s three
+  65,060 and 67,482, and from nothing twelve 5,466 and 5,585. The candidates'
+  recent mean, which no luck picks, says the same of `raid` on those runs:
+  22,281 and 23,557, 19,063 and 20,170, 3,595 and 3,718.
+- A step of 0.06 breeds worse candidates, `raid`'s recent mean 22,864 after
+  fifteen million ticks on `cave`'s where the schedule's is 28,760, 15,739
+  from `seed`'s and 3,020 from nothing, and fields no more for its reach: on
+  seed 2 of `cave`'s it fields the weights it began with still.
+- What a run fields at its stop is the pair holding its titles then, which
+  moves by more than a mean of its hundred rounds. Past a population's
+  fifteenth round the schedule and its floor are one learner, and after three
+  million ticks they field 28,511 apart on seed 2 and 31,722 the other way on
+  seed 4. Over a second hundred rounds ten pairs' means moved by 357 to
+  29,113, and the pairs differ by more: seed 2's field 328,417 and 284,269
+  over the two hundred.
 
 A watched run at speed 1 shows the play, and a headless one flat out fills the
 files.

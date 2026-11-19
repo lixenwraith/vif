@@ -286,15 +286,63 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     `cave`'s own `kraken` fielded 315,649 on seed 1, four rounds lost early,
     none crushed and 96 at the limit, and the 107,101 on seed 2, twenty lost.
   - **What ranks, and who is tested**, after the archive that ranks by what
-    rounds prove ([Bots](bots.md#learning)). Two arms are owed, each its own.
-    The trust weight fitted from a run's rounds: over 105 members with eight
-    rounds and eight or more after, the mean weighed with eight rounds at the
-    recent mean foretells the later ones 20% under, with two it is level, and
-    the plain mean runs 14% over. And the rival taken as the proved member
-    with the highest plain mean: the title is tested only against the next
-    most trusted, so after fifteen million ticks on seed 1 five members at
-    52,350 to 55,969 over eight to ten rounds stood behind a rival of 48,221
-    over 54 and no turn played them again.
+    rounds prove ([Bots](bots.md#learning)). Two arms were read on the starts
+    and seeds of [the population file](bots.md#the-population-file), each
+    alone and both with the step fixed, and neither is built: each does
+    inside a population what it was made for, and no run fields more for it.
+    - **The trust weight**, the rounds at the recent mean a member's mean is
+      weighed with. A repeat's round is foretold level at 1.7 for `raid` and
+      2.2 for `kraken` in populations played on from `cave`'s and `seed`'s
+      weights, at 5.1 and 7.1 from nothing, and at 3.7 and 3.3 over every
+      run, where eight foretells 13% under. The networks differ by less than
+      a start's own spread, and the starts do not. Run at two and at four,
+      the proof left at eight rounds, it moved the rank, a candidate's entry
+      and the guess proved next by nothing one run tells from another, and
+      the title: over fifteen million ticks on `cave`'s, both seeds, `raid`'s
+      title turns went to 10 members under eight, 19 under two and 13 under
+      four, and the title changed hands 9, 38 and 23 times.
+    - **The rival as the proved member with the highest plain mean.** Under
+      eight a round finds 1.98 and 1.24 proved `raid` members, seeds 1 and
+      2, with a plain mean above the fielded one's and no round in the last
+      fifty, five on each seed as the run ends, the stalest 277 and 753
+      rounds back. The weight leaves 0.11 and 0.28 at two and 0.19 and 0.23
+      at four. The rival leaves none, its turns going to 22 members and the
+      title changing hands 11 times.
+    - Held out, the mean of 100 rounds, from nothing that of twelve seeds'
+      means, `together` the weight at four, the rival and a step of 0.03:
+
+      ```
+      start          seed    eight      two     four    rival  together
+      cave's   3M       1   300260   300260   300260   300260    312488
+                        2   318164   318164   300260   318164    300260
+              15M       1   321365   311679   317867   284145    263009
+                        2   318164   328955   306664   330962    338154
+      seed's   3M       1    47746    58870    52928    49647     46348
+                        2    68569    49434    79985    67052     55661
+                        3    78865    54655    59690    78865     54252
+      nothing     1 to 12     5466     5301     6441     5392      6083
+      ```
+
+    - No start tells an arm from luck, which on `cave`'s is wide: two
+      learners alike past a population's fifteenth round field 28,511 apart
+      ([Bots](bots.md#the-population-file)). The widest gap is seed 1 after
+      fifteen million ticks under the rival, alone and with the weight: over
+      200 rounds its pairs field 281,099 and 254,257 where main's fields
+      321,544, and lose 33 and 40 rounds before the first Kraken for 12.
+    - Giving promise its turn passes the title on fewer rounds. As fifteen
+      million ticks end `raid`'s title has 55 and 72 rounds behind it under
+      main, 45 and 48 under the rival and 14 and 39 under the two together,
+      and `kraken`'s 40 and 32, 15 and 28, 11 and 19. A fielded `raid`'s
+      rounds score 65,000 to 71,000 or, lost before the first Kraken, 3,000
+      to 7,000, four in fifty, so its mean over 33 to 72 rounds carries
+      3,000 either way and fourteen with none lost say little: both of seed
+      1's pairs field a `raid` that took the title on the highest mean its
+      run saw, 55,864 over 45 rounds and 61,735 over 14. A `kraken`'s rounds
+      score the cap, 306,500, or less, and one took the title on fifteen at
+      the cap.
+    - Owed before either is read again: a title that does not pass on the
+      rounds that test promise, and rounds enough to tell its holders apart,
+      where one candidate in six goes to the title's test.
 - **`default`'s network `walk`** learns in a run alone, a population a
   scenario, and writes no weight ([Bots](bots.md#writing-a-graph)). Owed:
   - a learned walk for the bots seated beside a player, who play what a
