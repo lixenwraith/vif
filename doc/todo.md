@@ -252,7 +252,8 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and with the title tested
   ([Bots](bots.md#learning)) no run measured fielded a worse member than it
-  began with. What limits it, measured over 100 held-out rounds:
+  began with. Four runs of fifty minutes on from it field 341,701 and ship as
+  its model; what limits it was read on the one before, over 100 held-out rounds:
   - **The score has a ceiling.** A round closed at its half hour pays by the
     Krakens shot down in it, 375,000 for nine, 214,000 for eight and 132,000
     for seven, and none shoots ten: `cave`'s model has nine in 72 rounds and
