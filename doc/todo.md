@@ -295,8 +295,18 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     most trusted, so after fifteen million ticks on seed 1 five members at
     52,350 to 55,969 over eight to ten rounds stood behind a rival of 48,221
     over 54 and no turn played them again.
-- **The default bot as the stress test**: every input loaded into its generic
-  network and measured, then the hooks it does not need unplugged.
+- **`default`'s network `walk`** ships with no weight and learns only in a
+  copy ([Bots](bots.md#writing-a-graph)). Owed before it learns by itself:
+  - a place to steer where `default` types: it has the wheel 18% of the
+    embedded scenario's ticks and 0.1% of `td`'s, and a game's learning shows
+    in neither;
+  - states that let it live in `cave`, where a random `Leap` and auto-fire's
+    special end a round in 158 ticks, learned or not;
+  - a round's length for a game that never ends, as closing the embedded one
+    every five minutes halves what its ticks earn;
+  - its inputs cut to what a policy uses: the 161 are those that read on its
+    ticks, and which ranks of eight species and eight bullets earn their
+    weights is unmeasured. A population of them is 860 KB a scenario.
 - **A move that names a place**, not built: `outputs` leaves room for one. An
   output's units are its own and a network has those of the outputs it lists,
   so a move to a place in the view takes `move`'s place in a list, where `move`

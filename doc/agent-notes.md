@@ -19,6 +19,9 @@ Libraries · Branches.
 - The `gofmt` on a container's `PATH` can be older than the module's Go and reject
   generic methods ("method must have no type parameters"); run
   `"$(go env GOROOT)/bin/gofmt" -l`.
+- A long session's Go build cache fills the disk allowance, 27 GB after some
+  sixty scratch builds, and a link then fails with "no space left on device":
+  `go clean -cache` frees it and the next build takes 40 s.
 - `git ls-files <path>` before creating a file: `internal/app` names its test files
   for concepts (`door_test.go`), and a write to a path that exists replaces it.
 - `android/` is its own module: a dependency bump in the root `go.mod` also needs
@@ -1068,6 +1071,20 @@ Libraries · Branches.
   them. `EventCursorDefeatState` can cross `defeated` twice in one game, a hit's
   energy lifting it inside the 250 ms before the reset, and fitness weighs each:
   read a round by `Stats.Score`.
+- A Kraken's `Kinetic` holds no velocity: `KrakenSystem.animate` places the
+  body and zeroes `VelX` and `VelY` each tick, so a reading of them is 0 in
+  play though a test world can set them. Its motion is its `State` and target,
+  what a `landing` reads.
+- What a bot's inputs read in play is counted, not guessed: a scratch `Driver`
+  method running `network.read` under `World.RunSafe` on a probe network of
+  every input, tallied by `Driver.Stats().State`, 60,000 ticks a scenario in
+  seconds (`td` 85 s). `default` is in `Walk` 18% of the embedded scenario's
+  ticks, 90% of `cave`'s and 0.1% of `td`'s; only `armada`'s mounts fire a
+  hostile missile, and a bot alone sights no other cursor.
+- The embedded game pays about twice as much late as early: `default` earns 18
+  a tick over an unbroken 60,000 and 9.7 over five-minute rounds. Compare
+  graphs there at one round length, never a learning run's sum with an
+  unbroken run's.
 - Heat is what stands between an empty shield and a defeat in `cave`, a touch
   taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
   the 10 a game starts with in its first seconds, on blasts wherever dust lies.

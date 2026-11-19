@@ -1,6 +1,41 @@
-# Type runs left to right; when text is absent, collect nuggets between patrols.
+# Type runs left to right; when text is absent, collect nuggets between patrols,
+# which the network walk steers once it has weights, written or learned.
 [bot]
 actions_per_second = 12
+
+# walk reads what read anything while it steered in the embedded scenario, cave
+# and td: the rock, the blocks, every species and hostile bullet, the Kraken, two
+# landings and the bot's own. Text, gold and nuggets are the typing states' to
+# reach. It learns in a copy whose [bot] sets learn, with a round_seconds where
+# the game ends no round by itself.
+[network.walk]
+hidden = 6
+outputs = ["move"]
+inputs = [
+    "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
+    "block_up", "block_down", "block_left", "block_right",
+    "species_x", "species_y", "species_near_x", "species_near_y", "species_enraged", "species_hp", "species_size", "species_vx", "species_vy",
+    "species2_x", "species2_y", "species2_near_x", "species2_near_y", "species2_enraged", "species2_hp", "species2_size", "species2_vx", "species2_vy",
+    "species3_x", "species3_y", "species3_near_x", "species3_near_y", "species3_enraged", "species3_hp", "species3_size", "species3_vx", "species3_vy",
+    "species4_x", "species4_y", "species4_near_x", "species4_near_y", "species4_enraged", "species4_hp", "species4_size", "species4_vx", "species4_vy",
+    "species5_x", "species5_y", "species5_near_x", "species5_near_y", "species5_enraged", "species5_hp", "species5_size", "species5_vx", "species5_vy",
+    "species6_x", "species6_y", "species6_near_x", "species6_near_y", "species6_enraged", "species6_hp", "species6_size", "species6_vx", "species6_vy",
+    "species7_x", "species7_y", "species7_near_x", "species7_near_y", "species7_enraged", "species7_hp", "species7_size", "species7_vx", "species7_vy",
+    "species8_x", "species8_y", "species8_near_x", "species8_near_y", "species8_enraged", "species8_hp", "species8_size", "species8_vx", "species8_vy",
+    "kraken_x", "kraken_y", "kraken_near_x", "kraken_near_y", "kraken_reach", "kraken_hp", "kraken_health",
+    "landing_x", "landing_y", "landing_near_x", "landing_near_y", "landing_soon",
+    "landing2_x", "landing2_y", "landing2_near_x", "landing2_near_y", "landing2_soon",
+    "bullet_x", "bullet_y", "bullet_near_x", "bullet_near_y", "bullet_vx", "bullet_vy",
+    "bullet2_x", "bullet2_y", "bullet2_near_x", "bullet2_near_y", "bullet2_vx", "bullet2_vy",
+    "bullet3_x", "bullet3_y", "bullet3_near_x", "bullet3_near_y", "bullet3_vx", "bullet3_vy",
+    "bullet4_x", "bullet4_y", "bullet4_near_x", "bullet4_near_y", "bullet4_vx", "bullet4_vy",
+    "bullet5_x", "bullet5_y", "bullet5_near_x", "bullet5_near_y", "bullet5_vx", "bullet5_vy",
+    "bullet6_x", "bullet6_y", "bullet6_near_x", "bullet6_near_y", "bullet6_vx", "bullet6_vy",
+    "bullet7_x", "bullet7_y", "bullet7_near_x", "bullet7_near_y", "bullet7_vx", "bullet7_vy",
+    "bullet8_x", "bullet8_y", "bullet8_near_x", "bullet8_near_y", "bullet8_vx", "bullet8_vy",
+    "column", "row", "energy", "heat", "overheat", "ember", "shield", "boost",
+    "weapon_rod", "weapon_launcher", "weapon_disruptor", "weapon_turret", "weapon_emitter", "weapon_gun",
+]
 
 [regions.play]
 initial = "Seek"
@@ -34,6 +69,7 @@ transitions = [
 on_update = [
     { action = "Intent", payload = { name = ["motion_left", "motion_right", "motion_up", "motion_down"], count = [2, 10] },
       guard = "Chance", guard_args = { percent = 12 } },
+    { action = "Steer" },
 ]
 transitions = [
     { trigger = "Tick", target = "Seek", guard = "HasTarget", guard_args = { target = "glyph" } },

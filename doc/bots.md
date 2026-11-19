@@ -360,9 +360,36 @@ right and collects nuggets between patrols:
 | `Seek` | points at the nearest glyph | to `Gold` if gold exists, `Nugget` if one is within 12, `Type` on a glyph, `Walk` with no glyph |
 | `Type` | types the glyph under the cursor | to `Seek` once off text |
 | `Gold` | jumps to gold and types it | to `Seek` when off gold, 1.5 s after entering |
-| `Walk` | now and then moves 2 to 10 cells | to `Seek`, `Gold` or `Nugget` once one exists; at 1% an update to `Leap` |
+| `Walk` | now and then moves 2 to 10 cells, and points where its network `walk` asks | to `Seek`, `Gold` or `Nugget` once one exists; at 1% an update to `Leap` |
 | `Leap` | clicks a random shown cell | to `Walk` after 0.4 s |
 | `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
+
+`walk` is `default`'s one network and the catalogue's stress test: loaded with
+every input, then left the 161 that read anything while it steered in the
+embedded scenario, `cave` and `td`. Text, gold and nuggets are the typing
+states' to reach, and no other cursor, missile or third landing was in view. It
+has no weight written, so it asks for nothing and `default` plays as its states
+say; it learns in a copy whose `[bot]` sets `learn`, with a `round_seconds`
+where the game ends no round ([Learning](#learning)). What that is worth, by
+the ticks `default` spends in `Walk` and what one game's 600,000 ticks of
+learning field held out, three seeds, over 100 rounds in `cave` and 48 of five
+minutes in the embedded scenario:
+
+```
+scenario    in Walk   as shipped   walk learned
+embedded      18%        57,918    57,918  58,925  61,018
+cave          90%           215       258     247     225
+td           0.1%
+```
+
+- Where `default` types, the typing is the score: 48 rounds tell nothing under
+  2,000 apart, and the first seed proved no member in its 99 rounds.
+- In `cave` the states about `walk` cap it, a random `Leap` and an auto-fire
+  that spends its heat among them: a round lasts 158 ticks as shipped and 170
+  to 195 learned. With every input, 369, the three seeds field 251, 236 and 253.
+- A run learning the embedded scenario ends its game every `round_seconds`,
+  and the game pays more the longer it runs: closed every five minutes,
+  600,000 ticks earn 5.8 million where one unbroken game earns 11.4.
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph the scenario carries is held
@@ -469,7 +496,12 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   pass take 1.2 µs while raiders fly and 3.8 µs with a Kraken up, whose members
   it walks, of a tick's 180. A scan tells the one field it holds of each thing,
   as a species' `enraged`; an input reads any other of the thing's entity, a
-  lookup each.
+  lookup each. A network with no weight written neither reads nor asks.
+  - Every input at once, 367 through six hidden units, is what
+    `BenchmarkEveryInput` (`internal/bot`) times: 4.4 µs with eight of each kind
+    in view, 10 µs with 64 and 43 µs with 512. Played, the reading alone takes
+    7 µs in the embedded scenario, 9 µs in `cave` while raiders fly and 19 µs
+    under its Kraken and in `td`.
   - An offset grows with distance, so only a nearness lets one weight back off
     what is close and leave alone what is far.
   - `cave` flies three raiders at most and any may charge or teleport, so its
@@ -661,6 +693,11 @@ nothing      1     6435     2874      75     7063     2970      70
   `kraken`'s fight within the run past 53,000. By its own rounds `raid`
   fields the same under both, 34,800 and 35,700. What the ranking changes is
   what an archive keeps, below.
+- Width is not what limits a start from nothing. With every input in both
+  networks, 369 for `raid`'s 39 and `kraken`'s 15 and 3,348 weights each for
+  378 and 162, the six seeds field 2,252 2,558 3,170 3,587 5,022 and 5,196, a
+  mean of 3,631 inside the spread of 4,824's. The game's 600,000 ticks take
+  82 s for 79, and a population file 2.2 MB for 240 KB.
 - A round snowballs, since a ship that outlives the first cave has its gun
   raised and its energy deep, so a few long rounds carry the mean: read the
   median, and several seeds.
