@@ -823,6 +823,61 @@ func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive(t *testing.T) {
 	}
 }
 
+// TestASteerActsOnTheOutputsItNames: a Steer that names outputs acts on those of its
+// network alone, so one region has the special attack asked for whatever another
+// does, and a move is made only where a Steer takes it. An output its network
+// lacks, or one named twice, is refused.
+func TestASteerActsOnTheOutputsItNames(t *testing.T) {
+	doc := func(play, fire string) string {
+		return `[bot]
+actions_per_second = 40
+[network.fly]
+inputs = ["column"]
+x = { bias = 0.1 }
+special = { bias = 0.5 }
+
+[regions.play]
+initial = "Play"
+
+[regions.fire]
+initial = "Fire"
+
+[states.Play]
+on_update = [{ action = "Steer"` + play + ` }]
+
+[states.Fire]
+on_update = [{ action = "Steer"` + fire + ` }]
+`
+	}
+	only := func(outputs string) string { return ", payload = { outputs = [" + outputs + "] }" }
+	for _, c := range []struct {
+		play, fire     string
+		special, moves bool
+	}{
+		{only(`"move"`), only(`"special"`), true, true},
+		{only(`"special"`), only(`"special"`), true, false},
+		{only(`"move"`), only(`"move"`), false, true},
+		{"", only(`"special"`), true, true},
+	} {
+		_, ctx := soloWorld(10, 2)
+		_, rec := botFor(t, ctx, doc(c.play, c.fire), 7)
+		var special, moves bool
+		for _, intent := range rec.got {
+			special = special || intent.Type == input.IntentFireSpecial
+			moves = moves || intent.Type == input.IntentMouseMove
+		}
+		if special != c.special || moves != c.moves {
+			t.Errorf("play steering%q and fire%q: the special attack asked for %t and a move made %t, want %t and %t",
+				c.play, c.fire, special, moves, c.special, c.moves)
+		}
+	}
+	for _, outputs := range []string{`"wheel"`, `"move", "move"`, `"aim"`} {
+		if _, err := ParseGraph("net", []byte(doc(only(outputs), ""))); err == nil {
+			t.Fatalf("a Steer of outputs %s loaded, want it refused: each once, and one its network has", outputs)
+		}
+	}
+}
+
 // TestARoundScoresHowFarItTravelledAndWhatItEarned: a new game closes a round,
 // scored by the columns its cave scrolled and its events' worth, a data species'
 // kill twelve times its hit points. Its end weighs once on the fitness alone, a

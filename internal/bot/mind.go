@@ -313,9 +313,11 @@ type (
 	textPayload struct {
 		Text string `toml:"text"`
 	}
-	// steerPayload's network is one network's name or a list of them
+	// steerPayload's network is one network's name or a list of them, and its
+	// outputs those of the network's this Steer acts on, every one when none is named
 	steerPayload struct {
-		Network any `toml:"network"`
+		Network any      `toml:"network"`
+		Outputs []string `toml:"outputs"`
 	}
 	hasTargetArgs struct {
 		Target string `toml:"target"`

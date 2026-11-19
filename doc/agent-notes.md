@@ -1176,8 +1176,11 @@ Libraries · Branches.
   real gain of 10,000 one time in eleven before and one in twenty after.
 - The embedded scenario is the cheap one to read: a round of half an hour is
   six seconds of a core, pays by its Krakens in steps of 50,000 and spreads
-  14,500 unlearned and 21,000 for its own bot `main`, so 100 rounds a side tell
-  85,000 apart at over thirty standard errors.
+  19,000 to 20,000, unlearned or learned, so 100 rounds a side tell 90,000
+  apart at over thirty standard errors.
+- A hold reads the graph file it names as its process starts. One queued behind
+  others on a file of the checkout failed once that document changed: a chain
+  holds copies.
 - A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`:
   keep it out of commits (`.git/info/exclude`) and out of a search
   (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd`
