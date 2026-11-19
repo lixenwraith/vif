@@ -365,8 +365,11 @@ right and collects nuggets between patrols:
 | `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
-loads and fails naming each that does not. A graph outside every root is checked
-by putting it under `<dir>/bot/` and running `vif -check -config-dir <dir>`.
+loads and fails naming each that does not. A graph the scenario carries is held
+to it as well: an `InState` that names a region or a state the scenario has not
+loads and never holds, so `-check` fails naming it; a player's graph, which any
+scenario may play, is held to none. A graph outside every root is checked by
+putting it under `<dir>/bot/` and running `vif -check -config-dir <dir>`.
 
 ## Fitness and comparing graphs
 

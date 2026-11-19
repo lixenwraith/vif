@@ -344,8 +344,8 @@ type (
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
 // bot's own view, and the bot's actions and guards; Steer resolves among nets,
-// each bound by its guard of whiles.
-func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mind]) {
+// each bound by its guard of whiles, and asks, where given, takes each InState.
+func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mind], asks *[]InState) {
 	std.Register(m, std.Host[*mind]{
 		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
@@ -423,6 +423,9 @@ func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mi
 	m.RegisterGuard("InState", func(a *inStateArgs) (fsm.GuardFunc[*mind], error) {
 		if a.Region == "" {
 			return nil, errors.New("requires 'region'")
+		}
+		if asks != nil {
+			*asks = append(*asks, InState{Region: a.Region, States: a.States})
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			return m.ctx.World.Resources.Scenario.In(a.Region, a.States)

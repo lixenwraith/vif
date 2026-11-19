@@ -237,8 +237,9 @@ the bot document, a network's `while`, a `Steer` over a list, `InState`,
 that names no graph playing the first; `cave`'s two in its scenario, `seed`
 the start written by hand and `cave` a model learned from it, run K's best of
 four, which fields 300,260 over 100 rounds of seeds 101 to 104 where `seed`
-fields 27,614; and the verbs, one grammar after `:bot` and `-bot`, that keep a
-player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
+fields 27,614; the verbs, one grammar after `:bot` and `-bot`, that keep a
+player's bot files ([Bots](bots.md#a-players-bot-files)); and `-check` holding
+a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
 2026-11-18), what is left, a PR a step:
 
 - **The verbs' edges.** `export` writes a network's weights at the document's
@@ -295,8 +296,6 @@ player's bot files ([Bots](bots.md#a-players-bot-files)). Decided (Lixen,
     `lixenwraith/genetic`, or the fielded member held outside the archive.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
-- **A scenario's bot held to its scenario by `-check`**: an `InState` that names
-  a region or a state the scenario lacks loads, and never holds.
 - **A move that names a place**, not built: `outputs` leaves room for one. An
   output's units are its own and a network has those of the outputs it lists,
   so a move to a place in the view takes `move`'s place in a list, where `move`
