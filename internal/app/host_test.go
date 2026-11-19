@@ -580,7 +580,7 @@ func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	injectExCommand(t, a, "bot add")
 	stopTicking := tickInBackground(a)
 	defer stopTicking()
-	for deadline := time.Now().Add(socketWait); !strings.Contains(a.ctx.SessionCtl.BotSummary(), "slot 1 default"); {
+	for deadline := time.Now().Add(socketWait); !strings.Contains(a.ctx.SessionCtl.BotSummary(), "slot 1 main"); {
 		if time.Now().After(deadline) {
 			t.Fatalf("the bot was not seated: %q", a.ctx.SessionCtl.BotSummary())
 		}
@@ -588,7 +588,7 @@ func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	}
 	stopTicking()
 	injectExCommand(t, a, "bot list")
-	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "slot 1 default") {
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "slot 1 main") {
 		t.Fatalf(":bot list reports %q", got)
 	}
 }
