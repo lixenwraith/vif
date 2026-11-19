@@ -128,13 +128,14 @@ EOF
 botfitness)
 	# A graph's fitness is summed per scenario over a fixed seed set, flat out at one
 	# size. blank is left out: it disables glyph, nugget and gold, so nothing there
-	# separates two graphs. A graph given is also measured against default.
+	# separates two graphs. A graph given is also measured against default, which
+	# plays as written: learning, it would play what the user root's population holds.
 	need_bin
 	graph=${2:-}
 	seeds=${3:-4}
 	secs=${4:-60}
 	dir=$(mktemp -d)
-	{ cat internal/asset/bot/default.toml; stop $((secs * 1000)); } >"$dir/default.toml"
+	{ grep -v '^learn = ' internal/asset/bot/default.toml; stop $((secs * 1000)); } >"$dir/default.toml"
 	if [ -n "$graph" ]; then
 		[ -f "$graph" ] || fail "no graph file $graph"
 		{ cat "$graph"; stop $((secs * 1000)); } >"$dir/graph.toml"

@@ -1,13 +1,15 @@
 # Type runs left to right; when text is absent, collect nuggets between patrols,
-# which the network walk steers once it has weights, written or learned.
+# which the network walk steers as far as a run alone has learned to.
 [bot]
 actions_per_second = 12
+learn = true
+# The embedded game ends no round by itself, so one is closed each half hour
+round_seconds = 1800
 
 # walk reads what read anything while it steered in the embedded scenario, cave
 # and td: the rock, the blocks, every species and hostile bullet, the Kraken, two
 # landings and the bot's own. Text, gold and nuggets are the typing states' to
-# reach. It learns in a copy whose [bot] sets learn, with a round_seconds where
-# the game ends no round by itself.
+# reach. What it learns is its scenario's own, so no weight is written here.
 [network.walk]
 hidden = 6
 outputs = ["move"]
