@@ -444,17 +444,22 @@ func BenchmarkEveryInput(b *testing.B) {
 	}
 }
 
-// TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder: a layout's digest names the
-// populations it fits, so the two of the cave scenario's cave stand until its
-// networks are changed on purpose, which starts every population kept for them
-// over; its seed's are the same, so what is learned from the seed cave takes.
-func TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder(t *testing.T) {
-	for _, name := range []string{"cave", "seed"} {
-		data, err := os.ReadFile(filepath.Join("..", "..", "wad", "scenario", "base", "cave", "bot", name+".toml"))
+// TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder: a layout's digest names
+// the populations it fits, so a scenario's own bot keeps its networks' until they are
+// changed on purpose, which starts every population kept for them over. Cave's seed
+// has cave's two, so what is learned from the seed cave takes.
+func TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder(t *testing.T) {
+	cave := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}
+	for path, want := range map[string]map[string]string{
+		"../../wad/scenario/base/cave/bot/cave.toml": cave,
+		"../../wad/scenario/base/cave/bot/seed.toml": cave,
+		"../asset/scenario/bot/main.toml":            {"walk": "1ad7b922c774"},
+	} {
+		data, err := os.ReadFile(filepath.FromSlash(path))
 		if err != nil {
 			t.Fatal(err)
 		}
-		g, err := ParseGraph(name, data)
+		g, err := ParseGraph("test", data)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -462,8 +467,8 @@ func TestCavesLayoutsAreTheOnesItsPopulationsAreKeptUnder(t *testing.T) {
 		for _, n := range g.nets {
 			got[n.name] = n.digest
 		}
-		if want := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}; !maps.Equal(got, want) {
-			t.Fatalf("%s's layouts are %v, want %v", name, got, want)
+		if !maps.Equal(got, want) {
+			t.Fatalf("%s: its layouts are %v, want %v", path, got, want)
 		}
 	}
 }
