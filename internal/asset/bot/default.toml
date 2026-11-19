@@ -3,18 +3,20 @@
 # steers as far as a run alone has learned to.
 [bot]
 actions_per_second = 12
+# The gun fires by itself and the special attack where walk asks for it
+auto_fire = "main"
 learn = true
 # The embedded game ends no round by itself, so one is closed each half hour
 round_seconds = 1800
 
 # walk reads what read anything while it steered in the embedded scenario, cave
-# and td: the rock, the blocks, every species and hostile bullet, the Kraken, two
-# landings and the bot's own. What it learns is its scenario's own, so no weight
-# is written here. It has the wheel while no text is left and while it asks for
-# it past a mark that genomes drawn at random seldom reach, so text comes first.
+# and td. What it learns is its scenario's own, so the one weight written has it
+# ask for the special attack always, until a run learns when. It has the wheel
+# while no text is left and while it asks for it past a mark that genomes drawn
+# at random seldom reach, so text comes first.
 [network.walk]
 hidden = 6
-outputs = ["move", "wheel"]
+outputs = ["special", "move", "wheel"]
 inputs = [
     "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
     "block_up", "block_down", "block_left", "block_right",
@@ -40,9 +42,17 @@ inputs = [
     "column", "row", "energy", "heat", "overheat", "ember", "shield", "boost",
     "weapon_rod", "weapon_launcher", "weapon_disruptor", "weapon_turret", "weapon_emitter", "weapon_gun",
 ]
+special = { bias = 1 }
 
 [regions.play]
 initial = "Seek"
+
+# The special attack is walk's to ask for whatever play is doing
+[regions.fire]
+initial = "Fire"
+
+[states.Fire]
+on_update = [{ action = "Steer", payload = { outputs = ["special"] } }]
 
 [states.Seek]
 on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
@@ -77,7 +87,7 @@ transitions = [
 on_update = [
     { action = "Intent", payload = { name = ["motion_left", "motion_right", "motion_up", "motion_down"], count = [2, 10] },
       guard = "Chance", guard_args = { percent = 12 } },
-    { action = "Steer" },
+    { action = "Steer", payload = { outputs = ["move"] } },
 ]
 transitions = [
     { trigger = "Tick", internal = true, guard = "Asks", guard_args = { output = "wheel", above = 1 } },

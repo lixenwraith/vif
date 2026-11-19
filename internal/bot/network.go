@@ -77,9 +77,10 @@ type want struct {
 	ranks int
 }
 
-// acting is an output a network has: where its units stand among the network's,
-// how many they are and what acts on them
+// acting is an output a network has: its name, where its units stand among the
+// network's, how many they are and what acts on them
 type acting struct {
+	name      string
 	at, units int
 	act       func(m *mind, out []float64) bool
 }
@@ -205,7 +206,7 @@ func (n *network) have(listed []string) (had []string, err error) {
 	for o, row := range outputs {
 		if has(o) {
 			had = append(had, row.name)
-			n.acts = append(n.acts, acting{at[o], len(row.units), row.act})
+			n.acts = append(n.acts, acting{row.name, at[o], len(row.units), row.act})
 		}
 	}
 	for i, name := range listed {
@@ -358,11 +359,12 @@ func (n *network) ask(m *mind) []float64 {
 	return n.out
 }
 
-// bound is a network a Steer lists and the guard that has it steer, nil for one
-// that always does
+// bound is a network a Steer lists, the guard that has it steer, nil for one that
+// always does, and which of its outputs that Steer acts on, a bit an output
 type bound struct {
 	net   int
 	while fsm.GuardFunc[*mind]
+	acts  uint
 }
 
 // steer plays, for an update, the first network of order whose binding holds: it
@@ -380,8 +382,8 @@ func (m *mind) steer(order []bound) {
 			return
 		}
 		out := n.ask(m)
-		for _, a := range n.acts {
-			if !a.act(m, out[a.at:a.at+a.units]) {
+		for i, a := range n.acts {
+			if b.acts&(1<<i) != 0 && !a.act(m, out[a.at:a.at+a.units]) {
 				return
 			}
 		}
@@ -400,9 +402,10 @@ func (m *mind) frame() bool {
 }
 
 // compileSteer resolves the networks a Steer names among the graph's, one or a
-// list in the order they are tried, each with its binding of whiles; a graph
-// declaring one network may leave the name out, and one with no binding always
-// steers, so only a list's last may have none
+// list in the order they are tried, each with its binding of whiles and the
+// outputs the Steer names of it, every one where it names none; a graph declaring
+// one network may leave the name out, and one with no binding always steers, so
+// only a list's last may have none
 func compileSteer(nets []*network, whiles []fsm.GuardFunc[*mind]) func(*steerPayload) ([]bound, error) {
 	return func(p *steerPayload) ([]bound, error) {
 		names, ok := []string{""}, true
@@ -437,7 +440,18 @@ func compileSteer(nets []*network, whiles []fsm.GuardFunc[*mind]) func(*steerPay
 			case k > 0 && order[k-1].while == nil:
 				return nil, fmt.Errorf("network %q never steers: %q before it has no while, so always does", name, names[k-1])
 			}
-			order[k] = bound{i, whiles[i]}
+			order[k] = bound{i, whiles[i], ^uint(0)}
+			if len(p.Outputs) == 0 {
+				continue
+			}
+			order[k].acts = 0
+			for j, output := range p.Outputs {
+				at := slices.IndexFunc(nets[i].acts, func(a acting) bool { return a.name == output })
+				if at < 0 || slices.Contains(p.Outputs[:j], output) {
+					return nil, fmt.Errorf("outputs: %q is no output of network %q, or is named twice", output, name)
+				}
+				order[k].acts |= 1 << at
+			}
 		}
 		return order, nil
 	}

@@ -268,7 +268,7 @@ Allowance left idle builds up to one second's worth.
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
-| `Steer` | `network`: the `[network.<name>]` to run, or a list of them, the first whose `while` holds running; a graph with one may leave it out | a pointer move to the cell that network names, after the special attack where it asks for it |
+| `Steer` | `network`: the `[network.<name>]` to run, or a list of them, the first whose `while` holds running; a graph with one may leave it out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack where it asks for it |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`) or that opens the command line
@@ -389,13 +389,15 @@ right, backs off a threat on it and collects nuggets between patrols:
 | `Flee` | points away from the nearest threat | to `Seek` once none is within 5 |
 | `Leap` | clicks a random shown cell | to `Walk` after 0.4 s |
 | `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
+| `Fire`, a region of its own | has `walk` ask for the special attack, whatever the states above do | never |
 
 `walk` is `default`'s one network and the catalogue's stress test: loaded with
 every input, then left the 161 that read anything while it steered in the
 embedded scenario, `cave` and `td`. It has the wheel while no text is left, and
 while it asks for it past a mark of 1 (`Asks`), which genomes drawn at random
-seldom reach, so text comes first until a run learns otherwise. No weight is
-written for it: until a player's runs have taught it a scenario, a bot plays
+seldom reach, so text comes first until a run learns otherwise. One weight is
+written for it, the bias that has it ask for the special attack always, as
+auto-fire would: until a player's runs have taught it a scenario, a bot plays
 there as its states say. A run of `default` alone learns it
 ([Learning](#learning)), a population a scenario, closing a round each half
 hour where the game ends none, and what that holds is what `default` plays in
@@ -404,16 +406,21 @@ and learned from nothing on three seeds:
 
 ```
 scenario   no text   unlearned   learned                      learning          rounds held out
-embedded     18%       624,495   708,250  664,177  676,883    4,800,000 ticks   24 of half an hour
-armada       93%           193     8,633    9,310    5,196    2,400,000         100
-cave         90%           216       224      239      232      600,000         100
-td          0.1%        12,952    16,479  (one seed)          1,200,000         12
+embedded     18%       617,557   646,614  698,932  659,256    4,800,000 ticks   24 of half an hour
+armada       93%           194    19,678    8,279    7,796    2,400,000         100
+cave         90%           210       911      252      237      600,000         100
+td          0.1%         9,739   not read                                        12
 ```
 
 - The ticks are four games', one in `cave`: two minutes on four cores in the
-  embedded scenario, 132 rounds; 15 seconds in `armada`, some 400; ten
-  minutes in `td`, 70. A round of `td` runs from 83 to 48,360, so twelve tell
-  16,479 from 12,952 no better than chance: their medians are 9,588 and 6,494.
+  embedded scenario, 132 rounds, and 25 seconds in `armada`, some 450. A
+  round of `td` runs from 83 to 48,360, so twelve say little: their median is
+  5,746.
+- The special attack is `walk`'s to ask for, an action of its rate each time,
+  and the one weight written asks always. Fired by auto-fire it cost no action
+  and `default` unlearned fielded 624,495, 193, 216 and 12,952, the median of
+  `td`'s twelve 9,341; never fired, the embedded scenario pays 402,940. The
+  notes below were read with auto-fire's.
 - Backing off a threat is `default`'s own, a state and no weight. Without it a
   round of `td` scores 3,923, its median 3,936, and lasts 6,537 ticks, where
   with it the median is 6,494 over 12,387; the other three play as they did,
@@ -439,24 +446,25 @@ td          0.1%        12,952    16,479  (one seed)          1,200,000         
   with it as they did without, which fielded 674,730 to 704,339 and 2,165 to
   11,957, and in `td`, where it is the network's one say, 142 rounds fielded
   3,767 beside 3,923 unlearned, before the reflex.
-- In `cave` auto-fire's special spends the heat a ship lives on, so `walk`
-  learns little there. A copy that sets `auto_fire = "main"` and lists
-  `special` among `walk`'s outputs, to ask for it itself, fielded 35,341,
-  1,734 and 3,001 after the same ticks, their medians 2,446, 910 and 1,067.
+- In `cave` a special asked for always spends the heat a ship lives on, and
+  600,000 ticks unlearn that in one seed of three. A copy whose `walk` began
+  asking for none fielded 35,341, 1,734 and 3,001 after the same ticks,
+  their medians 2,446, 910 and 1,067.
 - With every input, 367, `walk` learns no better, its population 1.9 MB for
   860 KB: the embedded scenario 633,036, 691,680 and 668,874, and `armada`
   3,160, 10,318 and 27,390.
 
 The embedded scenario's own bot,
 [`main`](../internal/asset/scenario/bot/main.toml), is `default`'s graph with
-the first of those walks written as its weights. Over 100 fresh rounds of half
-an hour, seeds 201 to 204, it fields 709,690 and a median of 720,658 where
-`default` unlearned fields 624,846 and 620,337: it meets fourteen Krakens in
-92 rounds and shoots all down in 78, where the unlearned walk meets twelve in
-73. A solo run learns on from it in a population of its own,
-`main.main.walk.json`. What `default` learned there stays `default`'s, which
-`-bot default` plays; its file under `main`'s name is `main`'s, the layout
-being one.
+a walk learned there: the first of those, and two minutes on from it once the
+special attack was its own to ask for. Over 100 fresh rounds of half an hour,
+seeds 201 to 204, it fields 708,665 and a median of 715,112 where `default`
+unlearned fields 616,485 and 615,512: it meets fourteen Krakens in 94 rounds
+and shoots all down in 82, where the unlearned walk meets twelve in 75, and
+in three rounds it met a fifteenth. A solo run learns on from it in a
+population of its own, `main.main.walk.json`. What `default` learned there
+stays `default`'s, which `-bot default` plays; its file under `main`'s name is
+`main`'s, the layout being one.
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph the scenario carries is held
@@ -518,10 +526,11 @@ states it is for, and steers by a list of them. The `cave` scenario's own bot,
 its raiders fly and `kraken` while its Kraken is up, which share next to
 nothing, each picked by a guard on a `Steer` of its own. A network needs the
 pointer free, and a bot's run starts on the embedded `[play]`'s pointer whatever
-the player's own says, and on the auto-fire its `[bot]` names. `cave` takes
-`main`, the gun alone: the special attack fired unasked spends in a game's
-first seconds the heat that outlasts the energy, and what its blasts happen to
-catch is luck in the score.
+the player's own says, and on the auto-fire its `[bot]` names. Every shipped
+bot takes `main`, the gun alone, and lists `special`: the special attack is a
+network's to ask for, an action of the bot's rate each time. Fired unasked in
+`cave` it spends in a game's first seconds the heat that outlasts the energy,
+and what its blasts happen to catch is luck in the score.
 
 ```toml
 [bot]
