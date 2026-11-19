@@ -606,8 +606,8 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
 `tutorial` teaches the game's vi-style typing and editing a lesson at a time,
 `cave` is a side-scroller whose raiders are species its own behavior programs
-define, and `armada` is a fixed shooter whose ranks are three more. Each entry has
-a short `description` for scenario listings.
+define, and `armada` is a vertical scroller whose ranks, squadrons and flagship
+are seven more. Each entry has a short `description` for scenario listings.
 
 `tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
@@ -729,28 +729,38 @@ opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scen
 (§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
 typing.
 
-`armada` is a fixed shooter of diving formations, one file with its
-three programs and its ranks' maps inline. The ship starts at the bottom of the
-map (`origin = "bottom"`), as every ship that joins does, and its gun fires
-up alone, a lane more for each `U`, up to three. The armada materializes in ranks
-at the top, each a map of one row laid from the map's middle column
-(`EventMapLayRequest`), eight columns six cells apart: two ranks of
-darts in the first wave, lancers over them from the second and four wardens over
-those from the third. A ship holds its slot until a roll sends it down, at a rate
-of one in fifty seconds for a dart, whatever the tick (`Chance { mean_ms }`): it
-turns red and marks the cell its target stands on with the charge line and
-the landing marker, dives there, then flies back to its post, the cell it spawned
-on (`FindLanding { to = "post" }`), so a slot shot empty stays empty. A rank up has
-more hit points (4, 10, 24) and a costlier touch and dives slower on a longer
-warning. Each warden carries a turret of its own (`[prototype.mount]`) and fires an
-aimed bullet every 3.2 seconds, give or take 0.6 drawn for each warden, so their
-volleys drift apart. A wave shot down strobes green, doubles species damage as a storm kill
-does in main ("Species Damage Up"), which is the ramp, and the next comes in two
-seconds on. A ship a player shoots down rolls the armada drop table for every
-player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is as in `cave`: heat
-and energy both run out, a red strobe, and the game starts over on "You Died!".
-Drains, nuggets, gold, the fuse and the text are off: special fire would blast
-text among the ranks, and they would fall with nobody aiming.
+`armada` is a vertical scroller of an armada's ranks, squadrons and flagship, one
+file with its seven programs and its ranks' maps inline, and a corpus of stars. The
+ship starts at the bottom of the map (`origin = "bottom"`), as every ship that joins
+does, and its gun fires up alone, a lane more for each `U`, up to three. The stars
+fall past it as scenery (§9) at three depths, rushing between waves and settling to
+a pace a step faster each wave. The odd waves stand the ranks at the top, each a map
+of one row laid from the map's middle column (`EventMapLayRequest`): two of darts,
+lancers over them from the third wave and wardens over those from the fifth. A ship
+holds its slot until a roll sends it down, one in 28 seconds for a dart, whatever
+the tick (`Chance { mean_ms }`), or a salvo does, one to three darts and from the
+third wave a lancer signalled every four seconds; it marks the cell its target
+stands on with the charge line and the landing marker, dives there and flies back to
+its post (`FindLanding { to = "post" }`), so a slot shot empty stays empty. A rank
+up has more hit points (4, 10, 24), a costlier touch and a slower dive on a longer
+warning; lancers and wardens fire turrets (`[prototype.mount]`). Every eighth wave
+brings the flagship, and the other even waves send two to five squadrons, one more
+every other wave, and from the seventh two cross each formation too. A squadron is a
+line of six wasps, four raptors or three bombers, the kinds the wave has reached,
+entering on the top edge's right end or its left. It flies a route drawn among four,
+legs homing on waypoints (`Waypoint`, mirrored from the left), into a circle it laps
+(`Orbit`), firing only there (`Armed`), the raptors' turrets and the bombers' homing
+missiles. Leaving it, one ship in three dives through where its target stood and off
+the bottom, the rest climb out where they came in (`Leave`). The flagship circles a
+station over the top's middle, its emitter laying a ray at the nearest cursor that
+fires after a warning, and launches wasps from its bay; shot down, it drops every
+player a `U`, a heat and two energy. A formation shot down doubles species damage as
+a storm kill does in main ("Species Damage Up"), and a squadron wave none of whose
+ships got away drops every player a heat. A kill rolls the armada drop table for
+every player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is as in `cave`:
+heat and energy both run out, the stars stop under a red strobe, and the game starts
+over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
+fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
 ## 11. System inventory
 

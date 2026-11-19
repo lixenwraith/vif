@@ -595,15 +595,18 @@ per instance:
   teleport goes to the cell it stored, as the raiders in `cave` do, or with `post`
   the cell the header spawned on (`BehaviorComponent.PostX`, `PostY`), which
   armada's ships hold and fly back to.
-- Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
-  `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
+- Effects run on an enter, an exit, a cue or an edge: `StoreTarget`, `Waypoint`
+  (a cell at fractions of the map, `x` mirrored for a body posted left of the
+  middle, `behaviorCtx.mirrored`), `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
   `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
   `SpawnSpecies` (any Shared species, a program's among them, by its land request),
   `Leave` (it marks the context, and the host ends the instance as the step
   returns, a hook being no place to stop the machine it runs in) and `EmitEvent`.
-- Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
-  per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
+- Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Orbit` (the velocity
+  round a cell, read off where the body stands each tick, so it keeps no phase),
+  `Drag` (linear drag per second, so it holds at any tick rate) and `Freeze` (no
+  move this tick), each
   over the in-place helpers of `pkg/vmath/physics` the code species use
   ([generic kinetic §8](generic-kinetic.md#8-feasible-pseudo-system-design)).
 - `Integrate` ends every tick unless `Freeze` ran: `IntegrateWithBounceStats` over
@@ -737,7 +740,10 @@ smaller part of it.
   `ChargeLine` to `BehaviorComponent.ChargeLine`, which `ChargeLineRenderer` reads
   to pulse the charge line toward it; and `Landing` to
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
-  marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
+  marker there; and `Armed`, for a program flagging any state with it, to the
+  body's mount as `MountArmed` and `Mount.Armed`, false while suspended, so the
+  mount the spawn asked for fires in those states alone), then, unless suspended,
+  gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
   instance, pattern frame and accumulator, stored target, post, raised signals, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
