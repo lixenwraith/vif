@@ -104,7 +104,6 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	kraken := place(w, core.DomainShared, 40, 14, func(e core.Entity) {
 		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25, MaxHitPoints: 4 * hitsHalf})
 		w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: 3 * hitsHalf})
-		w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: -rateHalf}})
 		var header component.HeaderComponent
 		for _, cell := range [][2]int{{30, 14}, {22, 12}, {9, 10}} {
 			member := place(w, core.DomainShared, cell[0], cell[1], func(core.Entity) {})
@@ -153,9 +152,9 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		"species_hp": 0.5, "species_size": 0.5, "species_vx": 0.5, "species_vy": -0.75,
 		"species2_size": 1.0 / (1 + sizeHalf), "species3_size": 1.0 / (1 + sizeHalf), "species5_size": 1.0 / (1 + sizeHalf),
 		// A Kraken is a species too, the fourth nearest by its body
-		"species4_hp": 0.75, "species4_size": 3.0 / (3 + sizeHalf), "species4_vx": -0.5,
+		"species4_hp": 0.75, "species4_size": 3.0 / (3 + sizeHalf),
 		"kraken_x": across(40 - 16), "kraken_y": down(14 - 10), "kraken_reach": 0.25,
-		"kraken_hp": 0.75, "kraken_health": 0.75, "kraken_vx": -0.5,
+		"kraken_hp": 0.75, "kraken_health": 0.75,
 		"bullet_vx": -0.75,
 		"column":    2*float64(16-minX)/float64(width-1) - 1, "row": 2*float64(10-minY)/float64(height-1) - 1,
 		"energy": 0.5, "heat": 0.5, "overheat": 0.25, "ember": 1, "shield": 1, "boost": 0.25,
