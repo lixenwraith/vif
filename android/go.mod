@@ -17,12 +17,12 @@ require (
 	github.com/lixenwraith/log v0.1.19 // indirect
 	github.com/lixenwraith/toml v0.10.0 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
-	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
-	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/mobile v0.0.0-20261117202452-47699113848a // indirect
+	golang.org/x/mod v0.43.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
-	golang.org/x/tools v0.52.0 // indirect
+	golang.org/x/tools v0.53.0 // indirect
 )
 
 replace github.com/lixenwraith/vif => ../
