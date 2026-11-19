@@ -108,7 +108,8 @@ Storm's red and green circles carry mounts, their rows in `circleVariants`, whic
 the storm arms from its machine's flags after each step, so an attack fires from
 the step that opens it and a stunned or cursorless circle's mount is disarmed. The
 red's turret fires a bullet a tick of its burst, the storm renderer drawing the
-muzzle at its aim while armed; the green's disruptor fires one pulse an attack.
+muzzle at its aim while armed; the green's disruptor fires one pulse an attack. A
+behavior program flagging a state `Armed` arms its body's mount the same way.
 
 **`pulse`** (dual) advances every pulse, an entity of its own in its firer's
 domain: a cursor's disruptor makes a Player-domain one that stays on its orb's

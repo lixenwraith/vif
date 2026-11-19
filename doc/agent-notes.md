@@ -793,6 +793,11 @@ Libraries · Branches.
   frame is dimmed by half (`DimFactor`): for true colors resume and capture every
   50 ms, which lands one capture a tick. A drain's end raises `EventSpeciesKilled`
   too, so `:system drain disable` first.
+- `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive
+  (`:energy 900000000`) and the formation ended (`:emit EventBehaviorCancelRequest
+  {}`), which brings the squadron wave on. A headless probe reads the route a
+  squadron drew as its ships land (`Resources.Scenario.Var("route")`) and plots
+  each ship's cells a tick.
 - `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
   without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
   nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
@@ -1146,9 +1151,10 @@ Libraries · Branches.
   learners a run in a session does. Read what a seated bot plays on a run of two
   bots with and without the population in the user root, at `-speed 8`, as a
   session cannot run flat out.
-- `armada` is the quick map to try a graph on: four games' 2,400,000 ticks take
-  15 s on four cores, where `td` takes 1.4 ms a tick. Try a reflex by hand
-  before asking a learner for it: backing off a threat within three cells
+- `armada` is the quick map to try a graph on: four games' 2,400,000 ticks took 15 s
+  on four cores before its stars and squadrons, which take a headless tick from 28
+  to 32 µs with nobody steering, where `td` takes 1.4 ms a tick. Try a reflex by
+  hand before asking a learner for it: backing off a threat within three cells
   doubled `default` in `td`, and 142 rounds of learning found none of it.
 - An output added to the catalogue is asked (`outputRow.asked`): given to every
   network that lists none, `cave`'s two would grow a unit, their layouts change

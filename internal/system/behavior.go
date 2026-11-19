@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/bits"
 	"slices"
 	"strings"
@@ -48,6 +49,7 @@ type BehaviorSystem struct {
 	motion              bounceTelemetry
 	sweep               cellSweep
 	hearing             []core.Entity // the instances a signal request may raise its signal on
+	arming              uint64        // a bit by program: one flagging a state Armed fires its mount in those alone
 
 	toggle
 }
@@ -91,6 +93,9 @@ func NewBehaviorSystem(world *engine.World, set *BehaviorSet) engine.System {
 		graph := set.Graph(i)
 		for _, state := range graph.States() {
 			t.states = append(t.states, reg.Ints.Get("behavior."+name+".state."+graph.Name(state)))
+			if graph.Flags(state)&behaviorArmed != 0 {
+				s.arming |= 1 << i
+			}
 		}
 		t.standing = make([]int64, len(t.states))
 		s.programs = append(s.programs, t)
@@ -278,6 +283,12 @@ func (s *BehaviorSystem) Update() {
 		b.Landing = flags&behaviorLanding != 0
 		if shielded {
 			c.combat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
+		}
+		// The mount lands after the spawn's step, so its trigger is set where it is armed
+		if s.arming&(1<<b.Program) != 0 {
+			if mount, ok := s.world.Components.Mount.GetPtr(header); ok {
+				mount.Trigger, mount.Armed = component.MountArmed, flags&behaviorArmed != 0 && !suspended
+			}
 		}
 
 		if !suspended {
@@ -644,6 +655,7 @@ const (
 	behaviorTeleportLine                    // a teleport line from the header to the stored cell
 	behaviorChargeLine                      // the charge line pulsing toward the stored cell
 	behaviorLanding                         // the landing marker blinking where the body lands on the stored cell
+	behaviorArmed                           // the body's mount fires, in a program that names it
 )
 
 // behaviorCtx is what one instance's step reads and its verbs write through. Verbs
@@ -683,6 +695,44 @@ func (c *behaviorCtx) distance(aim func(*behaviorCtx) (int, int, bool)) (float64
 }
 
 func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, true }
+
+// mapCell is the header's cell at fractions x, y of the places the footprint can
+// stand, 0 flush against the left or top edge and 1 against the right or bottom
+func (c *behaviorCtx) mapCell(x, y float64) (int, int) {
+	foot, config := c.proto.Footprint, c.sys.world.Resources.Config
+	return foot.HeaderX + int(math.Round(x*float64(max(config.MapWidth-foot.Width, 0)))),
+		foot.HeaderY + int(math.Round(y*float64(max(config.MapHeight-foot.Height, 0))))
+}
+
+// mirrored reports a body posted left of the map's middle, which flies a route
+// written for an entry on the right reflected
+func (c *behaviorCtx) mirrored() bool {
+	foot, config := c.proto.Footprint, c.sys.world.Resources.Config
+	return 2*(c.behavior.PostX-foot.HeaderX) < config.MapWidth-foot.Width
+}
+
+// orbit sets the velocity carrying the body round the centre of cell (x, y) at
+// radius, rows read by the cell aspect so the circle shows round. What lies between
+// the body and the circle closes at BehaviorOrbitPull, never faster than the orbit.
+func (c *behaviorCtx) orbit(x, y int, radius, speed float64, clockwise bool) {
+	aspect := c.sys.world.Resources.Config.CellAspect
+	cx, cy := vmath.Point{X: x, Y: y}.Center()
+	k := &c.kinetic.Kinetic
+	dx, dy := k.PreciseX-cx, aspect.Circular(k.PreciseY-cy)
+	d := vmath.Magnitude(dx, dy)
+	ux, uy := 1.0, 0.0
+	if d > 0 {
+		ux, uy = dx/d, dy/d
+	}
+	radial := max(-speed, min(speed, (radius-d)*parameter.BehaviorOrbitPull))
+	// Rows grow downward, so turning from x toward y is clockwise on screen
+	tx, ty := -uy, ux
+	if !clockwise {
+		tx, ty = uy, -ux
+	}
+	k.VelX = tx*speed + ux*radial
+	k.VelY = aspect.FromCircular(ty*speed + uy*radial)
+}
 
 // aim reads the cell a verb's to names: the target by default, with "stored" the
 // cell StoreTarget kept, which holds still however the cursors move after it, or
@@ -762,6 +812,18 @@ type (
 	}
 	dragArgs struct {
 		Rate float64 `toml:"rate"`
+	}
+	waypointArgs struct {
+		X      float64 `toml:"x"`
+		Y      float64 `toml:"y"`
+		Mirror bool    `toml:"mirror"`
+	}
+	orbitArgs struct {
+		To        string  `toml:"to"`
+		Radius    float64 `toml:"radius"`
+		LapMs     int64   `toml:"lap_ms"`
+		Clockwise bool    `toml:"clockwise"`
+		Mirror    bool    `toml:"mirror"`
 	}
 )
 
@@ -932,6 +994,19 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			c.behavior.TargetX, c.behavior.TargetY = x, y
 		}
 	}))
+	// A route is written once, for an entry on the right, and mirror flies it from the left
+	v.Effect("Waypoint", func(a *waypointArgs) (func(*behaviorCtx), error) {
+		if !(a.X >= 0 && a.X <= 1 && a.Y >= 0 && a.Y <= 1) {
+			return nil, fmt.Errorf("x %v and y %v are not fractions of the map, 0 to 1", a.X, a.Y)
+		}
+		return func(c *behaviorCtx) {
+			x := a.X
+			if a.Mirror && c.mirrored() {
+				x = 1 - x
+			}
+			c.behavior.TargetX, c.behavior.TargetY = c.mapCell(x, a.Y)
+		}, nil
+	})
 	v.Effect("ZeroVelocity", does(func(c *behaviorCtx) { c.kinetic.VelX, c.kinetic.VelY = 0, 0 }))
 	v.Effect("Teleport", does(func(c *behaviorCtx) { c.sys.teleport(c) }))
 	v.Effect("Telegraph", func(a *colorArgs) (func(*behaviorCtx), error) {
@@ -1106,6 +1181,26 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		c.kinetic.VelX = (x - c.kinetic.PreciseX) / remaining
 		c.kinetic.VelY = (y - c.kinetic.PreciseY) / remaining
 	}))
+	v.Sustained("Orbit", func(a *orbitArgs) (func(*behaviorCtx), error) {
+		center, err := aim(a.To)
+		switch {
+		case err != nil:
+			return nil, err
+		case !(a.Radius > 0) || math.IsInf(a.Radius, 1):
+			return nil, fmt.Errorf("radius %v is not a positive number of cells", a.Radius)
+		case a.LapMs <= 0:
+			return nil, fmt.Errorf("lap_ms %d is not positive", a.LapMs)
+		}
+		speed := 2 * math.Pi * a.Radius * 1000 / float64(a.LapMs)
+		return func(c *behaviorCtx) {
+			// A knocked-back body flies before it steers again, as under Home
+			x, y, ok := center(c)
+			if c.combat.RemainingKineticImmunity > 0 || !ok {
+				return
+			}
+			c.orbit(x, y, a.Radius, speed, a.Clockwise != (a.Mirror && c.mirrored()))
+		}, nil
+	})
 	v.Sustained("Drag", func(a *dragArgs) (func(*behaviorCtx), error) {
 		if a.Rate < 0 {
 			return nil, fmt.Errorf("rate %v is negative", a.Rate)
@@ -1146,6 +1241,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Flag("TeleportLine", behaviorTeleportLine)
 	v.Flag("ChargeLine", behaviorChargeLine)
 	v.Flag("Landing", behaviorLanding)
+	v.Flag("Armed", behaviorArmed)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })
 	v.Entered(func(c *behaviorCtx) { c.probed = false })
 	return v

@@ -53,4 +53,9 @@ const (
 	// BehaviorChargeRemainingMin floors the time a charge divides its distance by,
 	// so the last tick of an entry does not ask for unbounded speed
 	BehaviorChargeRemainingMin = time.Millisecond
+
+	// BehaviorOrbitPull is the share of its distance off the circle an orbiting body
+	// closes each second (1/sec), so a body arriving off the circle settles onto it
+	// in about a second
+	BehaviorOrbitPull = 3.0
 )
