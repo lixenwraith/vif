@@ -316,7 +316,7 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 		}
 		l.Saved = func(st bot.LearnStats) {
 			a.log.Info("app", "msg", "bot population kept", "name", g.Name, "network", st.Network, "games", len(drivers),
-				"rounds", st.Rounds, "recent", st.Recent, "step", st.Step, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
+				"rounds", st.Rounds, "recent", st.Recent, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
 		}
 		l.Lost = func(err error) {
 			a.log.Warn("app", "msg", "bot population not kept", "name", g.Name, "error", err.Error())

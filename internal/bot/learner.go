@@ -120,15 +120,14 @@ type slot struct {
 }
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
-// and since its population began, their recent mean, which no luck picked, the
-// step, its archive's size and its first member's score, and the score and
-// rounds of the member it fields, zero while none is proven.
+// and since its population began, their recent mean, which no luck picked, its
+// archive's size and its first member's score, and the score and rounds of the
+// member it fields, zero while none is proven.
 type LearnStats struct {
 	Network       string
 	Scored        int
 	Rounds        int
 	Recent        float64
-	Step          float64
 	Size          int
 	Best          float64
 	Fielded       float64
@@ -351,7 +350,7 @@ func (l *Learner) playing(genes []float64) (n int) {
 // hand-written one. It brings the stats, and the round each member entered at,
 // up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
-	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: learnStep, Size: len(members)}
+	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Size: len(members)}
 	born := make(map[uint64]int, len(members))
 	fielded := slices.Clone(l.seed)
 	for i, c := range members {
