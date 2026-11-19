@@ -339,6 +339,11 @@ type (
 		Region string   `toml:"region"`
 		States []string `toml:"states"`
 	}
+	asksArgs struct {
+		Network string  `toml:"network"`
+		Output  string  `toml:"output"`
+		Above   float64 `toml:"above"`
+	}
 )
 
 // register installs std's generic vocabulary, its status guards reading the bot's
@@ -347,7 +352,8 @@ type (
 // each bound by its guard of whiles, and asks, where given, takes each InState.
 func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mind], asks *[]InState) {
 	std.Register(m, std.Host[*mind]{
-		Refuse: "writes the world; a bot acts only through intents",
+		Refuse:        "writes the world; a bot acts only through intents",
+		CursorDecides: func(m *mind, entity int64) bool { return m.ctx.World.DefeatDecides(core.Entity(entity)) },
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
 			read, ok := engine.PrivateConfigIntAccessor(field)
 			if !ok {
@@ -429,6 +435,27 @@ func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mi
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			return m.ctx.World.Resources.Scenario.In(a.Region, a.States)
+		}, nil
+	})
+	// Asks holds while a network's one-unit output reads above a.Above: how a graph
+	// has its states hand over to what the network asks for, the wheel among them. A
+	// network with no weight asks nothing
+	m.RegisterGuard("Asks", func(a *asksArgs) (fsm.GuardFunc[*mind], error) {
+		i := slices.IndexFunc(nets, func(n *network) bool { return n.name == a.Network })
+		if a.Network == "" && len(nets) == 1 {
+			i = 0
+		}
+		if i < 0 {
+			return nil, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", a.Network)
+		}
+		o := slices.IndexFunc(outputs[:], func(row outputRow) bool { return row.name == a.Output })
+		if o < 0 || len(outputs[o].units) != 1 || !slices.Contains(nets[i].units, outputs[o].units[0]) {
+			return nil, fmt.Errorf("output %q is no output of one unit that network %s has", a.Output, nets[i].name)
+		}
+		unit := slices.Index(nets[i].units, outputs[o].units[0])
+		return func(m *mind, _ *fsm.RegionState, _ any) bool {
+			n := m.nets[i]
+			return !n.blank && m.frame() && n.ask(m)[unit] > a.Above
 		}, nil
 	})
 	m.RegisterGuard("Chance", func(a *chanceArgs) (fsm.GuardFunc[*mind], error) {

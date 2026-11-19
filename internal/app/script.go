@@ -230,7 +230,8 @@ func (a *App) playBeside(g *bot.Graph, n int) (*sideGames, error) {
 		cfg.Seed = vmath.DeriveSeed(a.Seed(), "bot.game."+strconv.Itoa(i))
 		cfg.Membership, cfg.Journal, cfg.JournalSink = Membership{}, false, nil
 		cfg.StatTicks, cfg.RecTicks, cfg.Settings, cfg.Notice = -1, -1, nil, ""
-		game, err := newDriven(runConfig{Config: cfg, wiring: wiring{log: vlog.NewLog("game " + strconv.Itoa(i+1)), scriptedSession: true}})
+		game, err := newDriven(runConfig{Config: cfg, wiring: wiring{log: vlog.NewLog("game " + strconv.Itoa(i+1)), scriptedSession: true,
+			membership: membership.Wiring{Bot: true}}})
 		if err != nil {
 			return nil, errors.Join(err, s.close(nil))
 		}
@@ -360,6 +361,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 		cfg.Mode = ModeHeadless
 	}
 	cfg.wiring.scriptedSession = true
+	cfg.wiring.membership.Bot = kind == "bot" // its own run's and a seat's alike
 	paced, err := scriptPacing(cfg.Config)
 	if err != nil {
 		return false, err

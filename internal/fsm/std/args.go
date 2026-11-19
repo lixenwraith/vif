@@ -133,6 +133,9 @@ type (
 		Field string   `toml:"field"`
 		Names []string `toml:"names"`
 	}
+	fieldArgs struct {
+		Field string `toml:"field"`
+	}
 )
 
 // originArgs is an origin as its table writes it; a bare anchor name is its at, and

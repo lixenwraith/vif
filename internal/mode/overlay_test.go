@@ -50,10 +50,11 @@ func TestSelectedCardScrollDeltaTraversesClippedCard(t *testing.T) {
 
 type menuSession struct {
 	engine.SessionController
-	bots  []engine.BotSeat
-	near  []engine.NearbySession
-	calls []string
-	err   error
+	bots   []engine.BotSeat
+	graphs []engine.BotGraph
+	near   []engine.NearbySession
+	calls  []string
+	err    error
 }
 
 func (s *menuSession) Nearby() []engine.NearbySession { return s.near }
@@ -106,6 +107,7 @@ func (s *menuSession) DropBot(slot int) error {
 	s.calls = append(s.calls, fmt.Sprintf("drop %d", slot))
 	return nil
 }
+func (s *menuSession) BotGraphs() []engine.BotGraph { return s.graphs }
 func (s *menuSession) BotFiles(words []string) ([]string, error) {
 	s.calls = append(s.calls, "files "+strings.Join(words, " "))
 	return []string{"first", "last"}, nil
@@ -118,6 +120,26 @@ type awaySession struct {
 }
 
 func (s *awaySession) Participants() []engine.SessionParticipant { return s.participants }
+
+// TestABotIsListedAsABotWhoeverHoldsIt: `:player` and the menu's drop rows tell a
+// bot by what drives it, a seat its holder brought and a run a bot plays itself
+// alike, and only a seat names a holder.
+func TestABotIsListedAsABotWhoeverHoldsIt(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &awaySession{participants: []engine.SessionParticipant{{Slot: 1}, {Slot: 2, Bot: true}, {Slot: 3, Holder: 9, Bot: true}}}
+	ExecuteCommand(ctx, "player")
+	if got, want := ctx.GetStatusMessage(), "Players: 1 player, 2 bot, 3 bot;"; !strings.HasPrefix(got, want) {
+		t.Fatalf(":player reads %q, want it to open %q", got, want)
+	}
+	var labels []string
+	for _, o := range participantConfigOptions(ctx) {
+		labels = append(labels, o.label)
+	}
+	if want := []string{"Drop 1: player", "Drop 2: bot", "Drop 3: bot"}; !slices.Equal(labels, want) {
+		t.Fatalf("the menu lists %q, want %q", labels, want)
+	}
+}
 
 // TestAnAwayPlayerIsListedAsAway: `:player` and the menu's drop rows tell a player
 // whose cursor waits as a Wraith from one in play.
@@ -507,6 +529,29 @@ func TestTheBotCommandReadsOneGrammar(t *testing.T) {
 		if ExecuteCommand(ctx, refused); len(session.calls) != 7 || !strings.HasPrefix(ctx.GetStatusMessage(), "Usage: :bot ") {
 			t.Fatalf(":%s was taken: %v, %q", refused, session.calls, ctx.GetStatusMessage())
 		}
+	}
+}
+
+// TestABotIsSeatedFromItsGraphsRow: the Multiplayer page lists each graph a seat of
+// the run can play, the player's, the scenario's and the shipped, and a graph's
+// row seats one bot playing it and leaves the menu.
+func TestABotIsSeatedFromItsGraphsRow(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	session := &menuSession{graphs: []engine.BotGraph{{Name: "mine", Owner: "yours"}, {Name: "cave", Owner: "scenario cave's"}, {Name: "default", Owner: "shipped"}}}
+	ctx.SessionCtl = session
+	r := NewRouter(ctx, input.NewMachine())
+	r.handleConfigMenu()
+	showConfigMenu(ctx, "multiplayer")
+	for _, name := range []string{"mine", "cave", "default"} {
+		if row := menuRow(ctx, "multiplayer/#Bots/seat/"+name); row.Label != "Add "+name || row.Disabled != "" {
+			t.Fatalf("the graph %s reads %q, disabled %q", name, row.Label, row.Disabled)
+		}
+	}
+	ctx.SetOverlaySelection("multiplayer/#Bots/seat/cave")
+	r.handleOverlayActivate()
+	if !slices.Equal(session.calls, []string{"add 1:cave"}) || ctx.IsOverlayActive() {
+		t.Fatalf("a graph's row did not seat one bot of it and leave the menu: %v", session.calls)
 	}
 }
 

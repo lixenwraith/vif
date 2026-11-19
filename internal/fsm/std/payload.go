@@ -287,6 +287,24 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}, nil
 	})
 
+	// PayloadCursorDecides passes when the cursor a payload field names is one whose
+	// defeat decides the game, read as the event arrives, ahead of the systems
+	m.RegisterPayloadGuard("PayloadCursorDecides", func(a *fieldArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
+		if a.Field == "" {
+			return nil, errors.New("requires 'field'")
+		}
+		if err := t.Reads(a.Field, "number", ExtractIntField); err != nil {
+			return nil, err
+		}
+		if h.CursorDecides == nil {
+			return alwaysFalse[T](), nil
+		}
+		return func(ctx T, _ *fsm.RegionState, payload any) bool {
+			entity, ok := ExtractIntField(payload, a.Field)
+			return ok && h.CursorDecides(ctx, entity)
+		}, nil
+	})
+
 	// PayloadExists reports whether the event carried a payload (useful inside Or)
 	static(m, "PayloadExists", func(_ T, _ *fsm.RegionState, payload any) bool { return payload != nil })
 }

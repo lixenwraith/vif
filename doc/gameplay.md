@@ -593,11 +593,13 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    clears the map; for four seconds text drifts down into it, easing to a rest,
    and `main` resumes with that text. Losing the tower fails the run.
    Encounter transitions preserve uncollected loot.
-6. Any participant reaching zero heat **and** zero energy ends the run. The shared
-   monitor consumes owner-authored defeat state and starts a new game, as `:n`
-   does: the world, the kill tallies and every other statistic start over and the
-   roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
-   also retains its objective-failure and victory conditions.
+6. Any person reaching zero heat **and** zero energy ends the run. A bot doing so,
+   or crushed, ends it only where every cursor in play is a bot's; beside a person
+   it plays on where it stands, and nothing respawns it. The shared monitor consumes
+   owner-authored defeat state and starts a new game, as `:n` does: the world, the
+   kill tallies and every other statistic start over and the roster is rearmed.
+   Every shipped scenario uses this defeat rule; tower defense also retains its
+   objective-failure and victory conditions.
 
 `wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an
 authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,

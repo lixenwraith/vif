@@ -562,7 +562,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 |----------------------------------|----------------------------|
 | `player.<n>.entity`              | Entity id, 0 when empty    |
 | `player.<n>.control`             | 0=this instance drives it (a person or a bot), 2=remote, -1=empty |
-| `player.<n>.peer`, `player.<n>.holder` | Owner participant; for a bot, the participant running it (0 for a person) |
+| `player.<n>.peer`, `player.<n>.holder` | Owner participant; for a held bot, the participant running it (0 for a person and for a bot's own run) |
 | `player.<n>.wraith`              | Owner away, cursor held as a Wraith |
 | `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty or off the map |
 | `player.<n>.energy.current`      | Energy                     |
@@ -577,11 +577,15 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | `player.<n>.typing.max_streak`   | Longest correct run        |
 
 `player.count` and `player.slot` describe the roster.
-`session.any_defeated` becomes true when any rostered cursor reports zero heat
-and zero energy; all shipped scenarios use it for game over.
-`session.all_defeated` serves a scenario that needs unanimous defeat.
-Both derive from replicated owner reports and are safe shared-region guards.
-Reports carry their production tick; a reset rejects reports from the previous attempt.
+`session.any_defeated` becomes true when a cursor whose defeat decides the game
+reports zero heat and zero energy, or is crushed; all shipped scenarios use it for
+game over. Those cursors are the persons' in play, a Wraith being out of it, and
+every one in play where none is a person's: a bot's defeat ends no game beside a
+person. `session.all_defeated`, every one of them defeated, serves a scenario that
+needs unanimous defeat. Both derive from replicated owner reports and shared cursor
+state and are safe shared-region guards. Reports carry their production tick; a
+reset rejects reports from the previous attempt. A transition on the defeat's own
+event runs before the keys move: guard it with `PayloadCursorDecides`.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
@@ -812,6 +816,17 @@ Passes when the payload's species is one of `names`: a code species (`drain`,
 the scenario's behavior programs, each resolved at load. A program's number moves
 with every name that sorts before it, so a guard names it; a name no species holds
 fails the load.
+
+### PayloadCursorDecides
+
+```toml
+{ trigger = "EventCursorCrushed", target = "PlayerCrushed", guard = "PayloadCursorDecides", guard_args = { field = "entity" } }
+```
+
+Passes when the cursor `field` names is one whose defeat decides the game, as the
+`session.*_defeated` keys fold it: a person's in play, or a bot's while no person's
+is. The machine takes an event ahead of the systems, so on a defeat's own event
+those keys still read as before it, and this guard reads the roster instead.
 
 ### PayloadExists
 

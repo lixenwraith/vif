@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -78,6 +79,66 @@ parent = "Root"
 		m.HandleEvent(w, event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{Species: c.species}})
 		if state, _, _ := m.GetActiveRegionTelemetry(); (state == "Hit") != c.hit {
 			t.Fatalf("species %d left the guard in %s, want a hit %v", c.species, state, c.hit)
+		}
+	}
+}
+
+// TestACursorGuardHoldsWhereItsDefeatDecides: PayloadCursorDecides holds for the
+// cursor a payload field names where that cursor's defeat decides the game: a
+// person's, or a bot's with no person's in play, alone or beside a person's Wraith.
+// A trigger carrying no such field fails the load.
+func TestACursorGuardHoldsWhereItsDefeatDecides(t *testing.T) {
+	load := func(trigger string) (*fsm.Machine[*engine.World], error) {
+		m := fsm.NewMachine[*engine.World]()
+		RegisterFSMComponents(m, component.Declared{})
+		return m, m.LoadScenario([]byte(`
+[regions.r]
+initial = "Play"
+
+[states.Play]
+parent = "Root"
+transitions = [{ trigger = "` + trigger + `", target = "Down", guard = "PayloadCursorDecides", guard_args = { field = "entity" } }]
+
+[states.Down]
+parent = "Root"
+`))
+	}
+	if _, err := load("EventDriftCancel"); err == nil {
+		t.Fatal("a trigger carrying no entity loaded")
+	}
+	for name, c := range map[string]struct {
+		bots    []bool // a cursor a slot, the first the one crushed
+		wraith  int    // the slot whose participant is away, none below 1
+		decides bool
+	}{
+		"a person alone":                 {bots: []bool{false}, decides: true},
+		"a bot alone":                    {bots: []bool{true}, decides: true},
+		"a bot beside a bot":             {bots: []bool{true, true}, decides: true},
+		"a person beside a bot":          {bots: []bool{false, true}, decides: true},
+		"a bot beside a person":          {bots: []bool{true, false}},
+		"a bot beside a person's Wraith": {bots: []bool{true, false}, wraith: 1, decides: true},
+	} {
+		w := scratchWorld(t)
+		var cursors []core.Entity
+		for slot, bot := range c.bots {
+			e := w.CreateEntity(core.DomainShared)
+			w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: uint8(slot), Bot: bot})
+			w.Resources.Player.Bind(uint8(slot), e)
+			cursors = append(cursors, e)
+		}
+		if c.wraith > 0 {
+			w.Components.Wraith.SetComponent(cursors[c.wraith], component.WraithComponent{})
+		}
+		m, err := load("EventCursorCrushed")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Init(w); err != nil {
+			t.Fatal(err)
+		}
+		m.HandleEvent(w, event.GameEvent{Type: event.EventCursorCrushed, Payload: &event.CursorCrushedPayload{Entity: cursors[0]}})
+		if state, _, _ := m.GetActiveRegionTelemetry(); (state == "Down") != c.decides {
+			t.Errorf("%s crushed left the guard in %s, want it to decide %v", name, state, c.decides)
 		}
 	}
 }

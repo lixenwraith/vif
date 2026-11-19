@@ -20,7 +20,7 @@ func nativeMenu(tb testing.TB) (*engine.GameContext, *Router, *awaySession) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
 	session := &awaySession{menuSession: menuSession{bots: []engine.BotSeat{{ID: 10, Slot: 2, Graph: "default"}, {ID: 11, Slot: 3, Graph: "idle", Joining: true}, {ID: 12, Slot: 5, Graph: "default", Stopping: true}}},
-		participants: []engine.SessionParticipant{{Entity: 7, Slot: 1}, {Entity: 8, Slot: 4, Holder: 1}, {Entity: 9, Slot: 6, Away: true}}}
+		participants: []engine.SessionParticipant{{Entity: 7, Slot: 1}, {Entity: 8, Slot: 4, Holder: 1, Bot: true}, {Entity: 9, Slot: 6, Away: true}}}
 	ctx.SessionCtl = session
 	r := NewRouter(ctx, input.NewMachine())
 	ExecuteCommand(ctx, "g")

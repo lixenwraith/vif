@@ -63,6 +63,8 @@ func worldHost(declared component.Declared) std.Host[*engine.World] {
 
 		Names: event.PayloadNames(declared),
 
+		CursorDecides: func(w *engine.World, entity int64) bool { return w.DefeatDecides(core.Entity(entity)) },
+
 		// The session root is shared session identity, and the run moves before a
 		// reset re-enters the machine, which the session counter does only after
 		Seed: func(w *engine.World) uint64 {

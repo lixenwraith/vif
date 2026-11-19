@@ -63,7 +63,8 @@ type network struct {
 	while  *binding
 	hidden int
 	genes  []float64
-	blank  bool // every gene is zero: it asks for nothing, and Steer reads nothing for it
+	blank  bool   // every gene is zero: it asks for nothing, and Steer reads nothing for it
+	asked  uint64 // the update, one past its tick, that out was last read and passed for
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
 	out    []float64 // scratch: its units' sums
@@ -174,10 +175,10 @@ func parseNetwork(name string, raw map[string]any, shared []string) (*network, e
 		}
 	}
 
-	// The outputs are named only where one is left out: the digest of a network
-	// with them all is the one its populations are kept under
+	// The outputs are named only where they are not those a network listing none
+	// has: the digest of such a network is the one its populations are kept under
 	layout := fmt.Appendf(nil, "%d %s %d", layoutVersion, strings.Join(names, ","), t.Hidden)
-	if len(had) < len(outputs) {
+	if usual, _ := (&network{}).have(nil); !slices.Equal(had, usual) {
 		layout = fmt.Appendf(layout, " %s", strings.Join(had, ","))
 	}
 	sum := sha256.Sum256(layout)
@@ -185,21 +186,24 @@ func parseNetwork(name string, raw map[string]any, shared []string) (*network, e
 	return n, nil
 }
 
-// have gives the network the outputs listed, every one where none is, and returns
-// their names: their units in the order of at, as its genes hold them, and what
-// acts on each in the order Steer does
+// have gives the network the outputs listed, or with none listed every one that
+// is not asked, and returns their names: their units in the order of at, as its
+// genes hold them, and what acts on each in the order Steer does
 func (n *network) have(listed []string) (had []string, err error) {
 	var at [len(outputs)]int
+	has := func(o int) bool {
+		return len(listed) == 0 && !outputs[o].asked || slices.Contains(listed, outputs[o].name)
+	}
 	for place := range outputs {
 		for o, row := range outputs {
-			if row.at == place && (len(listed) == 0 || slices.Contains(listed, row.name)) {
+			if row.at == place && has(o) {
 				at[o] = len(n.units)
 				n.units = append(n.units, row.units...)
 			}
 		}
 	}
 	for o, row := range outputs {
-		if len(listed) == 0 || slices.Contains(listed, row.name) {
+		if has(o) {
 			had = append(had, row.name)
 			n.acts = append(n.acts, acting{at[o], len(row.units), row.act})
 		}
@@ -343,6 +347,17 @@ func (n *network) pass() []float64 {
 	return n.out
 }
 
+// ask reads the inputs and passes them once an update, however many of the
+// graph's guards and Steers ask in it, and returns the units' sums
+func (n *network) ask(m *mind) []float64 {
+	if n.asked != m.tick+1 {
+		n.asked = m.tick + 1
+		n.read(m)
+		n.pass()
+	}
+	return n.out
+}
+
 // bound is a network a Steer lists and the guard that has it steer, nil for one
 // that always does
 type bound struct {
@@ -364,8 +379,7 @@ func (m *mind) steer(order []bound) {
 		if n.blank || !m.frame() || m.room < 1 {
 			return
 		}
-		n.read(m)
-		out := n.pass()
+		out := n.ask(m)
 		for _, a := range n.acts {
 			if !a.act(m, out[a.at:a.at+a.units]) {
 				return

@@ -78,6 +78,8 @@ type SessionController interface {
 	// BotFiles runs one of BotVerbs that keeps bot files, its word first, and
 	// returns what it tells the operator, a line each.
 	BotFiles(words []string) ([]string, error)
+	// BotGraphs names the graphs a seat of this run can play and whose each is
+	BotGraphs() []BotGraph
 	Participants() []SessionParticipant
 	DropPlayer(slot int) error
 	RemovePlayer(entity core.Entity) error
@@ -155,10 +157,15 @@ type SessionParticipant struct {
 	Entity core.Entity
 	Slot   uint8
 	Holder uint32
+	Bot    bool   // a bot drives it: a seat its holder brought, or a run a bot plays itself
 	Name   string // the account's, attested by the site; empty for an anonymous player
 	Local  bool
 	Away   bool // a Wraith waits in the slot for the participant's return
 }
+
+// BotGraph is a graph a seat can play: its name and whose it is, the player's,
+// an installed one, the scenario's or the shipped
+type BotGraph struct{ Name, Owner string }
 
 type BotSeat struct {
 	ID       uint64 // Holder-local identity; roster slots and participant IDs can be reused

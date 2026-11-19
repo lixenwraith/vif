@@ -642,7 +642,7 @@ func TestADepartureAResetInterruptedIsAnnouncedAgain(t *testing.T) {
 // stands for a departure ahead of it, and one behind it is crossed after it.
 func TestAnArrivalAResetInterruptedIsCrossedAgain(t *testing.T) {
 	type world = func(*engine.World, *NetworkSystem)
-	arrival := event.ParticipantJoinedPayload{Participant: 7, Slot: 2, Key: "key", Name: "name",
+	arrival := event.ParticipantJoinedPayload{Participant: 7, Slot: 2, Key: "key", Name: "name", Bot: true,
 		Record: &event.CursorRecord{Charges: []int{0, 3}, Energy: 4321}}
 	left := event.ParticipantDepartedPayload{Participant: 7, Slot: 2}
 	joins, lost := event.ParticipantJoinedPayload{Participant: 9, Slot: 4}, event.ParticipantDepartedPayload{Participant: 9, Slot: 4}

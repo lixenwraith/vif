@@ -344,12 +344,14 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
       rounds that test promise, and rounds enough to tell its holders apart,
       where one candidate in six goes to the title's test.
 - **`default`'s network `walk`** learns in a run alone, a population a
-  scenario, and writes no weight ([Bots](bots.md#writing-a-graph)). Owed:
-  - a learned walk for the bots seated beside a player, who play what a
-    document writes: the embedded scenario carrying a bot of its own with the
-    walk learned there, as `cave` carries its model, or a seat fielding what
-    its player's population holds. `default` cannot write one itself, as what
-    the embedded scenario teaches loses in `armada`;
+  scenario, which a seat fields too, and writes no weight
+  ([Bots](bots.md#writing-a-graph)). Owed:
+  - a use for the wheel. `td` and `recall` are all text, where it is the
+    network's one say, and 142 rounds of `td` learned nothing by it; a start
+    written by hand that asks for it as a threat nears is the next to try;
+  - a bot of its own for each scenario, the embedded one first, carrying what
+    `default` learns there as `cave` carries its model: what one scenario
+    teaches loses in another, so `default` writes none;
   - the special where heat is scarce. Auto-fire's or the network's is the
     document's `auto_fire`, so learning `cave` takes a copy; a rule handing
     it to a network once that has weights would let one document do both;
@@ -1268,8 +1270,10 @@ and they must leave the keys for a few minutes.
   where they moved, and updates one set of weights live, at each death, in the
   game the bot and the player share. What it is, a network pulled toward the
   player's moves or something else, is to be defined.
-- **Before it**, the game's own changes: a bot's death that does not start the
-  game over, both ships back as they were or a little changed.
+- **Before it**, the game's own changes. A bot's death no longer starts the
+  game over beside a person ([Multiplayer §5.4](multi-player.md#54-wraiths)):
+  it plays on with no energy and no heat until it earns some. Left to decide
+  is what it comes back as, whole as a new game makes it or a little changed.
 - **To decide then**: what of a player is read and where it is kept, since a
   style learned over weeks outlives a session; what the auto-pilot does with
   the special attack, a typed scenario and a player's settings; and how the
@@ -1283,6 +1287,23 @@ The map editor leads this section. Its foundation is the P1 items, in the order
 they stand; the editor follows at P2, on a terminal and in the desktop window, with
 [armada's redesign](#redesign-armada-as-a-vertical-scroller) its first scenario.
 The rest wait.
+
+### Settle what a bot's defeat leaves standing
+
+- Priority: P3
+- Affected files: `internal/system/meta.go`, `internal/engine/world.go`,
+  `internal/app/internal/membership/session.go`, `internal/status`
+- Guide: [Multiplayer §5.4](multi-player.md#54-wraiths)
+
+A bot's defeat ends a game only where every cursor in play is a bot's
+(`World.DefeatDecides`). What that leaves:
+
+- A crush's latch stays set for its game, where a defeat's lifts as the bot
+  earns: the last person leaving a bot crushed long before ends the game at
+  once.
+- A dedicated host sizes its map by the first joiner that names no holder, a
+  run a bot plays itself among them (`noteJoinerReport`'s `firstPerson`).
+- No status key says which slots are bots', so a scenario's guard cannot ask.
 
 ### Hold every scenario to the shared-region rule at load
 
