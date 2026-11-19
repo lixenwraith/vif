@@ -1,7 +1,9 @@
 package system
 
 import (
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
@@ -278,6 +281,121 @@ transitions = [{ trigger = "Tick", guard = "TargetDistance", guard_args = { to =
 	if pos, _ := w.Positions.GetPosition(header); b.Machine.State != hold || pos.X != wardenX || pos.Y != wardenY {
 		t.Fatalf("five seconds on the warden stands at (%d,%d) in state %d, want its post (%d,%d) held",
 			pos.X, pos.Y, b.Machine.State, wardenX, wardenY)
+	}
+}
+
+// TestAWaypointSpansTheFootprintsPlacesMirroredFromTheLeft: x and y run from the
+// footprint flush against the left or top edge to the right or bottom, and mirror
+// reflects x for a body posted left of the middle, so one route flies either side
+func TestAWaypointSpansTheFootprintsPlacesMirroredFromTheLeft(t *testing.T) {
+	program := wardenHead("Mark") + `
+[states.Mark]
+on_enter = [{ action = "Waypoint", payload = { x = 1.0, y = 1.0, mirror = true } }]
+on_update = [{ action = "Freeze" }]
+`
+	ctx, s, left := newProgramWorld(t, program, wardenX, wardenY)
+	w := ctx.World
+	s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: 60, Y: wardenY}})
+	right := w.Components.Behavior.Entities()[1]
+	// The warden is four cells by two, its header the first row's second
+	width, height := w.Resources.Config.MapWidth, w.Resources.Config.MapHeight
+	for header, wantX := range map[core.Entity]int{left: 1, right: width - 3} {
+		if b, _ := w.Components.Behavior.GetComponent(header); b.TargetX != wantX || b.TargetY != height-2 {
+			t.Errorf("posted at x %d the waypoint stored (%d,%d), want (%d,%d)", b.PostX, b.TargetX, b.TargetY, wantX, height-2)
+		}
+	}
+
+	doc, err := toml.NewParser([]byte(strings.Replace(program, "x = 1.0", "x = 1.5", 1))).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), "not fractions of the map") {
+		t.Fatalf("a waypoint past the map compiled: %v", err)
+	}
+}
+
+// TestAnOrbitCarriesItsBodyRoundItsCellTheWayItNames: from off the circle the body
+// settles onto it and laps it in lap_ms, rows read by the cell aspect, clockwise on
+// screen or the other way
+func TestAnOrbitCarriesItsBodyRoundItsCellTheWayItNames(t *testing.T) {
+	for _, clockwise := range []bool{true, false} {
+		program := wardenHead("Circle") + `
+[states.Circle]
+on_enter = [{ action = "Waypoint", payload = { x = 0.5, y = 0.5 } }]
+on_update = [{ action = "Orbit", payload = { to = "stored", radius = 10.0, lap_ms = 4000, clockwise = ` + strconv.FormatBool(clockwise) + ` } }]
+`
+		ctx, s, header := newProgramWorld(t, program, wardenX, wardenY)
+		w := ctx.World
+		b, _ := w.Components.Behavior.GetPtr(header)
+		k, _ := w.Components.Kinetic.GetPtr(header)
+		cx, cy := vmath.Point{X: b.TargetX, Y: b.TargetY}.Center()
+		polar := func() (float64, float64) {
+			dx, dy := k.PreciseX-cx, w.Resources.Config.CellAspect.Circular(k.PreciseY-cy)
+			return math.Atan2(dy, dx), vmath.Magnitude(dx, dy)
+		}
+		for range int(2 * time.Second / parameter.GameUpdateInterval) {
+			stepBehaviors(w, s)
+		}
+		last, _ := polar()
+		swept := 0.0
+		for range int(4 * time.Second / parameter.GameUpdateInterval) {
+			stepBehaviors(w, s)
+			angle, d := polar()
+			if math.Abs(d-10) > 1 {
+				t.Fatalf("clockwise %v: the body runs %.2f cells from the centre, want 10 within one", clockwise, d)
+			}
+			swept += math.Remainder(angle-last, 2*math.Pi)
+			last = angle
+		}
+		// Rows grow downward, so a clockwise lap sweeps the angle up
+		if !clockwise {
+			swept = -swept
+		}
+		if swept < 1.8*math.Pi || swept > 2.2*math.Pi {
+			t.Fatalf("clockwise %v: a lap swept %.2f radians, want one turn its way", clockwise, swept)
+		}
+	}
+}
+
+// TestAnArmedProgramFiresItsMountOnlyInItsArmedStates: a program flagging a state
+// Armed holds its mount's fire in every other, and one naming none fires throughout
+func TestAnArmedProgramFiresItsMountOnlyInItsArmedStates(t *testing.T) {
+	for _, flags := range []string{`["Armed"]`, `[]`} {
+		program := wardenHead("Fire") + `
+[states.Fire]
+duration_ms = 500
+flags = ` + flags + `
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Hold" }]
+
+[states.Hold]
+duration_ms = 500
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Fire" }]
+`
+		const fire = component.BehaviorState(0)
+		ctx, s, header := newProgramWorld(t, program, wardenX+4, wardenY+10)
+		w := ctx.World
+		ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+			Payload: &event.CursorSpawnRequestPayload{X: wardenX + 4, Y: wardenY + 10, Control: uint8(component.ControlLocal)}})
+		mounts, timers := ready(NewMountSystem(w)).(*MountSystem), ready(NewTimerSystem(w))
+		mounts.HandleEvent(event.GameEvent{Type: event.EventMountRequest,
+			Payload: &event.MountRequestPayload{Host: header, Weapon: component.WeaponTurret, IntervalMs: 100}})
+		w.Resources.Event.Queue.Consume()
+		b, _ := w.Components.Behavior.GetPtr(header)
+
+		var shots [2]int // by state
+		for range int(3 * time.Second / parameter.GameUpdateInterval) {
+			timers.Update()
+			stepBehaviors(w, s)
+			mounts.Update()
+			shots[b.Machine.State] += countEvents(w.Resources.Event.Queue.Consume(), event.EventBulletSpawnRequest)
+		}
+		armed := flags != `[]`
+		if shots[fire] == 0 || armed != (shots[1-fire] == 0) {
+			t.Fatalf("flags %s: %d shots in Fire and %d in Hold, want Hold firing only when no state is armed", flags, shots[fire], shots[1-fire])
+		}
 	}
 }
 

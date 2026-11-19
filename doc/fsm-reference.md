@@ -1083,7 +1083,8 @@ target = "Roam"
 - The mount: each spawn asks the mount system for it on its own header
   ([Combat §3](combat.md#3-drivers)), so a program copied into another scenario
   comes armed, and with `spread_ms` no two instances fire in step. An empty table
-  mounts nothing, which is how a macro's default leaves a body unarmed.
+  mounts nothing, which is how a macro's default leaves a body unarmed. A program
+  that flags a state `Armed` fires it only while such a state runs, unstunned.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.
@@ -1132,7 +1133,11 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `FindLanding { to }` (the nearest place the footprint fits around that cell;
   probed at its post ahead of `StoreTarget`, it sends a charge or a teleport back
   to the spawn cell, as armada's ships fly back).
-- Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
+- Effects: `StoreTarget` (the probe's cell, else the target's), `Waypoint { x, y,
+  mirror }` (stores the cell at fractions `x`, `y` of the places the footprint can
+  stand, 0 flush against the left or top edge and 1 the right or bottom; with
+  `mirror` a body posted left of the middle reflects `x`, so a route written for an
+  entry on the right flies mirrored from the left), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
   and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
@@ -1149,7 +1154,11 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   its route, or straight at the stored cell or its post, so a body a wall pushed
   off its post flies back where `Freeze` would leave it), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
-  `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
+  `Orbit { to, radius, lap_ms, clockwise, mirror }` (circles the cell `to` reads,
+  `radius` cells out with rows scaled by the cell aspect, a lap each `lap_ms`,
+  clockwise on screen when set, closing on the circle from off it; `mirror` turns
+  it the other way for a body posted left of the middle), `Drag { rate }` (linear
+  drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
   `Shielded` (no damage, no stun), `ChargeLine` (the charge line: two pulses from
   the body's centre to the centre of the footprint on the stored cell, the landing
@@ -1157,10 +1166,11 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   (`BehaviorChargeLinePulseShare`), so a lock flagged with it shows where a charge
   goes), `TeleportLine` (the teleport line from the body where it stands to the
   same centre, over the entry, for a state that ends in `Teleport` on its
-  timeout's `actions`) and
+  timeout's `actions`),
   `Landing` (the landing marker: the centre of the footprint the body takes on the
   stored cell blinks white, red and pink, so flagging the lock, the charge and the
-  teleport marks where an attack lands until it does).
+  teleport marks where an attack lands until it does) and `Armed` (the body's mount
+  fires: a program that flags any state so fires it in those alone).
 
 The target is the cursor nearest the header, read from the Shared positions with
 the lower roster slot taking a tie, so every instance of a session aims alike. Hit
