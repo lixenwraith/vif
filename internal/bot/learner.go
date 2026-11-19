@@ -19,8 +19,8 @@ import (
 // What the learner searches by. A population whose graph writes no weight plays
 // learnPool genomes drawn learnSpread of a weight's bound about zero first. A step
 // is learnStep of a weight's range. Every learnRepeat-th candidate is a member
-// again, learnProven rounds prove one, learnProbation slots stay with the
-// unproved, and recent looks back learnRecent.
+// again, learnProven rounds prove one, learnTrust at the recent mean weigh every
+// mean, learnProbation slots stay the unproved's, recent looks back learnRecent.
 const (
 	learnPool      = 32
 	learnSpread    = 0.03
@@ -29,6 +29,7 @@ const (
 	learnKeep      = 0.9
 	learnRepeat    = 3
 	learnProven    = 8
+	learnTrust     = 2
 	learnProbation = 24
 	learnRecent    = 200
 
@@ -374,10 +375,10 @@ func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float
 }
 
 // trusted is a member's mean as its rounds are trusted for: weighed with
-// learnProven rounds at the population's recent mean, so a few lucky rounds do
-// not outrank many good ones.
+// learnTrust rounds at the population's recent mean, which is what its later
+// rounds bear out, so a few lucky rounds do not outrank many good ones.
 func trusted(c genetic.Candidate[[]float64, float64], recent float64) float64 {
-	return (c.Score*float64(c.Count) + recent*learnProven) / float64(c.Count+learnProven)
+	return (c.Score*float64(c.Count) + recent*learnTrust) / float64(c.Count+learnTrust)
 }
 
 // rank keys the archive for the engine by what its members' rounds prove: each

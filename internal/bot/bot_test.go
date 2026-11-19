@@ -1072,7 +1072,7 @@ func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 	l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest,
 		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
 		member{Genes: genome(0.2), Score: 60, Rounds: learnProven},
-		member{Genes: genome(0.3), Score: 50, Rounds: 4 * learnProven},
+		member{Genes: genome(0.3), Score: 50, Rounds: 16 * learnProven},
 		member{Genes: genome(0.4), Score: 30, Rounds: 1}))
 	if err != nil {
 		t.Fatal(err)
@@ -1923,7 +1923,7 @@ func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	doc := func(version int, layout string) *memory {
 		data, err := json.Marshal(population{Version: version, Layout: layout, Rounds: 70, Recent: 12.5, Members: []member{
-			{Genes: genome(0.1), Score: 90, Rounds: 2}, {Genes: genome(0.2), Score: 60, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
+			{Genes: genome(0.1), Score: 90, Rounds: 2}, {Genes: genome(0.2), Score: 54, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
 		if err != nil {
 			t.Fatal(err)
 		}
