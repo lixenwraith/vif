@@ -230,6 +230,8 @@ bots = ["bot/cave.toml", "bot/seed.toml"]
 - The first is the scenario's own bot: what a seat that names no graph plays, from
   `-bot`, `-bot 2`, `:bot` and `:bot 2` alike. A scenario that lists none has
   `default` play.
+- The embedded scenario carries `main`, `default`'s graph with a walk learned
+  there ([Examples](#examples)).
 - A player's graph of the same name plays in the scenario's place, so a copy is
   how one is changed, which `create <name> import <graph>` writes
   ([A player's bot files](#a-players-bot-files)); what any of them learns is
@@ -443,6 +445,17 @@ td          0.1%        12,952    16,479  (one seed)          1,200,000         
 - With every input, 367, `walk` learns no better, its population 1.9 MB for
   860 KB: the embedded scenario 633,036, 691,680 and 668,874, and `armada`
   3,160, 10,318 and 27,390.
+
+The embedded scenario's own bot,
+[`main`](../internal/asset/scenario/bot/main.toml), is `default`'s graph with
+the first of those walks written as its weights. Over 100 fresh rounds of half
+an hour, seeds 201 to 204, it fields 709,690 and a median of 720,658 where
+`default` unlearned fields 624,846 and 620,337: it meets fourteen Krakens in
+92 rounds and shoots all down in 78, where the unlearned walk meets twelve in
+73. A solo run learns on from it in a population of its own,
+`main.main.walk.json`. What `default` learned there stays `default`'s, which
+`-bot default` plays; its file under `main`'s name is `main`'s, the layout
+being one.
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph the scenario carries is held

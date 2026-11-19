@@ -147,7 +147,7 @@ func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 }
 
 // shippedGraphs is every bot graph that ships, by name: the embedded ones and those
-// a scenario of the checkout's wad carries for its map.
+// a scenario carries for its map, the embedded one and each of the checkout's wad.
 func shippedGraphs(t *testing.T) map[string][]byte {
 	t.Helper()
 	graphs, err := shipped()
@@ -165,7 +165,7 @@ var shipped = sync.OnceValues(func() (map[string][]byte, error) {
 			return nil, err
 		}
 	}
-	for _, scenario := range resource.Scenarios(resource.Options{Dir: soakRoot})[1:] {
+	for _, scenario := range resource.Scenarios(resource.Options{Dir: soakRoot}) {
 		sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: scenario})
 		if err != nil {
 			return nil, err

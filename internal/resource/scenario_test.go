@@ -581,6 +581,23 @@ func TestAScenarioCarriesItsBotsAsFilesOfItsOwn(t *testing.T) {
 	}
 }
 
+// TestTheEmbeddedScenarioCarriesItsOwnBot: main, which a seat naming no graph plays
+// there, where default is still had by its name
+func TestTheEmbeddedScenarioCarriesItsOwnBot(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	o := Options{Embedded: true}
+	sc, err := LoadScenario(o)
+	if err != nil || !slices.Equal(sc.Bots(), []string{"main"}) {
+		t.Fatalf("the embedded scenario carries %v, %v; want main", sc.Bots(), err)
+	}
+	for spec, want := range map[string]string{"": "main", "main": "main", DefaultBot: DefaultBot} {
+		if data, name, err := BotGraph(o, sc, spec); err != nil || name != want || len(data) == 0 {
+			t.Fatalf("bot %q in the embedded scenario is %q, %v; want %s", spec, name, err, want)
+		}
+	}
+}
+
 // flyer is a bot of two networks, fly and kraken, each with the table given
 func flyer(fly, kraken string) string {
 	return "# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
