@@ -75,6 +75,11 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - A seated bot belongs to its holder, so it is never a candidate: the
   succession list holds only independent participants. A watched or headless bot is one and
   takes over as any other does, where its run says so (`-listen`, `[play] takeover`).
+- A bot's defeat or crush ends the game only where every cursor in play is a
+  bot's, this run's or another's: a seat, or a run `-bot` plays itself. Beside a
+  person it plays on where it stands, and the game ends at a person's defeat, at
+  `:n`, or as the last person leaves a bot that is down
+  ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - `:leave` takes your bots out of the session with you: they leave it first and
@@ -95,11 +100,27 @@ into the session it joins, and `:leave` takes them out of one with the run.
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
 | `:bot list` | Every graph a seat can play with what it has learned here, then this run's bots: slot, graph, joining or leaving. |
 | `:bot create`, `import`, `export`, `clear` | Keep a player's bot files ([below](#a-players-bot-files)). |
-| `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3`, or `5 player (away)` for one who left. |
+| `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3` for a seat, `6 bot` for a run a bot plays itself, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
 
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 [configuration menu](config-menu.md#bots) offers the same operations.
+
+Which bot a seat plays is its player's to choose, and each plays what the
+player's runs have taught it in the scenario, or what its graph writes where
+they taught it nothing. After `-bot`, after `:bot` and in the menu alike:
+
+- no graph: the scenario's own, the model it carries, or `default` where it
+  carries none;
+- `seed`, or any other the scenario carries: as `cave`'s start written by hand;
+- `default`: the shipped generic bot;
+- `mine`, a copy of yours to train on: `create mine import cave` or `import
+  seed` first, a run of it alone learns, and `clear mine` starts it over;
+- a fresh one: `create mine`, the scenario's own with no weight;
+- a graph you wrote: its path, or its name once it is in the user root's `bot/`.
+
+A graph of the scenario's or `default` that your runs taught plays as taught;
+`clear` it to have what is shipped again, or train a copy and leave it be.
 
 The words after `-bot` are the words after `:bot`, one grammar
 (`engine.BotVerbs`): `-bot`, `-bot 2:cave` and `-bot add 2:cave` seat bots as the
@@ -280,6 +301,7 @@ or no cell gains ground.
 | `Idle` | none | the intent queue is empty |
 | `InState` | `region`, `states` | the scenario's region runs and, where `states` names any, is in one of them or in a state within one |
 | `Own` | `field` | that event payload field names the bot's own cursor |
+| `Asks` | `output`, `above`, `network` | the network's output of one unit, `special` or `wheel`, reads above `above` (0) this update; a graph's one network needs no name, and one with no weight asks nothing |
 
 ### Targets
 
@@ -353,58 +375,73 @@ transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", g
 ```
 
 The shipped [`default`](../internal/asset/bot/default.toml) types text left to
-right and collects nuggets between patrols:
+right, backs off a threat on it and collects nuggets between patrols:
 
 | State | Does | Moves on |
 |---|---|---|
-| `Seek` | points at the nearest glyph | to `Gold` if gold exists, `Nugget` if one is within 12, `Type` on a glyph, `Walk` with no glyph |
-| `Type` | types the glyph under the cursor | to `Seek` once off text |
+| `Seek` | points at the nearest glyph | to `Flee` if a threat is within 3, `Walk` if its network asks for the wheel, `Gold` if gold exists, `Nugget` if one is within 12, `Type` on a glyph, `Walk` with no glyph |
+| `Type` | types the glyph under the cursor | to `Flee` or `Walk` as `Seek` does, else to `Seek` once off text |
 | `Gold` | jumps to gold and types it | to `Seek` when off gold, 1.5 s after entering |
-| `Walk` | now and then moves 2 to 10 cells, and points where its network `walk` asks | to `Seek`, `Gold` or `Nugget` once one exists; at 1% an update to `Leap` |
+| `Walk` | now and then moves 2 to 10 cells, and points where its network `walk` asks | stays while `walk` asks for the wheel; to `Seek`, `Gold` or `Nugget` once one exists; at 1% an update to `Leap` |
+| `Flee` | points away from the nearest threat | to `Seek` once none is within 5 |
 | `Leap` | clicks a random shown cell | to `Walk` after 0.4 s |
 | `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
 
 `walk` is `default`'s one network and the catalogue's stress test: loaded with
 every input, then left the 161 that read anything while it steered in the
-embedded scenario, `cave` and `td`. Text, gold and nuggets are the typing
-states' to reach, and no other cursor, missile or third landing was in view. No
-weight is written for it, so a bot seated beside a player asks nothing of it and
-plays as its states say. A run of `default` alone learns it
-([Learning](#learning)), a population a scenario, and closes a round each half
-hour where the game ends none. What that fields held out, from nothing on three
-seeds: in the embedded scenario after four games' 4,800,000 ticks, 132 rounds
-and two minutes on four cores, over 24 half-hour rounds; in `cave` after one
-game's 600,000, some 3,700 rounds, over 100:
+embedded scenario, `cave` and `td`. It has the wheel while no text is left, and
+while it asks for it past a mark of 1 (`Asks`), which genomes drawn at random
+seldom reach, so text comes first until a run learns otherwise. No weight is
+written for it: until a player's runs have taught it a scenario, a bot plays
+there as its states say. A run of `default` alone learns it
+([Learning](#learning)), a population a scenario, closing a round each half
+hour where the game ends none, and what that holds is what `default` plays in
+the scenario from then on, a seat beside its player too. Held out, unlearned
+and learned from nothing on three seeds:
 
 ```
-scenario    in Walk   unlearned   walk learned
-embedded      18%       622,620   704,339  681,384  674,730
-cave          90%           215       258      247      225
-td           0.1%
+scenario   no text   unlearned   learned                      learning          rounds held out
+embedded     18%       624,495   708,250  664,177  676,883    4,800,000 ticks   24 of half an hour
+armada       93%           193     8,633    9,310    5,196    2,400,000         100
+cave         90%           216       224      239      232      600,000         100
+td          0.1%        12,952   TDLEARNED                    1,200,000         12
 ```
 
+- The ticks are four games', one in `cave`: two minutes on four cores in the
+  embedded scenario, 132 rounds; 15 seconds in `armada`, some 400; eight
+  minutes in `td`, TDROUNDS.
+- Backing off a threat is `default`'s own, a state and no weight. Without it a
+  round of `td` scores 3,923, its median 3,936, and lasts 6,537 ticks, where
+  with it the median is 6,494 over 12,387; the other three play as they did,
+  622,620, 193 and 215. Written as weights for `walk` to steer by, the same
+  reflex gained in `td` between nothing and seven tenths of that, by its
+  strength and the seed.
 - The embedded scenario pays by its Krakens: 97 in 100 of what `default` earns
-  is their bounty, 50,000 each, twelve a half hour and a thirteenth in one
-  round of 24. A learned walk shoots one or two more down. Seed 1's fields
-  698,025 on 24 rounds of other seeds, and written into the document earns
-  12.7 million over an unbroken game's 600,000 ticks where none earns 11.4.
-- A round must span what pays: closed every five minutes, before the second
-  Kraken, 99 rounds learned nothing that 48 could tell from none.
-- What is learned there is no place to stand. The three walks idle mostly in
+  is their bounty, 50,000 each, twelve a half hour, and a learned walk shoots
+  one or two more down. One learned before the reflex earned 12.7 million
+  over an unbroken game's 600,000 ticks where none earned 11.4. A round must
+  span what pays: closed every five minutes, before the second Kraken, 99
+  rounds learned nothing that 48 could tell from none.
+- What is learned there is no place to stand. Three such walks idle mostly in
   the view's lower corners, 16 to 17 ticks in 100 for the unlearned 20, yet a
   walk written to hold a corner of the view loses 6 to 12 in 100 and one that
   holds its middle 17.
+- In `armada`, with no text at all, the walk is the play: a learned round lasts
+  12,000 to 23,000 ticks for 848.
 - What is learned is its scenario's. The embedded scenario's walk written into
   `default` earns -8,304 and -6,352 over `armada`'s 60,000 ticks where none
-  earns 7,868 and 7,024, and nothing either way in `td` and `cave`. So
-  `default` writes none, and a bot seated beside a player has a learned walk
-  only from a graph that writes one, as `export` makes of a population.
+  earns 7,868 and 7,024. So `default` writes none.
+- The wheel has taught nothing yet. The embedded scenario and `armada` learn
+  with it as they did without, which fielded 674,730 to 704,339 and 2,165 to
+  11,957, and in `td`, where it is the network's one say, 142 rounds fielded
+  3,767 beside 3,923 unlearned, before the reflex.
 - In `cave` auto-fire's special spends the heat a ship lives on, so `walk`
-  learns little there, a round of 158 ticks grown to 170 to 195. A copy that
-  sets `auto_fire = "main"` and drops its `outputs` line, so `walk` asks for
-  the special too, fields 35,341, 1,734 and 3,001 after the same ticks, their
-  medians 2,446, 910 and 1,067. With every input, 369, `walk` learns `cave`
-  as shipped no better: 251, 236 and 253.
+  learns little there. A copy that sets `auto_fire = "main"` and lists
+  `special` among `walk`'s outputs, to ask for it itself, fielded 35,341,
+  1,734 and 3,001 after the same ticks, their medians 2,446, 910 and 1,067.
+- With every input, 367, `walk` learns no better, its population 1.9 MB for
+  860 KB: the embedded scenario 633,036, 691,680 and 668,874, and `armada`
+  3,160, 10,318 and 27,390.
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph the scenario carries is held
@@ -533,6 +570,12 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   has no weights. Each unit of an output, `special`, `x` and `y`, is the direct
   sum of its weights over the inputs plus the hidden units' and its bias, a
   weight within 4 either side of zero.
+  - `wheel` is had only by listing it, and `Steer` does nothing with it: the
+    graph reads it by the guard `Asks`, so its states hand over while the
+    network asks and take the wheel back when it stops. The mark `Asks` reads
+    it above is the graph's lean: genomes drawn at random seldom pass 1.
+  - A network is read and passed once an update, however many guards and
+    `Steer`s of the graph ask.
 - A graph may write any weight: a unit's table (`x`, `y`, `special`) gives its
   weight from each input by name, its `bias` and, as `hidden`, a weight a hidden
   unit in their order, and `units` lists a table a hidden unit, its weight from
@@ -609,9 +652,10 @@ end, and all the rest for `raid`.
   beats is scored and the next one plays. `cave` takes half an hour: a limit
   under a fight's length scores it before its kill pays, and with 150 seconds
   its own model learned on to one that fields 20,441 for 300,260.
-- A run in a session does not learn, since any participant's defeat ends every
-  round there: its bots, seats among them, play what is fielded. A round an
-  operator ends (`:n`) scores nothing.
+- A run in a session does not learn, since a round there is not its bot's
+  alone: others' play ends it, a person's defeat, or any bot's where only bots
+  play. Its bots, seats among them, play what is fielded. A round an operator
+  ends (`:n`) scores nothing.
 - A bot alone plays `-size`, else 120x40, watched or not, so one population is
   scored by one game: stop a headless run, start a watched one, and it goes on
   from the same files.

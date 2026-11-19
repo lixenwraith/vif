@@ -1103,6 +1103,32 @@ Libraries · Branches.
   at the same round length: a state and a guard keeping `default`'s own drift
   out of a learned walk's way fielded 696,029 where the graph as merged
   fielded 704,339.
+- A seat fields what its player's population holds: `PlaySeat` builds the
+  learners a run in a session does. Read what a seated bot plays on a run of two
+  bots with and without the population in the user root, at `-speed 8`, as a
+  session cannot run flat out.
+- `armada` is the quick map to try a graph on: four games' 2,400,000 ticks take
+  15 s on four cores, where `td` takes 1.4 ms a tick. Try a reflex by hand
+  before asking a learner for it: backing off a threat within three cells
+  doubled `default` in `td`, and 142 rounds of learning found none of it.
+- An output added to the catalogue is asked (`outputRow.asked`): given to every
+  network that lists none, `cave`'s two would grow a unit, their layouts change
+  and every population of theirs start over.
+- The scenario machine takes an event before any system handles it
+  (`Scheduler.dispatchOnePass`), so a transition on an event reads the status
+  keys as they stood: guard it on the world (`PayloadCursorDecides`), not on a
+  key the event is about to move.
+- Whether a bot plays a run reaches its replay only by the session latch's note
+  (`SessionState.Bot`). `drive` with kind "bot", so `driveBot`, marks its run a
+  bot's; `playBot` and a bare `NewHeadless` with a driver do not, and a harness
+  built so holds a person's cursor, whose defeat ends its game as before.
+- A gameplay change is held against `cave`'s own bot learning alone, before
+  and after on one seed: 200,000 ticks of it are 81,549 actions and a fitness
+  of 1,838,475 on seed 1, which a trainer's populations rest on.
+- A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`:
+  keep it out of commits (`.git/info/exclude`) and out of a search
+  (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd`
+  into the worktree moves the shell there.
 - Heat is what stands between an empty shield and a defeat in `cave`, a touch
   taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
   the 10 a game starts with in its first seconds, on blasts wherever dust lies.

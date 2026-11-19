@@ -750,6 +750,47 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "fly"] } }]
 	}
 }
 
+// TestAsksHoldsWhileANetworksOutputReadsAboveItsMark: a graph hands its states
+// over to what a network asks for. Asks holds while the one-unit output it names
+// reads above its mark, which no network without weights does. The wheel is had
+// only by listing it, Steer does nothing with it, and a network that lists no
+// output keeps special and move.
+func TestAsksHoldsWhileANetworksOutputReadsAboveItsMark(t *testing.T) {
+	doc := func(weights, args string) string {
+		return "[bot]\nactions_per_second = 20\n[network.fly]\ninputs = [\"column\"]\noutputs = [\"move\", \"wheel\"]\n" + weights + `
+[regions.play]
+initial = "Own"
+
+[states.Own]
+transitions = [{ trigger = "Tick", target = "Asked", guard = "Asks", guard_args = { ` + args + ` } }]
+
+[states.Asked]
+on_update = [{ action = "Steer" }]
+`
+	}
+	for _, c := range []struct{ weights, args, want string }{
+		{"", `output = "wheel"`, "play:Own"},
+		{"wheel = { bias = 0.5 }", `output = "wheel"`, "play:Asked"},
+		{"wheel = { bias = 0.5 }", `output = "wheel", above = 1`, "play:Own"},
+		{"wheel = { bias = 1.5 }", `output = "wheel", above = 1, network = "fly"`, "play:Asked"},
+	} {
+		_, ctx := soloWorld(10, 2)
+		d, rec := botFor(t, ctx, doc(c.weights, c.args), 4)
+		if got := d.Stats().State; got != c.want || len(rec.got) != 0 {
+			t.Fatalf("with weights %q and %s the graph is in %s having sent %+v, want %s and nothing sent", c.weights, c.args, got, rec.got, c.want)
+		}
+	}
+	for _, args := range []string{`output = "move"`, `output = "special"`, `output = "wheel", network = "walk"`} {
+		if _, err := ParseGraph("net", []byte(doc("", args))); err == nil {
+			t.Fatalf("an Asks of %s loaded, want it refused: an output of one unit that a network of the graph has", args)
+		}
+	}
+	g, err := ParseGraph("net", []byte(steering(`inputs = ["column"]`)))
+	if err != nil || !slices.Equal(g.nets[0].units, []string{"x", "y", "special"}) {
+		t.Fatalf("a network listing no output has the units %v (%v), want x, y and special", g.nets[0].units, err)
+	}
+}
+
 // TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive: a positive special
 // asks for the special attack ahead of the move, as often as auto-fire would, and
 // takes the update's one intent where the rate leaves no second; at zero, as with

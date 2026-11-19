@@ -651,19 +651,25 @@ var sensors = func() (rows []sensor) {
 	return rows
 }()
 
-// outputs is what a network asks for, in the order Steer acts on it: a key ahead
-// of the move, as a hand presses one on its way. units names the tables a graph
-// writes an output's weights in, a unit each, which a network's weights hold in
-// the order of at, and act reports whether the step has room for more.
-var outputs = [...]struct {
+type outputRow struct {
 	name  string
 	at    int
 	units []string
 	doc   string
 	act   func(m *mind, out []float64) bool
-}{
-	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial},
-	{"move", 0, []string{"x", "y"}, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point},
+	asked bool
+}
+
+// outputs is what a network asks for, in the order Steer acts on it: a key ahead
+// of the move, as a hand presses one on its way. units names the tables a graph
+// writes an output's weights in, a unit each, which a network's weights hold in
+// the order of at, and act reports whether the step has room for more. One that
+// is asked has only the networks that list it; one listing none has the rest.
+var outputs = [...]outputRow{
+	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial, false},
+	{"move", 0, []string{"x", "y"}, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point, false},
+	{"wheel", 2, []string{"wheel"}, "asks its graph for the wheel: Steer does nothing with it, and the guard Asks holds while it is above what the guard names. A network has it only by listing it",
+		func(*mind, []float64) bool { return true }, true},
 }
 
 // specialIntent is how a network asks for the special attack, as a key does

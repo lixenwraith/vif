@@ -248,6 +248,7 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 	m.nets[0].blank = false // it reads as one with a weight written does
 	if allocs := testing.AllocsPerRun(100, func() {
 		m.fresh, m.room = [targetCount]bool{}, 1
+		m.tick++ // an update reads once
 		m.steer(order)
 		m.nearest(kindThreat)
 		m.nearest(kindKraken)

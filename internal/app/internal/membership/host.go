@@ -60,6 +60,9 @@ func (c Control) BotFiles(words []string) ([]string, error) {
 	}
 	return lines, err
 }
+func (c Control) BotGraphs() []engine.BotGraph {
+	return resource.BotGraphs(c.m.run.Resources(), *c.m.scenario)
+}
 func (c Control) HostError() error  { return c.m.hostErrorLocked() }
 func (c Control) JoinError() error  { return c.m.joinErrorLocked() }
 func (c Control) Leave() error      { return c.m.leaveLocked() }
@@ -280,7 +283,7 @@ func (c Control) Participants() []engine.SessionParticipant {
 	for slot := range parameter.MaxPlayers {
 		e := c.m.world.Resources.Player.Slot(uint8(slot))
 		if p, ok := c.m.world.Components.Cursor.GetComponent(e); ok {
-			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder, Name: p.Name,
+			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder, Bot: p.Bot, Name: p.Name,
 				Local: c.m.world.SimulatesLocally(e), Away: c.m.world.Components.Wraith.HasEntity(e)})
 		}
 	}
