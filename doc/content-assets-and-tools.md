@@ -188,7 +188,7 @@ banks aside, which the audio module's `bank` package embeds:
 | Content bundle | `internal/asset/content/*.toml` | Always-available tutorial corpus. |
 | Keymaps | `internal/asset/input/*.toml` | `keymap.toml`, the default bindings, and those `-k` reads over it by name, as `vim.toml`; also what `make install-config` installs. |
 | Settings | `internal/asset/vif.toml` | The defaults a root's `vif.toml` overrides; also installed. |
-| Bot graphs | `internal/asset/bot/*.toml` | `default`, the generic graph, bound to no scenario; also installed. A scenario's own bots are its files (`wad/scenario/base/cave/bot/`). |
+| Bot graphs | `internal/asset/bot/*.toml` | `default`, the generic graph, bound to no scenario; also installed. A scenario's own bots are its files (`wad/scenario/base/cave/bot/`, and the embedded scenario's `internal/asset/scenario/bot/`). |
 | Sound bank | the audio module's `bank/sfx.toml`, `drums.toml`, `voices.toml` | Built-in specs the engine renders and the tonal voices it plays, a later file overriding an earlier one by name. |
 | Music bank | the audio module's `bank/music.toml` | Built-in patterns the conductor arranges. |
 | Version stamp | `internal/asset/version.txt` | Tag and commit `git archive` writes for `-version`. |

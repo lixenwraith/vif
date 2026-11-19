@@ -249,6 +249,12 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   `-s` alone; the menu's Bots page names populations only through its Bot
   files row; and `clear` in a run learning the population is undone by that
   run's next save.
+- **Training on from `main`'s model.** The embedded scenario's bot is
+  `default`'s graph with a walk two minutes of four games fielded, 133 rounds,
+  and no trainer has run on from it. A round pays by its Krakens, 50,000 each,
+  so its score moves in steps: the model fields 709,690 over 100 held-out
+  rounds, fourteen Krakens down in 78, and whether a walk brings a fifteenth
+  inside the half hour is not known ([Bots](bots.md#examples)).
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and a run can field less than it began
   with: of eight read on the model before this one, two field 284,269 and

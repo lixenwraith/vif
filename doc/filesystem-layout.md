@@ -18,7 +18,8 @@ anything. The embedded keymaps, the generic bot graph and `vif.toml` have no
 `wad/` copy: they are installed from `internal/asset/input/`,
 `internal/asset/bot/` and `internal/asset/vif.toml`, so the file the binary
 falls back to and the file a user edits are one source. A scenario's own bots
-are files of the scenario, as `cave`'s in `wad/scenario/base/cave/bot/`.
+are files of the scenario, as `cave`'s in `wad/scenario/base/cave/bot/` and the
+embedded one's in `internal/asset/scenario/bot/`.
 
 ```text
 wad/                            internal/asset/
