@@ -957,9 +957,15 @@ A notice dismisses only a seat, which its holder dropped; a player whose link
 closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
 A defeat is the persons left in play: a Wraith neither loses nor holds one up, and
-nor does a bot beside a person, whose defeat or crush ends no game and leaves it
-playing where it stands. Where every cursor in play is a bot's, this node's or
-another's, they decide as persons would, so a person leaving a defeated bot behind
+nor does a bot beside a person, whose defeat or crush ends no game. `MetaSystem`
+keeps the tick each latch was set at, and `BotRespawnTicks` later, a second of
+game time, asks for that bot's cursor to be equipped again
+(`EventCursorRespawnRequest`): the boot request's heat and energy, the innate
+loadout, and the free cell nearest the one a cursor starts on, announced as
+spawned, which lifts its defeat. Every instance holds the latch from one tick, so
+each asks at the same one, and the tick travels with the meta system's record.
+Where every cursor in play is a bot's, this node's or another's, they decide as
+persons would and none comes back, so a person leaving a bot inside that second
 ends the game (`World.DefeatDecides`, which the session's defeat keys and the
 scenario guard `PayloadCursorDecides` read).
 

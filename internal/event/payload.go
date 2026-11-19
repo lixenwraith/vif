@@ -991,6 +991,12 @@ type CursorWraithRequestPayload struct {
 	Slot uint8 `toml:"slot"`
 }
 
+// CursorRespawnRequestPayload names the slot whose cursor is equipped again as a
+// new game equips one: a bot's that went down beside a person, whose game goes on.
+type CursorRespawnRequestPayload struct {
+	Slot uint8 `toml:"slot"`
+}
+
 // CursorMoveRequestPayload asks for an absolute placement of an explicitly named cursor;
 // the producer has already validated the destination. Pointer marks a cell the mouse
 // named, which APM admits at a lower rate.

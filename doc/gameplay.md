@@ -595,7 +595,8 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    Encounter transitions preserve uncollected loot.
 6. Any person reaching zero heat **and** zero energy ends the run. A bot doing so,
    or crushed, ends it only where every cursor in play is a bot's; beside a person
-   it plays on where it stands, and nothing respawns it. The shared monitor consumes
+   it is equipped again a second later, at its starting cell with a new game's
+   heat, energy and loadout. The shared monitor consumes
    owner-authored defeat state and starts a new game, as `:n` does: the world, the
    kill tallies and every other statistic start over and the roster is rearmed.
    Every shipped scenario uses this defeat rule; tower defense also retains its

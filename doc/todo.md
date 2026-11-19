@@ -1280,8 +1280,7 @@ and they must leave the keys for a few minutes.
   player's moves or something else, is to be defined.
 - **Before it**, the game's own changes. A bot's death no longer starts the
   game over beside a person ([Multiplayer §5.4](multi-player.md#54-wraiths)):
-  it plays on with no energy and no heat until it earns some. Left to decide
-  is what it comes back as, whole as a new game makes it or a little changed.
+  it comes back a second later, whole as a new game makes it.
 - **To decide then**: what of a player is read and where it is kept, since a
   style learned over weeks outlives a session; what the auto-pilot does with
   the special attack, a typed scenario and a player's settings; and how the
@@ -1304,11 +1303,9 @@ The rest wait.
 - Guide: [Multiplayer §5.4](multi-player.md#54-wraiths)
 
 A bot's defeat ends a game only where every cursor in play is a bot's
-(`World.DefeatDecides`). What that leaves:
+(`World.DefeatDecides`), and beside a person it comes back a second later. What
+that leaves:
 
-- A crush's latch stays set for its game, where a defeat's lifts as the bot
-  earns: the last person leaving a bot crushed long before ends the game at
-  once.
 - A dedicated host sizes its map by the first joiner that names no holder, a
   run a bot plays itself among them (`noteJoinerReport`'s `firstPerson`).
 - No status key says which slots are bots', so a scenario's guard cannot ask.

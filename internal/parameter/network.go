@@ -121,6 +121,10 @@ const (
 	// session ages nobody's wait, and two minutes covers a reload or a reconnect.
 	WraithTimeout = 2 * time.Minute
 
+	// BotRespawnTicks is how long a bot that went down beside a person stays down
+	// before it is equipped again: a second of game time, long enough to be seen.
+	BotRespawnTicks = uint64(time.Second / GameUpdateInterval)
+
 	// PlacesKept is how many places a process keeps the keys of to come back to its
 	// sessions with: a player and every bot it can hold, twice, so one joined since
 	// still leaves the last session's places to return to. A dial proves at most

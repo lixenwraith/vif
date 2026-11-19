@@ -344,6 +344,8 @@ const (
 	EventCursorDespawned
 	// EventCursorWraithRequest (CursorWraithRequestPayload) [shared] asks CursorSystem to turn a departed participant's cursor Wraith
 	EventCursorWraithRequest
+	// EventCursorRespawnRequest (CursorRespawnRequestPayload) [shared] asks CursorSystem to equip a slot's cursor again as a new game does: a bot's that went down beside a person
+	EventCursorRespawnRequest
 	// EventCursorMoveRequest (CursorMoveRequestPayload) [bus] asks CursorSystem to place a cursor
 	EventCursorMoveRequest
 	// EventCursorMoved (CursorMovedPayload) [shared] announces an applied cursor position

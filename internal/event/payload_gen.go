@@ -115,6 +115,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventCursorDespawnRequest:            func() any { return new(CursorDespawnRequestPayload) },
 	EventCursorDespawned:                 func() any { return new(CursorDespawnedPayload) },
 	EventCursorWraithRequest:             func() any { return new(CursorWraithRequestPayload) },
+	EventCursorRespawnRequest:            func() any { return new(CursorRespawnRequestPayload) },
 	EventCursorMoveRequest:               func() any { return new(CursorMoveRequestPayload) },
 	EventCursorMoved:                     func() any { return new(CursorMovedPayload) },
 	EventCursorPredicted:                 func() any { return new(CursorMoveRequestPayload) },
@@ -291,6 +292,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventCursorDespawnRequest:            &codecCursorDespawnRequestPayload,
 	EventCursorDespawned:                 &codecCursorDespawnedPayload,
 	EventCursorWraithRequest:             &codecCursorWraithRequestPayload,
+	EventCursorRespawnRequest:            &codecCursorRespawnRequestPayload,
 	EventCursorMoveRequest:               &codecCursorMoveRequestPayload,
 	EventCursorMoved:                     &codecCursorMovedPayload,
 	EventCursorPredicted:                 &codecCursorMoveRequestPayload,
@@ -1363,6 +1365,14 @@ func (p *CursorWraithRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecCursorWraithRequestPayload = structCodec{size: unsafe.Sizeof(CursorWraithRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(CursorWraithRequestPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *CursorRespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorRespawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorRespawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorRespawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorRespawnRequestPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 }}
 
 func (p *CursorMoveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
