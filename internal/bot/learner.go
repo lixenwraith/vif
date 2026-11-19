@@ -29,7 +29,7 @@ const (
 	learnKeep      = 0.9
 	learnRepeat    = 3
 	learnProven    = 8
-	learnTrust     = 2
+	learnTrust     = 4
 	learnProbation = 24
 	learnRecent    = 200
 
