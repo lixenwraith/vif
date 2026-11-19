@@ -1062,9 +1062,10 @@ func TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce(t *testing.T) {
 }
 
 // TestRepeatsTestTheTitleAndProveTheBestGuessByTurns: every third candidate is a
-// member again, by turns the less played of the fielded and its rival, the two
-// most trusted, and the most trusted short of its proof. What is fielded is the
-// most trusted of the proved: a few lucky rounds do not unseat many good ones.
+// member again, by turns the less played of the fielded and its rival, the other
+// proved member of the highest mean though another is trusted more, and the most
+// trusted short of its proof. What is fielded is the most trusted of the proved:
+// a few lucky rounds do not unseat many good ones.
 func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
@@ -1073,12 +1074,13 @@ func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 		member{Genes: genome(0.1), Score: 500, Rounds: learnProven - 2},
 		member{Genes: genome(0.2), Score: 60, Rounds: learnProven},
 		member{Genes: genome(0.3), Score: 50, Rounds: 16 * learnProven},
-		member{Genes: genome(0.4), Score: 30, Rounds: 1}))
+		member{Genes: genome(0.4), Score: 30, Rounds: 1},
+		member{Genes: genome(0.5), Score: 55, Rounds: 2 * learnProven}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fielded := l.take(0, false); !slices.Equal(fielded, genome(0.3)) {
-		t.Fatalf("fields %v, want the member of many rounds over the luckier one of few", fielded[:1])
+		t.Fatalf("fields %v, want the member of many rounds over the luckier ones of few", fielded[:1])
 	}
 	for i, want := range [][]float64{genome(0.2), genome(0.1)} {
 		for l.drawn%learnRepeat != learnRepeat-1 {
@@ -1086,7 +1088,8 @@ func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 			l.settle(0, 20, true)
 		}
 		if candidate := l.take(0, true); !slices.Equal(candidate, want) {
-			t.Fatalf("repeat %d is %v, want %v: the fielded's rival, the less played, then the most trusted short of its proof", i+1, candidate[:1], want[:1])
+			t.Fatalf("repeat %d is %v, want %v: the fielded's rival, the highest mean of the other proved and the less played, then the most trusted short of its proof",
+				i+1, candidate[:1], want[:1])
 		}
 		l.settle(0, 60, true)
 	}

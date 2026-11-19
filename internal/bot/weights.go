@@ -226,7 +226,7 @@ func (g *Graph) Kept(name string, store Store) (Kept, bool, error) {
 			members = append(members, genetic.Candidate[[]float64, float64]{Data: m.Genes, Score: m.Score, Count: m.Rounds})
 		}
 	}
-	if f, _ := fieldedOf(members, doc.Recent); f >= 0 {
+	if f := fieldedOf(members, doc.Recent); f >= 0 {
 		k.Fielded, k.Score, k.Proved = members[f].Data, members[f].Score, members[f].Count
 	}
 	return k, true, nil

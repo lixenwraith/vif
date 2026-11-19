@@ -366,7 +366,7 @@ func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float
 			st.Best = c.Score
 		}
 	}
-	if f, _ := fieldedOf(members, l.recent); f >= 0 {
+	if f := fieldedOf(members, l.recent); f >= 0 {
 		st.Fielded, st.FieldedRounds, fielded = members[f].Score, members[f].Count, members[f].Data
 	}
 	l.born = born
@@ -416,25 +416,28 @@ func (l *Learner) enters(score float64) bool {
 }
 
 // fieldedOf is the member a run fields, the most trusted of those learnProven
-// rounds have proved, and the next most trusted, its rival; -1 for none.
-func fieldedOf(members []genetic.Candidate[[]float64, float64], recent float64) (fielded, rival int) {
-	fielded, rival = -1, -1
+// rounds have proved, and -1 for none
+func fieldedOf(members []genetic.Candidate[[]float64, float64], recent float64) int {
+	fielded := -1
 	for i, c := range members {
-		switch {
-		case c.Count < learnProven:
-		case fielded < 0 || trusted(c, recent) > trusted(members[fielded], recent):
-			fielded, rival = i, fielded
-		case rival < 0 || trusted(c, recent) > trusted(members[rival], recent):
+		if c.Count >= learnProven && (fielded < 0 || trusted(c, recent) > trusted(members[fielded], recent)) {
+			fielded = i
+		}
+	}
+	return fielded
+}
+
+// rival is the member a round tests the title on: of the fielded and its rival,
+// the other proved member of the highest mean, the one with fewer rounds, those
+// in flight counted, and -1 while none is proved. So promise is played until it
+// holds, and takes the title, or falls under another's.
+func (l *Learner) rival(members []genetic.Candidate[[]float64, float64]) int {
+	fielded, rival := fieldedOf(members, l.recent), -1
+	for i, c := range members {
+		if i != fielded && c.Count >= learnProven && (rival < 0 || c.Score > members[rival].Score) {
 			rival = i
 		}
 	}
-	return fielded, rival
-}
-
-// rival is the member a round tests the title on: of the fielded and its rival
-// the one with fewer rounds, those in flight counted, and -1 while none is proved
-func (l *Learner) rival(members []genetic.Candidate[[]float64, float64]) int {
-	fielded, rival := fieldedOf(members, l.recent)
 	rounds := func(i int) int { return members[i].Count + l.playing(members[i].Data) }
 	if rival >= 0 && rounds(rival) < rounds(fielded) {
 		return rival
@@ -450,7 +453,7 @@ func (l *Learner) save() {
 	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: learnStep, Fielded: -1}
 	members := l.engine.Snapshot().Members
 	l.field(members)
-	doc.Fielded, _ = fieldedOf(members, l.recent)
+	doc.Fielded = fieldedOf(members, l.recent)
 	for _, c := range members {
 		doc.Members = append(doc.Members, member{Score: c.Score, Rounds: c.Count, Born: l.born[genomeKey(c.Data)], Genes: c.Data})
 	}
