@@ -235,3 +235,4 @@ until its rename to vif in September 2026.
 - A death visual for every species
 - Cheaper cells and probes; three axes
 - Roster across new games; unheard players retired
+- Go 1.27.4
