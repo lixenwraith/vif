@@ -453,7 +453,7 @@ func TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder(t *testing.T) {
 	for path, want := range map[string]map[string]string{
 		"../../wad/scenario/base/cave/bot/cave.toml": cave,
 		"../../wad/scenario/base/cave/bot/seed.toml": cave,
-		"../asset/scenario/bot/main.toml":            {"walk": "10cd74a1b30c"},
+		"../asset/scenario/bot/main.toml":            {"walk": "375d2a41f2c9"},
 	} {
 		data, err := os.ReadFile(filepath.FromSlash(path))
 		if err != nil {
