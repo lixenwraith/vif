@@ -564,16 +564,17 @@ The threats, and the part that meets each:
 
 ## 6. `lixenwraith/auth`, and logwisp as its consumer
 
-v0.5.2: one package over `golang-jwt/jwt/v5` and `golang.org/x/crypto`. What vif
+v0.5.3: one package over `golang-jwt/jwt/v5` and `golang.org/x/crypto`. What vif
 takes:
 
 - **Argon2-SCRAM**: the package's own JSON challenge and response over Argon2id, not
   SASL's SCRAM-SHA-256. `NewCredential` provisions in one KDF pass on the client;
   `Export`/`ImportCredential` carry the result as a map, which the identity service
   stores and a passphrase door keeps in memory. `ScramServer` holds credentials of
-  one shared KDF profile and at most 4096 single-use handshakes of 30 s, and the
-  server side only HMACs; `NewScramServerWithDecoyKey` keeps an unknown user's decoy
-  salt stable across restarts, so a probe cannot tell an account from none.
+  one shared KDF profile and at most 4096 single-use handshakes of 30 s, a full
+  table dropping its oldest, and the server side only HMACs;
+  `NewScramServerWithDecoyKey` keeps an unknown user's decoy salt stable across
+  restarts, so a probe cannot tell an account from none.
   `ScramClient` refuses a cost below 64 MiB and 3 passes unless `WithMinArgonCost`
   says otherwise: the client's floor, never the challenge's. `WithChannelBinding`
   (1–64 bytes at both ends) commits the proof to the TLS channel, and a bound and an
