@@ -101,7 +101,7 @@ Libraries · Branches.
 - `go install golang.org/x/tools/cmd/deadcode@latest` outside the module builds with
   the tool's own minimum Go (1.26), which refuses this module ("package requires
   newer Go version go1.27"): install it, and staticcheck, under
-  `GOTOOLCHAIN=go1.27.3`.
+  `GOTOOLCHAIN=go1.27.4`.
 - deadcode reads one profile: `pkg/browser`'s `keyCode` reads dead on linux and is
   live on js/wasm, `glyph.Texture.Atlas` and `Frames.ColorMode` on js/wasm and
   Android. Call a function dead only where every profile compiling its file reports
