@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func TestCursorDefeatTransitionCrossesCombinedOwnerState(t *testing.T) {
@@ -139,8 +140,9 @@ func TestAWraithNeitherLosesNorHoldsUpADefeat(t *testing.T) {
 
 // defeatFold is a world rostering one cursor a payload, in slot order as participants
 // 1 on, with ask, which hands an event to the cursor system and to the meta system
-// that folds, then what the first raised to the second, and the fold's two keys.
-func defeatFold(t *testing.T, rostered ...event.CursorSpawnRequestPayload) (w *engine.World, ask func(event.EventType, any), keys func() (anyLost, all bool)) {
+// that folds, then what the first raised to the second, the fold's two keys, and
+// pass, which plays game ticks: the meta system's update and what it asks for.
+func defeatFold(t *testing.T, rostered ...event.CursorSpawnRequestPayload) (w *engine.World, ask func(event.EventType, any), keys func() (anyLost, all bool), pass func(ticks uint64)) {
 	t.Helper()
 	w = engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -159,15 +161,24 @@ func defeatFold(t *testing.T, rostered ...event.CursorSpawnRequestPayload) (w *e
 		ask(event.EventCursorSpawnRequest, &p)
 	}
 	status := w.Resources.Status.Bools
-	return w, ask, func() (bool, bool) {
+	keys = func() (bool, bool) {
 		return status.Get("session.any_defeated").Load(), status.Get("session.all_defeated").Load()
+	}
+	return w, ask, keys, func(ticks uint64) {
+		for range ticks {
+			w.Resources.Game.State.IncrementGameTicks()
+			meta.Update()
+			for _, raised := range w.Resources.Event.Queue.Consume() {
+				ask(raised.Type, raised.Payload)
+			}
+		}
 	}
 }
 
 // TestABotsDefeatEndsNoGameBesideAPerson: a seat's defeat and its crush leave both
 // keys unset while a person's cursor plays, and that person's defeat sets both.
 func TestABotsDefeatEndsNoGameBesideAPerson(t *testing.T) {
-	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
+	w, ask, keys, _ := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
 	person, seat := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
 	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: seat, Defeated: true})
 	ask(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: seat})
@@ -183,7 +194,7 @@ func TestABotsDefeatEndsNoGameBesideAPerson(t *testing.T) {
 // TestABotsDefeatEndsTheGameWhereOnlyBotsPlay: with no person's cursor in play the
 // bots' decide as persons' would, a bot's own run's and its seat's alike.
 func TestABotsDefeatEndsTheGameWhereOnlyBotsPlay(t *testing.T) {
-	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{Bot: true}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
+	w, ask, keys, _ := defeatFold(t, event.CursorSpawnRequestPayload{Bot: true}, event.CursorSpawnRequestPayload{Holder: 1, Bot: true})
 	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(1), Defeated: true})
 	if anyLost, all := keys(); !anyLost || all {
 		t.Fatalf("one of two bots defeated with no person in play: any defeated %t, all %t; want any alone", anyLost, all)
@@ -194,11 +205,127 @@ func TestABotsDefeatEndsTheGameWhereOnlyBotsPlay(t *testing.T) {
 	}
 }
 
+// TestABotDownBesideAPersonComesBack: a seat defeated or crushed beside a person is
+// equipped again BotRespawnTicks later as a new game makes it, at the template's
+// cell with its heat and energy, and its defeat lifts. A person's cursor is left as
+// it fell, and so is a bot's where only bots play, whose defeat decides.
+func TestABotDownBesideAPersonComesBack(t *testing.T) {
+	start := event.CursorSpawnRequestPayload{Heat: 10, Energy: 100}
+	seated := event.CursorSpawnRequestPayload{Heat: 10, Energy: 100, Holder: 1, Bot: true}
+	// down drains a cursor where it has wandered to, as a defeat or a crush leaves it
+	down := func(w *engine.World, e core.Entity) {
+		w.Components.Energy.SetComponent(e, component.EnergyComponent{})
+		w.Components.Heat.SetComponent(e, component.HeatComponent{})
+		w.Positions.SetPosition(e, component.PositionComponent{X: 30, Y: 20})
+	}
+	whole := func(w *engine.World, e core.Entity) bool {
+		energy, _ := w.Components.Energy.GetComponent(e)
+		heat, _ := w.Components.Heat.GetComponent(e)
+		pos, _ := w.Positions.GetPosition(e)
+		return energy.Current == 100 && heat.Current == 10 && pos.X == 5 && pos.Y == 5
+	}
+
+	for name, fall := range map[string]func(ask func(event.EventType, any), e core.Entity){
+		"defeated": func(ask func(event.EventType, any), e core.Entity) {
+			ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: e, Defeated: true})
+		},
+		"crushed": func(ask func(event.EventType, any), e core.Entity) {
+			ask(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: e})
+		},
+	} {
+		w, ask, keys, pass := defeatFold(t, start, seated)
+		seat := w.Resources.Player.Slot(1)
+		down(w, seat)
+		fall(ask, seat)
+		pass(parameter.BotRespawnTicks - 1)
+		if whole(w, seat) {
+			t.Fatalf("%s: the seat is back before its %d ticks are up", name, parameter.BotRespawnTicks)
+		}
+		pass(1)
+		if !whole(w, seat) {
+			pos, _ := w.Positions.GetPosition(seat)
+			energy, _ := w.Components.Energy.GetComponent(seat)
+			t.Fatalf("%s: after %d ticks the seat stands at %d,%d with energy %d; want it equipped again at 5,5 with 100",
+				name, parameter.BotRespawnTicks, pos.X, pos.Y, energy.Current)
+		}
+		// Its defeat has lifted: the person leaving a seat still down would end the game
+		ask(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: 0})
+		if anyLost, all := keys(); anyLost || all {
+			t.Fatalf("%s: the person gone, the seat that came back reads any defeated %t, all %t; want neither", name, anyLost, all)
+		}
+	}
+
+	w, ask, _, pass := defeatFold(t, start, start)
+	person := w.Resources.Player.Slot(1)
+	down(w, person)
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: person, Defeated: true})
+	pass(3 * parameter.BotRespawnTicks)
+	if whole(w, person) {
+		t.Fatal("a person's cursor was equipped again; only a bot's is")
+	}
+
+	seated.Holder = 0
+	w, ask, keys, pass := defeatFold(t, seated, seated)
+	alone := w.Resources.Player.Slot(1)
+	down(w, alone)
+	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: alone, Defeated: true})
+	pass(3 * parameter.BotRespawnTicks)
+	if anyLost, _ := keys(); whole(w, alone) || !anyLost {
+		t.Fatalf("with no person in play a bot down was equipped again %t and reads any defeated %t; want it left and its defeat to decide", whole(w, alone), anyLost)
+	}
+}
+
+// TestABotsTimeDownIsCarriedByACapture: an instance that takes the meta system's
+// record mid-wait asks for the bot back at the tick the others do.
+func TestABotsTimeDownIsCarriedByACapture(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
+	for slot, bot := range []bool{false, true} {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+			Slot: uint8(slot), X: 5, Y: 5, Heat: 10, Energy: 100, PeerID: uint32(slot) + 1, Control: uint8(component.ControlRemote), Bot: bot}})
+	}
+	w.Resources.Event.Queue.Consume()
+	state := w.Resources.Game.State
+	state.SetGameTicks(100)
+	meta.HandleEvent(event.GameEvent{Type: event.EventCursorDefeatState,
+		Payload: &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(1), Defeated: true, ProducedTick: 100}})
+	record, err := meta.SaveShared()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taken := ready(NewMetaSystem(ctx)).(*MetaSystem)
+	if err := taken.LoadShared(record); err != nil {
+		t.Fatal(err)
+	}
+	asked := func() int {
+		n := 0
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.CursorRespawnRequestPayload); ok && p.Slot == 1 {
+				n++
+			}
+		}
+		return n
+	}
+	state.SetGameTicks(100 + parameter.BotRespawnTicks - 1)
+	taken.Update()
+	if n := asked(); n != 0 {
+		t.Fatalf("a tick early the record's taker asked for the bot back %d times", n)
+	}
+	state.SetGameTicks(100 + parameter.BotRespawnTicks)
+	taken.Update()
+	if n := asked(); n != 1 {
+		t.Fatalf("at its tick the record's taker asked for the bot back %d times, want once", n)
+	}
+}
+
 // TestAPersonAwayAsAWraithIsNoPersonInPlay: a defeated bot ends the game as the
 // person beside it turns Wraith, the bot alone in play, and no longer once that
 // person has taken the Wraith back.
 func TestAPersonAwayAsAWraithIsNoPersonInPlay(t *testing.T) {
-	w, ask, keys := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Bot: true})
+	w, ask, keys, _ := defeatFold(t, event.CursorSpawnRequestPayload{}, event.CursorSpawnRequestPayload{Bot: true})
 	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(1), Defeated: true})
 	ask(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: 0})
 	if anyLost, all := keys(); !anyLost || !all {

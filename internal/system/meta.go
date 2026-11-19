@@ -43,6 +43,7 @@ type MetaSystem struct {
 	statAnyDefeated      *atomic.Bool
 	statDamageMultiplier *atomic.Int64
 	defeated             [parameter.MaxPlayers]bool
+	downSince            [parameter.MaxPlayers]uint64 // the tick a slot's latch was set, to respawn a bot from
 	defeatResetTick      uint64
 
 	// Cycle difficulty scaling: a world property the shared FSM raises, applied
@@ -93,6 +94,7 @@ func (s *MetaSystem) Init() {
 	s.statPlayerX.Reset()
 	s.statPlayerY.Reset()
 	s.defeated = [parameter.MaxPlayers]bool{}
+	s.downSince = [parameter.MaxPlayers]uint64{}
 	s.defeatResetTick = 0
 	s.statAllDefeated.Store(false)
 	s.statAnyDefeated.Store(false)
@@ -270,14 +272,12 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventCursorSpawned:
 		if p, ok := ev.Payload.(*event.CursorSpawnedPayload); ok && int(p.Slot) < len(s.defeated) {
-			s.defeated[p.Slot] = false
-			s.publishDefeatState()
+			s.latch(p.Slot, false)
 		}
 
 	case event.EventCursorDespawned:
 		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok && int(p.Slot) < len(s.defeated) {
-			s.defeated[p.Slot] = false
-			s.publishDefeatState()
+			s.latch(p.Slot, false)
 		}
 
 	case event.EventCycleDamageMultiplierIncrease:
@@ -300,8 +300,40 @@ func (s *MetaSystem) setCursorDefeated(entity core.Entity, defeated bool) {
 	if !ok || s.world.Resources.Player.Slot(slot) != entity {
 		return
 	}
+	s.latch(slot, defeated)
+}
+
+// latch sets or lifts one slot's defeat, keeping the tick it first went down
+func (s *MetaSystem) latch(slot uint8, defeated bool) {
+	switch {
+	case !defeated:
+		s.downSince[slot] = 0
+	case !s.defeated[slot]:
+		s.downSince[slot] = s.world.Resources.Game.State.GetGameTicks()
+	}
 	s.defeated[slot] = defeated
 	s.publishDefeatState()
+}
+
+// respawnBots asks for each bot's cursor that has been down BotRespawnTicks beside
+// a person to be equipped again: its defeat decides nothing there, so the game goes
+// on and it comes back as a new game would make it. Every instance holds the latch
+// from one tick, so each asks at the same one. A cursor no cell could take is asked
+// for again after as long.
+func (s *MetaSystem) respawnBots() {
+	now := s.world.Resources.Game.State.GetGameTicks()
+	roster := s.world.Resources.Player
+	for i := range parameter.MaxPlayers {
+		if !s.defeated[i] || now-s.downSince[i] < parameter.BotRespawnTicks {
+			continue
+		}
+		e := roster.Slot(uint8(i))
+		if c, ok := s.world.Components.Cursor.GetComponent(e); !ok || !c.Bot || s.world.DefeatDecides(e) || s.world.Components.Wraith.HasEntity(e) {
+			continue
+		}
+		s.downSince[i] = now
+		s.world.PushEvent(event.EventCursorRespawnRequest, &event.CursorRespawnRequestPayload{Slot: uint8(i)})
+	}
 }
 
 // Shared guards fold owner-authored defeat latches, never stale energy/heat mirrors.
@@ -323,9 +355,11 @@ func (s *MetaSystem) publishDefeatState() {
 	s.statAnyDefeated.Store(lost > 0)
 }
 
-// Update publishes context and player telemetry; every read is world state
-// already guarded by the update mutex
+// Update asks for the downed bots due back and publishes context and player
+// telemetry; every read is world state already guarded by the update mutex
 func (s *MetaSystem) Update() {
+	s.respawnBots()
+
 	cfg := s.world.Resources.Config
 	s.statMapW.Store(int64(cfg.MapWidth))
 	s.statMapH.Store(int64(cfg.MapHeight))
@@ -372,12 +406,13 @@ func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 // kills.* as a mixed-domain aggregate, an installed state never runs the on_enter
 // action that raises the multiplier, and a pruned crossing never reaches a counter.
 type metaSnapshot struct {
-	Kills            [component.SpeciesMax]int64 `json:"kills"`
-	KillsTotal       int64                       `json:"kills_total"`
-	KillsUncredited  int64                       `json:"kills_uncredited"`
-	Defeated         [parameter.MaxPlayers]bool  `json:"defeated"`
-	DefeatResetTick  uint64                      `json:"defeat_reset_tick"`
-	DamageMultiplier int64                       `json:"damage_multiplier"`
+	Kills            [component.SpeciesMax]int64  `json:"kills"`
+	KillsTotal       int64                        `json:"kills_total"`
+	KillsUncredited  int64                        `json:"kills_uncredited"`
+	Defeated         [parameter.MaxPlayers]bool   `json:"defeated"`
+	DownSince        [parameter.MaxPlayers]uint64 `json:"down_since"`
+	DefeatResetTick  uint64                       `json:"defeat_reset_tick"`
+	DamageMultiplier int64                        `json:"damage_multiplier"`
 }
 
 // SaveShared carries shared progression (D-19).
@@ -386,6 +421,7 @@ func (s *MetaSystem) SaveShared() ([]byte, error) {
 		KillsTotal:       s.statKillsTotal.Load(),
 		KillsUncredited:  s.statKillsUncredited.Load(),
 		Defeated:         s.defeated,
+		DownSince:        s.downSince,
 		DefeatResetTick:  s.defeatResetTick,
 		DamageMultiplier: s.damageMultiplier,
 	}
@@ -411,6 +447,7 @@ func (s *MetaSystem) LoadShared(data []byte) error {
 	s.statKillsTotal.Store(snap.KillsTotal)
 	s.statKillsUncredited.Store(snap.KillsUncredited)
 	s.defeated = snap.Defeated
+	s.downSince = snap.DownSince
 	s.defeatResetTick = snap.DefeatResetTick
 	s.publishDefeatState()
 	s.setDamageMultiplier(max(snap.DamageMultiplier, 1))
@@ -541,6 +578,7 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	// Encounter transitions preserve defeat; a reset clears it before rearming.
 	if payload.ClearEntities && !payload.PreserveLoot {
 		s.defeated = [parameter.MaxPlayers]bool{}
+		s.downSince = [parameter.MaxPlayers]uint64{}
 		// Reports already in flight describe the previous attempt.
 		s.defeatResetTick = s.world.Resources.Game.State.GetGameTicks() + 1
 		s.publishDefeatState()

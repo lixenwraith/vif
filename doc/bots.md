@@ -77,9 +77,10 @@ into the session it joins, and `:leave` takes them out of one with the run.
   takes over as any other does, where its run says so (`-listen`, `[play] takeover`).
 - A bot's defeat or crush ends the game only where every cursor in play is a
   bot's, this run's or another's: a seat, or a run `-bot` plays itself. Beside a
-  person it plays on where it stands, and the game ends at a person's defeat, at
-  `:n`, or as the last person leaves a bot that is down
-  ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+  person it comes back a second later as a new game makes it, at the cell and
+  with the heat, energy and loadout a cursor starts on, and the game ends at a
+  person's defeat, at `:n`, or as the last person leaves a bot inside that
+  second ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - `:leave` takes your bots out of the session with you: they leave it first and
