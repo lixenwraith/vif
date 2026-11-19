@@ -90,6 +90,7 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
 		event.EventCursorWraithRequest,
+		event.EventCursorRespawnRequest,
 		event.EventWraithWaitRestart,
 		event.EventCursorMoveRequest,
 		event.EventCursorSetLocalRequest,
@@ -110,6 +111,10 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorWraithRequest:
 		if p, ok := ev.Payload.(*event.CursorWraithRequestPayload); ok {
 			s.wraith(p.Slot, 0)
+		}
+	case event.EventCursorRespawnRequest:
+		if p, ok := ev.Payload.(*event.CursorRespawnRequestPayload); ok {
+			s.respawn(p.Slot)
 		}
 	case event.EventWraithWaitRestart:
 		s.restartWaits()
@@ -351,6 +356,35 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	if x >= 0 {
 		w.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 	}
+}
+
+// respawn equips a slot's cursor again as a new game does: the template's heat,
+// energy and loadout, at the free cell nearest the template's. It is announced as
+// spawned, which lifts its defeat. A Wraith or a cursor off the map has nothing to
+// equip, and with no free cell the request is its asker's to make again.
+func (s *CursorSystem) respawn(slot uint8) {
+	w := s.world
+	config := w.Resources.Config
+	e := w.Resources.Player.Slot(slot)
+	if e == 0 || config.CursorsOffMap || w.Components.Wraith.HasEntity(e) {
+		return
+	}
+	t := w.Resources.Player.Template()
+	x, y := t.Origin.Cell(t.X, t.Y, config.MapWidth, config.MapHeight)
+	x, y, placed := w.ResolveFreeCell(
+		max(0, min(x, config.MapWidth-1)), max(0, min(y, config.MapHeight-1)),
+		component.WallBlockCursor)
+	if !placed {
+		return
+	}
+	s.equip(e, x, y, t.Heat, t.Energy)
+	w.ReconcileLocalCursor(e, x, y, false)
+	w.UpdateBoundsRadius()
+	s.publishRoster()
+
+	w.Log().Info("app", "msg", "cursor respawned", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
+	w.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: x, Y: y, Slot: slot})
+	w.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 }
 
 // restore writes what a returning player brought back over the template its cursor

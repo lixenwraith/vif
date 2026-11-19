@@ -1541,7 +1541,11 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	if port.PeerCount() != 2 {
 		t.Fatal("the holder has no warm link to its bot")
 	}
-	kept := seatRunOf(holder)
+	// The seat's cursor and its link stand before its run is listed
+	var kept *seatRun
+	for deadline := time.Now().Add(socketWait); kept == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		kept = seatRunOf(holder)
+	}
 	if kept == nil {
 		t.Fatal("the holder plays no run for its bot")
 	}

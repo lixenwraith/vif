@@ -1345,15 +1345,16 @@ func TestSessionRosterStartsAndRestartsEveryParticipant(t *testing.T) {
 }
 
 // TestABotsDefeatStartsNoNewGameBesideAPerson: a bot's defeat crosses to every
-// instance and starts no new game while a person plays; that person's starts one, at
-// once on both, and the game it starts still holds the bot's cursor for a bot's.
+// instance and starts no new game while a person plays, and a second later the bot
+// is equipped again on both alike; that person's defeat starts a new game, at once
+// on both, and the game it starts still holds the bot's cursor for a bot's.
 func TestABotsDefeatStartsNoNewGameBesideAPerson(t *testing.T) {
 	t.Parallel()
 	const bot, person = 0, 1
 	apps := meshRostered(t, Config{Seed: 0xA2A3, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
 		2, [][2]int{{1, 2}}, func(roster []network.RosterEntry) { roster[bot].Bot = true })
 	local := localCursors(t, apps)
-	var downs, resets [2]int
+	var downs, resets, back [2]int
 	for i, a := range apps {
 		a.SetDispatchTap(func(ev event.GameEvent) {
 			if p, ok := ev.Payload.(*event.CursorDefeatStatePayload); ok && p.Defeated {
@@ -1361,6 +1362,9 @@ func TestABotsDefeatStartsNoNewGameBesideAPerson(t *testing.T) {
 			}
 			if ev.Type == event.EventGameResetRequest {
 				resets[i]++
+			}
+			if p, ok := ev.Payload.(*event.CursorSpawnedPayload); ok && ev.Type == event.EventCursorSpawned && p.Slot == bot {
+				back[i]++
 			}
 		})
 	}
@@ -1376,9 +1380,25 @@ func TestABotsDefeatStartsNoNewGameBesideAPerson(t *testing.T) {
 		}
 	}
 	drain(bot)
-	if downs[0] == 0 || downs[1] == 0 || resets != [2]int{} {
-		t.Fatalf("the bot's defeat reached the instances %v times and started %v new games; want it on both and none", downs, resets)
+	if downs[0] == 0 || downs[1] == 0 || resets != [2]int{} || back != [2]int{} {
+		t.Fatalf("the bot's defeat reached the instances %v times, started %v new games and brought it back %v times; want it on both, none and not yet",
+			downs, resets, back)
 	}
+	for range parameter.BotRespawnTicks {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		a.World().RunSafe(func() {
+			w := a.World()
+			energy, _ := w.Components.Energy.GetComponent(w.Resources.Player.Slot(bot))
+			heat, _ := w.Components.Heat.GetComponent(w.Resources.Player.Slot(bot))
+			if back[i] != 1 || energy.Current <= 0 || heat.Current <= 0 || resets[i] != 0 {
+				t.Errorf("participant %d: a second on the bot came back %d times with energy %d and heat %d, %d new games; want once, armed, and none",
+					i+1, back[i], energy.Current, heat.Current, resets[i])
+			}
+		})
+	}
+	assertMeshParity(t, apps, 24)
 	drain(person)
 	if resets != [2]int{1, 1} {
 		t.Fatalf("the person's defeat started %v new games; want one on each instance", resets)
