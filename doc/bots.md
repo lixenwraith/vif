@@ -367,29 +367,44 @@ right and collects nuggets between patrols:
 `walk` is `default`'s one network and the catalogue's stress test: loaded with
 every input, then left the 161 that read anything while it steered in the
 embedded scenario, `cave` and `td`. Text, gold and nuggets are the typing
-states' to reach, and no other cursor, missile or third landing was in view. It
-has no weight written, so it asks for nothing and `default` plays as its states
-say; it learns in a copy whose `[bot]` sets `learn`, with a `round_seconds`
-where the game ends no round ([Learning](#learning)). What that is worth, by
-the ticks `default` spends in `Walk` and what one game's 600,000 ticks of
-learning field held out, three seeds, over 100 rounds in `cave` and 48 of five
-minutes in the embedded scenario:
+states' to reach, and no other cursor, missile or third landing was in view. No
+weight is written for it, so a bot seated beside a player asks nothing of it and
+plays as its states say. A run of `default` alone learns it
+([Learning](#learning)), a population a scenario, and closes a round each half
+hour where the game ends none. What that fields held out, from nothing on three
+seeds: in the embedded scenario after four games' 4,800,000 ticks, 132 rounds
+and two minutes on four cores, over 24 half-hour rounds; in `cave` after one
+game's 600,000, some 3,700 rounds, over 100:
 
 ```
-scenario    in Walk   as shipped   walk learned
-embedded      18%        57,918    57,918  58,925  61,018
-cave          90%           215       258     247     225
+scenario    in Walk   unlearned   walk learned
+embedded      18%       622,620   704,339  681,384  674,730
+cave          90%           215       258      247      225
 td           0.1%
 ```
 
-- Where `default` types, the typing is the score: 48 rounds tell nothing under
-  2,000 apart, and the first seed proved no member in its 99 rounds.
-- In `cave` the states about `walk` cap it, a random `Leap` and an auto-fire
-  that spends its heat among them: a round lasts 158 ticks as shipped and 170
-  to 195 learned. With every input, 369, the three seeds field 251, 236 and 253.
-- A run learning the embedded scenario ends its game every `round_seconds`,
-  and the game pays more the longer it runs: closed every five minutes,
-  600,000 ticks earn 5.8 million where one unbroken game earns 11.4.
+- The embedded scenario pays by its Krakens: 97 in 100 of what `default` earns
+  is their bounty, 50,000 each, twelve a half hour and a thirteenth in one
+  round of 24. A learned walk shoots one or two more down. Seed 1's fields
+  698,025 on 24 rounds of other seeds, and written into the document earns
+  12.7 million over an unbroken game's 600,000 ticks where none earns 11.4.
+- A round must span what pays: closed every five minutes, before the second
+  Kraken, 99 rounds learned nothing that 48 could tell from none.
+- What is learned there is no place to stand. The three walks idle mostly in
+  the view's lower corners, 16 to 17 ticks in 100 for the unlearned 20, yet a
+  walk written to hold a corner of the view loses 6 to 12 in 100 and one that
+  holds its middle 17.
+- What is learned is its scenario's. The embedded scenario's walk written into
+  `default` earns -8,304 and -6,352 over `armada`'s 60,000 ticks where none
+  earns 7,868 and 7,024, and nothing either way in `td` and `cave`. So
+  `default` writes none, and a bot seated beside a player has a learned walk
+  only from a graph that writes one, as `export` makes of a population.
+- In `cave` auto-fire's special spends the heat a ship lives on, so `walk`
+  learns little there, a round of 158 ticks grown to 170 to 195. A copy that
+  sets `auto_fire = "main"` and drops its `outputs` line, so `walk` asks for
+  the special too, fields 35,341, 1,734 and 3,001 after the same ticks, their
+  medians 2,446, 910 and 1,067. With every input, 369, `walk` learns `cave`
+  as shipped no better: 251, 236 and 253.
 
 Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph the scenario carries is held
@@ -432,9 +447,10 @@ flee threats within 20       304     240    0.71
 Fitness is in the `-headless` summary, the `bot stopped` log record, which also
 holds the rounds and their summed score, and a seat's `bot left` record. From a
 checkout with `bin/vif` built,
-`./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` headless
-and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
-scenario and `td`, and prints each scenario's sum. Given a graph file, it
+`./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` as
+written, its learning left off, headless and flat out at 120x40 for `secs` (60)
+over seeds 1..`seeds` (4) on the embedded scenario and `td`, and prints each
+scenario's sum. Given a graph file, it
 fails unless that graph beats `default` on every scenario; with none, the sums
 are the baseline to beat. It appends a `stop` region (states `StopWait` and
 `StopQuit`), so a graph cannot use those names.

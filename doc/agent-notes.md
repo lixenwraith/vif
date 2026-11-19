@@ -1091,6 +1091,18 @@ Libraries · Branches.
   a tick over an unbroken 60,000 and 9.7 over five-minute rounds. Compare
   graphs there at one round length, never a learning run's sum with an
   unbroken run's.
+- In the embedded scenario a bot's fitness is its Krakens: `default` earns 97
+  in 100 of it as their bounty, 50,000 each, as 10,000 hit points die well
+  inside `krakenPar`, twelve a half hour. A mean of 24 half-hour rounds has a
+  standard error of 2,000 in 622,000; a round of five minutes ends before the
+  second Kraken and tells nothing. Size a learner's round to span what pays.
+- Weights learned in one scenario are tried in every scenario their graph
+  plays before they are written into it: the embedded scenario's walk turned
+  `default`'s 7,868 in `armada` into -8,304.
+- A change to a graph that looks needed is read against the graph as it stands
+  at the same round length: a state and a guard keeping `default`'s own drift
+  out of a learned walk's way fielded 696,029 where the graph as merged
+  fielded 704,339.
 - Heat is what stands between an empty shield and a defeat in `cave`, a touch
   taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
   the 10 a game starts with in its first seconds, on blasts wherever dust lies.

@@ -295,15 +295,19 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     most trusted, so after fifteen million ticks on seed 1 five members at
     52,350 to 55,969 over eight to ten rounds stood behind a rival of 48,221
     over 54 and no turn played them again.
-- **`default`'s network `walk`** ships with no weight and learns only in a
-  copy ([Bots](bots.md#writing-a-graph)). Owed before it learns by itself:
-  - a place to steer where `default` types: it has the wheel 18% of the
-    embedded scenario's ticks and 0.1% of `td`'s, and a game's learning shows
-    in neither;
-  - states that let it live in `cave`, where a random `Leap` and auto-fire's
-    special end a round in 158 ticks, learned or not;
-  - a round's length for a game that never ends, as closing the embedded one
-    every five minutes halves what its ticks earn;
+- **`default`'s network `walk`** learns in a run alone, a population a
+  scenario, and writes no weight ([Bots](bots.md#writing-a-graph)). Owed:
+  - a learned walk for the bots seated beside a player, who play what a
+    document writes: the embedded scenario carrying a bot of its own with the
+    walk learned there, as `cave` carries its model, or a seat fielding what
+    its player's population holds. `default` cannot write one itself, as what
+    the embedded scenario teaches loses in `armada`;
+  - the special where heat is scarce. Auto-fire's or the network's is the
+    document's `auto_fire`, so learning `cave` takes a copy; a rule handing
+    it to a network once that has weights would let one document do both;
+  - a round that needs no new game: closing the embedded one each half hour
+    earns a tenth less than an unbroken game does, and waits on a death that
+    resets none;
   - its inputs cut to what a policy uses: the 161 are those that read on its
     ticks, and which ranks of eight species and eight bullets earn their
     weights is unmeasured. A population of them is 860 KB a scenario.
