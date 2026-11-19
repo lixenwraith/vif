@@ -228,7 +228,28 @@ func multiplayerConfigOptions(ctx *engine.GameContext) []configNode {
 	if players := participantConfigOptions(ctx); len(players) > 0 {
 		options = append(options, section("Players", players))
 	}
-	return append(options, section("Bots", append([]configNode{formRow("add"), formRow("files")}, botConfigOptions(ctx)...)))
+	bots := append([]configNode{formRow("add"), formRow("files")}, botGraphOptions(ctx)...)
+	return append(options, section("Bots", append(bots, botConfigOptions(ctx)...)))
+}
+
+// botGraphOptions lists the graphs a seat of this run can play, each a row that
+// seats one bot playing it, as :bot <name> does
+func botGraphOptions(ctx *engine.GameContext) []configNode {
+	graphs := ctx.SessionCtl.BotGraphs()
+	options := make([]configNode, 0, len(graphs))
+	for _, g := range graphs {
+		options = append(options, configNode{kind: kindAction, key: "seat/" + g.Name, label: "Add " + g.Name, command: "bot", read: enterValue,
+			description: fmt.Sprintf("Seat one bot playing %s (%s), which plays what your runs have taught it in this scenario, or as its graph writes. Bot files' list says what each has learned.", g.Name, g.Owner),
+			activate: func(r *Router) {
+				if err := r.ctx.SessionCtl.AddBot("1:" + g.Name); err != nil {
+					setCommandError(r.ctx, sentence(err))
+					return
+				}
+				r.closeOverlay()
+				r.ctx.SetStatusMessage("Bot "+g.Name+" joining; Menu / Multiplayer removes it", parameter.StatusNotice)
+			}})
+	}
+	return options
 }
 
 // nearbyConfigOptions lists the games found on this network, each joined as :join
@@ -321,8 +342,11 @@ func participantConfigOptions(ctx *engine.GameContext) []configNode {
 			continue
 		}
 		kind, description := "player", "Removes this player and every bot it brought."
-		if p.Holder != 0 {
+		switch {
+		case p.Holder != 0:
 			kind, description = "bot", "Removes this bot alone; its holder and other bots stay."
+		case p.Bot:
+			kind, description = "bot", "Removes this bot and every bot it brought."
 		}
 		if p.Away {
 			kind += ", away"

@@ -1,5 +1,6 @@
-# Type runs left to right; when text is absent, collect nuggets between patrols,
-# which the network walk steers as far as a run alone has learned to.
+# Type runs left to right, backing off a threat that comes within three cells;
+# when text is absent, collect nuggets between patrols, which the network walk
+# steers as far as a run alone has learned to.
 [bot]
 actions_per_second = 12
 learn = true
@@ -8,11 +9,12 @@ round_seconds = 1800
 
 # walk reads what read anything while it steered in the embedded scenario, cave
 # and td: the rock, the blocks, every species and hostile bullet, the Kraken, two
-# landings and the bot's own. Text, gold and nuggets are the typing states' to
-# reach. What it learns is its scenario's own, so no weight is written here.
+# landings and the bot's own. What it learns is its scenario's own, so no weight
+# is written here. It has the wheel while no text is left and while it asks for
+# it past a mark that genomes drawn at random seldom reach, so text comes first.
 [network.walk]
 hidden = 6
-outputs = ["move"]
+outputs = ["move", "wheel"]
 inputs = [
     "ceiling", "floor", "ceiling_near", "floor_near", "ceiling_far", "floor_far",
     "block_up", "block_down", "block_left", "block_right",
@@ -45,6 +47,8 @@ initial = "Seek"
 [states.Seek]
 on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
 transitions = [
+    { trigger = "Tick", target = "Flee", guard = "HasTarget", guard_args = { target = "threat", within = 3 } },
+    { trigger = "Tick", target = "Walk", guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", target = "Gold", guard = "HasTarget", guard_args = { target = "gold" } },
     { trigger = "Tick", target = "Nugget", guard = "HasTarget", guard_args = { target = "nugget", within = 12 } },
     { trigger = "Tick", target = "Type", guard = "OnTarget", guard_args = { target = "glyph" } },
@@ -54,6 +58,8 @@ transitions = [
 [states.Type]
 on_update = [{ action = "TypeGlyph" }]
 transitions = [
+    { trigger = "Tick", target = "Flee", guard = "HasTarget", guard_args = { target = "threat", within = 3 } },
+    { trigger = "Tick", target = "Walk", guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", internal = true, guard = "OnTarget", guard_args = { target = "glyph" } },
     { trigger = "Tick", target = "Seek" },
 ]
@@ -74,10 +80,18 @@ on_update = [
     { action = "Steer" },
 ]
 transitions = [
+    { trigger = "Tick", internal = true, guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", target = "Seek", guard = "HasTarget", guard_args = { target = "glyph" } },
     { trigger = "Tick", target = "Gold", guard = "HasTarget", guard_args = { target = "gold" } },
     { trigger = "Tick", target = "Nugget", guard = "HasTarget", guard_args = { target = "nugget" } },
     { trigger = "Tick", target = "Leap", guard = "Chance", guard_args = { percent = 1 } },
+]
+
+# Text waits while a threat is on it: back off until none is within five cells
+[states.Flee]
+on_update = [{ action = "PointAt", payload = { target = "threat", away = true } }]
+transitions = [
+    { trigger = "Tick", target = "Seek", guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "threat", within = 5 } } } },
 ]
 
 [states.Leap]

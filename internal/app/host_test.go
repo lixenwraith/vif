@@ -1344,6 +1344,57 @@ func TestSessionRosterStartsAndRestartsEveryParticipant(t *testing.T) {
 	assertMeshParity(t, apps, 6)
 }
 
+// TestABotsDefeatStartsNoNewGameBesideAPerson: a bot's defeat crosses to every
+// instance and starts no new game while a person plays; that person's starts one, at
+// once on both, and the game it starts still holds the bot's cursor for a bot's.
+func TestABotsDefeatStartsNoNewGameBesideAPerson(t *testing.T) {
+	t.Parallel()
+	const bot, person = 0, 1
+	apps := meshRostered(t, Config{Seed: 0xA2A3, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
+		2, [][2]int{{1, 2}}, func(roster []network.RosterEntry) { roster[bot].Bot = true })
+	local := localCursors(t, apps)
+	var downs, resets [2]int
+	for i, a := range apps {
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if p, ok := ev.Payload.(*event.CursorDefeatStatePayload); ok && p.Defeated {
+				downs[i]++
+			}
+			if ev.Type == event.EventGameResetRequest {
+				resets[i]++
+			}
+		})
+	}
+	// Each owner drains its own cursor, then the session plays on past every lead
+	drain := func(i int) {
+		apps[i].Context().PushEventOrigin(event.EventEnergySetRequest,
+			&event.EnergySetPayload{Entity: local[i], Value: 0}, event.OriginDebug)
+		apps[i].Context().PushEventOrigin(event.EventHeatSetRequest,
+			&event.HeatSetRequestPayload{Entity: local[i], Value: 0}, event.OriginDebug)
+		apps[i].Settle()
+		for range 12 {
+			tickAll(apps)
+		}
+	}
+	drain(bot)
+	if downs[0] == 0 || downs[1] == 0 || resets != [2]int{} {
+		t.Fatalf("the bot's defeat reached the instances %v times and started %v new games; want it on both and none", downs, resets)
+	}
+	drain(person)
+	if resets != [2]int{1, 1} {
+		t.Fatalf("the person's defeat started %v new games; want one on each instance", resets)
+	}
+	for i, a := range apps {
+		a.World().RunSafe(func() {
+			for slot, want := range [2]bool{bot: true, person: false} {
+				if c, _ := a.World().Components.Cursor.GetComponent(a.World().Resources.Player.Slot(uint8(slot))); c.Bot != want {
+					t.Errorf("participant %d's new game holds slot %d for a bot's %t, want %t: %+v", i+1, slot, c.Bot, want, c)
+				}
+			}
+		})
+	}
+	assertMeshParity(t, apps, 24)
+}
+
 // TestLiveSessionRefusesAnInstanceLocalPause pins the operator policy: entering a
 // local overlay or command mode may inspect a live session, but it must not stop
 // that participant's production clock while its peers continue.

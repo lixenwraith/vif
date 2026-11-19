@@ -21,16 +21,16 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// RosterEntry is one identity the coordinator has admitted, and the cursor slot it
-// drives. NoPlayerSlot means it drives none, which is what a dedicated coordinator
-// holds: in the roster, and not one of the session's participants. Away is one that
-// left and has a Wraith waiting in its slot: both stay taken, and nothing waits on it.
-// Key is the public half of its participant key (EncodeKey), which a dial proves to
-// come back to the place and a peer link or a succession message is signed with.
+// RosterEntry is one identity the coordinator admitted and the cursor slot it drives:
+// NoPlayerSlot for none, a dedicated coordinator's, in the roster and no participant.
+// Away is one that left, a Wraith waiting in its slot, both still taken. Key is the
+// public half of its participant key (EncodeKey), which a dial proves to come back
+// and a peer link or succession message is signed with. Bot: a bot drives its cursor.
 type RosterEntry struct {
 	ID     link.PeerID `json:"id"`
 	Slot   uint8       `json:"slot"`
 	Holder link.PeerID `json:"holder,omitempty"`
+	Bot    bool        `json:"bot,omitempty"`
 	Away   bool        `json:"away,omitempty"`
 	Key    string      `json:"key,omitempty"`
 	// Account and Name are the site's, copied from a verified ticket or the pass that
@@ -136,14 +136,17 @@ type sessionReply struct {
 	// confirmed: the coordinator dials it once before publishing it.
 	Listen string      `json:"listen,omitempty"`
 	Holder link.PeerID `json:"holder,omitempty"`
+	Bot    bool        `json:"bot,omitempty"`
 
 	Record *event.CursorRecord `json:"record,omitempty"`
 }
 
 // JoinerReport declares simulation identity, bot holder, and advisory geometry.
-// The coordinator validates it before accepting the participant.
+// The coordinator validates it before accepting the participant. Bot says a bot
+// plays the joining run; one with a Holder is a bot whatever it says.
 type JoinerReport struct {
 	Holder link.PeerID
+	Bot    bool
 	Width  int
 	Height int
 
@@ -475,7 +478,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (link.Pee
 		if c.Report != nil {
 			if err = c.Report(o.Assigned, JoinerReport{
 				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
-				Remote: conn.RemoteAddr().String(), Holder: reply.Holder, Record: reply.Record,
+				Remote: conn.RemoteAddr().String(), Holder: reply.Holder, Bot: reply.Bot, Record: reply.Record,
 			}); err != nil {
 				refuse(err)
 				return 0, err
@@ -1657,7 +1660,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	} else {
 		reply.Width, reply.Height = report.Width, report.Height
 		reply.Identity = report.Identity
-		reply.Listen, reply.Holder = report.Listen, report.Holder
+		reply.Listen, reply.Holder, reply.Bot = report.Listen, report.Holder, report.Bot
 		reply.Record = report.Record
 	}
 	body, err := json.Marshal(reply)

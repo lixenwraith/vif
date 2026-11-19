@@ -1558,7 +1558,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 			if p.Name != "" {
 				name = fmt.Sprintf("%X %s", p.Slot, p.Name)
 			}
-			if p.Holder != 0 {
+			if p.Bot {
 				name = fmt.Sprintf("%X bot", p.Slot)
 				if holder, ok := slots[p.Holder]; ok {
 					name += fmt.Sprintf(" of %X", holder)

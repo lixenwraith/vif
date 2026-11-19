@@ -165,7 +165,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 	// An arrival applying at a reset's own tick joins the roster the boot rebuilds:
 	// taking it as this request's own would leave the boot's nothing to build.
 	if p.PeerID != 0 && roster.JoinRestore(engine.CursorRosterEntry{Slot: p.Slot, Control: component.ControlKind(p.Control),
-		PeerID: p.PeerID, Holder: p.Holder, Key: p.Key, Name: p.Name}) {
+		PeerID: p.PeerID, Holder: p.Holder, Bot: p.Bot, Key: p.Key, Name: p.Name}) {
 		return
 	}
 
@@ -182,7 +182,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 			q.Slot = entry.Slot
 			q.Auto = false
 			q.Control = uint8(entry.Control)
-			q.PeerID, q.Holder, q.Key, q.Name = entry.PeerID, entry.Holder, entry.Key, entry.Name
+			q.PeerID, q.Holder, q.Bot, q.Key, q.Name = entry.PeerID, entry.Holder, entry.Bot, entry.Key, entry.Name
 			s.spawnOne(&q)
 			if entry.Wraith {
 				s.wraith(entry.Slot, entry.Waited)
@@ -336,7 +336,8 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	}
 	w.Components.Wraith.RemoveEntity(e)
 	if c, ok := w.Components.Cursor.GetPtr(e); ok {
-		c.Control, c.Name = component.ControlKind(p.Control), p.Name // the name its return showed the door
+		// What its return showed the door: its name, and whether a bot plays it now
+		c.Control, c.Name, c.Bot = component.ControlKind(p.Control), p.Name, p.Bot
 	}
 	if x >= 0 {
 		s.equip(e, x, y, p.Heat, p.Energy)
@@ -385,8 +386,12 @@ func (s *CursorSystem) restore(e core.Entity, slot uint8, r *event.CursorRecord)
 func (s *CursorSystem) build(slot uint8, p *event.CursorSpawnRequestPayload) core.Entity {
 	w := s.world
 	e := w.CreateEntity(core.DomainShared)
+	// One made for no participant is the run's own boot: a bot's where a bot plays
+	// the run, which the latch says for the run and for its replay. Every other is
+	// what the roster made it, alike on every instance.
+	bot := p.Bot || p.PeerID == 0 && w.Session().Bot
 	w.Components.Cursor.SetComponent(e, component.CursorComponent{
-		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder, Key: p.Key, Name: p.Name})
+		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder, Bot: bot, Key: p.Key, Name: p.Name})
 	w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
 	return e
 }

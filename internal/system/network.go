@@ -684,7 +684,7 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	t := s.world.Resources.Player.Template()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 		Slot: p.Slot, Origin: t.Origin, X: t.X, Y: t.Y, Control: uint8(control), PeerID: p.Participant, Holder: p.Holder,
-		Heat: t.Heat, Energy: t.Energy, Key: p.Key, Name: p.Name, Record: p.Record,
+		Bot: p.Bot, Heat: t.Heat, Energy: t.Energy, Key: p.Key, Name: p.Name, Record: p.Record,
 	})
 	if control == component.ControlLocal {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})
@@ -786,7 +786,7 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	held = held && c.PeerID == p.Participant || cursor == 0 && s.dueFor(p.Participant).spawning
 	if (p.Shed || p.Dropped) && held && p.Participant != s.world.Session().Participant {
 		who := "player"
-		if c.Holder != 0 {
+		if c.Bot {
 			who = "bot"
 		}
 		why, by := "", "The host dropped"

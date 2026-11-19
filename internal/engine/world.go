@@ -107,6 +107,7 @@ type World struct {
 	followJournal           atomic.Bool                  // a replay: session state and settlements are records
 	projects                atomic.Bool                  // a projection: it re-runs ticks another world reached
 	watches                 atomic.Bool                  // a viewer: it runs the ticks its session's host closed
+	botDriven               atomic.Bool                  // a bot's run: the latch carries it; see DriveByBot
 	statPredictionPending   *atomic.Int64
 	statPredictionConfirmed *atomic.Int64
 	statPredictionDropped   *atomic.Int64
@@ -628,6 +629,10 @@ func (w *World) Watch() { w.watches.Store(true) }
 // Watches reports a viewer's world.
 func (w *World) Watches() bool { return w.watches.Load() }
 
+// DriveByBot makes this world a bot's run's: the next latch says so (SessionState.Bot),
+// and its replay reads it there. Call before the session is first latched.
+func (w *World) DriveByBot() { w.botDriven.Store(true) }
+
 // TickGranted reports whether the next tick may run: any may, but a viewer's, which
 // waits for its feed to close it. Caller MUST hold updateMutex.
 func (w *World) TickGranted() bool {
@@ -703,6 +708,8 @@ type SessionState struct {
 	// Superseding: the cursor in this run's place is still the run's it took the
 	// place back from, driven by nobody until this run's own arrival applies.
 	Superseding bool
+	// Bot: a bot plays this run, so the cursor it boots for itself is a bot's.
+	Bot bool
 }
 
 // Pausable reports whether this instance may pause: a solo run, or an authority
@@ -776,7 +783,7 @@ func (w *World) LatchSession() {
 	if w.followJournal.Load() {
 		return
 	}
-	var s SessionState
+	s := SessionState{Bot: w.botDriven.Load()}
 	if r := w.Resources.Network; r != nil && r.Port != nil {
 		s.Participant, s.Authority = r.ParticipantID, r.Authority.Load()
 		s.Live = r.Port.IsRunning() && r.Port.PeerCount() > 0
@@ -791,7 +798,7 @@ func (w *World) LatchSession() {
 	if w.Resources.Event != nil && w.Resources.Event.Queue != nil {
 		w.Resources.Event.Queue.Note(event.GameEvent{
 			Type: event.EventSessionState, Payload: &event.SessionStatePayload{Live: s.Live, Participant: s.Participant,
-				Authority: s.Authority, SeatsOnly: s.SeatsOnly, Peers: s.Peers, Superseding: s.Superseding},
+				Authority: s.Authority, SeatsOnly: s.SeatsOnly, Peers: s.Peers, Superseding: s.Superseding, Bot: s.Bot},
 			Origin: event.OriginSession, Domain: core.DomainPlayer,
 		})
 	}
@@ -880,7 +887,7 @@ func (w *World) recordEvent(rec event.JournalRecord, payload any) (event.GameEve
 		}
 	case *event.SessionStatePayload:
 		w.latch(SessionState{Live: p.Live, Participant: p.Participant, Authority: p.Authority,
-			SeatsOnly: p.SeatsOnly, Peers: p.Peers, Superseding: p.Superseding})
+			SeatsOnly: p.SeatsOnly, Peers: p.Peers, Superseding: p.Superseding, Bot: p.Bot})
 		return event.GameEvent{}, false
 	}
 	return event.GameEvent{
@@ -1252,6 +1259,26 @@ func (w *World) KeepView() {
 func (w *World) played(slot uint8) bool {
 	e := w.Resources.Player.Slot(slot)
 	return e != 0 && !w.Components.Wraith.HasEntity(e)
+}
+
+// DefeatDecides reports whether the defeat of cursor e decides the game: a played
+// one of the roster that is a person's, or a bot's while no person's is played. The
+// session's defeat keys and a scenario's guard both ask it, so a bot's defeat ends
+// no game beside a person. Caller MUST hold updateMutex.
+func (w *World) DefeatDecides(e core.Entity) bool {
+	c, ok := w.Components.Cursor.GetComponent(e)
+	if !ok || w.Resources.Player.Slot(c.Slot) != e || !w.played(c.Slot) {
+		return false
+	}
+	if !c.Bot {
+		return true
+	}
+	for slot := range uint8(parameter.MaxPlayers) {
+		if o, _ := w.Components.Cursor.GetComponent(w.Resources.Player.Slot(slot)); !o.Bot && w.played(slot) {
+			return false
+		}
+	}
+	return true
 }
 
 // nextView is the first slot step by step from slot, around the roster, that

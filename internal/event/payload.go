@@ -141,6 +141,7 @@ type ParticipantJoinedPayload struct {
 	Holder      uint32        `toml:"holder"`
 	Participant uint32        `toml:"participant"`
 	Slot        uint8         `toml:"slot"`
+	Bot         bool          `toml:"bot"` // a bot drives the cursor
 }
 
 // ParticipantDepartedPayload names the roster slot a departed participant held. It
@@ -175,6 +176,7 @@ type SessionStatePayload struct {
 	SeatsOnly   bool   `toml:"seats_only"`
 	Peers       uint32 `toml:"peers"`
 	Superseding bool   `toml:"superseding"`
+	Bot         bool   `toml:"bot"`
 }
 
 // NetworkDisconnectPayload signals peer disconnection
@@ -931,6 +933,7 @@ type CursorSpawnRequestPayload struct {
 	Control uint8         `toml:"control"` // component.ControlKind
 	PeerID  uint32        `toml:"peer_id"` // Remote owner when Control is ControlRemote
 	Auto    bool          `toml:"auto"`
+	Bot     bool          `toml:"bot"` // a bot drives the cursor
 	Origin  MapAnchor     `toml:"origin"`
 }
 

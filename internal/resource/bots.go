@@ -117,16 +117,16 @@ func stems(dir, ext string) []string {
 	return files
 }
 
-// listBots names every bot a seat of this run can play, a root's first, with what
-// each has learned in the run's scenario: a population's rounds, their recent
-// mean and the member it fields
-func listBots(o Options, sc Scenario, dir string) []string {
-	var names, whose []string
+// BotGraphs names every graph a seat of a run of sc can play, as a name finds one:
+// a root's first, the player's own among them, then the scenario's and the shipped
+func BotGraphs(o Options, sc Scenario) []engine.BotGraph {
+	var graphs []engine.BotGraph
 	add := func(name, owner string) {
-		if !slices.Contains(names, name) {
-			names, whose = append(names, name), append(whose, owner)
+		if !slices.ContainsFunc(graphs, func(g engine.BotGraph) bool { return g.Name == name }) {
+			graphs = append(graphs, engine.BotGraph{Name: name, Owner: owner})
 		}
 	}
+	dir := paths.PopulationDir()
 	for _, root := range newResolver(o).roots {
 		at, owner := filepath.Join(root, paths.BotDirName), "installed"
 		if at == dir {
@@ -140,12 +140,20 @@ func listBots(o Options, sc Scenario, dir string) []string {
 		add(name, "scenario "+sc.Shown()+"'s")
 	}
 	add(DefaultBot, "shipped")
+	return graphs
+}
 
-	lines := make([]string, 0, len(names))
-	for i, name := range names {
+// listBots names every bot a seat of this run can play (BotGraphs) with what each
+// has learned in the run's scenario: a population's rounds, their recent mean and
+// the member it fields
+func listBots(o Options, sc Scenario, dir string) []string {
+	graphs := BotGraphs(o, sc)
+	lines := make([]string, 0, len(graphs))
+	for _, graph := range graphs {
+		name, owner := graph.Name, graph.Owner
 		g, _, err := graphOf(o, sc, name)
 		if err != nil {
-			lines = append(lines, fmt.Sprintf("%s (%s): %v", name, whose[i], err))
+			lines = append(lines, fmt.Sprintf("%s (%s): %v", name, owner, err))
 			continue
 		}
 		var learned []string
@@ -172,12 +180,12 @@ func listBots(o Options, sc Scenario, dir string) []string {
 		}
 		switch {
 		case dir == "": // a host that keeps no population
-			lines = append(lines, fmt.Sprintf("%s (%s)", name, whose[i]))
+			lines = append(lines, fmt.Sprintf("%s (%s)", name, owner))
 			continue
 		case len(learned) == 0:
 			learned = []string{"nothing learned in " + sc.Shown()}
 		}
-		lines = append(lines, fmt.Sprintf("%s (%s): %s", name, whose[i], strings.Join(learned, "; ")))
+		lines = append(lines, fmt.Sprintf("%s (%s): %s", name, owner, strings.Join(learned, "; ")))
 	}
 	return lines
 }

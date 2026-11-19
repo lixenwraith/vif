@@ -134,3 +134,6 @@ output's weights in a table named for each of its units.
   ahead of the move and as often as auto-fire would.
 - `move`, units `x`, `y`: points at a cell: x and y are its offset from the
   cursor in view widths and heights, kept to the cells the view shows.
+- `wheel`, units `wheel`: asks its graph for the wheel: Steer does nothing with
+  it, and the guard Asks holds while it is above what the guard names. A network
+  has it only by listing it.

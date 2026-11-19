@@ -260,8 +260,10 @@ type JoinBase interface {
 // with, the ceiling of a session it joined, the doors Run bound for it, and the
 // press its join waits for.
 type Wiring struct {
-	// Holder is the participant whose bot this run is, zero for any other run.
+	// Holder is the participant whose bot this run is, zero for any other run. Bot
+	// says a bot plays this run's own cursor: a seat's, or a graph's own run's.
 	Holder link.PeerID
+	Bot    bool
 	Relay  func() (net.Conn, error) // a bot's stream to its holder; see seatLink
 
 	// Places is the process's place keeper, which every run Run builds and every seat

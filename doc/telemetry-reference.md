@@ -183,13 +183,13 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `player.<slot>.entity` (int) | The cursor entity in the slot, or zero. Gates the slot's cards |
 | `player.<slot>.control` (int) | That cursor's control mode, or -1 for an empty slot |
 | `player.<slot>.peer` (int) | The participant that owns the slot's cursor, zero outside a session |
-| `player.<slot>.holder` (int) | The participant whose process runs the slot's bot, zero for a person |
+| `player.<slot>.holder` (int) | The participant whose process runs the slot's bot, zero for a person and for a bot's own run |
 | `player.<slot>.wraith` (bool) | The slot's participant is away and its cursor waits as a Wraith |
 | `player.slot` (int) | The slot this instance drives, or -1 when it drives none |
 | `player.entity` (int) | The cursor entity this instance drives, the number an `:emit` payload names it by, or zero |
 | `player.peer` (int) | The participant that owns the cursor this instance drives: its own identity in a session, zero outside one |
-| `session.any_defeated` (bool) | At least one rostered cursor's owner-authored defeat latch (`EventCursorDefeatState`) is set. A shipped game-over guard |
-| `session.all_defeated` (bool) | Every rostered cursor's defeat latch is set |
+| `session.any_defeated` (bool) | The defeat latch (owner-authored `EventCursorDefeatState`, or a crush) of a cursor whose defeat decides is set: a person's in play or, where no person's is, any in play; never a Wraith's, nor a bot's beside a person. A shipped game-over guard |
+| `session.all_defeated` (bool) | The latch of every cursor whose defeat decides is set, there being one |
 | `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower's death is never counted: the structure is the players' own, and `kills.tower` stays zero |
 | `kills.total`, `kills.uncredited` (int) | All counted deaths, and those whose killer resolves to no roster cursor |
 | `energy.damage_multiplier` (int) | The cycle damage factor. `MetaSystem.setDamageMultiplier` is its only writer: it doubles on `EventCycleDamageMultiplierIncrease` and returns to 1 on `EventCycleDamageMultiplierReset` and in `Init`. `EnergySystem` multiplies penalties by it |

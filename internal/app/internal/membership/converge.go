@@ -66,7 +66,7 @@ func (m *Membership) worldRosterLocked() []network.RosterEntry {
 			continue
 		}
 		out = append(out, network.RosterEntry{
-			ID: link.PeerID(c.PeerID), Slot: uint8(slot), Holder: link.PeerID(c.Holder),
+			ID: link.PeerID(c.PeerID), Slot: uint8(slot), Holder: link.PeerID(c.Holder), Bot: c.Bot,
 			Away: w.Components.Wraith.HasEntity(e), Key: c.Key, Name: c.Name,
 		})
 	}

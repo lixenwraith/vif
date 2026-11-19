@@ -410,7 +410,7 @@ on_enter = [
     ] } },
 ]
 transitions = [
-    { trigger = "EventCursorCrushed", target = "PlayerCrushed" },
+    { trigger = "EventCursorCrushed", target = "PlayerCrushed", guard = "PayloadCursorDecides", guard_args = { field = "entity" } },
     { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 

@@ -391,6 +391,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; an omitted
 | `PayloadBoolEquals` | `field`, `value` | Event payload boolean field comparison. |
 | `PayloadStringEquals` | `field`, `value` | Event payload string field comparison. |
 | `PayloadSpeciesIn` | `field`, `names` | Event payload species is one of the named code species or behavior programs, resolved at load. |
+| `PayloadCursorDecides` | `field` | The cursor the payload field names is one whose defeat decides the game: a person's in play, or a bot's where no person's is. |
 | `PayloadExists` | none | Event payload is non-nil. |
 | `And`, `Or` | `guards`: array of `{ name, args }` | Recursively combine parameterized/static guards; an empty list passes. |
 | `Not` | `guard`: one `{ name, args }` | Negates one guard. |
@@ -574,7 +575,9 @@ The embedded campaign uses `main`, `quasar`, `storm`, `kraken`, `tower`, the
 owns cursor boot/retry, pays gold completions wherever the sequence ends, and
 resets on `session.any_defeated`. This guard aggregates
 replicated owner defeat reports; it does not read instance-local energy or heat
-mirrors. Encounter `EventLevelSetup` actions pair `clear_entities = true` with
+mirrors. It counts the persons' cursors in play, and every cursor in play where
+none is a person's, so a bot's defeat resets nothing beside a person. Encounter
+`EventLevelSetup` actions pair `clear_entities = true` with
 `preserve_loot = true`, so a level change keeps uncollected rewards; a Kraken's
 return to `main` clears only its maze, keeping the text. A defeat emits
 `EventGameResetRequest`, the same new game `:n` starts, which clears the world,

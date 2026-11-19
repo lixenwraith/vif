@@ -1131,6 +1131,128 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	}
 }
 
+// TestTheRosterSaysOfEachCursorWhetherABotDrivesIt: a bot's own run is a bot's where
+// it hosts and where it joins, by its word, and a held participant whatever it
+// says: the host's seat, and one that names a holder and no bot. A person's is not.
+// Every instance holds each cursor so, and so does the replay of the host's journal.
+func TestTheRosterSaysOfEachCursorWhetherABotDrivesIt(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr, capture := freeAddress(t), journal.NewCapture()
+	host, stop := driveBot(t, Config{Journal: true, JournalSink: capture,
+		Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	person, _ := mustSocketJoiner(t, addr, fixtureSeed, 120, 40)
+	t.Cleanup(tickInBackground(person))
+	pending, offered := dialSession(t, addr)
+	takePlace(t, pending, offered, network.JoinerReport{Holder: engine.CoordinatorParticipant, Width: 120, Height: 40})
+	joined, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
+
+	id := link.PeerID(person.membership.LocalParticipant())
+	for name, a := range map[string]*App{"the host": host, "the person": person, "the bot that joined": joined} {
+		waitForCursors(t, a, 5)
+		for _, p := range a.instance().WorldRoster() {
+			if p.Bot == (p.ID == id) {
+				t.Errorf("%s holds %+v; want participant %d alone a person's", name, p, id)
+			}
+		}
+	}
+
+	bots := func(a *App) (slots [parameter.MaxPlayers]bool) {
+		a.world.RunSafe(func() {
+			for slot := range slots {
+				c, _ := a.world.Components.Cursor.GetComponent(a.world.Resources.Player.Slot(uint8(slot)))
+				slots[slot] = c.Bot
+			}
+		})
+		return slots
+	}
+	want := bots(host)
+	stop()
+	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	end := capture.End()
+	d, err := newReplayDriver(replay, journal.Set{Records: capture.Records(), Captures: capture.Captures(), End: &end}.Stream())
+	if err == nil {
+		err = d.RunAll()
+	}
+	if got := bots(replay); err != nil || got != want {
+		t.Fatalf("the replay of the host's journal holds bots in slots %v, err %v; the host held them in %v", got, err, want)
+	}
+}
+
+// TestABotsRunBootsItsCursorAsABots: the cursor a graph's own run boots in no session
+// says a bot drives it, and still does in the session the run then opens; a script's
+// says a person's. The replay of the bot's journal, which the session note tells,
+// boots a bot's cursor too, before the world the session's opening wrote reaches it.
+func TestABotsRunBootsItsCursorAsABots(t *testing.T) {
+	// Not parallel: hosting binds a real socket.
+	booted := errors.New("booted")
+	own := func(a *App) (bot bool) {
+		a.world.RunSafe(func() {
+			c, _ := a.world.Components.Cursor.GetComponent(a.world.Resources.Player.Entity)
+			bot = c.Bot
+		})
+		return bot
+	}
+	capture := journal.NewCapture()
+	for kind, want := range map[string]bool{"bot": true, "script": false} {
+		run := runConfig{Config: Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight, Resources: resource.Options{Embedded: true}}}
+		if want {
+			run.Journal, run.JournalSink = true, capture
+		}
+		var alone, hosting bool
+		if _, err := drive(run, kind, kind, nil, nil, func(a *App) (pacedSource, error) {
+			tickUntilCursor(t, a)
+			alone = own(a)
+			a.Tick(3)
+			if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+				return nil, err
+			}
+			hosting = own(a)
+			return nil, booted
+		}); !errors.Is(err, booted) {
+			t.Fatalf("a %s's run: %v", kind, err)
+		}
+		if alone != want || hosting != want {
+			t.Errorf("a %s's run holds its cursor for a bot's %t alone and %t hosting, want %t", kind, alone, hosting, want)
+		}
+	}
+
+	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	end := capture.End()
+	d, err := newReplayDriver(replay, journal.Set{Records: capture.Records(), Captures: capture.Captures(), End: &end}.Stream())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for !own(replay) && d.Stats().Installed == 0 {
+		if more, err := d.Step(); err != nil || !more {
+			t.Fatalf("the replay ended with no cursor a bot's: %v", err)
+		}
+	}
+	if d.Stats().Installed != 0 {
+		t.Fatal("the replay held its cursor for a bot's only once the session's opening was written")
+	}
+	if err := d.RunAll(); err != nil || !own(replay) || d.Stats().Installed != 1 {
+		t.Fatalf("the replay ended holding its cursor for a bot's %t, with %d world(s) written, err %v; want a bot's and the opening's one",
+			own(replay), d.Stats().Installed, err)
+	}
+}
+
 // TestAGuestsBotsJoinThroughIt: a guest's bot is admitted on the guest's link, not
 // the host's, the host still allocates it and crosses its arrival, and what it plays
 // reaches the host through the guest.

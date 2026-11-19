@@ -488,6 +488,7 @@ type CursorRosterEntry struct {
 	Slot    uint8
 	Control component.ControlKind
 	PeerID  uint32
+	Bot     bool          // a bot drives it
 	Wraith  bool          // its participant is away, so the reset rebuilds it as a Wraith
 	Waited  time.Duration // how long it has been away, which the new game's wait goes on from
 }

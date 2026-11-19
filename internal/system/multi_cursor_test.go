@@ -238,7 +238,7 @@ func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 	arrive := func(slot uint8, peer uint32) (failed bool) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
 			Slot: slot, Origin: event.MapAnchorCenter, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
-			Name: "renamed"}})
+			Name: "renamed", Bot: true}})
 		for _, ev := range w.Resources.Event.Queue.Consume() {
 			failed = failed || ev.Type == event.EventCursorSpawnFailed
 		}
@@ -257,8 +257,8 @@ func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 			t.Fatalf("an arrival into %s: the cursor taken back stands at %+v, want the cell it held, 25,5", kept, pos)
 		}
 	}
-	if c, _ := w.Components.Cursor.GetComponent(remote); c.Name != "renamed" {
-		t.Fatalf("the cursor taken back is named %q, want the name its return showed", c.Name)
+	if c, _ := w.Components.Cursor.GetComponent(remote); c.Name != "renamed" || !c.Bot {
+		t.Fatalf("the cursor taken back is named %q, a bot's %t; want the name and the bot its return showed", c.Name, c.Bot)
 	}
 	energy, _ := w.Components.Energy.GetComponent(remote)
 	heat, _ := w.Components.Heat.GetComponent(remote)
@@ -333,7 +333,7 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 	}
 	arrive := func(slot uint8, peer uint32, control component.ControlKind) {
 		ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Slot: slot, Origin: event.MapAnchorCenter,
-			Control: uint8(control), PeerID: peer, Holder: 4, Key: "key", Name: "name"})
+			Control: uint8(control), PeerID: peer, Holder: 4, Bot: true, Key: "key", Name: "name"})
 	}
 	w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{
 		{Slot: 0, PeerID: 1, Control: component.ControlRemote},
@@ -358,9 +358,9 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 	roster := w.Resources.Player
 	var last core.Entity
 	for slot, want := range []component.CursorComponent{
-		{Slot: 0, PeerID: 1, Holder: 4, Control: component.ControlRemote, Key: "key", Name: "name"},
-		{Slot: 1, PeerID: 9, Holder: 4, Control: component.ControlLocal, Key: "key", Name: "name"},
-		{Slot: 2, PeerID: 7, Holder: 4, Control: component.ControlRemote, Key: "key", Name: "name"},
+		{Slot: 0, PeerID: 1, Holder: 4, Bot: true, Control: component.ControlRemote, Key: "key", Name: "name"},
+		{Slot: 1, PeerID: 9, Holder: 4, Bot: true, Control: component.ControlLocal, Key: "key", Name: "name"},
+		{Slot: 2, PeerID: 7, Holder: 4, Bot: true, Control: component.ControlRemote, Key: "key", Name: "name"},
 		{Slot: 3, PeerID: 8, Control: component.ControlRemote},
 	} {
 		e := roster.Slot(uint8(slot))
