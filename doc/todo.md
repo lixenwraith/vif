@@ -164,14 +164,14 @@ the maze again (Trim what a tick spends outside the position index).
 
 ## Armada
 
-Armada is to become a vertical scroller that keeps its three ships, likely the
-first scenario built on a painted map ([Authoring](#authoring)). Its items follow
-the editor's foundation. Its ships already hold and fly back to a post, leave the
-map of their own accord (`Leave`, `AtEdge`), carry their mounts, and take their
-dives from the region (`Status`, `Var`, a signal), and its ranks are maps
-([FSM reference](fsm-reference.md#behavior-programs)).
+Armada is a vertical scroller with no terrain: the drift carries its stars down
+past the ship, its ranks stand overhead and its squadrons fly routes into circles
+([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). A terrain under
+that scroll is what is left, likely the first scenario built on a painted map
+([Authoring](#authoring)); its items follow the editor's foundation. The bots'
+armada figures ([Bots](bots.md#examples)) want reading again on it.
 
-### Redesign armada as a vertical scroller
+### Scroll a terrain past armada
 
 - Priority: P2
 - Affected files: `wad/scenario/base/armada/`, `internal/system/wall.go` (the cave
@@ -183,11 +183,11 @@ dives from the region (`Status`, `Var`, a signal), and its ranks are maps
 - Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment),
   [Position §1](position-package.md#1-the-boundary)
 
-The ship keeps to the bottom and fires up, and the map comes down past it with the
-darts, lancers and wardens in it. The game has one scroll, the cave's: a profile of
-columns shifted left a column at a time (`ShiftRock`), which pushes what it meets
-left, crushes a cursor against the left edge and carries particles left. Given a
-direction and a source, that one scroll is each form armada may take:
+The map comes down past the ship as its stars do, with the ranks and squadrons in
+it. The game has one scroll, the cave's: a profile of columns shifted left a column
+at a time (`ShiftRock`), which pushes what it meets left, crushes a cursor against
+the left edge and carries particles left. Given a direction and a source, that one
+scroll is each form a terrain may take:
 
 - **A painted map, likely the first.** The map's rows enter at the top as the
   scroll steps. Its tiles are a third kind of surface, blocks laid from the map's
@@ -196,7 +196,6 @@ direction and a source, that one scroll is each form armada may take:
   a row carries beside walls, a program's spawn or a loot, is raised as it enters.
 - **Procedural rock.** The cave on its side, endless: `pkg/cave`'s profile is a
   function of an index and serves rows as it serves columns.
-- **No terrain.** The pace and the drift alone, the region spawning the ranks.
 
 What the direction needs, whatever the source: a surface of widths a row with a
 solid side, where `pkg/position` holds heights a column (`Above`, `Below`) and
@@ -210,13 +209,14 @@ To settle with the design:
   second scroll beside the cave's, and every reader of the map's edges (a
   cursor's bounds, a spawn search, the glyph spawner, a bounce, the camera) then
   needs a window beside the map.
-- The pace: a row is twice a column's height on screen, so a pace in rows reads
-  twice as fast, and a 40-row map shows a third of what a 120-column side-scroller
-  does ahead (`[map] min_height`).
-- Whether a rank keeps its place on the screen, as now, or passes with the map.
+- The pace: the rock steps whole cells, and a row is twice a column's height on
+  screen, so rock at the drift's pace in rows reads twice as fast, and a 40-row map
+  shows a third of what a 120-column side-scroller does ahead (`[map] min_height`).
+- Whether the ranks keep their place on the screen, as now, or pass with the map,
+  and how a squadron's routes, fractions of the map, meet the rock.
 
 [Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
-follow the redesign.
+follow the terrain.
 
 ## Bots
 
@@ -1293,7 +1293,7 @@ and they must leave the keys for a few minutes.
 
 The map editor leads this section. Its foundation is the P1 items, in the order
 they stand; the editor follows at P2, on a terminal and in the desktop window, with
-[armada's redesign](#redesign-armada-as-a-vertical-scroller) its first scenario.
+[armada's terrain](#scroll-a-terrain-past-armada) its first scenario.
 The rest wait.
 
 ### Settle what a bot's defeat leaves standing

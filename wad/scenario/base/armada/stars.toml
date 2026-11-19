@@ -1,0 +1,63 @@
+# armada's sky: points of light the drift brings down, each block one line, so the
+# field stays sparse and every line falls at a depth of its own
+schema = 1
+
+[[blocks]]
+lines = ["."]
+
+[[blocks]]
+lines = ["*      ."]
+
+[[blocks]]
+lines = ["'"]
+
+[[blocks]]
+lines = [".   +"]
+
+[[blocks]]
+lines = [".        ."]
+
+[[blocks]]
+lines = ["*"]
+
+[[blocks]]
+lines = [",     '"]
+
+[[blocks]]
+lines = [".:."]
+
+[[blocks]]
+lines = ["+     .      '"]
+
+[[blocks]]
+lines = ["o"]
+
+[[blocks]]
+lines = ["'   *"]
+
+[[blocks]]
+lines = ["."]
+
+[[blocks]]
+lines = [". * ."]
+
+[[blocks]]
+lines = ["-+-"]
+
+[[blocks]]
+lines = ["`      ."]
+
+[[blocks]]
+lines = ["*        ,"]
+
+[[blocks]]
+lines = [":"]
+
+[[blocks]]
+lines = [".      '      ."]
+
+[[blocks]]
+lines = ["+"]
+
+[[blocks]]
+lines = ["'  ."]

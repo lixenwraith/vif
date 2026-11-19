@@ -1,41 +1,56 @@
-description = "Hold the line under an armada: its ranks hang overhead and its ships dive at you one by one."
+description = "Fly up through the stars under an armada: its ranks hold and dive at you, and its squadrons sweep in on set routes and circle, firing."
 min_players = 1
 max_players = 16
 
-# A fixed shooter of diving formations: the cursor is a ship firing
-# up alone, under an armada standing in ranks. A ship breaks rank, dives at where
-# the cursor stood and flies back to its slot; the top rank's wardens fire aimed
-# bullets too. A wave shot down brings on the next: darts, then lancers over them,
-# then wardens over those. A ship shot down may drop a U, a lane more for the gun.
+# A vertical scroller: the cursor is a ship by the bottom firing up alone, and the
+# stars stream down past it at three depths. The odd waves stand the armada's ranks
+# overhead, whose ships dive one by one and in salvos; the even ones send squadrons,
+# lines of ships flying a route drawn at random into a circle they lap, firing. A
+# ship shot down may drop a U, a lane more for the gun.
 
 # The eight columns' width with a margin, and the ranks' rows over a lane to dodge in
 [map]
 min_width = 56
 min_height = 22
 
-# No drains, and so nothing to fuse: the waves spawn their ships directly. No text
-# either: special fire would blast it among the ranks, and they would fall unaimed at.
+# The stars, a corpus no key types: every line placed under the drift is scenery
+[content]
+files = ["stars.toml"]
+
+# No drains, and so nothing to fuse: the waves spawn their ships directly. Particles
+# are off, so special fire turns no star into a blast among the ranks, which fall only
+# to fire aimed at them.
 [regions.main]
 initial = "Muster"
-disabled_systems = ["nugget", "gold", "drain", "fuse", "glyph"]
+disabled_systems = ["nugget", "gold", "drain", "fuse", "particle"]
 
 [regions.player]
 initial = "PlayerBoot"
 background = true
 
-# --- Ships ---
+# Beside the waves: the formation's salvos and the squadrons' launches
+[regions.salvo]
+initial = "SalvoWait"
+background = true
 
-# A ship holds its slot until its roll sends it down, hold_ms on at the mean. It
-# marks the cell its target stands on for aim_ms, dives there over dive_ms and flies
-# back over return_ms to its post, the cell it spawned on, so a slot shot empty
-# stays empty. A stun sends a ship that broke rank back.
+[regions.squadron]
+initial = "SquadronIdle"
+background = true
+
+# --- The ranks ---
+
+# A ship holds its slot until its roll or a salvo sends it down, hold_ms on at the
+# mean. It marks the cell its target stands on for aim_ms, dives there over dive_ms
+# and flies back over return_ms to its post, the cell it spawned on, so a slot shot
+# empty stays empty. A stun sends a ship that broke rank back.
 [macros.Ship]
-doc = "An armada ship: its slot, its roll to dive, the dive and the flight back, and the mount it carries, if any."
+doc = "A ship of the ranks: its slot, its roll or salvo to dive, the dive and the flight back, and the mount it carries, if any."
 params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", hold_ms = "int", aim_ms = "int", dive_ms = "int", return_ms = "int", mount = "table" }
 defaults = { mount = {} }
 
 [macros.Ship.body]
 initial = "Hold"
+signals = ["dive"]
 suspend = { guard = "Stunned" }
 global = [{ from = ["Aim", "Dive"], guard = "Stunned", target = "Return", fallback = "hold" }]
 
@@ -59,10 +74,13 @@ bg256 = 0
 mount = "${mount}"
 
 # A roll a tick at a rate of one in hold_ms, so ships break rank one at a time
-# whatever the tick. With no target it holds.
+# whatever the tick, or a salvo's signal. With no target it holds.
 [macros.Ship.body.states.Hold]
 on_update = [{ action = "Freeze" }]
-transitions = [{ trigger = "Tick", target = "Aim", fallback = "hold", guard = "Chance", guard_args = { mean_ms = "${hold_ms}" } }]
+transitions = [
+    { trigger = "Tick", target = "Aim", fallback = "hold", guard = "Signalled", guard_args = { name = "dive" } },
+    { trigger = "Tick", target = "Aim", fallback = "hold", guard = "Chance", guard_args = { mean_ms = "${hold_ms}" } },
+]
 
 # The charge line and the landing marker show where the dive goes before it leaves
 [macros.Ship.body.states.Aim]
@@ -105,7 +123,7 @@ header = { x = 1, y = 0 }
 hp = 4
 mass = 2.0
 contact = { energy = 600, heat = 6 }
-hold_ms = 50000
+hold_ms = 28000
 aim_ms = 600
 dive_ms = 900
 return_ms = 1200
@@ -117,7 +135,8 @@ frames = [
     { glyphs = ["-o-", " v "], fg = ["212", " 0 "], attr = [" B ", "   "] },
 ]
 
-# The lancer: a winged raider of the second rank
+# The lancer: a winged raider of the second rank, its gun firing an aimed bullet every
+# five seconds or so, each lancer on an interval of its own
 [behaviors.lancer]
 macro = "Ship"
 width = 4
@@ -126,7 +145,8 @@ header = { x = 1, y = 0 }
 hp = 10
 mass = 2.4
 contact = { energy = 900, heat = 9 }
-hold_ms = 62500
+mount = { weapon = "turret", interval_ms = 5000, spread_ms = 1200, range = 1000, muzzle = 1.5, energy = 200, heat = 2 }
+hold_ms = 36000
 aim_ms = 800
 dive_ms = 1100
 return_ms = 1400
@@ -139,7 +159,7 @@ frames = [
 ]
 
 # The warden: the top rank's gunship. Its turret fires a bullet aimed at the
-# nearest cursor from anywhere on the map, every three seconds or so, each warden
+# nearest cursor from anywhere on the map, every two seconds or so, each warden
 # on an interval of its own so their volleys drift apart.
 [behaviors.warden]
 macro = "Ship"
@@ -149,8 +169,8 @@ header = { x = 2, y = 1 }
 hp = 24
 mass = 3.0
 contact = { energy = 1200, heat = 12 }
-mount = { weapon = "turret", interval_ms = 3200, spread_ms = 600, range = 1000, muzzle = 2.0, energy = 300, heat = 3 }
-hold_ms = 100000
+mount = { weapon = "turret", interval_ms = 2000, spread_ms = 500, range = 1000, muzzle = 2.0, energy = 300, heat = 3 }
+hold_ms = 56000
 aim_ms = 1000
 dive_ms = 1300
 return_ms = 1600
@@ -160,6 +180,211 @@ fg256 = 13
 frames = [
     { glyphs = ["/===\\", "[o=o]", " \\_/ "], fg = ["20002", "01010", " 222 "], attr = ["     ", " B B ", "     "] },
     { glyphs = ["/===\\", "[o=o]", " |_| "], fg = ["20002", "01010", " 222 "], attr = ["     ", " B B ", "     "] },
+]
+
+# --- The squadrons ---
+
+# A squadron ship flies the route the region drew for its squadron, read as it first
+# steps: legs, each homing on a waypoint until three cells from it, into a circle it
+# laps for circle_ms, firing. Each route is written for an entry on the right and
+# flown mirrored from the left. Leaving the circle, one in three dives through where
+# its target stood and leaves past the bottom; the rest climb back out where they came in.
+[macros.Squadron]
+doc = "A squadron ship: its look, stats, physics and weapon over the routes, the circle it laps and the way out."
+params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", contact = "table", physics = "table", mount = "table", radius = "float", lap_ms = "int", circle_ms = "int", aim_ms = "int", dive_ms = "int" }
+
+[macros.Squadron.body]
+initial = "Enter"
+suspend = { guard = "Stunned" }
+
+# It materializes on the top edge in under a third of a second and flies with no
+# mass, so a line passes through the ranks and itself; a ship lost to its route
+# fades at a minute. A player's kill rolls the armada table.
+[macros.Squadron.body.prototype]
+entrance = "materialize"
+entrance_ms = 300
+lifetime_ms = 60000
+drops = "armada"
+combat = "swarm"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+hp = "${hp}"
+contact = "${contact}"
+physics = "${physics}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+fg = "${fg}"
+fg256 = "${fg256}"
+bg256 = 0
+mount = "${mount}"
+
+# The routes, as fractions of the map an entry on the right flies. Hook: in toward the
+# middle, down it, up to the top left and round. Loop: down the right side, low across
+# and up over the top. Weave: across and back down the map. Strafe: down the right,
+# across the middle firing, up the far side.
+[macros.Squadron.body.states]
+Hook1 = { macro = "Leg", x = 0.54, y = 0.12, next = "Hook2" }
+Hook2 = { macro = "Leg", x = 0.5, y = 0.64, next = "Hook3" }
+Hook3 = { macro = "Leg", x = 0.38, y = 0.5, next = "Hook4" }
+Hook4 = { macro = "Leg", x = 0.22, y = 0.2, next = "HookCircle" }
+HookCircle = { macro = "Circle", x = 0.24, y = 0.34, clockwise = false, radius = "${radius}", lap_ms = "${lap_ms}", circle_ms = "${circle_ms}" }
+Loop1 = { macro = "Leg", x = 0.8, y = 0.52, next = "Loop2" }
+Loop2 = { macro = "Leg", x = 0.64, y = 0.8, next = "Loop3" }
+Loop3 = { macro = "Leg", x = 0.42, y = 0.68, next = "Loop4" }
+Loop4 = { macro = "Leg", x = 0.4, y = 0.38, next = "Loop5" }
+Loop5 = { macro = "Leg", x = 0.58, y = 0.24, next = "LoopCircle" }
+LoopCircle = { macro = "Circle", x = 0.56, y = 0.38, clockwise = true, radius = "${radius}", lap_ms = "${lap_ms}", circle_ms = "${circle_ms}" }
+Weave1 = { macro = "Leg", x = 0.14, y = 0.12, next = "Weave2" }
+Weave2 = { macro = "Leg", x = 0.86, y = 0.3, next = "Weave3" }
+Weave3 = { macro = "Leg", x = 0.14, y = 0.48, next = "Weave4" }
+Weave4 = { macro = "Leg", x = 0.5, y = 0.3, next = "WeaveCircle" }
+WeaveCircle = { macro = "Circle", x = 0.5, y = 0.38, clockwise = true, radius = "${radius}", lap_ms = "${lap_ms}", circle_ms = "${circle_ms}" }
+Strafe1 = { macro = "Leg", x = 0.9, y = 0.44, next = "Strafe2" }
+Strafe2 = { macro = "Leg", x = 0.1, y = 0.44, next = "Strafe3", flags = ["Armed"] }
+Strafe3 = { macro = "Leg", x = 0.16, y = 0.16, next = "StrafeCircle" }
+StrafeCircle = { macro = "Circle", x = 0.32, y = 0.3, clockwise = true, radius = "${radius}", lap_ms = "${lap_ms}", circle_ms = "${circle_ms}" }
+
+# The route its squadron drew, Strafe if none of the others
+[macros.Squadron.body.states.Enter]
+transitions = [
+    { trigger = "Tick", target = "Hook1", guard = "Var", guard_args = { name = "route", op = "eq", value = 1 } },
+    { trigger = "Tick", target = "Loop1", guard = "Var", guard_args = { name = "route", op = "eq", value = 2 } },
+    { trigger = "Tick", target = "Weave1", guard = "Var", guard_args = { name = "route", op = "eq", value = 3 } },
+    { trigger = "Tick", target = "Strafe1" },
+]
+
+# The dive marks the cell its target stands on, and with no target the ship climbs out
+[macros.Squadron.body.states.Peel]
+duration_ms = "${aim_ms}"
+flags = ["Enraged", "ChargeLine", "Landing"]
+probe = "ResolveTarget"
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Dive" }]
+
+# A dive that reaches the bottom edge flies off the map; one cut short climbs out
+[macros.Squadron.body.states.Dive]
+duration_ms = "${dive_ms}"
+flags = ["Enraged", "Landing"]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [
+    { trigger = "AfterTick", guard = "AtEdge", guard_args = { edge = "bottom" }, target = "Gone" },
+    { trigger = "Timeout", target = "Climb" },
+]
+
+[macros.Squadron.body.states.Climb]
+duration_ms = 8000
+on_update = [{ action = "Home", payload = { to = "post" } }]
+transitions = [
+    { trigger = "Tick", target = "Out", guard = "TargetDistance", guard_args = { to = "post", op = "lte", cells = 2.0 } },
+    { trigger = "Timeout", target = "Out" },
+]
+
+# Gone off the map, a squadron's ship is no kill and drops nothing
+[macros.Squadron.body.states.Out]
+on_enter = [{ action = "Leave", payload = { effect = "fadeout" } }]
+
+[macros.Squadron.body.states.Gone]
+on_enter = [{ action = "Leave" }]
+
+[macros.Leg]
+doc = "A leg of a route: home on the waypoint at fractions `x`, `y` of the map, mirrored from the left, and go on to `next` three cells from it or after six seconds."
+params = { x = "float", y = "float", next = "string", flags = "array" }
+defaults = { flags = [] }
+
+[macros.Leg.body]
+duration_ms = 6000
+flags = "${flags}"
+on_enter = [{ action = "Waypoint", payload = { x = "${x}", y = "${y}", mirror = true } }]
+on_update = [{ action = "Home", payload = { to = "stored" } }]
+transitions = [
+    { trigger = "Tick", target = "${next}", guard = "TargetDistance", guard_args = { to = "stored", op = "lte", cells = 3.0 } },
+    { trigger = "Timeout", target = "${next}" },
+]
+
+[macros.Circle]
+doc = "A route's circle: lap the cell at fractions `x`, `y` of the map for circle_ms, firing, the way written for an entry on the right; then dive or climb out."
+params = { x = "float", y = "float", clockwise = "bool", radius = "float", lap_ms = "int", circle_ms = "int" }
+
+[macros.Circle.body]
+duration_ms = "${circle_ms}"
+flags = ["Armed"]
+on_enter = [{ action = "Waypoint", payload = { x = "${x}", y = "${y}", mirror = true } }]
+on_update = [{ action = "Orbit", payload = { to = "stored", radius = "${radius}", lap_ms = "${lap_ms}", clockwise = "${clockwise}", mirror = true } }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Peel", guard = "Chance", guard_args = { percent = 34 } }, "Climb"] }]
+
+# Cells index the palette as the ranks' do, the bomber's 3 its bay. Squadrons fly in
+# colours the ranks do not: amber wasps, silver raptors, steel-blue bombers.
+
+# The wasp: a small, quick fighter flying in lines of six, its gun slow
+[behaviors.wasp]
+macro = "Squadron"
+width = 3
+height = 2
+header = { x = 1, y = 0 }
+hp = 3
+contact = { energy = 500, heat = 5 }
+physics = { speed = 18.0, accel = 60.0, drag = 1.5 }
+mount = { weapon = "turret", interval_ms = 2600, spread_ms = 700, range = 1000, muzzle = 1.0, energy = 200, heat = 2 }
+radius = 11.0
+lap_ms = 3600
+circle_ms = 7200
+aim_ms = 500
+dive_ms = 800
+pattern_ms = 200
+fg = [{ r = 255, g = 160, b = 40 }, { r = 255, g = 255, b = 255 }, { r = 200, g = 100, b = 20 }]
+fg256 = 11
+frames = [
+    { glyphs = [">w<", " v "], fg = ["202", " 0 "], attr = [" B ", "   "] },
+    { glyphs = ["-w-", " v "], fg = ["202", " 0 "], attr = [" B ", "   "] },
+]
+
+# The raptor: a gunship flying in fours, firing fast while it circles and strafes
+[behaviors.raptor]
+macro = "Squadron"
+width = 5
+height = 2
+header = { x = 2, y = 0 }
+hp = 8
+contact = { energy = 800, heat = 8 }
+physics = { speed = 14.0, accel = 44.0, drag = 1.5 }
+mount = { weapon = "turret", interval_ms = 1700, spread_ms = 450, range = 1000, muzzle = 1.5, energy = 250, heat = 3 }
+radius = 13.0
+lap_ms = 4400
+circle_ms = 8800
+aim_ms = 650
+dive_ms = 950
+pattern_ms = 300
+fg = [{ r = 220, g = 220, b = 232 }, { r = 120, g = 240, b = 255 }, { r = 150, g = 150, b = 170 }]
+fg256 = 15
+frames = [
+    { glyphs = ["\\=o=/", " \\V/ "], fg = ["20102", " 010 "], attr = ["  B  ", "     "] },
+    { glyphs = ["-=o=-", " \\V/ "], fg = ["20102", " 010 "], attr = ["  B  ", "     "] },
+]
+
+# The bomber: a heavy ship flying in threes, its launcher firing a homing missile a
+# ship can outrun while it circles
+[behaviors.bomber]
+macro = "Squadron"
+width = 7
+height = 3
+header = { x = 3, y = 1 }
+hp = 18
+contact = { energy = 1100, heat = 11 }
+physics = { speed = 10.0, accel = 30.0, drag = 1.5 }
+mount = { weapon = "launcher", interval_ms = 4600, spread_ms = 900, range = 1000, muzzle = 1.5, energy = 600, heat = 6 }
+radius = 15.0
+lap_ms = 5600
+circle_ms = 11200
+aim_ms = 800
+dive_ms = 1200
+pattern_ms = 400
+fg = [{ r = 90, g = 140, b = 255 }, { r = 255, g = 255, b = 255 }, { r = 50, g = 80, b = 170 }, { r = 255, g = 130, b = 60 }]
+fg256 = 12
+frames = [
+    { glyphs = ["/=[#]=\\", "|o-+-o|", " \\_V_/ "], fg = ["2003002", "2103012", " 00100 "], attr = ["       ", " B   B ", "       "] },
+    { glyphs = ["/=[#]=\\", "|o-x-o|", " \\_V_/ "], fg = ["2003002", "2103012", " 00100 "], attr = ["       ", " B   B ", "       "] },
 ]
 
 # --- Loot ---
@@ -204,42 +429,204 @@ doc = "From wave `from`, lay the rank `map` on row `y`, about the map's middle c
 params = { map = "string", from = "int", y = "int" }
 body = { action = "EmitEvent", event = "EventMapLayRequest", origin = "top", payload = { map = "${map}", x = -22, y = "${y}" }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = "${from}" } }
 
-# Boot: settled before the clock starts, drawn behind the start prompt; the first
-# wave comes in at the first Tick, after the press
+[macros.Drift]
+doc = "Ease the stars' fall to the speed variable `speed` holds over `ease_ms`."
+params = { speed = "string", ease_ms = "int" }
+defaults = { ease_ms = 0 }
+body = { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 1.5707963267948966, duration_ms = 0, scenery = true, ease_ms = "${ease_ms}" }, payload_vars = { speed = "${speed}" } }
+
+[macros.WaveDone]
+doc = "A wave's end, spliced into an And's guards: every squadron asked for has launched and no ship is left."
+params = {}
+body = [
+    { name = "VarEquals", args = { var = "squadrons", value = 0 } },
+    { name = "StatusIntCompare", args = { key = "behavior.count", op = "eq", value = 0 } },
+]
+
+# Boot: settled before the clock starts, behind the start prompt. The stars set off
+# in a rush at the first Tick, after the press, and settle to the pace as the first
+# wave comes in. The pace is cells a second at the nearest depth, a row being two.
 [states.Muster]
 parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "pace", value = 28 } },
+    { action = "SetVar", payload = { name = "warp", value = 140 } },
+    { macro = "Drift", speed = "warp" },
+]
 transitions = [
     { trigger = "Tick", target = "Wave" },
 ]
 
-# The first wave is the two ranks of darts, the second adds the lancers over them
-# and every wave from the third the wardens over those.
+# The stars ease from the rush that brought the wave to the pace; the odd waves stand
+# the ranks, the even ones send squadrons
 [states.Wave]
 parent = "Root"
 on_enter = [
     { action = "IncrementVar", payload = { name = "wave" } },
-    { macro = "Rank", map = "wardens", from = 3, y = 2 },
-    { macro = "Rank", map = "lancers", from = 2, y = 5 },
-    { macro = "Rank", map = "darts", from = 1, y = 8 },
-    { macro = "Rank", map = "darts", from = 1, y = 11 },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}" }, payload_vars = { message = "wave" } },
+    { macro = "Drift", speed = "pace", ease_ms = 1500 },
+    { action = "CopyVar", payload = { name = "odd", source_var = "wave" } },
+    { action = "ModuloVar", payload = { name = "odd", delta = 2 } },
 ]
 transitions = [
-    { trigger = "Tick", target = "Cleared", guard = "StatusIntCompare", guard_args = { key = "behavior.count", op = "eq", value = 0 } },
+    { trigger = "Tick", target = "Formation", guard = "VarEquals", guard_args = { var = "odd", value = 1 } },
+    { trigger = "Tick", target = "Squadrons" },
 ]
 
-# A green strobe, species damage doubles, and every energy penalty with it, as a
-# storm kill doubles it in main, and the next wave comes in two seconds on
+# The ranks: two of darts, lancers over them from the third wave and wardens over
+# those from the fifth. Salvos send darts down together, one more every four waves
+# to three, and from the seventh wave two squadrons cross over the ranks.
+[states.Formation]
+parent = "Root"
+on_enter = [
+    { macro = "Rank", map = "wardens", from = 5, y = 2 },
+    { macro = "Rank", map = "lancers", from = 3, y = 5 },
+    { macro = "Rank", map = "darts", from = 1, y = 8 },
+    { macro = "Rank", map = "darts", from = 1, y = 11 },
+    { action = "SetVar", payload = { name = "formation", value = 1 } },
+    { action = "CopyVar", payload = { name = "salvo", source_var = "wave" } },
+    { action = "DivideVar", payload = { name = "salvo", delta = 4 } },
+    { action = "IncrementVar", payload = { name = "salvo", max = 3 } },
+    { action = "SetVar", payload = { name = "squadrons", value = 2 }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = 7 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}" }, payload_vars = { message = "wave" } },
+]
+on_exit = [{ action = "SetVar", payload = { name = "formation", value = 0 } }]
+transitions = [
+    { trigger = "Tick", target = "Cleared", guard = "And", guard_args = { guards = [{ macro = "WaveDone" }] } },
+]
+
+# Squadrons: two in the second wave and one more every other wave to five. A wave
+# none of whose ships got away is swept.
+[states.Squadrons]
+parent = "Root"
+on_enter = [
+    { action = "CopyVar", payload = { name = "squadrons", source_var = "wave" } },
+    { action = "DivideVar", payload = { name = "squadrons", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "squadrons", max = 5 } },
+    { action = "StatusToVar", payload = { key = "behavior.wasp.left", name = "wasps_gone" } },
+    { action = "StatusToVar", payload = { key = "behavior.raptor.left", name = "raptors_gone" } },
+    { action = "StatusToVar", payload = { key = "behavior.bomber.left", name = "bombers_gone" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}: Squadrons Inbound" }, payload_vars = { message = "wave" } },
+]
+transitions = [
+    { trigger = "Tick", target = "Swept", guard = "And", guard_args = { guards = [
+        { macro = "WaveDone" },
+        { name = "StatusIntCompare", args = { key = "behavior.wasp.left", since = "wasps_gone", op = "eq", value = 0 } },
+        { name = "StatusIntCompare", args = { key = "behavior.raptor.left", since = "raptors_gone", op = "eq", value = 0 } },
+        { name = "StatusIntCompare", args = { key = "behavior.bomber.left", since = "bombers_gone", op = "eq", value = 0 } },
+    ] } },
+    { trigger = "Tick", target = "Cleared", guard = "And", guard_args = { guards = [{ macro = "WaveDone" }] } },
+]
+
+# A wave down: a green strobe, the pace a step faster and the stars rushing past as
+# the armada regroups ahead. The ranks' fall doubles species damage, and every energy
+# penalty with it, as a storm kill doubles it in main.
 [states.Cleared]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 250 } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {} Cleared" }, payload_vars = { message = "wave" } },
-    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" }, delay_ms = 1000 },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease", guard = "VarEquals", guard_args = { var = "odd", value = 1 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" }, delay_ms = 1000, guard = "VarEquals", guard_args = { var = "odd", value = 1 } },
+    { action = "IncrementVar", payload = { name = "pace", delta = 4, max = 64 } },
+    { action = "CopyVar", payload = { name = "warp", source_var = "pace" } },
+    { action = "MultiplyVar", payload = { name = "warp", delta = 5, max = 200 } },
+    { macro = "Drift", speed = "warp", ease_ms = 600 },
 ]
 transitions = [
-    { trigger = "Tick", target = "Wave", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+    { trigger = "Tick", target = "Wave", guard = "StateTimeExceeds", guard_args = { ms = 2500 } },
+]
+
+# Swept: every player is paid a heat, dropped at the top and drawn to the ship
+[states.Swept]
+parent = "Cleared"
+on_enter = [
+    { action = "EmitEvent", event = "EventLootSpawnRequest", origin = "top", payload = { type = "heat", y = 2 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Squadrons Swept: Heat Up" }, delay_ms = 1000 },
+]
+
+# --- Salvos ---
+
+# While a formation stands, a salvo every four seconds signals salvo darts to dive
+# together, and from the third wave a lancer with them, drawn among the ships holding
+# their slots alike on every instance
+[states.SalvoWait]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "Salvo", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 4000 } },
+        { name = "VarEquals", args = { var = "formation", value = 1 } },
+    ] } },
+]
+
+[states.Salvo]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventBehaviorSignalRequest", payload = { program = "dart", signal = "dive" }, payload_vars = { count = "salvo" } },
+    { action = "EmitEvent", event = "EventBehaviorSignalRequest", payload = { program = "lancer", signal = "dive", count = 1 }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = 3 } },
+]
+transitions = [
+    { trigger = "Tick", target = "SalvoWait" },
+]
+
+# --- Squadron launches ---
+
+# A squadron is a line of one program's ships entering on the top edge's right end or
+# its left, which fly the route drawn for it; the next squadron draws three seconds
+# after its last ship, so no ship reads another's route. Its kind is drawn among those
+# the wave has reached: wasps from the second, raptors from the fourth, bombers from
+# the sixth. The first squadron of a game flies the Hook.
+[states.SquadronIdle]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "SquadronDraw", guard = "VarCompare", guard_args = { var = "squadrons", op = "gt", value = 0 } },
+]
+
+[states.SquadronDraw]
+parent = "Root"
+on_enter = [
+    { action = "IncrementVar", payload = { name = "squadron" } },
+    { action = "RandomVar", payload = { name = "route", min = 1, max = 4, index_var = "squadron" } },
+    { action = "SetVar", payload = { name = "route", value = 1 }, guard = "VarEquals", guard_args = { var = "squadron", value = 1 } },
+    { action = "SetVar", payload = { name = "side_seed", value = 1 } },
+    { action = "RandomVar", payload = { name = "entry_x", min = -1, max = 0, seed_var = "side_seed", index_var = "squadron" } },
+    { action = "SetVar", payload = { name = "kind_seed", value = 2 } },
+    { action = "RandomVar", payload = { name = "kind", min = 0, max = 1048575, seed_var = "kind_seed", index_var = "squadron" } },
+    { action = "CopyVar", payload = { name = "kinds", source_var = "wave" } },
+    { action = "DivideVar", payload = { name = "kinds", delta = 2 } },
+    { action = "ClampVar", payload = { name = "kinds", min = 1, max = 3 } },
+    { action = "ModuloVar", payload = { name = "kind", source_var = "kinds" } },
+]
+transitions = [
+    { trigger = "Tick", target = "LaunchWasps", guard = "VarEquals", guard_args = { var = "kind", value = 0 } },
+    { trigger = "Tick", target = "LaunchRaptors", guard = "VarEquals", guard_args = { var = "kind", value = 1 } },
+    { trigger = "Tick", target = "LaunchBombers" },
+]
+
+[macros.Launch]
+doc = "Launch a ship of `program` on the top edge's end entry_x names, after `delay_ms`."
+params = { program = "string", delay_ms = "int" }
+body = { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "${program}", edge = "top", inset = 6 }, payload_vars = { x = "entry_x" }, delay_ms = "${delay_ms}" }
+
+[states.LaunchWasps]
+parent = "Root"
+on_enter = [{ macro = "Launch", program = "wasp", each = { delay_ms = [0, 300, 600, 900, 1200, 1500] } }]
+transitions = [{ trigger = "Tick", target = "SquadronGap", guard = "StateTimeExceeds", guard_args = { ms = 1600 } }]
+
+[states.LaunchRaptors]
+parent = "Root"
+on_enter = [{ macro = "Launch", program = "raptor", each = { delay_ms = [0, 450, 900, 1350] } }]
+transitions = [{ trigger = "Tick", target = "SquadronGap", guard = "StateTimeExceeds", guard_args = { ms = 1450 } }]
+
+[states.LaunchBombers]
+parent = "Root"
+on_enter = [{ macro = "Launch", program = "bomber", each = { delay_ms = [0, 700, 1400] } }]
+transitions = [{ trigger = "Tick", target = "SquadronGap", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
+
+[states.SquadronGap]
+parent = "Root"
+on_enter = [{ action = "DecrementVar", payload = { name = "squadrons", min = 0 } }]
+transitions = [
+    { trigger = "Tick", target = "SquadronIdle", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
 ]
 
 # --- Player ---
@@ -273,11 +660,12 @@ transitions = [
     { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# A lost game holds under a red strobe as long as main's, then starts over; the
-# reset clears the status bar, so the new game opens with what ended the last
+# A lost game stops the stars under a red strobe as long as main's, then starts over;
+# the reset clears the status bar, so the new game opens with what ended the last
 [states.PlayerDied]
 parent = "Root"
 on_enter = [
+    { action = "EmitEvent", event = "EventDriftCancel", payload = { ease_ms = 250 } },
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
 ]
 transitions = [

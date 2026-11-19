@@ -430,7 +430,8 @@ td          0.1%        12,952    16,479  (one seed)          1,200,000         
   walk written to hold a corner of the view loses 6 to 12 in 100 and one that
   holds its middle 17.
 - In `armada`, with no text at all, the walk is the play: a learned round lasts
-  12,000 to 23,000 ticks for 848.
+  12,000 to 23,000 ticks for 848. Its figures here are the fixed shooter's, read
+  before it scrolled and flew squadrons, whose stars no bot sees.
 - What is learned is its scenario's. The embedded scenario's walk written into
   `default` earns -8,304 and -6,352 over `armada`'s 60,000 ticks where none
   earns 7,868 and 7,024. So `default` writes none.
