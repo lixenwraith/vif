@@ -1070,6 +1070,45 @@ Libraries · Branches.
   (`grep --line-buffered`): a container restart ends the runs and loses what a
   pipe still held. `genetic`'s `Inject` keeps the gene slices it is handed, so a
   test builds each learner its own population.
+- What a run fields at its stop in `cave` is the pair holding its titles then,
+  a lottery wider than a hundred rounds' luck and no measure of its learner.
+  Two learners alike past each population's fifteenth round fielded 28,511
+  apart after three million ticks on `cave`'s weights and 31,722 the other way
+  on another seed, a second hundred rounds moved ten pairs' means by 357 to
+  29,113, and from nothing six seeds put every arm over main's 4,824 where
+  twelve read level at 5,466. Read a learner's setting by the candidates'
+  recent mean, which no luck picks, by every proved member, and on six seeds
+  a start or more.
+- A rule of the learner is read as an arm: a `tar` copy whose rule reads the
+  environment and logs every scored round, with its genome's key, what drew
+  it, its member's mean and rounds after it and who holds the title. With no
+  knob set it keeps main's population bytes, and what is built keeps its
+  knob's. The runs go through a queue keyed by a done marker a run, which a
+  restart costs one run and which is reordered by stopping it as a run ends.
+- Held-out rows are a function of the genomes played: two runs fielding one
+  pair give the same rows, so a queue keeps them by the genomes, and a hold of
+  25 rounds opens with the rounds a hold of 3 plays. One member is held beside
+  another network's by populations of a member each, eight rounds apiece.
+- The trusted mean is read a round ahead, each repeat against its member's
+  mean before it, in units of the recent mean so that runs weigh alike. A
+  member's later rounds after its eighth are those of the members whose rounds
+  held up. The weight that reads level is its start's more than its
+  network's: 1.2 to 2.7 in a population played on from written weights, 5 to
+  7 from nothing, 3.3 and 3.7 over every run.
+- A title holder's own mean tells little, so count the rounds behind a title
+  before reading what it fields. A fielded `raid`'s round scores 65,000 to
+  71,000 or, lost before the first Kraken, 3,000 to 7,000, so 45 rounds carry
+  3,000 either way, and a `kraken`'s scores the cap, 306,500, or less. Giving
+  promise its turn cleared most or all of the proved members left unplayed
+  and passed `raid`'s title on 14 to 48 rounds under a rival of the highest
+  plain mean and 33 to 53 under a lighter trust weight, for 55 and 72 as
+  built: seed 1 fielded 40,445 less over 200 rounds by it, and a `kraken`
+  took its title on fifteen rounds at the cap.
+- A merge under a measurement is checked before a baseline is kept: main's
+  binary after it and before it play one seed, a game's 600,000 ticks from
+  nothing, and the same population bytes say the runs read so far are main's
+  still. A scenario's own model is a file of the merge: a start on it is read
+  again.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick
   144, and one that only fires at about 158. A hit pays energy and a raider's
   touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
@@ -1125,19 +1164,6 @@ Libraries · Branches.
 - A gameplay change is held against `cave`'s own bot learning alone, before
   and after on one seed: 200,000 ticks of it are 81,549 actions and a fitness
   of 1,838,475 on seed 1, which a trainer's populations rest on.
-- What a run fields as it stops is the pair holding its titles then, a lottery
-  wider than a hundred rounds' luck: two learners alike past a population's
-  fifteenth round fielded 28,511 apart after three million ticks on `cave`'s
-  weights and 31,722 the other way on another seed, and a second hundred rounds
-  moved ten pairs' means by 357 to 29,113. Read a learner's setting on six
-  seeds a start, and by the candidates' recent mean, which no luck picks.
-- Count the rounds behind a title before reading what it fields. Giving
-  promise its turn, by a lighter trust weight or a rival of the highest plain
-  mean, cleared the proved members left unplayed and passed `raid`'s title on
-  14 to 48 rounds for 55 to 72, and one seed lost forty thousand by it.
-- The weight at which a member's trusted mean foretells its next round level
-  is the start's more than the network's: 1.2 to 2.7 played on from written
-  weights, 5 to 7 from nothing, 3.5 over every run.
 - A bar a model must clear is set in standard errors read from its rows, not
   in points. A round of `cave`'s model of 300,260 spreads 134,733 and one of
   341,701 spreads 92,217, so 15,000 on each of two sets of 400 rounds passed a
