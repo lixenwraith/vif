@@ -404,12 +404,13 @@ scenario   no text   unlearned   learned                      learning          
 embedded     18%       624,495   708,250  664,177  676,883    4,800,000 ticks   24 of half an hour
 armada       93%           193     8,633    9,310    5,196    2,400,000         100
 cave         90%           216       224      239      232      600,000         100
-td          0.1%        12,952   TDLEARNED                    1,200,000         12
+td          0.1%        12,952    16,479  (one seed)          1,200,000         12
 ```
 
 - The ticks are four games', one in `cave`: two minutes on four cores in the
-  embedded scenario, 132 rounds; 15 seconds in `armada`, some 400; eight
-  minutes in `td`, TDROUNDS.
+  embedded scenario, 132 rounds; 15 seconds in `armada`, some 400; ten
+  minutes in `td`, 70. A round of `td` runs from 83 to 48,360, so twelve tell
+  16,479 from 12,952 no better than chance: their medians are 9,588 and 6,494.
 - Backing off a threat is `default`'s own, a state and no weight. Without it a
   round of `td` scores 3,923, its median 3,936, and lasts 6,537 ticks, where
   with it the median is 6,494 over 12,387; the other three play as they did,
