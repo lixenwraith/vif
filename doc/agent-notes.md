@@ -52,8 +52,14 @@ Libraries · Branches.
 - `deploy/docker/Dockerfile` pins the Go image's index digest: HEAD
   `registry-1.docker.io/v2/library/golang/manifests/<tag>` with an `auth.docker.io`
   pull token and the OCI index Accept header, and read `Docker-Content-Digest`. HEAD
-  the current pin first, which must match. Docker Hub answers a shared egress 429
-  at times: retry after a pause.
+  the current pin first: it matches unless Docker Hub rebuilt the tag on a newer
+  Alpine since, which a GET of the pinned digest shows in its manifests'
+  `org.opencontainers.image.created`. Docker Hub answers a shared egress 429 at
+  times: retry after a pause.
+- A cloud container builds the session image: `sudo env HTTPS_PROXY=... dockerd`,
+  then a scratch copy of the Dockerfile that copies the proxy's CA in from a
+  `--build-context` and sets `SSL_CERT_FILE` before `apk add`, built with
+  `--network host` and the proxy's variables as build args.
 - A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
   development machine): keep a long task's notes and working files in the
   checkout's `tmp/`, which `.gitignore` holds. A `.go` file there is a package to
