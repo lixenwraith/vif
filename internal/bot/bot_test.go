@@ -886,7 +886,8 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 // TestALearnerKeepsItsPopulationByItsLayout: a population kept under the layout's
 // digest comes back with its rounds, and the best member its rounds have proved is
 // the one fielded, not the best scored; one of another layout, or none, starts
-// over from the hand-written genome. A save says each member's rounds and birth.
+// over from the hand-written genome. A save says each member's rounds and birth,
+// the proved first with the fielded at their head.
 func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	g, d, _ := learning(t)
 	net := g.nets[0]
@@ -930,9 +931,10 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
-	if saved.Layout != net.digest || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 0 ||
-		saved.Members[entered].Born != learnPool+1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 2 || saved.Members[2].Born != 5 {
-		t.Fatalf("saved %+v: want the three kept with their births, the genome scored 45 born at round 1, and the proved member fielded",
+	if saved.Layout != net.digest || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 2 ||
+		saved.Members[entered].Born != learnPool+1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 0 ||
+		saved.Members[0].Born != 5 || saved.Members[1].Born != 7 {
+		t.Fatalf("saved %+v: want the three kept with their births, the two proved first and the more trusted fielded, and the genome scored 45 born at round 1",
 			saved)
 	}
 }
@@ -1046,6 +1048,81 @@ func TestRepeatsTestTheTitleAndProveTheBestGuessByTurns(t *testing.T) {
 			t.Fatalf("repeat %d is %v, want %v: the fielded's rival, the less played, then the most trusted short of its proof", i+1, candidate[:1], want[:1])
 		}
 		l.settle(0, 60, true)
+	}
+}
+
+// probation is a learner on a full archive: the proved it has room for, eight
+// rounds each at 100 less a tenth a place, and members of one round at 300 less
+// one a place, every one of which outscores every proved. A genome of 0.5 with
+// a round short of its proof at mean takes the last's place where mean is given.
+func probation(t *testing.T, mean ...float64) (*Learner, func(float64) []float64) {
+	t.Helper()
+	g, _, _ := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	var full []member
+	for i := range learnPool {
+		if i < learnPool-learnProbation {
+			full = append(full, member{Genes: genome(float64(i+1) / 100), Score: 100 - float64(i)/10, Rounds: learnProven})
+		} else {
+			full = append(full, member{Genes: genome(float64(i+1) / 100), Score: float64(300 - i), Rounds: 1})
+		}
+	}
+	if len(mean) > 0 {
+		full[learnPool-1] = member{Genes: genome(0.5), Score: mean[0], Rounds: learnProven - 1}
+	}
+	l, err := NewLearner(g, "fly", 1, 1, keeping(t, net.digest, full...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l, genome
+}
+
+// TestANewcomerDisplacesOnlyAMemberOnProbation: the archive ranks by what rounds
+// prove, the proved above the rest, so a newcomer's one round, however high,
+// takes the place of the last member short of its proof and of no proved one;
+// and one whose round ranks it under them all does not enter.
+func TestANewcomerDisplacesOnlyAMemberOnProbation(t *testing.T) {
+	l, genome := probation(t)
+	foot := genome(float64(learnPool) / 100)
+	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.99)), 5000)
+	members := l.engine.Snapshot().Members
+	proved := learnPool - learnProbation
+	for i, c := range members {
+		if (c.Count >= learnProven) != (i < proved) {
+			t.Fatalf("member %d of the archive has %d rounds: want the %d proved first, as a round of 5000 displaces none of them", i, c.Count, proved)
+		}
+	}
+	if !l.holds(genome(0.99)) || l.holds(foot) || !slices.Equal(members[proved].Data, genome(0.99)) {
+		t.Fatal("a round of 5000 did not take the place of the last member on probation, at the head of the rest")
+	}
+	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.98)), 200)
+	if l.holds(genome(0.98)) {
+		t.Fatal("a round under every member's on probation entered")
+	}
+}
+
+// TestAMemberProvedTakesAProvedMembersPlaceOrLeaves: a member whose round proves
+// it stands among the proved by its trusted mean, and as the next newcomer
+// enters the last of them leaves: another where the one just proved ranks above
+// it, and the one just proved where it does not, level with the last included.
+func TestAMemberProvedTakesAProvedMembersPlaceOrLeaves(t *testing.T) {
+	level := 100 - float64(learnPool-learnProbation-1)/10
+	for name, c := range map[string]struct {
+		mean  float64
+		stays bool
+	}{"above": {120, true}, "below": {80, false}, "level": {level, false}} {
+		l, genome := probation(t, c.mean)
+		last := genome(float64(learnPool-learnProbation) / 100)
+		l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.5)), c.mean)
+		if !l.holds(genome(0.5)) || !l.holds(last) {
+			t.Fatalf("%s: a member proved left, or pushed a proved one off, before any newcomer wanted the place", name)
+		}
+		l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.99)), 1)
+		if !l.holds(genome(0.99)) || l.holds(genome(0.5)) != c.stays || l.holds(last) == c.stays {
+			t.Errorf("%s: after the next newcomer the member proved at %g is held %t and the last of the proved %t: want the lower of the two gone and the newcomer in its place",
+				name, c.mean, l.holds(genome(0.5)), l.holds(last))
+		}
 	}
 }
 
@@ -1183,7 +1260,8 @@ func TestARoundIsScoredThoughTheEngineDroppedItsEvaluation(t *testing.T) {
 }
 
 // TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds: a member played
-// again may be pushed off by another game's entry before its round closes. It
+// again in two games may be pushed off before the second's round closes, once
+// the first's has brought it to the foot of probation and a newcomer entered. It
 // re-enters on the mean of its rounds with this one, not on this one alone as a
 // new genome would.
 func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
@@ -1192,7 +1270,10 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	var full []member
 	for i := range learnPool {
-		full = append(full, member{Genes: genome(float64(i+1) / 100), Score: float64(1000 - i), Rounds: learnProven})
+		full = append(full, member{Genes: genome(float64(i+1) / 100), Score: float64(1000 - i), Rounds: 1})
+		if i < learnPool-learnProbation {
+			full[i].Rounds = learnProven
+		}
 	}
 	tail := &full[learnPool-1]
 	tail.Rounds = 3
@@ -1204,11 +1285,12 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 	l.settle(0, 1, true) // the hand-written genome, scored under them all
 	l.drawn = 2*learnRepeat - 1
 	if again := l.take(0, true); !slices.Equal(again, tail.Genes) {
-		t.Fatalf("the repeat is %v, want the one member short of its proof", again[:1])
+		t.Fatalf("the repeat is %v, want the member short of its proof its three rounds make the most trusted", again[:1])
 	}
+	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(tail.Genes), -1e6)
 	l.engine.CompleteEvaluation(l.engine.BeginEvaluation(genome(0.99)), 990.5)
 	if l.holds(tail.Genes) {
-		t.Fatal("another game's entry did not push the member off the archive")
+		t.Fatal("a round that brought the member to the foot and a newcomer's entry did not push it off the archive")
 	}
 	l.settle(0, 5000, true)
 	want := genetic.MeanScore(tail.Score, 5000, tail.Rounds)

@@ -264,12 +264,12 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     once and fields 187,300, a Kraken slower in most rounds. Learned on from
     so, fifteen million ticks field 201,942 on seed 1 and 267,101 on seed 2,
     one round and none crushed, at the rock 73 and 76 ticks in 100, nine
-    Krakens down in 29 rounds and 62: seed 1's `raid` kept no member of more
-    than three rounds and fielded the weights it began with
-    ([below](#have-a-scenario-describe-the-bots-that-play-it)), and seed 2
-    lost 17 rounds early to the raiders. From `cave`'s own weights the same
-    ticks field a `raid` that still stands at the rock 80 ticks in 100, loses
-    five rounds early, two crushed, and shoots nine Krakens down in 80.
+    Krakens down in 29 rounds and 62: seed 1's `raid`, its archive then ranked
+    by the plain mean, kept no member of more than three rounds and fielded
+    the weights it began with, and seed 2 lost 17 rounds early to the
+    raiders. From `cave`'s own weights the same ticks field a `raid` that
+    still stands at the rock 80 ticks in 100, loses five rounds early, two
+    crushed, and shoots nine Krakens down in 80.
   - **A nudge in the pay**, tried in a scratch tree and not built: a learner
     is paid no column scrolled while a block stands within two rows above or
     below its ship. Under the rule that fielded the best of eight rounds it
@@ -285,15 +285,16 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     the kill pays, and `raid` on its first cave alone. That `raid` beside
     `cave`'s own `kraken` fielded 315,649 on seed 1, four rounds lost early,
     none crushed and 96 at the limit, and the 107,101 on seed 2, twenty lost.
-  - **The archive ranks by raw mean**, so a member whose mean many rounds
-    have brought down to what it is worth sinks below newcomers one lucky
-    round put there: after fifteen million ticks `raid`'s fielded stood 30th
-    and 32nd of 32, and `kraken` on seed 2 kept no proved member, each one
-    tested to its first lost round having left an archive of 32 at the
-    limit's score. Pushed off, a title passes to the next proved, or to the
-    weights written. The archive wants ranking by the trusted mean, a
-    newcomer let in at its foot on what its round claims: a rank hook in
-    `lixenwraith/genetic`, or the fielded member held outside the archive.
+  - **What ranks, and who is tested**, after the archive that ranks by what
+    rounds prove ([Bots](bots.md#learning)). Two arms are owed, each its own.
+    The trust weight fitted from a run's rounds: over 105 members with eight
+    rounds and eight or more after, the mean weighed with eight rounds at the
+    recent mean foretells the later ones 20% under, with two it is level, and
+    the plain mean runs 14% over. And the rival taken as the proved member
+    with the highest plain mean: the title is tested only against the next
+    most trusted, so after fifteen million ticks on seed 1 five members at
+    52,350 to 55,969 over eight to ten rounds stood behind a rival of 48,221
+    over 54 and no turn played them again.
 - **The default bot as the stress test**: every input loaded into its generic
   network and measured, then the hooks it does not need unplugged.
 - **A move that names a place**, not built: `outputs` leaves room for one. An
@@ -358,11 +359,12 @@ built so:
 - **The inputs are what a player reads**: the rock, all three raiders, every
   landing and how soon it lands, the Kraken, energy and heat. A raider's size
   and the cave's number steer nothing a person steers by.
-- **A member ranks by the mean of its rounds** and enters a full archive on a
-  second round. Fielded is, of those eight rounds have proved, the one whose
-  mean is trusted most, weighed with eight rounds at the population's recent
-  mean, and a third of the rounds go by turns to proving the most trusted
-  guess and to testing the fielded against its rival.
+- **A member ranks by what its rounds prove**: its mean weighed with eight
+  rounds at the population's recent mean, the eight-round proved, eight at
+  most, above the 24 on probation. It enters a full archive on a second round,
+  in the place of the last on probation and of no proved member. Fielded is
+  the first of the proved, and a third of the rounds go by turns to proving the
+  most trusted guess and to testing the fielded against its rival.
 - **A game on every core.** A headless run alone plays `-games` games at once,
   each its own instance on a seed drawn from the run's, all feeding one learner
   a network and its one file, their rounds closing by tick and then by game.
@@ -1094,10 +1096,7 @@ What remains:
     against 71,954, and the rounds lost in the first cave fall from 20 in 100
     to 4. From nothing what is fielded doubles, and `kraken`, which in turn had
     no member eight rounds proved, fields one.
-  - Not built, from a read of the learner. The archive ranks a member's mean
-    against a new genome's one round, and of one genome's rounds 61 in 100
-    score over its own mean (`seed`'s 27,614, a deviation of 18,425), so a
-    full archive drops proved members for lucky ones. A step at the floor
+  - Not built, from a read of the learner. A step at the floor
     moves a weight 0.24, a normal draw of 0.03 of its range of 8. And from a
     written start a hidden unit does nothing until a weight into it and one
     out of it have both moved, each alone a child that plays as its parent:
