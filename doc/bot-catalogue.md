@@ -24,7 +24,7 @@ nearest ones the view shows, each by its fields.
 - `kraken`: a Kraken, by its body, which may stand past a view that shows a leg;
   its nearness is that of the nearest cell it covers, legs and all. A target. A
   network reads the nearest, by `x`, `y`, `near_x`, `near_y`, `reach`, `hp`,
-  `health`, `vx`, `vy`.
+  `health`.
 - `cursor`: another participant's cursor. A target. A network reads the 8
   nearest, each by `x`, `y`, `near_x`, `near_y`.
 - `threat`: a species, a hostile bullet or a hostile missile, all weighted

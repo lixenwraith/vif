@@ -93,7 +93,7 @@ var kinds = [kindCount]struct {
 				m.at(e, k.AttackT, to)
 				return true
 			})
-		}, ranks: 1, covers: true, tells: fieldReach, knows: []field{fieldReach, fieldHits, fieldHealth, fieldVX, fieldVY}},
+		}, ranks: 1, covers: true, tells: fieldReach, knows: []field{fieldReach, fieldHits, fieldHealth}},
 	kindCursor: {name: "cursor", doc: "another participant's cursor",
 		scan: func(m *mind, to visitor) {
 			own := m.ctx.World.Resources.Player.Entity
