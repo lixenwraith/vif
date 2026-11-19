@@ -104,7 +104,6 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 	kraken := place(w, core.DomainShared, 40, 14, func(e core.Entity) {
 		w.Components.Kraken.SetComponent(e, component.KrakenComponent{TargetX: 17.5, TargetY: 9.5, AttackT: 0.25, MaxHitPoints: 4 * hitsHalf})
 		w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: 3 * hitsHalf})
-		w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: -rateHalf}})
 		var header component.HeaderComponent
 		for _, cell := range [][2]int{{30, 14}, {22, 12}, {9, 10}} {
 			member := place(w, core.DomainShared, cell[0], cell[1], func(core.Entity) {})
@@ -153,9 +152,9 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 		"species_hp": 0.5, "species_size": 0.5, "species_vx": 0.5, "species_vy": -0.75,
 		"species2_size": 1.0 / (1 + sizeHalf), "species3_size": 1.0 / (1 + sizeHalf), "species5_size": 1.0 / (1 + sizeHalf),
 		// A Kraken is a species too, the fourth nearest by its body
-		"species4_hp": 0.75, "species4_size": 3.0 / (3 + sizeHalf), "species4_vx": -0.5,
+		"species4_hp": 0.75, "species4_size": 3.0 / (3 + sizeHalf),
 		"kraken_x": across(40 - 16), "kraken_y": down(14 - 10), "kraken_reach": 0.25,
-		"kraken_hp": 0.75, "kraken_health": 0.75, "kraken_vx": -0.5,
+		"kraken_hp": 0.75, "kraken_health": 0.75,
 		"bullet_vx": -0.75,
 		"column":    2*float64(16-minX)/float64(width-1) - 1, "row": 2*float64(10-minY)/float64(height-1) - 1,
 		"energy": 0.5, "heat": 0.5, "overheat": 0.25, "ember": 1, "shield": 1, "boost": 0.25,
@@ -206,7 +205,8 @@ func TestTheSensorsReadWhatTheViewShows(t *testing.T) {
 }
 
 // TestANetworkScansOnlyTheKindsItsInputsName: a steer walks the world once for
-// each kind its network's inputs read, and for no other.
+// each kind its network's inputs read, and for no other; and for none while no
+// weight is written, when the network asks for nothing.
 func TestANetworkScansOnlyTheKindsItsInputsName(t *testing.T) {
 	var scans [kindCount]int
 	for k := range kinds {
@@ -216,7 +216,11 @@ func TestANetworkScansOnlyTheKindsItsInputsName(t *testing.T) {
 		}
 	}
 	_, ctx := soloWorld(10, 2)
-	botFor(t, ctx, steering(`inputs = ["species2_x", "species_near_y", "column", "ceiling"]`), 2)
+	inputs := `inputs = ["species2_x", "species_near_y", "column", "ceiling"]`
+	if botFor(t, ctx, steering(inputs), 2); scans != [kindCount]int{} {
+		t.Fatalf("one steer by a network of no weight scanned %v by kind, want nothing", scans)
+	}
+	botFor(t, ctx, steering(inputs+"\n[network.fly.special]\ncolumn = 1"), 2)
 	want := [kindCount]int{kindSpecies: 1}
 	if scans != want {
 		t.Fatalf("one steer by species, the cursor's column and the rock scanned %v by kind, want the species once", scans)
@@ -241,6 +245,7 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 	})
 	d, _ := botFor(t, ctx, everySensor(), 0)
 	m, order := &d.mind, []bound{{net: 0}}
+	m.nets[0].blank = false // it reads as one with a weight written does
 	if allocs := testing.AllocsPerRun(100, func() {
 		m.fresh, m.room = [targetCount]bool{}, 1
 		m.steer(order)
@@ -369,6 +374,72 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 		if v := got[s.name]; v != 0 && s.scale != scalePlace && !terrain[s.name] {
 			t.Errorf("with nothing to sight %s reads %g, want 0", s.name, v)
 		}
+	}
+}
+
+// BenchmarkEveryInput is the stress measurement of a Steer: one reading of every
+// input and its pass through six hidden units, in a view holding crowd of each
+// kind and a Kraken of as many cells
+func BenchmarkEveryInput(b *testing.B) {
+	for _, crowd := range []int{8, 64, 512} {
+		b.Run(strconv.Itoa(crowd), func(b *testing.B) {
+			w, ctx := soloWorld(40, 12)
+			cfg := w.Resources.Config
+			cols := make([]engine.RockColumn, cfg.MapWidth)
+			for x := range cols {
+				cols[x] = engine.RockColumn{Ceil: 2, Floor: cfg.MapHeight - 3}
+			}
+			w.Positions.SetRock(component.WallBlockCursor, 0, cols)
+			rng := rand.New(rand.NewPCG(7, 11))
+			var legs component.HeaderComponent
+			for range crowd {
+				sets := []func(core.Entity){
+					func(e core.Entity) { w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a'}) },
+					func(e core.Entity) {
+						w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'g', Type: component.GlyphGold})
+					},
+					func(e core.Entity) { w.Components.Nugget.SetComponent(e, component.NuggetComponent{Char: 'n'}) },
+					func(e core.Entity) { w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: 1}) },
+					func(e core.Entity) {
+						w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, HitPoints: 8})
+					},
+					func(e core.Entity) { w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true}) },
+					func(e core.Entity) { w.Components.Missile.SetComponent(e, component.MissileComponent{Hostile: true}) },
+					func(e core.Entity) {
+						x, y := rng.IntN(cfg.MapWidth), rng.IntN(cfg.MapHeight)
+						w.Components.Behavior.SetComponent(e, component.BehaviorComponent{Landing: true, TargetX: x, TargetY: y})
+					},
+					func(e core.Entity) { legs.MemberEntries = append(legs.MemberEntries, component.MemberEntry{Entity: e}) },
+				}
+				for _, set := range sets {
+					e := place(w, core.DomainShared, rng.IntN(cfg.MapWidth), rng.IntN(cfg.MapHeight), set)
+					w.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{VelX: 3, VelY: -2}})
+				}
+			}
+			place(w, core.DomainShared, 60, 12, func(e core.Entity) {
+				w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 400})
+				w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: 300})
+				w.Components.Header.SetComponent(e, legs)
+			})
+			g, err := ParseGraph("test", []byte(strings.Replace(everySensor(), "inputs = ", "hidden = 6\ninputs = ", 1)))
+			if err != nil {
+				b.Fatal(err)
+			}
+			d, err := NewDriver(&recorder{}, ctx, g, 1, 0)
+			if err != nil {
+				b.Fatal(err)
+			}
+			m, n := &d.mind, d.mind.nets[0]
+			if !m.frame() {
+				b.Fatal("the instance shows no view to read through")
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				n.read(m)
+				n.pass()
+			}
+		})
 	}
 }
 

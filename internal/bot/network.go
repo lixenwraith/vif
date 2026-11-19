@@ -63,6 +63,7 @@ type network struct {
 	while  *binding
 	hidden int
 	genes  []float64
+	blank  bool // every gene is zero: it asks for nothing, and Steer reads nothing for it
 	digest string
 	in     []float64 // scratch: the inputs read, the hidden units' outputs after them
 	out    []float64 // scratch: its units' sums
@@ -295,8 +296,14 @@ func (n *network) blocks() [][]int {
 // playing is a network of its own for one driver, whose weights a learner replaces
 func (n *network) playing() *network {
 	c := *n
-	c.genes, c.in, c.out, c.near = slices.Clone(n.genes), make([]float64, len(n.in)), make([]float64, len(n.out)), make([]nearest, len(n.near))
+	c.in, c.out, c.near = make([]float64, len(n.in)), make([]float64, len(n.out)), make([]nearest, len(n.near))
+	c.wear(slices.Clone(n.genes))
 	return &c
+}
+
+// wear has the network play genes
+func (n *network) wear(genes []float64) {
+	n.genes, n.blank = genes, !slices.ContainsFunc(genes, func(v float64) bool { return v != 0 })
 }
 
 // read takes the inputs from the world as m's view frames it: of each kind they
@@ -345,17 +352,18 @@ type bound struct {
 
 // steer plays, for an update, the first network of order whose binding holds: it
 // reads that network's inputs through the view around the cursor, then acts on
-// each of its outputs in turn for as long as the step has room
+// each of its outputs in turn for as long as the step has room. One with no
+// weight written neither reads nor asks
 func (m *mind) steer(order []bound) {
 	for _, b := range order {
 		if b.while != nil && !b.while(m, nil, nil) {
 			continue
 		}
 		m.steered[b.net] = true
-		if !m.frame() || m.room < 1 {
+		n := m.nets[b.net]
+		if n.blank || !m.frame() || m.room < 1 {
 			return
 		}
-		n := m.nets[b.net]
 		n.read(m)
 		out := n.pass()
 		for _, a := range n.acts {

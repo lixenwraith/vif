@@ -575,7 +575,7 @@ func (d *Driver) deal() {
 	alone := d.alone()
 	for i, l := range d.learners {
 		if l != nil {
-			d.mind.nets[i].genes = l.take(d.game, alone)
+			d.mind.nets[i].wear(l.take(d.game, alone))
 		}
 	}
 }
