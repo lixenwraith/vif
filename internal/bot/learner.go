@@ -19,8 +19,8 @@ import (
 // What the learner searches by. A population whose graph writes no weight plays
 // learnPool genomes drawn learnSpread of a weight's bound about zero first. A step
 // is a share of a weight's range, learnStep at first and learnStepFloor settled.
-// Every learnRepeat-th candidate is an archive member again, learnProven rounds
-// prove a member a run fields, and the recent score looks back learnRecent rounds.
+// Every learnRepeat-th candidate is a member again, learnProven rounds prove one,
+// learnProbation slots stay with the unproved, and recent looks back learnRecent.
 const (
 	learnPool      = 32
 	learnSpread    = 0.03
@@ -32,6 +32,7 @@ const (
 	learnKeep      = 0.9
 	learnRepeat    = 3
 	learnProven    = 8
+	learnProbation = 24
 	learnRecent    = 200
 
 	// learnSaveEvery is the least wall time between two saves of a population in play
@@ -49,10 +50,10 @@ type Store interface {
 	Store([]byte) error
 }
 
-// population is the document a learner keeps: its archive, best first, and what
-// reads it without the code. Rounds is every round scored since the population
-// began, Recent their mean lately, Step the mutation step in force, and Fielded
-// the member a run that is not learning plays, -1 while none is proven.
+// population is the document a learner keeps: its archive in its order, the
+// proved first, and what reads it without the code. Rounds is every round scored
+// since the population began, Recent their mean lately, Step the mutation step in
+// force, and Fielded the member a run that is not learning plays, -1 with none.
 type population struct {
 	Version int      `json:"version"`
 	Layout  string   `json:"layout"`
@@ -73,10 +74,10 @@ type member struct {
 }
 
 // Learner evolves the weights of one network of a graph, a round an evaluation: a
-// steady-state archive of scored genomes, bred a hidden unit or an output at a
-// time, its members played again in turn so a score is the mean of its rounds. It
-// lives beside the drivers of the games it learns from, outside their worlds, and
-// keeps its archive in a store.
+// steady-state archive of scored genomes ranked by what their rounds prove (rank),
+// bred a hidden unit or an output at a time, its members played again in turn so
+// a score is the mean of its rounds. It lives beside the drivers of the games it
+// learns from, outside their worlds, and keeps its archive in a store.
 type Learner struct {
 	engine *genetic.StreamingEngine[[]float64, float64]
 	store  Store
@@ -124,8 +125,8 @@ type slot struct {
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
 // and since its population began, their recent mean, which no luck picked, the
-// step in force, its archive's size and best score, and the score and rounds of
-// the member it fields, zero while none is proven.
+// step in force, its archive's size and its first member's score, and the score
+// and rounds of the member it fields, zero while none is proven.
 type LearnStats struct {
 	Network       string
 	Scored        int
@@ -196,6 +197,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 		perturb, genetic.SliceCloner[[]float64, float64]{}, cfg)
 	l.engine.SetEqual(slices.Equal[[]float64])
 	l.engine.SetMerge(genetic.MeanScore[float64])
+	l.engine.SetRank(l.rank)
 	adapt := genetic.AdaptiveStrength[float64](learnRate, l.step, learnStepFloor, learnStepCeil, learnStepTurn)
 	l.engine.SetSchedule(func(generation int, stats genetic.PoolStats[float64]) (float64, float64) {
 		rate, step := adapt(generation, stats)
@@ -248,7 +250,7 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 		l.rounds++
 		l.recent += (score - l.recent) / float64(min(l.rounds, learnRecent))
 		l.dirty = true
-		if st := l.engine.Stats(); s.fresh && st.Size == learnPool && score > st.WorstScore {
+		if s.fresh && l.enters(score) {
 			s.fresh = false
 			held := l.Stats()
 			held.Scored, held.Rounds, held.Recent = l.scored, l.rounds, l.recent
@@ -309,8 +311,6 @@ func (l *Learner) take(game int, explore bool) []float64 {
 			}
 			if again >= 0 {
 				genes, s.id = members[again].Data, l.engine.BeginEvaluation(members[again].Data)
-			} else {
-				genes, s.id = l.engine.Reevaluate()
 			}
 		}
 		if s.id == 0 {
@@ -358,9 +358,9 @@ func (l *Learner) playing(genes []float64) (n int) {
 }
 
 // field is the genome a round plays where no candidate does: the member fielded
-// (fieldedOf), since one enters on a round or two and the top of an archive is
-// its luckiest, or the hand-written one. It brings the stats, and the round each
-// member entered at, up to the archive as it stands.
+// (fieldedOf), which stands first of the archive, or with none proved the
+// hand-written one. It brings the stats, and the round each member entered at,
+// up to the archive as it stands.
 func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
 	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Step: l.step, Size: len(members)}
 	born := make(map[uint64]int, len(members))
@@ -389,6 +389,40 @@ func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float
 // not outrank many good ones.
 func trusted(c genetic.Candidate[[]float64, float64], recent float64) float64 {
 	return (c.Score*float64(c.Count) + recent*learnProven) / float64(c.Count+learnProven)
+}
+
+// rank keys the archive for the engine by what its members' rounds prove: each
+// by its trusted mean, the proved above those on probation. So a newcomer
+// displaces only the last on probation, and where a full archive holds more
+// proved than probation leaves room for, the last of them leaves instead: the
+// one just proved, where it stands above no other.
+func (l *Learner) rank(members []genetic.Candidate[[]float64, float64], keys []float64) {
+	lo, hi := math.Inf(1), math.Inf(-1)
+	for i, c := range members {
+		keys[i] = trusted(c, l.recent)
+		lo, hi = min(lo, keys[i]), max(hi, keys[i])
+	}
+	proved, last := 0, -1
+	for i, c := range members {
+		if c.Count < learnProven {
+			continue
+		}
+		keys[i] += hi - lo + 1
+		if proved++; last < 0 || keys[i] <= keys[last] {
+			last = i
+		}
+	}
+	if len(members) > learnPool && proved > learnPool-learnProbation {
+		keys[last] = lo - 1
+	}
+}
+
+// enters reports whether a first round of score would have its genome enter a
+// full archive, which is where a member of that one round ranks above the last
+func (l *Learner) enters(score float64) bool {
+	members := l.engine.Snapshot().Members
+	return len(members) == learnPool &&
+		trusted(genetic.Candidate[[]float64, float64]{Score: score, Count: 1}, l.recent) > trusted(members[learnPool-1], l.recent)
 }
 
 // fieldedOf is the member a run fields, the most trusted of those learnProven
