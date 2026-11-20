@@ -46,22 +46,22 @@ background = true
 [macros.Say]
 doc = "Status message `message`."
 params = { message = "string" }
-body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" } }
+body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, reconcile = true }
 
 [macros.Heading]
 doc = "Write `text` in the small face at the top left, in the lesson's gold."
 params = { text = "string" }
-body = { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "${text}", font = "small", color = { r = 255, g = 200, b = 0 }, origin_x = 4, origin_y = 1 } }
+body = { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "${text}", font = "small", color = { r = 255, g = 200, b = 0 }, origin_x = 4, origin_y = 1 }, reconcile = true }
 
 [macros.Note]
 doc = "Lay `text` at row `row` as scenery: part of the lesson, which nothing types or deletes."
 params = { text = "string", row = "int" }
-body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "white", level = "normal", scenery = true } }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "white", level = "normal", scenery = true }, reconcile = true }
 
 [macros.Line]
 doc = "Lay the practice line `text` at row `row`, typeable."
 params = { text = "string", row = "int" }
-body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "blue", level = "bright" } }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "blue", level = "bright" }, reconcile = true }
 
 [macros.Stand]
 doc = "Stand the cursor on `x`, `y`, a tick on: after the move the key that ended the last lesson made."
@@ -71,14 +71,14 @@ body = { action = "EmitEvent", event = "EventCursorMoveRequest", payload = { ent
 [macros.Mark]
 doc = "Lay a bright x at `x`, `y`, scenery, as the cell a lesson ends on."
 params = { x = "int", y = "int" }
-body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "x", x = "${x}", y = "${y}", type = "white", level = "bright", scenery = true } }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "x", x = "${x}", y = "${y}", type = "white", level = "bright", scenery = true }, reconcile = true }
 
 [macros.Clear]
 doc = "End the lesson: every glyph gone and the heading blanked, under a white flash."
 params = {}
 body = [
-    { action = "EmitEvent", event = "EventGlyphClearRequest" },
-    { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "", origin_x = 4, origin_y = 1 } },
+    { action = "EmitEvent", event = "EventGlyphClearRequest", reconcile = true },
+    { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "", origin_x = 4, origin_y = 1 }, reconcile = true },
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 0.3, duration_ms = 150 } },
 ]
 

@@ -219,3 +219,66 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 		t.Fatalf("past the last lesson the tutorial stands in %s with the shield up %v, want Free with it down", state, shield)
 	}
 }
+
+// tutorialRow reads the glyphs on row y from column 4, a gap as a space.
+func tutorialRow(a *App, y int) string {
+	w := a.World()
+	cells := map[int]rune{}
+	last := -1
+	w.RunSafe(func() {
+		w.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+			if pos, ok := w.Positions.GetPosition(e); ok && pos.Y == y && pos.X >= 4 {
+				cells[pos.X] = g.Rune
+				last = max(last, pos.X)
+			}
+			return true
+		})
+	})
+	var row []rune
+	for x := 4; x <= last; x++ {
+		if r, ok := cells[x]; ok {
+			row = append(row, r)
+		} else {
+			row = append(row, ' ')
+		}
+	}
+	return string(row)
+}
+
+// A participant that arrives at a lesson by installing it, as a join or a reload
+// does, lays that lesson's text in place of the one its own boot laid: the first
+// lesson's practice block and x are gone, and the second's line stands.
+func TestTutorialAnInstalledLessonLaysItsOwnText(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	boot := func() *App {
+		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		t.Cleanup(a.Close)
+		a.Tick(10)
+		return a
+	}
+	host, joiner := boot(), boot()
+	tutorialKeys(t, host, "s")
+	if got := tutorialRow(joiner, 16); got != "and right to the x" {
+		t.Fatalf("the first lesson laid %q on row 16, want its last practice line", got)
+	}
+
+	capture := host.scheduler.ExportFSM()
+	joiner.World().RunSafe(func() {
+		if err := joiner.scheduler.ImportFSM(capture, true); err != nil {
+			t.Errorf("import fsm: %v", err)
+		}
+	})
+	joiner.Settle()
+	if got := tutorialRow(joiner, 16); got != "" {
+		t.Fatalf("the installed lesson left %q on row 16, want the first lesson's block gone", got)
+	}
+	if got, want := tutorialRow(joiner, 14), tutorialRow(host, 14); got != want || got == "" {
+		t.Fatalf("the installed lesson reads %q on row 14, want the second lesson's %q", got, want)
+	}
+}

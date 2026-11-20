@@ -76,6 +76,10 @@ heading at row 1, the notes at rows 8 to 11 and the practice lines at rows 14 to
 16, all from column 4. The Visual lesson practises on five rows and turns the
 shield system on for itself alone, so the ping bounds have a reach to show.
 
+The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
+join or a reload that installs a later lesson lays that lesson's text in place of
+the first one its own boot laid.
+
 ## 3. The next round
 
 - **More lessons**: `[ ]`, `gl` and the colour markers, `q` and `@` macros, and
