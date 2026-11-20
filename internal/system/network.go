@@ -3301,19 +3301,33 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 	return local, peer
 }
 
-// Only the authority may author roster changes, which create or destroy shared
-// identities, a reset, a hold or a rate, which end, stop or pace everyone's game: the
-// one that sent the frame, or the one it applies under — a dropped guest sees the link
-// close before its dismissal's tick and takes the term itself. Nobody acts as another
-// participant's cursor (crossingActors); other authentication needs authenticated peers.
+// Only the authority may author a roster change, a reset, a hold, a rate or a machine
+// transition: the one that sent the frame, or the one it applies under, as a dropped
+// guest sees the link close before its dismissal's tick and takes the term itself.
+// Only a participant that plays may ask for a transition (plays), and nobody acts as
+// another's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
 		event.EventGameResetRequest, event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
+	case event.EventFSMTransitionRequest:
+		return s.plays(source)
 	}
 	actor, ok := crossingActors[et]
 	return !ok || s.actsAsOwn(source, actor(s.world, payload))
+}
+
+// plays reports whether source holds a cursor, as a dedicated host and a viewer do
+// not. Ownership is shared state, so every instance answers alike at one tick.
+// Caller MUST hold updateMutex.
+func (s *NetworkSystem) plays(source uint32) bool {
+	found := false
+	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
+		found = source != 0 && c.PeerID == source
+		return !found
+	})
+	return found
 }
 
 // actsAsOwn reports whether e is no other participant's cursor: source's own, or
