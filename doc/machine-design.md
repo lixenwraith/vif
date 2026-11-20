@@ -492,15 +492,12 @@ at load; only `Op.Holds` runs per evaluation.
   under `names`.
 
 `fsm.Machine` registers a name with the struct its arguments decode into, through
-generic methods: `RegisterGuard[A]`, or `RegisterStateGuard[A]` for a guard that
-reads the region it guards in; `RegisterAction[A, R]` for an action that
+generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
 reads only `payload`, compiled to `R` at load (`fsm.Payload[A]` keeps the decoded
 payload as it is); `RegisterKeyedAction[R]` for one that reads keys of its own
 table (`EmitEvent`: `event`, `payload`, `payload_vars`, `pick`, `origin`; the region actions:
 `region`, `initial_state`); and `RefuseAction`, a name whose use fails the load
-and which the vocabulary leaves out. `Machine.Guard` builds a guard an embedder
-asks of no state, as a bot network's `while`, and refuses one that reads its
-region or a payload. The loader refuses a key of an action's
+and which the vocabulary leaves out. The loader refuses a key of an action's
 table the action does not read (`action 'Text' takes no payload_vars`) and a key
 no config struct takes under `[systems]`, a region or a state, its transitions and
 actions included (`state 'A': unknown key "on_entr"`). A top-level key is its

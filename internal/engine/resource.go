@@ -74,7 +74,7 @@ type Resource struct {
 	Drift *DriftResource
 
 	// Scenario is the scenario machine's variables, which a behavior program's
-	// guards read, and its regions' states, which a bot graph's do
+	// guards read
 	Scenario *ScenarioResource
 
 	// The cave's scroll as this tick left it, for what rides the cave's frame
@@ -215,26 +215,15 @@ func (r *CaveResource) Carry(since time.Duration) int {
 
 // --- Scenario Resource ---
 
-// ScenarioResource is the scenario machine's variables and the states its regions
-// are in, as its scheduler reads them out, so a system or a bot reads what its
-// scenario decided without reaching the machine. It is a view, never copied with a
-// world: the machine's own capture carries the values.
+// ScenarioResource is the scenario machine's variables as its scheduler reads them
+// out, so a system reads what its scenario decided without reaching the machine. It
+// is a view, never copied with a world: the machine's own capture carries the values.
 type ScenarioResource struct {
 	read func(name string) int64
-	in   func(region string, states []string) bool
 }
 
-// Bind sets where the variables and the regions' states are read from, a run's
-// scheduler's machine
-func (r *ScenarioResource) Bind(read func(name string) int64, in func(region string, states []string) bool) {
-	r.read, r.in = read, in
-}
-
-// In reports whether region runs and, where states names any, is in one of them;
-// false in a world no machine runs
-func (r *ScenarioResource) In(region string, states []string) bool {
-	return r != nil && r.in != nil && r.in(region, states)
-}
+// Bind sets where the variables are read from, a run's scheduler's machine
+func (r *ScenarioResource) Bind(read func(name string) int64) { r.read = read }
 
 // Var is a variable's value, 0 for one never set or in a world no machine runs
 func (r *ScenarioResource) Var(name string) int64 {

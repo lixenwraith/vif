@@ -301,10 +301,11 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - Priority: P3
 - Affected files: `internal/bot/catalogue.go`, `internal/engine/resource.go`
 
-A network reads the world, and a `while` the states of the scenario's regions.
-Neither reads a variable of the scenario's own, as `cave`'s `raid_rank`, though
-`ScenarioResource` lends them to behavior programs. An input over one needs a
-scale its scenario declares, and a bot listing it plays only such scenarios.
+A network reads the world, and a guard the bot's status rows, among them whether
+a region of the scenario runs (`fsm.<region>.index`). Neither reads a state of
+the scenario by name or a variable of its own, as `cave`'s `raid_rank`, though
+`ScenarioResource` lends variables to behavior programs. An input over one needs
+a scale its scenario declares, and a bot listing it plays only such scenarios.
 
 ### Draw a watched run's wait on its screen
 

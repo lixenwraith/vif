@@ -244,12 +244,12 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 		w.Components.Header.SetComponent(e, component.HeaderComponent{MemberEntries: []component.MemberEntry{{Entity: leg}}})
 	})
 	d, _ := botFor(t, ctx, everySensor(), 0)
-	m, order := &d.mind, []bound{{net: 0}}
+	m, a := &d.mind, steerArgs{net: 0}
 	m.nets[0].blank = false // it reads as one with a weight written does
 	if allocs := testing.AllocsPerRun(100, func() {
 		m.fresh, m.room = [targetCount]bool{}, 1
 		m.tick++ // an update reads once
-		m.steer(order)
+		m.steer(a)
 		m.nearest(kindThreat)
 		m.nearest(kindKraken)
 	}); allocs != 0 || !m.steered[0] {

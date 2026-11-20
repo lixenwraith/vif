@@ -116,22 +116,6 @@ func machineOf(sc Scenario) (*fsm.Machine[*engine.World], error) {
 	return m, fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry())
 }
 
-// heldTo is the fault of a graph sc carries whose InState names a region or a
-// state sc's machine lacks: it loads all the same, and never holds
-func heldTo(g *bot.Graph, m *fsm.Machine[*engine.World]) error {
-	for _, ask := range g.InStates() {
-		if !slices.Contains(m.DeclaredRegions(), ask.Region) {
-			return fmt.Errorf("bot %s: InState asks of region %q, which the scenario has not", g.Name, ask.Region)
-		}
-		for _, state := range ask.States {
-			if _, ok := m.GetStateID(state); !ok {
-				return fmt.Errorf("bot %s: InState names state %q, which the scenario has not", g.Name, state)
-			}
-		}
-	}
-	return nil
-}
-
 // checkScenario reports what a peer would compare: the name, the digest, and
 // where it came from, and the players it runs with.
 func checkScenario(o Options, w io.Writer) (Scenario, error) {
@@ -299,8 +283,7 @@ func checkContent(o Options, sc Scenario, w io.Writer) error {
 
 // checkBots parses every graph a name can resolve to, in each root, in the
 // scenario and embedded, so a broken one fails here rather than when -bot or
-// :bot add first loads it, and holds those the scenario carries to its own
-// regions and states (heldTo).
+// :bot add first loads it.
 func checkBots(o Options, sc Scenario, w io.Writer) error {
 	var faults []error
 	// Globbed inside the directory, so a root's own path is never read as a pattern
@@ -324,14 +307,7 @@ func checkBots(o Options, sc Scenario, w io.Writer) error {
 	}
 	for _, name := range sc.Bots() {
 		data, _ := sc.Bot(name)
-		g, err := bot.ParseGraph(name, data)
-		if err == nil {
-			var m *fsm.Machine[*engine.World]
-			if m, err = machineOf(sc); err == nil {
-				err = heldTo(g, m)
-			}
-		}
-		if err != nil {
+		if _, err := bot.ParseGraph(name, data); err != nil {
 			faults = append(faults, fmt.Errorf("scenario %s: %w", sc.Shown(), err))
 			continue
 		}

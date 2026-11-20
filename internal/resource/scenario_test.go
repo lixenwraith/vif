@@ -746,45 +746,6 @@ func TestWhatBotsLearnedIsListedAndClearedByAddress(t *testing.T) {
 	}
 }
 
-// TestCheckHoldsAScenariosBotToItsRegionsAndStates: an InState of a graph a
-// scenario carries names that scenario's regions and states, or -check faults
-// it, since such a guard loads and never holds. A player's graph, which any
-// scenario may play, is held to none.
-func TestCheckHoldsAScenariosBotToItsRegionsAndStates(t *testing.T) {
-	for asks, fault := range map[string]string{
-		`region = "main"`:                          "",
-		`region = "main", states = ["MainStart"]`:  "",
-		`region = "boss"`:                          `region "boss"`,
-		`region = "main", states = ["MainFinish"]`: `state "MainFinish"`,
-	} {
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-		t.Setenv(paths.SystemRootsEnv, "")
-		root := t.TempDir()
-		dir := writeScenario(t, filepath.Join(root, "scenario", "flight"), scenarioRegion)
-		bound := flyer("", "while = { name = \"InState\", args = { "+asks+" } }")
-		for name, body := range map[string]string{
-			filepath.Join(dir, "scenario.toml"):    "bots = [\"bot/pilot.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n",
-			filepath.Join(dir, "bot/pilot.toml"):   bound,
-			filepath.Join(root, "bot/roamer.toml"): flyer("", "while = { name = \"InState\", args = { region = \"elsewhere\" } }"),
-		} {
-			if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		var out strings.Builder
-		err := checkBots(Options{Dir: root}, read(t, dir), &out)
-		if fault == "" && (err != nil || !strings.Contains(out.String(), "bot ok: scenario flight pilot")) {
-			t.Errorf("InState { %s }: check = %v, reporting:\n%s", asks, err, out.String())
-		}
-		if fault != "" && (err == nil || !strings.Contains(err.Error(), fault) || strings.Contains(err.Error(), "elsewhere")) {
-			t.Errorf("InState { %s }: check = %v; want a fault naming the %s the scenario has not, and none of a player's graph", asks, err, fault)
-		}
-	}
-}
-
 // TestContentFilesAreScenarioFilesAndItsCorpus: the corpus files an entry's [content]
 // names are carried and digested as a region file is, serve as the run's corpus in
 // place of the roots', and travel in the canonical form; a name the scenario has no

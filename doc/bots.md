@@ -250,7 +250,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 | Table | Holds |
 |---|---|
 | `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never. `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
-| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs`, the `while` that has it steer and, if any, weights written by hand. |
+| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs` and, if any, weights written by hand. |
 | `[regions.<name>]` | `initial` only. Regions update in name order, so what one queues in a step goes ahead of a later one's. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -270,7 +270,7 @@ Allowance left idle builds up to one second's worth.
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
-| `Steer` | `network`: the `[network.<name>]` to run, or a list of them, the first whose `while` holds running; a graph with one may leave it out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack where it asks for it |
+| `Steer` | `network`: the `[network.<name>]` to run, which a graph with one may leave out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack where it asks for it |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), one that opens the command
@@ -304,7 +304,6 @@ or no cell gains ground.
 | `InMode` | `mode`: `normal`, `visual`, `insert`, `search`, `command`, `overlay` | the router is in that mode |
 | `Chance` | `percent`, 1..100 | a draw from the bot's own stream |
 | `Idle` | none | the intent queue is empty |
-| `InState` | `region`, `states` | the scenario's region runs and, where `states` names any, is in one of them or in a state within one |
 | `Own` | `field` | that event payload field names the bot's own cursor |
 | `Asks` | `output`, `above`, `network` | the network's output of one unit, `special` or `wheel`, reads above `above` (0) this update; a graph's one network needs no name, and one with no weight asks nothing |
 
@@ -396,10 +395,7 @@ right, backs off a threat on it and collects nuggets between walks:
 The other shipped bots, and what each scores, are under
 [The shipped bots](#the-shipped-bots). Run `vif -check` after editing a graph:
 it prints `bot ok: <path>` for each graph that loads and fails naming each that
-does not. A graph a scenario carries is also held to that scenario: an `InState`
-naming a region or a state the scenario lacks would load and never hold, so
-`-check` fails naming it. A player's graph, which any scenario may play, is held
-to none. A graph outside every root is checked by putting it under `<dir>/bot/`
+does not. A graph outside every root is checked by putting it under `<dir>/bot/`
 and running `vif -check -config-dir <dir>`.
 
 ## Fitness and comparing graphs
@@ -464,7 +460,6 @@ on once its energy is gone.
 inputs = ["ceiling", "floor", "column"]
 
 [network.kraken]
-while = { name = "InState", args = { region = "boss", states = ["BossFight"] } }
 inputs = ["kraken_near_x", "kraken_near_y"]
 outputs = ["move"]
 x = { kraken_near_x = -1.0, column = -0.1 }
@@ -476,7 +471,10 @@ y = { species_y = 0.9, hidden = [0.5] }
 units = [{ species_near_x = 1.0, bias = -0.2 }]
 
 [states.Fly]
-on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "raid" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]
 ```
 
 - A network's name is lowercase letters, digits and underscores, as it is part
@@ -504,17 +502,11 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   - `wheel` is had only by listing it, and `Steer` does nothing with it. The
     graph reads it by the guard `Asks`, so its states hand over to the network
     while it asks and take over again when it stops.
-- `while`: the guard that has the network steer, written `{ name, args }` as
-  `And` lists one. `InState` binds a network to the scenario's own states. It
-  is asked of no state of the graph, so a guard of a state's time
-  (`StateTimeExceeds`) or of an event's payload is refused at load.
-  - A `Steer` plays a network only while its `while` holds. Given a list, it
-    asks each in turn, once an update, and plays the first whose `while`
-    holds. A network with none always steers, so only a list's last may have
-    none.
-  - A guard on the `Steer` action itself does the same job, and is what the
-    shipped bots use: `cave` steers by `kraken` while `HasTarget` sights a
-    Kraken and by `raid` otherwise.
+- Which network steers is the graph's to say, in the dialect's own words: a
+  guard on each `Steer`, as `cave` steers by `kraken` while `HasTarget` sights
+  a Kraken and by `raid` otherwise, or a state for each, as `default` steers by
+  `walk` only in `Walk`. A network carries no condition of its own, so guards
+  that overlap have two networks steer in one update.
 - Weights: a unit's table (`x`, `y`, `special`, `wheel`) gives its weight from
   each input by name, its `bias` and, as `hidden`, a weight for each hidden
   unit in their order. `units` lists a table for each hidden unit: its weight
@@ -873,6 +865,10 @@ What a network reads and asks for:
   -8,304 over 60,000 ticks of `armada` where no walk scored 7,868.
 - Backing off a threat written as `walk`'s weights, in place of the state
   `Flee`: in `td` it gained seven tenths of what the state gains at most.
+- A network's own `while`, a `Steer` over a list of networks that played the
+  first whose `while` held, and a guard `InState` over the scenario's states:
+  `cave` written so kept its populations' bytes, and a guard on each `Steer`
+  does the same with nothing added.
 
 <!-- catalogue: generated, see its first lines -->
 ## Catalogue

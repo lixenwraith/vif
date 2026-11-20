@@ -991,9 +991,6 @@ Libraries · Branches.
   `internal/bot`: it deals and settles scripted rounds into a learner on a
   store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
   A changed repeat order moves every hash.
-- A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
-  given no region: one that reads its region registers by `RegisterStateGuard`
-  and is refused there at load.
 - An output added to the catalogue is asked (`outputRow.asked`): given to every
   network that lists none, `cave`'s two would grow a unit, their layouts change
   and every population of theirs start over.

@@ -57,20 +57,8 @@ type Graph struct {
 	Settings Settings
 	nets     []*network
 	text     []byte // the document as written, which Document writes weights into
-	asks     []InState
 	doc      map[string]any
 }
-
-// InState is one use of the InState guard: the scenario's region it asks of and
-// the states it names there
-type InState struct {
-	Region string
-	States []string
-}
-
-// InStates are the graph's uses of InState, each of which holds only in a
-// scenario that has its region and states
-func (g *Graph) InStates() []InState { return g.asks }
 
 // Networks names the graph's networks, in the order a list of them takes
 func (g *Graph) Networks() []string {
@@ -96,7 +84,7 @@ func ParseGraph(name string, data []byte) (*Graph, error) {
 	if err := g.validate(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	if _, err := g.compile(&g.asks); err != nil {
+	if _, err := g.machine(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
 	return g, nil
@@ -141,25 +129,11 @@ func (g *Graph) validate() error {
 	return nil
 }
 
-// machine compiles a fresh machine over the graph, the vocabulary registered first
-// so the loader resolves every name against it, and each network's while built
-// of that machine's guards, for a Steer that names the network to ask.
-func (g *Graph) machine() (*fsm.Machine[*mind], error) { return g.compile(nil) }
-
-// compile is machine, noting in asks, where given, each InState it resolves
-func (g *Graph) compile(asks *[]InState) (*fsm.Machine[*mind], error) {
+// machine compiles a fresh machine over the graph, the vocabulary registered
+// first so the loader resolves every name against it
+func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 	m := fsm.NewMachine[*mind]()
-	whiles := make([]fsm.GuardFunc[*mind], len(g.nets))
-	register(m, g.nets, whiles, asks)
-	for i, n := range g.nets {
-		if n.while == nil {
-			continue
-		}
-		var err error
-		if whiles[i], err = m.Guard(n.while.Name, n.while.Args); err != nil {
-			return nil, fmt.Errorf("[network]: %s: while: %w", n.name, err)
-		}
-	}
+	register(m, g.nets)
 	if err := m.LoadScenarioFromMap(g.doc); err != nil {
 		return nil, err
 	}
@@ -169,7 +143,7 @@ func (g *Graph) compile(asks *[]InState) (*fsm.Machine[*mind], error) {
 // Vocabulary lists the actions and guards a graph resolves, for -schema
 func Vocabulary() []dialect.Entry {
 	m := fsm.NewMachine[*mind]()
-	register(m, nil, nil, nil)
+	register(m, nil)
 	return m.Vocabulary()
 }
 

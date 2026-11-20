@@ -27,8 +27,6 @@ import (
 // author watching, so every reference, key and value is checked when it is parsed.
 func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 	const region = "\n[regions.play]\ninitial = \"A\"\n"
-	// a always steers and b only while the scenario's boss region runs
-	const two = "[network.a]\ninputs = [\"column\"]\n[network.b]\ninputs = [\"column\"]\nwhile = { name = \"InState\", args = { region = \"boss\" } }"
 	for _, tt := range []struct{ doc, want string }{
 		{"[systems]\ndisabled_systems = []" + region + "[states.A]", `unknown table "systems"`},
 		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `[bot]: unknown key "actions_per_minute"`},
@@ -110,17 +108,6 @@ on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" i
 		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\", \"jump\"]" + region + "[states.A]", `outputs: "jump" is no output`},
 		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]\nspecial = { bias = 1.0 }" + region + "[states.A]", "special: the network lists no output of that unit"},
 		{"[bot]\ninputs = [\"column\"]\n[network.a]\ninputs = [\"column\"]" + region + "[states.A]", `inputs: "column" is no sensor, or is named twice`},
-		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"StateTimeExceeds\", args = { ms = 5 } }" + region + "[states.A]", "[network]: a: while: guard 'StateTimeExceeds': reads the state it guards"},
-		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"Own\", args = { field = \"entity\" } }" + region + "[states.A]", "sees no payload"},
-		{"[network.a]\ninputs = [\"column\"]\nwhile = { name = \"InState\" }" + region + "[states.A]", "while: guard 'InState': requires 'region'"},
-		{two + region + `[states.A]
-on_update = [{ action = "Steer", payload = { network = ["a", "c"] } }]`, `network "c" is none of the graph's`},
-		{two + region + `[states.A]
-on_update = [{ action = "Steer", payload = { network = ["b", "b"] } }]`, `network "b" is listed twice`},
-		{two + region + `[states.A]
-on_update = [{ action = "Steer", payload = { network = ["a", "b"] } }]`, `network "b" never steers: "a" before it has no while`},
-		{two + region + `[states.A]
-on_update = [{ action = "Steer", payload = { network = 3 } }]`, "network must be a network's name or a list of them"},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -706,47 +693,6 @@ func TestALayoutIsWhatItsNetworkReadsHidesAndAsksFor(t *testing.T) {
 	}
 	if !slices.Equal(own.units, []string{"x", "y", "special"}) || !slices.Equal(move.units, []string{"x", "y"}) || len(move.genes) != 2*(2+1) {
 		t.Fatalf("units %v of every output and %v of move alone, in %d genes", own.units, move.units, len(move.genes))
-	}
-}
-
-// TestSteerPlaysTheFirstNetworkItListsWhoseWhileHolds: a Steer over a list asks
-// each network's while in turn, once an update, and plays the first that holds,
-// one with none always; InState holds while the scenario's region is in a state
-// it names.
-func TestSteerPlaysTheFirstNetworkItListsWhoseWhileHolds(t *testing.T) {
-	w, ctx := soloWorld(10, 2)
-	fight, asked := false, 0
-	w.Resources.Scenario.Bind(nil, func(region string, states []string) bool {
-		asked++
-		return fight && region == "boss" && slices.Equal(states, []string{"BossFight"})
-	})
-	d, rec := botFor(t, ctx, `[bot]
-actions_per_second = 20
-
-[network.fly]
-inputs = ["column"]
-x = { bias = 0.1 }
-
-[network.kraken]
-inputs = ["column"]
-x = { bias = -0.1 }
-while = { name = "InState", args = { region = "boss", states = ["BossFight"] } }
-
-[regions.play]
-initial = "A"
-
-[states.A]
-on_update = [{ action = "Steer", payload = { network = ["kraken", "fly"] } }]
-`, 2)
-	fight = true
-	if _, err := d.Step(); err != nil {
-		t.Fatal(err)
-	}
-	minX, _, maxX, _, _ := ctx.World.Resources.Config.VisibleMapRect()
-	reach := int(math.Round(0.1 * float64(maxX-minX+1)))
-	want := []input.Intent{{Type: input.IntentMouseMove, X: 10 + reach, Y: 2, MapCell: true}, {Type: input.IntentMouseMove, X: 10 - reach, Y: 2, MapCell: true}}
-	if !slices.Equal(rec.got, want) || asked != 2 {
-		t.Fatalf("steered %+v asking the scenario %d times, want fly's move right, then kraken's left once its state came, asked once an update", rec.got, asked)
 	}
 }
 
@@ -1695,9 +1641,8 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 }
 
 // twoNetworks is a learning graph of two networks, fly steering while no Kraken is
-// up and kraken, whose table takes the keys given, while one is, a driver on it
-// and each network's learner
-func twoNetworks(t *testing.T, keys ...string) (*engine.World, *Driver, *recorder, []*Learner) {
+// up and kraken while one is, a driver on it and each network's learner
+func twoNetworks(t *testing.T) (*engine.World, *Driver, *recorder, []*Learner) {
 	t.Helper()
 	w, ctx := soloWorld(10, 2)
 	g, err := ParseGraph("net", []byte(`[bot]
@@ -1711,14 +1656,15 @@ x = { bias = 0.1 }
 [network.kraken]
 inputs = ["column"]
 x = { bias = -0.1 }
-while = { name = "HasTarget", args = { target = "kraken" } }
-`+strings.Join(keys, "\n")+`
 
 [regions.play]
 initial = "A"
 
 [states.A]
-on_update = [{ action = "Steer", payload = { network = ["kraken", "fly"] } }]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "fly" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]
 `))
 	if err != nil {
 		t.Fatal(err)

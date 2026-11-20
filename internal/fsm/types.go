@@ -167,12 +167,10 @@ type ActionFunc[T any] func(ctx T, args any)
 // Valid only for the duration of the compile call
 type StateResolver func(name string) (StateID, bool)
 
-// guardEntry is a registered guard: its args for -schema, build, which decodes
-// its guard_args and makes the guard once at load for its trigger, and state,
-// set on one that reads the region it guards in
+// guardEntry is a registered guard: its args for -schema, and build, which
+// decodes its guard_args and makes the guard once at load for its trigger
 type guardEntry[T any] struct {
 	args  []dialect.Field
-	state bool
 	build func(args map[string]any, t Trigger) (GuardFunc[T], error)
 }
 

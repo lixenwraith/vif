@@ -214,7 +214,7 @@ func NewScheduler(
 	// than as an API pair reaching through App, and a system reads its variables
 	// through the world's resource
 	s.eventRouter.Register(s)
-	world.Resources.Scenario.Bind(s.fsm.GetVar, s.fsm.In)
+	world.Resources.Scenario.Bind(s.fsm.GetVar)
 
 	return s, updateDone, resetChan
 }

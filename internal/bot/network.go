@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
@@ -35,19 +34,12 @@ const (
 // networkTable is one of a graph's [network.<name>] tables, its weights aside: the
 // sensors it reads after the document's own, in the order its weights take them,
 // its hidden units and a table of weights for each, the outputs it has, special
-// and move when it lists none, and the guard that has it steer
+// and move when it lists none
 type networkTable struct {
 	Inputs  []string `toml:"inputs"`
 	Hidden  int      `toml:"hidden"`
 	Units   []any    `toml:"units"`
 	Outputs []string `toml:"outputs"`
-	While   *binding `toml:"while"`
-}
-
-// binding is a network's while, a guard as a tree names one
-type binding struct {
-	Name string         `toml:"name"`
-	Args map[string]any `toml:"args"`
 }
 
 // network is one policy of a graph: tanh hidden units and a direct term from the
@@ -60,7 +52,6 @@ type network struct {
 	wants  []want   // the kinds its inputs read, each to the furthest rank one asks for
 	units  []string // its outputs' units, in the order its genes hold them
 	acts   []acting // its outputs, in the order Steer acts on them
-	while  *binding
 	hidden int
 	genes  []float64
 	blank  bool   // every gene is zero: it asks for nothing, and Steer reads nothing for it
@@ -143,7 +134,7 @@ func parseNetwork(name string, raw map[string]any, shared []string) (*network, e
 	if len(names) == 0 || t.Hidden < 0 || t.Hidden > hiddenMax {
 		return nil, fmt.Errorf("needs inputs and 0 to %d hidden units, got %d and %d", hiddenMax, len(names), t.Hidden)
 	}
-	n := &network{name: name, names: names, hidden: t.Hidden, while: t.While}
+	n := &network{name: name, names: names, hidden: t.Hidden}
 	for i, name := range names {
 		s := slices.IndexFunc(sensors, func(row sensor) bool { return row.name == name })
 		if s < 0 || slices.Contains(names[:i], name) {
@@ -359,35 +350,27 @@ func (n *network) ask(m *mind) []float64 {
 	return n.out
 }
 
-// bound is a network a Steer lists, the guard that has it steer, nil for one that
-// always does, and which of its outputs that Steer acts on, a bit an output
-type bound struct {
-	net   int
-	while fsm.GuardFunc[*mind]
-	acts  uint
+// steerArgs is a compiled Steer payload: the network it runs and which of that
+// network's outputs it acts on, a bit an output
+type steerArgs struct {
+	net  int
+	acts uint
 }
 
-// steer plays, for an update, the first network of order whose binding holds: it
-// reads that network's inputs through the view around the cursor, then acts on
-// each of its outputs in turn for as long as the step has room. One with no
-// weight written neither reads nor asks
-func (m *mind) steer(order []bound) {
-	for _, b := range order {
-		if b.while != nil && !b.while(m, nil, nil) {
-			continue
-		}
-		m.steered[b.net] = true
-		n := m.nets[b.net]
-		if n.blank || !m.frame() || m.room < 1 {
+// steer plays a's network for an update: it reads the network's inputs through
+// the view around the cursor, then acts on each output a takes, in turn, for as
+// long as the step has room. One with no weight written neither reads nor asks
+func (m *mind) steer(a steerArgs) {
+	m.steered[a.net] = true
+	n := m.nets[a.net]
+	if n.blank || !m.frame() || m.room < 1 {
+		return
+	}
+	out := n.ask(m)
+	for i, act := range n.acts {
+		if a.acts&(1<<i) != 0 && !act.act(m, out[act.at:act.at+act.units]) {
 			return
 		}
-		out := n.ask(m)
-		for i, a := range n.acts {
-			if b.acts&(1<<i) != 0 && !a.act(m, out[a.at:a.at+a.units]) {
-				return
-			}
-		}
-		return
 	}
 }
 
@@ -401,58 +384,39 @@ func (m *mind) frame() bool {
 	return cursor && ok
 }
 
-// compileSteer resolves the networks a Steer names among the graph's, one or a
-// list in the order they are tried, each with its binding of whiles and the
-// outputs the Steer names of it, every one where it names none; a graph declaring
-// one network may leave the name out, and one with no binding always steers, so
-// only a list's last may have none
-func compileSteer(nets []*network, whiles []fsm.GuardFunc[*mind]) func(*steerPayload) ([]bound, error) {
-	return func(p *steerPayload) ([]bound, error) {
-		names, ok := []string{""}, true
-		switch v := p.Network.(type) {
-		case nil:
-			if len(nets) == 1 {
-				names[0] = nets[0].name
-			}
-		case string:
-			names[0] = v
-		case []any:
-			names = make([]string, len(v))
-			for i := range v {
-				if names[i], ok = v[i].(string); !ok {
-					break
-				}
-			}
-		default:
-			ok = false
+// pick is the network of nets a Steer or an Asks names, the graph's one where
+// it names none
+func pick(nets []*network, name string) (int, error) {
+	i := slices.IndexFunc(nets, func(n *network) bool { return n.name == name })
+	if name == "" && len(nets) == 1 {
+		i = 0
+	}
+	if i < 0 {
+		return 0, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", name)
+	}
+	return i, nil
+}
+
+// compileSteer resolves the network a Steer names among the graph's and the
+// outputs the Steer names of it, every one where it names none
+func compileSteer(nets []*network) func(*steerPayload) (steerArgs, error) {
+	return func(p *steerPayload) (steerArgs, error) {
+		i, err := pick(nets, p.Network)
+		if err != nil {
+			return steerArgs{}, err
 		}
-		if !ok || len(names) == 0 {
-			return nil, fmt.Errorf("network must be a network's name or a list of them, got %v", p.Network)
+		a := steerArgs{net: i, acts: ^uint(0)}
+		if len(p.Outputs) == 0 {
+			return a, nil
 		}
-		order := make([]bound, len(names))
-		for k, name := range names {
-			i := slices.IndexFunc(nets, func(n *network) bool { return n.name == name })
-			switch {
-			case i < 0:
-				return nil, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", name)
-			case slices.Contains(names[:k], name):
-				return nil, fmt.Errorf("network %q is listed twice", name)
-			case k > 0 && order[k-1].while == nil:
-				return nil, fmt.Errorf("network %q never steers: %q before it has no while, so always does", name, names[k-1])
+		a.acts = 0
+		for j, output := range p.Outputs {
+			at := slices.IndexFunc(nets[i].acts, func(a acting) bool { return a.name == output })
+			if at < 0 || slices.Contains(p.Outputs[:j], output) {
+				return steerArgs{}, fmt.Errorf("outputs: %q is no output of network %q, or is named twice", output, nets[i].name)
 			}
-			order[k] = bound{i, whiles[i], ^uint(0)}
-			if len(p.Outputs) == 0 {
-				continue
-			}
-			order[k].acts = 0
-			for j, output := range p.Outputs {
-				at := slices.IndexFunc(nets[i].acts, func(a acting) bool { return a.name == output })
-				if at < 0 || slices.Contains(p.Outputs[:j], output) {
-					return nil, fmt.Errorf("outputs: %q is no output of network %q, or is named twice", output, name)
-				}
-				order[k].acts |= 1 << at
-			}
+			a.acts |= 1 << at
 		}
-		return order, nil
+		return a, nil
 	}
 }
