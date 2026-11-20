@@ -583,7 +583,7 @@ func (s *NetworkSystem) keepLost() {
 		for _, a := range artifacts {
 			et := a.frame.Event
 			if et != event.EventParticipantDeparted && et != event.EventParticipantJoined ||
-				!s.admissibleFromSource(et, nil, a.source, a.authored) {
+				!s.admissibleFromSource(et, a.frame.Domain, nil, a.source, a.authored) {
 				continue
 			}
 			switch v, _ := a.frame.Decode(); p := v.(type) {
@@ -901,7 +901,7 @@ func (s *NetworkSystem) eachRosterScheduled(visit func(participant uint32, slot 
 	for _, a := range s.scheduled {
 		et := a.frame.Event
 		if a.void || et != event.EventParticipantDeparted && et != event.EventParticipantJoined ||
-			!s.admissibleFromSource(et, nil, a.source, a.authored) {
+			!s.admissibleFromSource(et, a.frame.Domain, nil, a.source, a.authored) {
 			continue
 		}
 		switch v, _ := a.frame.Decode(); p := v.(type) {
@@ -3251,7 +3251,7 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 			s.statDrop.Add(1)
 			continue
 		}
-		if !s.admissibleFromSource(et, payload, a.source, a.authored) {
+		if !s.admissibleFromSource(et, domain, payload, a.source, a.authored) {
 			s.statForged.Add(1)
 			s.world.Log().Warn("session", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
@@ -3301,12 +3301,15 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 	return local, peer
 }
 
-// Only the authority may author a roster change, a reset, a hold, a rate or a machine
-// transition: the one that sent the frame, or the one it applies under, as a dropped
-// guest sees the link close before its dismissal's tick and takes the term itself.
-// Only a participant that plays may ask for a transition (plays), and nobody acts as
-// another's cursor (crossingActors); other authentication needs authenticated peers.
-func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
+// A peer's artifact is one a producer could have sent (event.Crosses), never a
+// Shared or Local event made to look applied. Of those, only the authority, which
+// sent the frame or under which it applies, authors a roster change, a reset, a
+// hold, a rate or a machine transition; only a participant that plays asks for a
+// transition (plays), and nobody acts as another's cursor (crossingActors).
+func (s *NetworkSystem) admissibleFromSource(et event.EventType, domain core.Domain, payload any, source uint32, authored bool) bool {
+	if !event.Crosses(et, domain, payload) {
+		return false
+	}
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
 		event.EventGameResetRequest, event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
