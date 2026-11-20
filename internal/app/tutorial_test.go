@@ -86,6 +86,53 @@ func tutorialKeys(t *testing.T, a *App, keys string) {
 	}
 }
 
+// newTutorial boots a headless tutorial on a width by height terminal with its first
+// lesson laid, or skips where the scenario is not present
+func newTutorial(t *testing.T, width, height int) *App {
+	t.Helper()
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: width, Height: height, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	a.Tick(10)
+	return a
+}
+
+// tutorialState is the state the tutorial stands in
+func tutorialState(a *App) (state string) {
+	a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
+	return state
+}
+
+// tutorialTo skips to lesson with s, as a player may
+func tutorialTo(t *testing.T, a *App, lesson string) {
+	t.Helper()
+	for range 30 {
+		if tutorialState(a) == lesson {
+			return
+		}
+		tutorialKeys(t, a, "s")
+	}
+	t.Fatalf("s never reached %s; the tutorial stands in %s", lesson, tutorialState(a))
+}
+
+// tutorialInstall imports host's machine into joiner as a join or a reload does
+func tutorialInstall(t *testing.T, host, joiner *App) {
+	t.Helper()
+	capture := host.scheduler.ExportFSM()
+	joiner.World().RunSafe(func() {
+		if err := joiner.scheduler.ImportFSM(capture, true); err != nil {
+			t.Errorf("import fsm: %v", err)
+		}
+	})
+	joiner.Settle()
+}
+
 // The tutorial's keymap holds over the player's for its run: with an installed keymap
 // binding a to auto fire and p to pause, as a copy of the defaults does, a steps
 // right into Insert, as vim's append, and p puts and never pauses.
@@ -234,43 +281,23 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 // glyph gone some other way never strands them: a typo's Space deletes the glyph
 // it missed, and a delete repeated with . clears no as a repeated I no does.
 func TestTutorialsTypingLessonsEndHoweverTheirGlyphsGo(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	for _, c := range []struct{ to, keys, want string }{
-		{strings.Repeat("s", 7), "itypo me\x1bj^ithen me\x1b", "Append"},
-		{strings.Repeat("s", 12), "dwj.j.", "Yank"},
-		{strings.Repeat("s", 12), "2xj.j.", "Yank"},
+	for _, c := range []struct{ lesson, keys, want string }{
+		{"Insert", "itypo me\x1bj^ithen me\x1b", "Append"},
+		{"Repeat", "dwj.j.", "Yank"},
+		{"Repeat", "2xj.j.", "Yank"},
 	} {
-		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-		if err != nil {
-			t.Fatalf("headless: %v", err)
+		a := newTutorial(t, 100, 30)
+		tutorialTo(t, a, c.lesson)
+		if tutorialKeys(t, a, c.keys); tutorialState(a) != c.want {
+			t.Errorf("%q left the tutorial in %s, want %s", c.keys, tutorialState(a), c.want)
 		}
-		a.Tick(10)
-		tutorialKeys(t, a, c.to+c.keys)
-		var state string
-		a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
-		if state != c.want {
-			t.Errorf("%q left the tutorial in %s, want %s", c.keys, state, c.want)
-		}
-		a.Close()
 	}
 }
 
 // The tutorial's map floor is the view an 80 by 24 terminal shows, so no lesson
 // there scrolls: G lands on a row in view and the next heading shows whole.
 func TestTutorialsMapIsTheViewOfAnEightyByTwentyFourTerminal(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
-	a.Tick(10)
+	a := newTutorial(t, 80, 24)
 	var width, height int
 	a.World().RunSafe(func() { width, height = a.World().Resources.Config.MapWidth, a.World().Resources.Config.MapHeight })
 	if vw, vh := engine.Viewport(80, 24); width != vw || height != vh {
@@ -282,71 +309,37 @@ func TestTutorialsMapIsTheViewOfAnEightyByTwentyFourTerminal(t *testing.T) {
 // game's special fire, which auto fire presses too, turns none of its dark glyphs
 // to dust, since the tutorial runs no particle system.
 func TestTutorialsFreePracticeKeepsItsCode(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
+	a := newTutorial(t, 100, 30)
 	w := a.World()
-	read := func() (state string, dark int) {
+	dark := func() (n int) {
 		w.RunSafe(func() {
-			state = w.Resources.Status.Strings.Get("fsm.state").Load()
 			w.Components.Glyph.Each(func(_ core.Entity, g *component.GlyphComponent) bool {
 				if g.Level == component.GlyphDark {
-					dark++
+					n++
 				}
 				return true
 			})
 		})
-		return state, dark
+		return n
 	}
-	a.Tick(10)
-	for range 30 {
-		if state, _ := read(); state == "Free" {
-			break
-		}
-		tutorialKeys(t, a, "s")
-	}
+	tutorialTo(t, a, "Free")
 	a.Tick(600)
-	state, before := read()
-	if state != "Free" || before == 0 {
-		t.Fatalf("the tutorial stands in %s with %d dark glyphs, want Free with its corpus laid", state, before)
+	before := dark()
+	if before == 0 {
+		t.Fatal("Free laid no dark glyph to keep")
 	}
-	tutorialKeys(t, a, "  ")
-	if _, after := read(); after < before {
-		t.Fatalf("Space in Free took %d of %d dark glyphs, want none", before-after, before)
+	if tutorialKeys(t, a, "  "); dark() < before {
+		t.Fatalf("Space in Free took %d of %d dark glyphs, want none", before-dark(), before)
 	}
 }
 
 // The tutorial gives the backtick to vi with m: `a returns to the marked cell
 // itself, which ends the marks lesson, and opens no console over it.
 func TestTutorialsBacktickReturnsToTheMarkedCell(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
-	state := func() (s string) {
-		a.World().RunSafe(func() { s = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
-		return s
-	}
-	a.Tick(10)
-	for range 30 {
-		if state() == "Marks" {
-			break
-		}
-		tutorialKeys(t, a, "s")
-	}
+	a := newTutorial(t, 100, 30)
+	tutorialTo(t, a, "Marks")
 	tutorialKeys(t, a, "maG`a")
-	if got := state(); got != "Map" || !a.Context().IsNormalMode() {
+	if got := tutorialState(a); got != "Map" || !a.Context().IsNormalMode() {
 		t.Fatalf("ma, G and `a left the tutorial in %s, Normal %v; want Map, in Normal", got, a.Context().IsNormalMode())
 	}
 }
@@ -355,27 +348,9 @@ func TestTutorialsBacktickReturnsToTheMarkedCell(t *testing.T) {
 // pairs a bracket inside its block: every run of rows holding glyphs is one block,
 // five rows at most, its brackets balanced.
 func TestTutorialsFreeLaysEachBlockAlone(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
+	a := newTutorial(t, 80, 24)
 	w := a.World()
-	state := func() (s string) {
-		w.RunSafe(func() { s = w.Resources.Status.Strings.Get("fsm.state").Load() })
-		return s
-	}
-	a.Tick(10)
-	for range 30 {
-		if state() == "Free" {
-			break
-		}
-		tutorialKeys(t, a, "s")
-	}
+	tutorialTo(t, a, "Free")
 	a.Tick(3000)
 	var height int
 	rows := map[int][]rune{}
@@ -407,8 +382,8 @@ func TestTutorialsFreeLaysEachBlockAlone(t *testing.T) {
 			}
 		}
 	}
-	if state() != "Free" || runs < 2 {
-		t.Fatalf("the tutorial stands in %s with %d blocks laid, want Free with its corpus", state(), runs)
+	if runs < 2 {
+		t.Fatalf("Free laid %d blocks, want its corpus", runs)
 	}
 }
 
@@ -416,17 +391,8 @@ func TestTutorialsFreeLaysEachBlockAlone(t *testing.T) {
 // entity, as a rejoin after its wraith went does, is stood on the next lesson's
 // practice line all the same.
 func TestTutorialStandsACursorThatCameBack(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
+	a := newTutorial(t, 100, 30)
 	w := a.World()
-	a.Tick(10)
 	var first, second core.Entity
 	w.RunSafe(func() { first = w.Resources.Player.Entity })
 	a.Context().PushEventOrigin(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: 0}, event.OriginDebug)
@@ -448,57 +414,26 @@ func TestTutorialStandsACursorThatCameBack(t *testing.T) {
 // for esc to end, and d stays in normal mode, where esc would open the menu, so
 // no step waits for an esc that d never needs.
 func TestTutorialsChangeLessonTakesADeleteToo(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
 	for _, keys := range []string{"cw\x1bjcc\x1b", "dwjdd", "cw\x1bjdd", "dejcc\x1b"} {
-		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-		if err != nil {
-			t.Fatalf("headless: %v", err)
+		a := newTutorial(t, 100, 30)
+		tutorialTo(t, a, "Change")
+		if tutorialKeys(t, a, keys); tutorialState(a) != "Replace" {
+			t.Errorf("%q in the change lesson left the tutorial in %s, want Replace", keys, tutorialState(a))
 		}
-		a.Tick(10)
-		tutorialKeys(t, a, strings.Repeat("s", 10)+keys)
-		var state string
-		a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
-		if state != "Replace" {
-			t.Errorf("%q in the change lesson left the tutorial in %s, want Replace", keys, state)
-		}
-		a.Close()
 	}
 }
 
 // The shield that gives Visual its reach drains while it stands, so the lesson sets
 // energy enough that it still stands for a learner who takes their time.
 func TestTutorialsVisualShieldOutlastsASlowLearner(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
+	a := newTutorial(t, 100, 30)
 	w := a.World()
-	read := func() (state string, shield bool) {
-		w.RunSafe(func() {
-			state = w.Resources.Status.Strings.Get("fsm.state").Load()
-			s, _ := w.Components.Shield.GetComponent(w.Resources.Player.Entity)
-			shield = s.Active
-		})
-		return state, shield
-	}
-	a.Tick(10)
-	for range 30 {
-		if state, _ := read(); state == "Visual" {
-			break
-		}
-		tutorialKeys(t, a, "s")
-	}
+	tutorialTo(t, a, "Visual")
 	a.Tick(3000)
-	if state, shield := read(); state != "Visual" || !shield {
-		t.Fatalf("a while into the lesson the tutorial stands in %s with the shield up %v, want Visual with it up", state, shield)
+	var shield component.ShieldComponent
+	w.RunSafe(func() { shield, _ = w.Components.Shield.GetComponent(w.Resources.Player.Entity) })
+	if state := tutorialState(a); state != "Visual" || !shield.Active {
+		t.Fatalf("a while into the lesson the tutorial stands in %s with the shield up %v, want Visual with it up", state, shield.Active)
 	}
 }
 
@@ -531,32 +466,12 @@ func tutorialRow(a *App, y int) string {
 // does, lays that lesson's text in place of the one its own boot laid: the first
 // lesson's practice block and x are gone, and the second's line stands.
 func TestTutorialAnInstalledLessonLaysItsOwnText(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	boot := func() *App {
-		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-		if err != nil {
-			t.Fatalf("headless: %v", err)
-		}
-		t.Cleanup(a.Close)
-		a.Tick(10)
-		return a
-	}
-	host, joiner := boot(), boot()
+	host, joiner := newTutorial(t, 100, 30), newTutorial(t, 100, 30)
 	tutorialKeys(t, host, "s")
 	if got := tutorialRow(joiner, 16); got != "and right to the x" {
 		t.Fatalf("the first lesson laid %q on row 16, want its last practice line", got)
 	}
-
-	capture := host.scheduler.ExportFSM()
-	joiner.World().RunSafe(func() {
-		if err := joiner.scheduler.ImportFSM(capture, true); err != nil {
-			t.Errorf("import fsm: %v", err)
-		}
-	})
-	joiner.Settle()
+	tutorialInstall(t, host, joiner)
 	if got := tutorialRow(joiner, 16); got != "" {
 		t.Fatalf("the installed lesson left %q on row 16, want the first lesson's block gone", got)
 	}
@@ -569,19 +484,6 @@ func TestTutorialAnInstalledLessonLaysItsOwnText(t *testing.T) {
 // reload into either does: the shield, whose reach Visual's block shows, and the
 // glyph spawner, which lays Free's code. An install re-derives a region's systems.
 func TestTutorialAnInstalledLessonRunsItsSystems(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	boot := func() *App {
-		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-		if err != nil {
-			t.Fatalf("headless: %v", err)
-		}
-		t.Cleanup(a.Close)
-		a.Tick(10)
-		return a
-	}
 	runs := func(a *App, lesson string) (on bool) {
 		w := a.World()
 		w.RunSafe(func() {
@@ -595,27 +497,12 @@ func TestTutorialAnInstalledLessonRunsItsSystems(t *testing.T) {
 		return on
 	}
 	for _, lesson := range []string{"Visual", "Free"} {
-		host, joiner := boot(), boot()
-		for range 30 {
-			var state string
-			host.World().RunSafe(func() { state = host.World().Resources.Status.Strings.Get("fsm.state").Load() })
-			if state == lesson {
-				break
-			}
-			tutorialKeys(t, host, "s")
-		}
-		if !runs(host, lesson) {
+		host, joiner := newTutorial(t, 100, 30), newTutorial(t, 100, 30)
+		if tutorialTo(t, host, lesson); !runs(host, lesson) {
 			t.Fatalf("the host in %s runs none of what the lesson turns on", lesson)
 		}
-		capture := host.scheduler.ExportFSM()
-		joiner.World().RunSafe(func() {
-			if err := joiner.scheduler.ImportFSM(capture, true); err != nil {
-				t.Errorf("import fsm: %v", err)
-			}
-		})
-		joiner.Settle()
-		joiner.Tick(5)
-		if !runs(joiner, lesson) {
+		tutorialInstall(t, host, joiner)
+		if joiner.Tick(5); !runs(joiner, lesson) {
 			t.Errorf("a participant that installed %s runs none of what the lesson turns on", lesson)
 		}
 	}
@@ -624,27 +511,13 @@ func TestTutorialAnInstalledLessonRunsItsSystems(t *testing.T) {
 // The first lesson's x ends its third line as a word does, so $, w and e reach it
 // as they reach any word's glyph, and h j k l still do.
 func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
-	a.Tick(10)
-	state := func() (s string) {
-		a.World().RunSafe(func() { s = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
-		return s
-	}
+	a := newTutorial(t, 100, 30)
 	for _, keys := range []string{"jj$", "jj4w", "jj5e", "jj" + strings.Repeat("l", 17)} {
-		tutorialKeys(t, a, keys)
-		if got := state(); got != "Words" {
-			t.Fatalf("%q left the tutorial in %s, want Words", keys, got)
+		if tutorialKeys(t, a, keys); tutorialState(a) != "Words" {
+			t.Fatalf("%q left the tutorial in %s, want Words", keys, tutorialState(a))
 		}
-		if tutorialKeys(t, a, "S"); state() != "Move" {
-			t.Fatalf("S from Words left the tutorial in %s, want Move", state())
+		if tutorialKeys(t, a, "S"); tutorialState(a) != "Move" {
+			t.Fatalf("S from Words left the tutorial in %s, want Move", tutorialState(a))
 		}
 	}
 }
@@ -652,16 +525,7 @@ func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {
 // The tutorial seats one player, so a bot asked for is refused before any session
 // opens for it, saying why, and the run plays on alone.
 func TestTutorialSeatsNoBot(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
-	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("tutorial scenario not present")
-	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	t.Cleanup(a.Close)
-	a.Tick(10)
+	a := newTutorial(t, 100, 30)
 	injectExCommand(t, a, "bot")
 	a.Tick(2)
 	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "seats one player, so no bot joins it") {
