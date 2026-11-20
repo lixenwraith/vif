@@ -556,11 +556,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 
 // handleMessageRequest displays a message in status bar
 func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
-	kind := parameter.StatusNotice
-	if payload.Alert {
-		kind = parameter.StatusAlert
-	}
-	s.ctx.SetStatusMessage(payload.Message, kind)
+	s.ctx.SetStatusMessage(payload.Message, payload.Kind)
 }
 
 // handleLevelSetup reconfigures map dimensions and clears entities

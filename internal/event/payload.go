@@ -218,11 +218,11 @@ type DrainDefeatedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// MetaStatusMessagePayload is a message for the status bar: a notice, or an alert
-// when a failure or a change to the session must be seen (parameter.StatusKind).
+// MetaStatusMessagePayload is a message for the status bar, ranked and shown for as
+// long as its kind says (parameter.StatusKinds): a notice unless it names another.
 type MetaStatusMessagePayload struct {
-	Message string `toml:"message"`
-	Alert   bool   `toml:"alert"`
+	Message string               `toml:"message"`
+	Kind    parameter.StatusKind `toml:"kind"`
 }
 
 // MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)

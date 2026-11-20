@@ -450,7 +450,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if ctx.StartScreen {
 			prompt = "" // the start screen's button asks
 		}
-		msg := r.runesOf(cmp.Or(r.gameCtx.ShownStatusMessage(realNow.UnixNano()), prompt))
+		text, kind := r.gameCtx.ShownStatus(realNow.UnixNano())
+		if prompt != "" && ctx.PromptAsks && kind == parameter.StatusProgress {
+			text = "" // the press the game waits on comes first; the line shows once it starts
+		}
+		msg := r.runesOf(cmp.Or(text, prompt))
 		// One longer than its room rises onto the items' row while it shows, as vim's
 		// long message rises over the window, and ends here; a keyboard hides that row
 		if len(msg) > textWidth && !ctx.StatusCovered {

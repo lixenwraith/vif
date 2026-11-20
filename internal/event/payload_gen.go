@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"time"
 	"unsafe"
@@ -620,7 +621,7 @@ func (p *MetaStatusMessagePayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecMetaStatusMessagePayload = structCodec{size: unsafe.Sizeof(MetaStatusMessagePayload{}), fields: []field{
 	{off: unsafe.Offsetof(MetaStatusMessagePayload{}.Message), kind: kindString},
-	{off: unsafe.Offsetof(MetaStatusMessagePayload{}.Alert), kind: kindBool},
+	{off: unsafe.Offsetof(MetaStatusMessagePayload{}.Kind), kind: kindUint, size: unsafe.Sizeof(parameter.StatusKind(0))},
 }}
 
 func (p *MetaSystemCommandPayload) codec() (*structCodec, unsafe.Pointer) {

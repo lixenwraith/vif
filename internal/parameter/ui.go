@@ -59,6 +59,16 @@ const (
 	StatusKindCount
 )
 
+// StatusKindNames are what a scenario and a host's menu call each StatusKind
+var StatusKindNames = [StatusKindCount]string{
+	StatusNotice:   "notice",
+	StatusProgress: "progress",
+	StatusInput:    "input",
+	StatusError:    "error",
+	StatusAlert:    "alert",
+	StatusAnnounce: "announce",
+}
+
 var StatusKinds = [StatusKindCount]struct{ Min, Shown time.Duration }{
 	StatusNotice:   {Shown: 5 * time.Second},
 	StatusProgress: {Shown: NetworkSessionRequestTimeout}, // the longest wait a run reports on

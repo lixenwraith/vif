@@ -605,9 +605,14 @@ then fits the bottom row, so a log path reads whole on a portrait phone. While a
 keyboard covers a touch host (`StatusCovered`), the row keeps its input and
 messages to the left half the host repeats above the keyboard. A
 message has a kind (`parameter.StatusKinds`): a notice, a wait's progress, a command
-typed, a refusal, an alert or a server's announcement. The newest replaces the one
-shown, except that a lower kind does not displace an alert or an announcement
-younger than its minimum, and each leaves after its kind's wall time. Its
+typed, a refusal, an alert or a server's announcement; a scenario names its
+own (`MetaStatusMessagePayload.Kind`), a notice unless it says. The newest
+replaces the one shown, except that a lower kind does not displace an alert or an
+announcement younger than its minimum, and each leaves after its kind's wall
+time. While a game holds for the press that starts it, the prompt asking for it
+(`RenderContext.PromptAsks`) outranks a progress line, which shows once the press
+starts the game; a guest's wait for its host asks nothing and yields to every
+message. Its
 colors come from one palette per color mode: the theme's in truecolor, and in an
 emulator in 256 colors through xterm's cube, labelled 256; on a text console fixed
 entries, each apart from the items beside it and with the text that reads best on it. The audio state is a letter: X muted, S sfx, M music,

@@ -797,7 +797,7 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 			by = "Dropped"
 		}
 		s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-			Message: fmt.Sprintf("%s the %s in slot %X%s", by, who, p.Slot, why), Alert: true})
+			Message: fmt.Sprintf("%s the %s in slot %X%s", by, who, p.Slot, why), Kind: parameter.StatusAlert})
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnDropped != nil && p.Dropped && held && c.Key != "" {
 		r.OnDropped(c.Key, p.Slot)
@@ -2144,7 +2144,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped 
 		s.world.Log().Info("net", "msg", "departed link closed", "peer", peerID, "remaining_peers", remaining)
 		return dropped
 	}
-	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Kind: parameter.StatusAlert})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 	return false

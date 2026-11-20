@@ -361,3 +361,38 @@ func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 		}
 	}
 }
+
+// TestAPressTheGameWaitsOnOutranksAProgressLine: while a game holds for the press
+// that starts it, the bar asks for the press over a progress line, which shows once
+// the game starts; a notice, a command typed, a refusal or an alert still shows, and
+// a guest's wait for its host, which asks nothing, yields to any message.
+func TestAPressTheGameWaitsOnOutranksAProgressLine(t *testing.T) {
+	const ask, line = "Click or press a key to start", "Lesson 1 of 22: move onto the x"
+	for _, c := range []struct {
+		kind parameter.StatusKind
+		asks bool
+		want string
+	}{
+		{parameter.StatusProgress, true, ask},
+		{parameter.StatusNotice, true, line},
+		{parameter.StatusInput, true, line},
+		{parameter.StatusError, true, line},
+		{parameter.StatusAlert, true, line},
+		{parameter.StatusProgress, false, line},
+	} {
+		r, _ := newStatusBar(t)
+		r.gameCtx.SetStatusMessage(line, c.kind)
+		rc := statusContext(80)
+		rc.Prompt, rc.PromptAsks = ask, c.asks
+		if bar, _ := statusRow(r, rc, 23); !strings.Contains(bar, c.want) {
+			t.Errorf("a %s line under a prompt that asks %t: the bar reads %q, want %q",
+				parameter.StatusKindNames[c.kind], c.asks, bar, c.want)
+		}
+		if c.kind != parameter.StatusProgress || !c.asks {
+			continue
+		}
+		if bar, _ := statusRow(r, statusContext(80), 23); !strings.Contains(bar, line) {
+			t.Errorf("once the game starts the bar reads %q, want the progress line", bar)
+		}
+	}
+}

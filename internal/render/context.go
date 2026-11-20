@@ -54,8 +54,11 @@ type RenderContext struct {
 	StatusCovered bool
 
 	// Prompt is the status line shown while no message is: what a game waiting for
-	// its start asks of the player
-	Prompt string
+	// its start asks of the player. PromptAsks: it asks for the press that starts the
+	// game, which outranks a progress line till then, the first key being spent on
+	// the start; a guest's wait for its host asks nothing.
+	Prompt     string
+	PromptAsks bool
 
 	// StartScreen: the launch waits behind the start screen for its press, and the
 	// screen's button asks for it in Prompt's place on the status line. StartHelp is
