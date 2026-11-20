@@ -51,7 +51,7 @@ var topics = []topicDef{
 			{Actions: []string{"motion_origin"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top-left corner"},
 			{Actions: []string{"motion_end"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Bottom-right corner"},
 			{Actions: []string{"motion_center"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Centre of the map"},
-			{Actions: []string{"motion_para_back", "motion_para_forward"}, Desc: "Previous and next empty row"},
+			{Actions: []string{"motion_para_back", "motion_para_forward"}, Desc: "Empty row before and after a block of text"},
 			{Actions: []string{"motion_match_bracket"}, Desc: "Jump to the matching bracket under the cursor"},
 			{Actions: []string{"motion_column_up"}, Desc: "Nearest glyph above in the same column"},
 			{Actions: []string{"motion_column_down"}, Desc: "Nearest glyph below in the same column"},
