@@ -230,7 +230,7 @@ on_enter = [
     { macro = "Note", text = "|e| lands on a word's last glyph. Punctuation is a word too;", row = 9 },
     { macro = "Note", text = "|W| |B| |E| take all up to a space as one word.", row = 10 },
     { macro = "Note", text = "Reach the start of dog, the last word of the line.", row = 11 },
-    { macro = "Line", text = "the quick.brown fox, jumping over the lazy-dog!", row = 14 },
+    { macro = "Line", text = "the quick.brown fox, jumping over the lazy-|d|og!", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 2 of 22: reach dog with w, b and e" },
 ]
@@ -249,7 +249,7 @@ on_enter = [
     { macro = "Note", text = "|^| finds the first glyph after the indent.", row = 9 },
     { macro = "Note", text = "Home and end work like |0| and |$|.", row = 10 },
     { macro = "Note", text = "Go to the period at the line's end, then back to its start.", row = 11 },
-    { macro = "Line", text = "    an indented line ends with a period.", row = 14 },
+    { macro = "Line", text = "    |a|n indented line ends with a period|.|", row = 14 },
     { macro = "Stand", x = 8, y = 14 },
     { macro = "Say", message = "Lesson 3 of 22: $ to the period, then ^ to the first glyph" },
 ]
@@ -277,7 +277,7 @@ on_enter = [
     { macro = "Note", text = "|t| stops just before it. |F| and |T| look backward.", row = 9 },
     { macro = "Note", text = "|;| repeats the last find and |,| reverses it.", row = 10 },
     { macro = "Note", text = "Hop from x to x: |fx| finds the first, |;| each one after.", row = 11 },
-    { macro = "Line", text = "hop x from x here x to x the last x", row = 14 },
+    { macro = "Line", text = "hop x from x here x to x the last |x|", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 4 of 22: reach the last x with fx and ;" },
 ]
@@ -297,7 +297,7 @@ on_enter = [
     { macro = "Note", text = "|5l| |4h| |2k|, and with |x| and |dd| as well.", row = 10 },
     { macro = "Note", text = "Reach five in as few keys as you can.", row = 11 },
     { macro = "Line", text = "one two three four", row = 14 },
-    { macro = "Line", text = "nine ten five six", row = 15 },
+    { macro = "Line", text = "nine ten |f|ive six", row = 15 },
     { macro = "Line", text = "seven eight twelve", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 5 of 22: j then 2w lands on five" },
@@ -319,7 +319,7 @@ on_enter = [
     { macro = "Note", text = "First |x| on the bright x, then |dd| on the third line.", row = 11 },
     { macro = "Line", text = "|x| marks this glyph", row = 14 },
     { macro = "Line", text = "keep this line", row = 15 },
-    { macro = "Line", text = "delete this whole line", row = 16 },
+    { macro = "Line", text = "|delete this whole line|", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 6 of 22: x on the x, then dd on the third line" },
 ]
@@ -347,7 +347,7 @@ on_enter = [
     { macro = "Note", text = "|dw| a word, |de| to its end, |d3w| three words, |dfx| to the", row = 9 },
     { macro = "Note", text = "next x, |dj| this row and the next. |D| cuts to the line's end.", row = 10 },
     { macro = "Note", text = "Delete the first word with |dw|, then |D| from the x on.", row = 11 },
-    { macro = "Line", text = "remove this word, then cut from the x on", row = 14 },
+    { macro = "Line", text = "|remove| this word, then cut from the |x| on", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 7 of 22: dw on the first word, then D on the x" },
 ]
@@ -535,8 +535,8 @@ on_enter = [
     { macro = "Note", text = "|cw| a word, |c$| the rest. |cc| clears the line, |C| its rest.", row = 9 },
     { macro = "Note", text = "In a game |s| is |cl| and |S| is |cc|; here they skip and go back.", row = 10 },
     { macro = "Note", text = "Change the first word with |cw|, |esc|, then |cc| on line two.", row = 11 },
-    { macro = "Line", text = "wrong word here", row = 14 },
-    { macro = "Line", text = "clear this whole line", row = 15 },
+    { macro = "Line", text = "|wrong| word here", row = 14 },
+    { macro = "Line", text = "|clear this whole line|", row = 15 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 11 of 22: cw on the first word" },
 ]
@@ -566,7 +566,7 @@ on_enter = [
     { macro = "Note", text = "no insert mode, no score. A count retypes that many: |3rx|.", row = 9 },
     { macro = "Note", text = "|~| flips a letter's case and moves on.", row = 10 },
     { macro = "Note", text = "Fix the z with |rs|, then quieten SHOUT with |5~|.", row = 11 },
-    { macro = "Line", text = "thiz line has a SHOUT in it", row = 14 },
+    { macro = "Line", text = "thi|z| line has a |SHOUT| in it", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 12 of 22: fz to the z, then rs" },
 ]
@@ -705,7 +705,7 @@ on_enter = [
     { macro = "Note", text = "From the opening brace, jump to the closing one.", row = 11 },
     { macro = "Line", text = "func main() {", row = 14 },
     { macro = "Line", text = "    run()", row = 15 },
-    { macro = "Line", text = "}", row = 16 },
+    { macro = "Line", text = "|}|", row = 16 },
     { macro = "Stand", x = 16, y = 14 },
     { macro = "Say", message = "Lesson 16 of 22: % from the opening brace" },
 ]
@@ -725,7 +725,7 @@ on_enter = [
     { macro = "Note", text = "|n| walks to the next match and |N| back; the search wraps.", row = 10 },
     { macro = "Note", text = "Search for needle, then |n| to the second one.", row = 11 },
     { macro = "Line", text = "a haystack hides a needle", row = 14 },
-    { macro = "Line", text = "and another needle here", row = 15 },
+    { macro = "Line", text = "and another |n|eedle here", row = 15 },
     { macro = "Line", text = "the search wraps around", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 17 of 22: /needle, enter, then n" },
@@ -746,8 +746,8 @@ on_enter = [
     { macro = "Note", text = "|n| and |N| repeat it; |2*| is the second match on.", row = 10 },
     { macro = "Note", text = "From the first in, |*| twice for the last one, then |#| back.", row = 11 },
     { macro = "Line", text = "in the room", row = 14 },
-    { macro = "Line", text = "within reach, not in sight", row = 15 },
-    { macro = "Line", text = "an inn is in town", row = 16 },
+    { macro = "Line", text = "within reach, not |i|n sight", row = 15 },
+    { macro = "Line", text = "an inn is |i|n town", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 18 of 22: * twice, to the last in" },
 ]
