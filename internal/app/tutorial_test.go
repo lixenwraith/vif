@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
@@ -280,5 +281,33 @@ func TestTutorialAnInstalledLessonLaysItsOwnText(t *testing.T) {
 	}
 	if got, want := tutorialRow(joiner, 14), tutorialRow(host, 14); got != want || got == "" {
 		t.Fatalf("the installed lesson reads %q on row 14, want the second lesson's %q", got, want)
+	}
+}
+
+// The first lesson's x ends its third line as a word does, so $, w and e reach it
+// as they reach any word's glyph, and h j k l still do.
+func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	a.Tick(10)
+	state := func() (s string) {
+		a.World().RunSafe(func() { s = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
+		return s
+	}
+	for _, keys := range []string{"jj$", "jj4w", "jj5e", "jj" + strings.Repeat("l", 17)} {
+		tutorialKeys(t, a, keys)
+		if got := state(); got != "Words" {
+			t.Fatalf("%q left the tutorial in %s, want Words", keys, got)
+		}
+		if tutorialKeys(t, a, "S"); state() != "Move" {
+			t.Fatalf("S from Words left the tutorial in %s, want Move", state())
+		}
 	}
 }

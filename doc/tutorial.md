@@ -78,7 +78,8 @@ shield system on for itself alone, so the ping bounds have a reach to show.
 
 The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
 join or a reload that installs a later lesson lays that lesson's text in place of
-the first one its own boot laid.
+the first one its own boot laid. Lesson 1's x is a typeable glyph, which `$`, `w`
+and `e` reach as they reach a word.
 
 ## 3. The next round
 
