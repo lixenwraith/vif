@@ -764,6 +764,17 @@ button is refused. A button shows its key in the splash font once it is about te
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/base/recall` is the worked example.
 
+A magic square takes the presses of the keys a state captures for it: a digit
+selects the block it names for the pressing slot, and h, l, k and j turn that
+block's row or column a place. `EventSquareSpawnRequest { x, y, layout, groups,
+hp, block_width, block_height, target_group_id }` lays it centred on the cell,
+`layout` the nine digits row by row and `groups` the digits of each kind in order,
+attack, hold and defense; one square stands at a time. `EventSquareAligned { kind,
+line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0 attack, 1
+hold, 2 defense), and `EventSquareBlockFallen { digit, remaining }` a block lost
+its last cell. `EventGatewayHoldRequest { duration_ms }` holds every gateway's
+spawns. `wad/scenario/base/magic` is the worked example.
+
 ### Splash text and glyph lines
 
 ```toml
@@ -1033,7 +1044,7 @@ restitution = 0.5                   # Speed kept off a wall or the map's edge, 0
 
 [prototype.attacks]                 # Its own attack row: each family named replaces its combat row's keys (optional)
 pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and knockback (where the row takes it)
-missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn
+missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, contact, strike, hold
 
 [prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
 color = { r = 255, g = 120, b = 0 }  # The beams' colour

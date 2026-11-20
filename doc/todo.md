@@ -218,6 +218,43 @@ To settle with the design:
 [Gameplay §10](gameplay.md#10-embedded-campaign-progression) and the soak test
 follow the terrain.
 
+## Magic
+
+Magic holds a magic square against a swarm
+([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
+built to be play tested; its numbers and rules are what the play test settles.
+
+### Tune magic after its first play test
+
+- Priority: P1
+- Affected files: `wad/scenario/base/magic/scenario.toml`,
+  `internal/parameter/square.go`, `internal/component/square.go` (`SquareKinds`)
+
+To settle: the cells' hit points and the contact damage, each kind's duration and
+recharge, the gateways' pace; whether a line fires only as it forms or again while
+it holds; and whether one turn may align all three kinds at once, as the Lo Shu
+rows, each a turn of the others, allow by row turns alone, or the layout mixes them.
+Re-forming the alignment every 8 s lost no block in 200 s.
+
+### Let a target group anchor more than eight
+
+- Priority: P3
+- Affected files: `internal/parameter/navigation.go` (`MaxTargetsPerGroup`),
+  `internal/system/square.go` (`anchor`)
+
+A group holds eight anchors, so the square's middle block holds none while all nine
+stand, and a larger square would leave more out. A cap of 16 closes it, and cursor
+groups past eight players with it.
+
+### Keep the square whole through a resize
+
+- Priority: P3
+- Affected files: `internal/system/square.go`, `wad/scenario/base/magic/scenario.toml`
+
+A map following its screen keeps the square where it was laid: a grown screen
+leaves it off the middle and a shrunk one ends the cells past the edge. Moving it
+to the middle as the map resizes, or a fixed map, closes it.
+
 ## Bots
 
 What ships, and what was tried and not built, is in [Bots](bots.md). Decisions

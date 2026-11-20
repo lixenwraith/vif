@@ -10,9 +10,9 @@ that a document or a code comment now states, and link that instead.
 
 Topics: Toolchain · Events and ticks · Sessions · Runs and their wiring ·
 Determinism and the harness · Session tests · Tests that flake · Locks · Networking
-and admission · Position · Math and physics · Glyphs and widgets · Looking at the
-game without a device · Measuring · Settings files · Scenario TOML · Corpus · Docs ·
-Libraries · Branches.
+and admission · Position · Math and physics · Combat · Glyphs and widgets · Looking
+at the game without a device · Measuring · Settings files · Scenario TOML · Corpus ·
+Docs · Libraries · Branches.
 
 ## Toolchain
 
@@ -734,6 +734,15 @@ Libraries · Branches.
   read: `v -= v*0` turns a negative zero positive, so a branch that skips a
   subtraction is not one that subtracts nothing.
 
+## Combat
+
+- A family lands alike from every attacker (`TestAFamilyLandsAlikeFromEveryAttacker`),
+  since a data species' row sets a family's damage and effects whoever throws it: a
+  new attacker that must deal otherwise takes a family of its own, as the magic
+  square's `strike` and `hold` do.
+- A target group holds `parameter.MaxTargetsPerGroup` (8) anchors and drops the rest
+  in store order, saying nothing: a ninth anchor is no target until one goes.
+
 ## Glyphs and widgets
 
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the
@@ -743,6 +752,9 @@ Libraries · Branches.
   every string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody
   sees stays ASCII, and a comment after code on its line as code, so that comment
   does too.
+- A glow added (`BlendAdd`) over a cell nothing painted adds onto black, a band
+  darker than the theme's background: blend it with `SetBgScreen` on
+  `visual.RgbBackground`, as the shield's and the square's glows do.
 - `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
   a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
 - The menu's rows are built again each frame the menu shows them, and a host that
@@ -762,6 +774,12 @@ Libraries · Branches.
   spans and shot with Playwright, it shows real colours. `TERM=linux COLORTERM=`
   gives the console tier. The capture carries SGR state from one line into the
   next, so a converter that resets colours at each line paints wrong backgrounds.
+- `tmux capture-pane -e` drops a line's trailing cells of the default colours, so a
+  converter paints black where the theme's background stands: add `-N`.
+- A scenario whose keys are its only input plays headless from a `-script` of
+  `press` intents under `-speed max -lv debug -log-stdout`: the FSM's transitions,
+  and the stat lines every 200 ticks (`combat`, `swarm`, the event tallies), say
+  what the presses did, a 200-second game in seconds.
 - A status message longer than its room rises onto the row above the status line
   (the bar's `spill`), and the last row reads empty: read a capture's last two rows.
 - A run started with `XDG_CONFIG_HOME` and `XDG_STATE_HOME` in a scratch directory
@@ -1187,6 +1205,9 @@ Libraries · Branches.
 - Reading a pane: the status bar's first item is the FSM state and its time, the
   column ruler counts from the cursor, and the large glyph some way off the cursor
   is the magnifier, the glyph under it in the large face.
+- `TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists
+  (`internal/app/domain_test.go`), not every one shipped: a new scenario adds its
+  directory there, or its triggers go unchecked.
 - The entry's top-level keys the FSM loader does not know are the embedder's
   (`resource.entryKeys` lists them), so a new entry key needs no loader change
   beyond reading its files into the container.
