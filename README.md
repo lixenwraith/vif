@@ -44,8 +44,9 @@ scenarios, renderers and simulation libraries.
   recorder for reproducing and diagnosing a run.
 
 Headless and replay runs are deterministic for one build from their seed,
-configuration and input; live play is not promised bit-for-bit, since it uses
-`float64` and live scheduling.
+configuration and input; live play is not promised bit-for-bit, since its tick,
+event and input loops race for the world lock, nor is any run across platforms,
+where `float64` results can differ.
 
 ## Play
 
@@ -101,8 +102,8 @@ change when the run read none of yours); the rest last the run.
 `vif -h` prints every flag, to stdout; `man vif` is the same list after an
 install. The ones most runs want:
 
-- `-s <name|path>` picks a scenario (`td`, `recall`, `blank`, `cave`, `armada`, `magic`, `dummy`), and `-d` plays
-  the embedded one.
+- `-s <name|path>` picks a scenario (`td`, `recall`, `blank`, `cave`, `armada`,
+  `magic`, `dummy`, `tutorial`), and `-d` plays the embedded one.
 - `-bot [N[:graph]]` seats bots beside you; `-watch` lets one play in your place
   ([Bots](doc/bots.md)).
 - `-g` plays in the desktop window, and `-cli` in the terminal whatever

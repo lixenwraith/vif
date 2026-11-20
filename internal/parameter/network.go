@@ -299,7 +299,7 @@ const (
 
 	// SnapshotCorrectionChunkBytes is how much of a correction body one frame
 	// carries mid-session. A body is released a chunk at a time as its link drains,
-	// so an epoch behind it waits for one chunk rather than for a whole world.
+	// so an epoch behind it waits for a few chunks rather than for a whole world.
 	SnapshotCorrectionChunkBytes = 4 << 10
 
 	// SnapshotSectionBlobBytes is the JSON size from which a capture's store travels
