@@ -92,6 +92,13 @@ Docs · Libraries · Branches.
   commit zipped the same way must hash (`dirhash.HashZip`) to the `h1` main's
   `go.sum` holds, which proves the zip before the new line is trusted, and
   `GOFLAGS=-modcacherw` lets the scratch cache be removed.
+- `gomobile bind` builds `./gobind` in a temporary module of its own, which no
+  `go.work` lists ("directory gobind is contained in a module that is not one of
+  the workspace modules listed in go.work"), so a workspace cannot stand in for a
+  dependency's untagged version in `make android`. The device run for terminal
+  v0.7.1 appended a `replace` to `android/go.mod` and reverted it before the
+  commit; the file `GOPROXY` above is environment, which should reach gomobile's
+  module, and no build has tried it.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the
