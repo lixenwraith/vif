@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/asset"
@@ -14,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -590,5 +592,23 @@ func TestTutorialSeatsNoBot(t *testing.T) {
 	}
 	if a.membership.SessionTransport() != nil {
 		t.Fatal(":bot opened a session for a bot the tutorial has no seat for")
+	}
+}
+
+// A lesson's prompt is a progress line, up till the next lesson's rather than for a
+// notice's five seconds, and the lesson a step reaches posts its own the same way.
+func TestTutorialsPromptsStayUp(t *testing.T) {
+	a := newTutorial(t, 100, 30)
+	shown := func() (string, parameter.StatusKind) {
+		return a.Context().ShownStatus(a.Context().TimeCtl.RealTime().Add(time.Minute).UnixNano())
+	}
+	if text, kind := shown(); kind != parameter.StatusProgress || !strings.HasPrefix(text, "Lesson 1 of 22") {
+		t.Fatalf("a minute on the bar shows %q, a %s line; want lesson 1's prompt", text, parameter.StatusKindNames[kind])
+	}
+	if tutorialKeys(t, a, "s"); tutorialState(a) != "Words" {
+		t.Fatalf("s left the tutorial in %s", tutorialState(a))
+	}
+	if text, kind := shown(); kind != parameter.StatusProgress || !strings.HasPrefix(text, "Lesson 2 of 22") {
+		t.Fatalf("a minute into Words the bar shows %q, a %s line; want lesson 2's prompt", text, parameter.StatusKindNames[kind])
 	}
 }

@@ -62,9 +62,9 @@ enabled_systems = ["shield"]
 # --- Macros ---
 
 [macros.Say]
-doc = "Status message `message`."
+doc = "Status line `message`: what the lesson waits on, shown till the next; a game held for its start asks for the press over it."
 params = { message = "string" }
-body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, reconcile = true }
+body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}", kind = "progress" }, reconcile = true }
 
 [macros.Heading]
 doc = "Write `text` in the small face at the top left, in the lesson's gold."
