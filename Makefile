@@ -20,7 +20,6 @@ VIF_CONFIG_BASE != case "$$(uname -s)" in \
 	*) test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config" ;; \
 	esac
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vif
-CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
@@ -111,7 +110,8 @@ help:
 	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
 	@echo "  install-config Install the wad, keymaps, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "           (both: a keymap.toml or vif.toml already there is brought up to date, its lines kept;"
-	@echo "           CLEAN=1 first removes what an earlier install put there)"
+	@echo "           script/install.sh <goal> -purge first removes what an earlier install put"
+	@echo "           there, a player's bot files, keymap.toml and vif.toml with it)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
@@ -269,22 +269,18 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 		else $(GO) run ./tool/vif-settings "$$2" || echo "keep    $$2, not brought up to date"; fi; }
 # The wad mirrors the installed layout, so a copy is the install: shipped files are
 # replaced, a player's kept, and the keymap.toml and vif.toml already there brought up
-# to this build's (tool/vif-settings). CLEAN=1 first removes the shipped
-# categories, those two files and of scenario/ base/ and the copies an older
-# install left beside it. A cave graph an older install put in bot/ is named and
-# left: the cave scenario carries those now, and a copy in a root plays in its
-# place. A variable, as make -n runs a sub-make.
+# to this build's (tool/vif-settings). script/install.sh -purge sets VIF_PURGE,
+# which first removes the shipped categories, bot/ whole among them, and those two
+# files. A variable, as make -n runs a sub-make.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
-	if [ '$(CLEAN)' = 1 ]; then \
-		for dir in $(WAD_DIR)/*/ bot/ $(WAD_DIR)/scenario/base/ $(WAD_DIR)/scenario/base/*/; do \
-			dir=$${dir%/}; case $$dir in $(WAD_DIR)/scenario) continue ;; $(WAD_DIR)/scenario/*) dir=scenario/$${dir\#\#*/} ;; *) dir=$${dir\#\#*/} ;; esac; \
-			[ ! -e "$$root/$$dir" ] || { rm -rf "$$root/$$dir"; echo "remove  $$root/$$dir"; }; \
+	if [ '$(VIF_PURGE)' = 1 ]; then \
+		for old in $(WAD_DIR)/*/ $(WAD_DIR)/scenario/*/ bot/ input/keymap.toml vif.toml; do \
+			old=$${old%/}; old=$${old\#$(WAD_DIR)/}; \
+			[ "$$old" = scenario ] || [ ! -e "$$root/$$old" ] || { rm -rf "$$root/$$old"; echo "remove  $$root/$$old"; }; \
 		done; \
-		rm -f "$$root/input/keymap.toml" "$$root/vif.toml"; \
 	fi; \
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
-	for old in cave seed cave_seed; do [ ! -e "$$root/bot/$$old.toml" ] || echo "stale   $$root/bot/$$old.toml plays in place of the cave scenario's own: remove it unless it is yours"; done; \
 	settings $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
 	put 0644 $(VIM_KEYMAP_SRC) "$$root/input/vim.toml"; \
 	settings $(SETTINGS_SRC) "$$root/vif.toml"; \

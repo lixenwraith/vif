@@ -131,8 +131,9 @@ Libraries · Branches.
   commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
 - Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
   a variable, a heredoc that only edits the Makefile's install recipe included:
-  edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
-  `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
+  edit that recipe with the Edit tool, and read what a purge would remove with
+  `./script/install.sh install-config -purge -n VIF_CONFIG_DIR=<any path>`, which
+  prints the recipe and runs nothing; run one only on a root made for it.
 - A probe of a dependency's API against the checkout's files runs from a module of
   its own outside the tree: its `go.mod` takes this module's `go` line, a lower
   one asking for a toolchain nothing serves, and its `go.sum` a copy of this

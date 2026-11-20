@@ -665,8 +665,9 @@ as the run stops. A browser keeps none. The learner lives beside the driver,
 outside the world and its captures. The file is JSON because one cut short
 never parses, where a TOML one could read as fewer members.
 
-`make install-config CLEAN=1` removes the user root's `bot/` whole, a player's
-graphs and populations with it: copy them out first.
+An install asked to purge (`./script/install.sh install-config -purge`) removes
+the user root's `bot/` whole, a player's graphs and populations with it: copy
+them out first ([Filesystem §4](filesystem-layout.md#4-installation)).
 
 A population starts over when its file is removed (`clear`), when the network's
 layout changes (the inputs read, `hidden`, or the outputs it has), which the
@@ -1052,7 +1053,7 @@ unattended.
 | Symptom | Fix |
 |---|---|
 | `bot graph "x" not found as a path, in a configuration root, in scenario <name> or embedded` | Check the name and `-config-dir`, or give a path; a scenario's bot is found only in a run of that scenario. |
-| `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place; installs before the scenario carried its bots left one there, which `make install-config` names. Remove it. |
+| `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place: remove or rename it. |
 | `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
 | A `roam` or `patrol` bot plays an old graph | An installed file of that name shadows `default`: use `-bot default` or update the file. |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |

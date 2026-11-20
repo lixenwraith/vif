@@ -84,7 +84,7 @@ downloading it again, and `-s` and the menu play it by that name; a copy the
 player edits answers no join and is never written over. Saving is off by default,
 since the host, not the player, chose what it holds, and a run that cannot write
 there plays on and says why on its status line. `make install-config` creates the
-directory empty and `CLEAN=1` leaves it.
+directory empty and `-purge` (§4) leaves it.
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
@@ -236,6 +236,8 @@ make install-config                                  # the user root only
 make install-config VIF_CONFIG_DIR=/path/to/stage    # into a staging root
 make install DESTDIR=/pkg PREFIX=/usr                # distribution package, root /etc/vif
 make uninstall                                       # what install put under PREFIX
+./script/install.sh install-config -purge            # either install, its root purged first:
+sudo ./script/install.sh install -purge              #   make's own line after the script's name
 ```
 
 Both copy `wad/`, the bot graphs, the keymaps and `vif.toml`. A reinstall replaces
@@ -245,14 +247,27 @@ brought up to this build's as a run brings it and written as §3 writes
 (`tool/vif-settings`), and the install names the changes. Without Go on `PATH` it keeps the file as it is, which a run reads
 brought up to date and writes back only when it is the player's own (§3); one that
 does not parse it keeps for the player to fix, as a run refuses it too, and a
-special file or one no one may write it leaves as a run does. `CLEAN=1` first
-removes the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/`
-its `base/` and the copies of shipped scenarios an install from before `base/`
-left at its top, which would shadow them) and those two files, so the root holds
-only the fresh install plus `audio/`, a player's own scenarios and anything else a
-player put beside them. `bot/` goes whole: in the user root that is a player's own
-graphs and every population their bots learned
-([Bots](bots.md#the-population-file)). `install` adds the binary, licence, manual, desktop entry
+special file or one no one may write it leaves as a run does.
+
+An install removes nothing, so a file a later build renames or stops shipping
+stays where an earlier install put it, and no install looks for one. `-purge` is
+for that: `make` takes no flag of its own, so `script/install.sh` takes it and
+hands make the rest of its line. Either install then first removes from its
+root, naming each as it goes:
+
+- `content/`, `image/` and `scenario/base/`, whole: what was shipped, with any
+  file a player put among it;
+- `bot/`, whole: the shipped `default`, and in the user root a player's own
+  graphs and every population their bots learned
+  ([Bots](bots.md#the-population-file)), to copy out first;
+- `input/keymap.toml` and `vif.toml`: the player's bindings and settings, which
+  the install then writes as shipped.
+
+It keeps `audio/`, a player's other keymaps, their own scenarios,
+`scenario/downloads/` and anything else in the root. `-n` beside it prints what
+would run and removes nothing.
+
+`install` adds the binary, licence, manual, desktop entry
 and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
 `PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs
