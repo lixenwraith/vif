@@ -468,6 +468,40 @@ func TestTutorialsChangeLessonTakesADeleteToo(t *testing.T) {
 	}
 }
 
+// The shield that gives Visual its reach drains while it stands, so the lesson sets
+// energy enough that it still stands for a learner who takes their time.
+func TestTutorialsVisualShieldOutlastsASlowLearner(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	read := func() (state string, shield bool) {
+		w.RunSafe(func() {
+			state = w.Resources.Status.Strings.Get("fsm.state").Load()
+			s, _ := w.Components.Shield.GetComponent(w.Resources.Player.Entity)
+			shield = s.Active
+		})
+		return state, shield
+	}
+	a.Tick(10)
+	for range 30 {
+		if state, _ := read(); state == "Visual" {
+			break
+		}
+		tutorialKeys(t, a, "s")
+	}
+	a.Tick(3000)
+	if state, shield := read(); state != "Visual" || !shield {
+		t.Fatalf("a while into the lesson the tutorial stands in %s with the shield up %v, want Visual with it up", state, shield)
+	}
+}
+
 // tutorialRow reads the glyphs on row y from column 4, a gap as a space.
 func tutorialRow(a *App, y int) string {
 	w := a.World()
