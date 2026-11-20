@@ -340,11 +340,12 @@ the version the build links (`make page`). A deployment needs no `vif.js`, and o
 that edits any of the rest has forked the launcher, the fork only visible the next
 time one side changes.
 
-The page's text is Roboto: the stylesheet takes a copy installed on the player's
-system, then `/fonts/` on the page's site, then `fonts/` beside the page, which
-`web/fonts/` holds with its licence, so no deployment fetches a font from
-elsewhere, and one that serves neither shows the system's sans-serif where Roboto
-is not installed.
+The page's own text, the Hack cells and the key strip's monospace aside, is
+Roboto: the stylesheet takes a copy installed on the player's system, then
+`/fonts/` on the page's site, then `fonts/` beside the page, which `web/fonts/`
+holds with its licence, so no deployment fetches a font from elsewhere, and one
+that serves neither shows the system's sans-serif where Roboto is not installed.
+
 
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
