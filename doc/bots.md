@@ -433,10 +433,11 @@ paid, the round in play included. From a checkout with `bin/vif` built,
 `./script/test.sh botscore [graph-file] [seeds] [secs]` plays `default` as
 written, its learning left off and under a user root of its own, where nothing
 is kept for it, headless and flat out at 120x40 for `secs` (60) over seeds
-1..`seeds` (4) on the embedded scenario and `td`, and prints each scenario's sum. Given a graph file, it fails unless that graph beats `default`
-on every scenario. Each graph is read by the score its own document declares.
-It appends a `stop` region (states `StopWait` and `StopQuit`), so a graph
-cannot use those names.
+1..`seeds` (4) on the embedded scenario and `td`, and prints each scenario's
+sum. Given a graph file, it fails unless that graph beats `default` on every
+scenario. Each graph is read by the score its own document declares. It appends
+a `stop` region (states `StopWait` and `StopQuit`), so a graph cannot use those
+names.
 
 ## Networks and learning
 
@@ -683,8 +684,8 @@ An install asked to purge (`./script/install.sh install-config -purge`) removes
 the user root's `bot/` whole, a player's graphs and populations with it: copy
 them out first ([Filesystem §4](filesystem-layout.md#4-installation)).
 
-A population starts over in four cases. A run, `list` and `export` read the
-file by that one rule.
+A population starts over in four cases, and a run, `list`, `export` and
+`import`'s note all read the file by the same rule.
 
 - Its file is removed (`clear`).
 - The network's layout changes: the inputs read, `hidden`, or the outputs it
@@ -766,8 +767,7 @@ before it plays: it was asked for the model.
   `seed`'s weights, 194 of its 540 weights not zero. A run of five games
   learned it, and a trainer then ran on from it in cycles of fifty minutes. The
   pair it fielded after the fourth cycle ships, and fifteen more cycles fielded
-  no better. The trainer is stopped; its populations are on the branch
-  `claude/cave-training-state`.
+  no better. The trainer is stopped.
 
 What each scores held out, with no learner. In `cave`: 100 rounds of seeds 101
 to 104, each closed at half an hour, 36,000 ticks.

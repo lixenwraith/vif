@@ -283,9 +283,10 @@ Libraries · Branches.
   (`returnPlace.via`), or a person with bots waiting reads as a bot holding bots.
 - What a player brings back to its Wraith (`event.CursorRecord`) is judged where it
   is written, `CursorSystem.restore` on every instance, never at the door: by the
-  game it names (`Run` against the queue's run, which a reset advances) and by
-  `heldInRange`, which the owner sync's check shares. A field added to the record
-  that play bounds joins `heldInRange`.
+  game it names (`Run` against the queue's run, which a reset advances), by
+  `heldInRange`, which the owner sync's check shares, and by reading no defeat,
+  no energy and no heat. A field added to the record that play bounds joins
+  `heldInRange`.
 
 ## Runs and their wiring
 

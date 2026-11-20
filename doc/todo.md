@@ -223,14 +223,17 @@ follow the terrain.
 What ships, and what was tried and not built, is in [Bots](bots.md). Decisions
 of Lixen's that bind, as they stood on 2026-11-20:
 
-- No trainer for `main` or `armada`: main's typing bot cannot lose, and
-  armada's design is not final.
-- `cave`'s trainer is stopped. It found one model, which ships; its last
-  populations are on the branch `claude/cave-training-state`.
+- No trainer for the embedded scenario or `armada`: a typing bot cannot lose
+  there, and armada's design is not final.
+- `cave`'s trainer is stopped. It found one model, which ships.
+- The embedded scenario carries no bot of its own: `default` plays it.
 - The special attack is a network's output in every bot of a scenario that has
   it, and main fire too where auto-fire is off.
 - A bot plays the game a person plays: no mechanic, event handling or engine
   wire is made for it.
+- Beside a person, one who is away included, a bot's defeat ends no game.
+  Where every player is a bot it does.
+- The learner's rules are frozen as built until a measured read says otherwise.
 - Nothing learned so far is precious: every population may start over for a
   setup that scales to new scenarios.
 
@@ -263,6 +266,10 @@ of Lixen's that bind, as they stood on 2026-11-20:
   that averages many rounds a step.
 - **Scenarios.** `td` and `armada` carry no bot of their own, so `-bot` there
   seats `default`. `armada`'s waits for its design.
+- **Two rules as built.** Once a ninth member is proved, the next newcomer
+  enters on one round whatever it scored. A child's parents are picked by plain
+  mean, where the archive ranks by trusted mean. Each is owed a read as an arm
+  before it is changed.
 
 ### Finish the bot verbs' edges
 
@@ -298,6 +305,8 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - A headless run that only fields says nothing of what it read: `Bot stopped`
   and a seat's `bot left` record carry no `fielding S over C`.
 - The source `kill` pays a code species' kill flat, whatever its hit points.
+  It also pays a Kraken whose fight could not be timed, shot down in the tick
+  it rose: 5 for the shipped bots, where its bounty is thousands.
 - A score names sources of the catalogue only. An event by name, with the field
   that names its owner, would let a scenario pay for one without Go.
 
@@ -346,25 +355,36 @@ its row to `sources`.
 
 Wanted (Lixen, 2026-11-18), not to be built yet: a bot that learns to play as
 its player does, and an auto-pilot that flies the player's ship until they take
-it back. Its learner is no search over a population: it reads what the player
-saw and where they moved, and updates one set of weights slowly. Owed, in order:
+it back. Decided 2026-11-20:
+
+- The auto-pilot is the player's own cursor with its control handed to a
+  trained bot, as one key's very long macro. The cursor stays the player's, so
+  a defeat under the auto-pilot is the player's defeat.
+- The learner watches the player and fits one set of weights: what a network's
+  inputs read, and what the player then did, is one sample and one step of the
+  network's gradient. It is no search over a population.
+
+Owed, in order:
 
 1. A reader of a person's play, on their own run: a `mind` that only reads
    gives a network's inputs, and the dispatch tap what they did, their
    `EventCursorMoveRequest` for `move` and `EventFireSpecialRequest` for
-   `special`. Typing is the graph's and is lost.
+   `special`. Typing is the graph's and is not learned.
 2. Samples from a journal first: a replay of a `-j` run under that reader, kept
    as rows of inputs and outputs, since a journal replays only on its build.
-3. A seam for a learner that is no population: `Driver.learners` holds
+3. The fit: a row pairs the inputs of a few ticks back, the player's reaction
+   time, with the action now, and rows are taken on a clock so standing still
+   is learned. Several fits at once differ by lag, step or inputs, and the one
+   with the least error on rows held back is kept; weights are not crossed.
+4. A seam for a learner that is no population: `Driver.learners` holds
    `*Learner` and needs only its `take`, `settle` and `Stats`.
-4. The style kept as a graph of the player's, written by `Graph.Document`.
-5. The auto-pilot as a driver on the person's own run, since a seat cannot take
+5. The style kept as a graph of the player's, written by `Graph.Document`.
+6. The auto-pilot as a driver on the person's own run, since a seat cannot take
    a held slot: the tick left to the run, and a hand-over each way that resets
    the input machine, returns to Normal and lets go of held keys.
 
-To decide then: whose the cursor is while the auto-pilot flies it, as a bot's
-comes back after a defeat and a person's ends the game; what it does in a typed
-scenario; and whether the session's others are told.
+To decide then: what it does in a typed scenario, and whether the session's
+others are told.
 
 ## Authoring
 
@@ -1949,7 +1969,7 @@ field of its own, which the session's dials read ahead of `Trust` and the next
 
 A Wraith is out of play: nothing reaches it, a session counts none toward its
 defeat, and its player comes back with what the cursor held where the game is
-still the one it left (§5.4). A reset ends that, so leaving ahead of a defeat
+still the one it left and the record reads no defeat (§5.4). A reset ends that, so leaving ahead of a defeat
 brings nothing into the next game. Inside one game it still pays: a player who
 drops its link as its cursor is about to die waits untouched and returns whole,
 while those who stayed took the damage. The choices, none of them the netcode's:
@@ -2080,9 +2100,9 @@ never comes back. This is a compromise. The values are owner-authored
 Wraith gives up everything the world reaches it through, so neither the host nor the
 shared world keeps them, and the session takes the returning run's word for them.
 `CursorSystem.restore` takes a record only of the game still played (`CursorRecord.Run`
-against the queue's run, which a reset advances) and inside the ranges a sync is held
-to (`heldInRange`), so a reset's new game and an edited record both leave the
-template. Inside those the word is still the returning run's, as a live sync is its
+against the queue's run, which a reset advances), inside the ranges a sync is held
+to (`heldInRange`) and reading no defeat, so a reset's new game, an edited record
+and a cursor that left down all leave the template. Inside those the word is still the returning run's, as a live sync is its
 owner's: energy has no bound, and an edited record names any game.
 
 The fix shares some data of every cursor, so the session holds what each Wraith
