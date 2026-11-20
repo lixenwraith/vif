@@ -1178,6 +1178,11 @@ Libraries · Branches.
   six seconds of a core, pays by its Krakens in steps of 50,000 and spreads
   19,000 to 20,000, unlearned or learned, so 100 rounds a side tell 90,000
   apart at over thirty standard errors.
+- A network's input set is read by learning from nothing on three seeds a
+  scenario and by the candidates' recent mean beside what is fielded: in the
+  fixed-shooter `armada` three fielded members of one set ran from 6,489 to
+  50,826, and the recent mean told seventeen inputs from 161 at 8,850 for
+  2,650.
 - A hold reads the graph file it names as its process starts. One queued behind
   others on a file of the checkout failed once that document changed: a chain
   holds copies.
