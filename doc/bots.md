@@ -564,7 +564,7 @@ between the networks by who steered.
   that lasts `round_seconds` of game time is closed by a new game the run asks
   for, and scored as far as it came. A round the operator ends (`:n`) scores
   nothing.
-- `cave` and `default` close a round at half an hour. The limit must span what
+- Every shipped bot closes a round at half an hour. The limit must span what
   pays: the embedded scenario pays by its Krakens, about twelve in half an
   hour, and a run closing rounds every five minutes learned nothing there.
 
@@ -629,8 +629,8 @@ Ctrl-C stops a run, which saves as it stops. A run stopped inside a round
 scores nothing for it: flat out a round closes every second or two, and watched
 at speed 1 a round the ship survives is half an hour.
 
-**Telling whether it got better.** A learner reports three figures, and only
-two can be trusted:
+**Telling whether it got better.** A model is read three ways, and only two
+can be trusted:
 
 - `recent` is the mean score of the learner's last 200 or so rounds, candidates
   and all. No luck picked those rounds, so it is the figure to compare two runs
