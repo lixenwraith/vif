@@ -1,6 +1,6 @@
 # The build context is the repository root. Everything the image needs is Go
-# source, the embedded assets those sources declare, and .git for the revision
-# stamp; nothing else belongs in a context that is transferred on every build.
+# source, the embedded assets those sources declare, the Makefile and LICENSE for
+# its notices, and .git for the revision stamp; nothing else belongs in a context that is transferred on every build.
 # The wad reaches a session through a read-only node volume, never through the
 # image: one is replaced without a rebuild and the other is not.
 bin/

@@ -4,27 +4,45 @@ package main
 
 import (
 	"errors"
+	"io"
+	"syscall/js"
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/atlas"
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/browser"
-	"github.com/lixenwraith/vif/pkg/glyph"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// What crosses the page's bridge that is vif's own, as web/vif.js names it: the
+// menu's snapshot out and its ops back, the mixer's PCM out, the player leaving for
+// the start screen and returning, and the two documents the page keeps
+const (
+	kindMenu    = "menu"
+	kindAudio   = "audio"
+	kindAway    = "away"
+	docSettings = "settings"
+	docPlaces   = "places"
+)
+
+// pageQueue bounds what the page's own messages queue for the run: a post never
+// waits, since the poster is the Worker's event loop, which a blocked callback holds
+const pageQueue = 256
+
 func init() {
 	var pres app.Presentation = &browserHost{}
-	if browser.HasMenu() {
-		pres = &menuHost{browserHost: &browserHost{}, ops: make(chan mode.MenuOp, menuOps)}
+	if terminal.PageHas(kindMenu) {
+		pres = &menuHost{browserHost: &browserHost{}, ops: make(chan mode.MenuOp, pageQueue)}
 	}
-	platformHost = app.Host{Presentation: pres, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
-	pageSettings = func(s *paths.Settings) (paths.SettingsStore, []string) { return keptSettings(browser.Settings(), s) }
+	platformHost = app.Host{Presentation: pres, Audio: speaker(), Pressed: true, StartScreen: true}
+	pageSettings = func(s *paths.Settings) (paths.SettingsStore, []string) {
+		return keptSettings(terminal.PageKept(docSettings), s)
+	}
 	pagePlaces = tabPlaces{}
 }
 
@@ -64,25 +82,49 @@ func (p *pageStore) Load() ([]byte, error) {
 
 func (p *pageStore) Store(doc []byte) error {
 	p.doc = doc
-	browser.KeepSettings(doc)
+	terminal.PageKeep(docSettings, doc)
 	return nil
 }
 
 // tabPlaces is the places document as the tab keeps it, across a reload
 type tabPlaces struct{}
 
-func (tabPlaces) Load() ([]byte, error) { return browser.Places(), nil }
+func (tabPlaces) Load() ([]byte, error) { return terminal.PageKept(docPlaces), nil }
 
 func (tabPlaces) Store(doc []byte) error {
-	browser.KeepPlaces(doc)
+	terminal.PageKeep(docPlaces, doc)
 	return nil
 }
+
+// speaker is the page's speakers, the writer the mixer streams to: each buffer goes
+// to the page but a silent one, so a muted game posts nothing and the page opens no
+// AudioContext until a sound plays. Nil on a page that plays no sound.
+func speaker() io.WriteCloser {
+	if !terminal.PageHas(kindAudio) {
+		return nil
+	}
+	return pageSpeaker{}
+}
+
+type pageSpeaker struct{}
+
+func (pageSpeaker) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if b != 0 {
+			terminal.PagePost(kindAudio, map[string]any{"data": terminal.PageBytes(p)})
+			break
+		}
+	}
+	return len(p), nil
+}
+
+func (pageSpeaker) Close() error { return nil }
 
 // browserHost is the page as the run's Presentation. A scenario change rebuilds the
 // run, not the page: it opens on the first Init and lives as long as the Worker.
 type browserHost struct {
-	host   *browser.Host
-	aspect vmath.Aspect
+	page *terminal.Page
+	away chan bool // the player left for the page's start screen, or came back
 }
 
 func (h *browserHost) Name() string           { return "browser" }
@@ -91,39 +133,46 @@ func (h *browserHost) Start() error           { return nil }
 func (h *browserHost) Stop() error            { return nil }
 
 func (h *browserHost) Init() error {
-	if h.host != nil {
+	if h.page != nil {
 		return nil
 	}
-	atlas, err := glyph.Parse(asset.DefaultFont)
+	page, err := terminal.OpenPage(terminal.PageConfig{BarRows: parameter.StatusRows, Cell: settings.Presentation.Cell,
+		CellLeast: parameter.CellLeast, CellMost: parameter.CellMost, CellStep: parameter.CellStep, Font: atlas.HackWeb()})
 	if err != nil {
 		return err
 	}
-	h.aspect = atlas.Aspect()
-	h.host, err = browser.Open(atlas, browser.Config{BarRows: parameter.StatusRows, Cell: settings.Presentation.Cell,
-		CellLeast: parameter.CellLeast, CellMost: parameter.CellMost, CellStep: parameter.CellStep})
-	return err
+	h.page, h.away = page, make(chan bool, pageQueue)
+	page.Handle(kindAway, func(msg js.Value) {
+		select {
+		case h.away <- msg.Get("away").Truthy():
+		default:
+		}
+	})
+	return nil
 }
 
-func (h *browserHost) Surface() render.Surface             { return h.host }
-func (h *browserHost) Size() (int, int)                    { return h.host.Size() }
-func (h *browserHost) Blocked() time.Duration              { return h.host.Blocked() }
-func (h *browserHost) CellAspect() vmath.Aspect            { return h.aspect }
-func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Events() }
-func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
-func (h *browserHost) Covered() int                        { return h.host.Covered() }
-func (h *browserHost) Cell() float64                       { return h.host.Cell() }
-func (h *browserHost) Away() <-chan bool                   { return h.host.Away() }
+func (h *browserHost) Surface() render.Surface             { return h.page }
+func (h *browserHost) Size() (int, int)                    { return h.page.Size() }
+func (h *browserHost) Blocked() time.Duration              { return h.page.Blocked() }
+func (h *browserHost) Events() <-chan terminal.Event       { return h.page.Events() }
+func (h *browserHost) SetPointerMode(enabled, motion bool) { h.page.SetPointerMode(enabled, motion) }
+func (h *browserHost) Covered() int                        { return h.page.Covered() }
+func (h *browserHost) Cell() float64                       { return h.page.Cell() }
+
+// CellAspect is the page's: it draws every cell one wide to two tall, at any zoom
+func (h *browserHost) CellAspect() vmath.Aspect { return vmath.RefAspect }
+
+// Away reports the player leaving for the page's start screen and returning, as
+// Android reports its app sent to the background: a solo run waits meanwhile
+func (h *browserHost) Away() <-chan bool { return h.away }
 
 func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
-	return h.host.SetKeyReport(report, allow)
+	return h.page.SetKeyReport(report, allow)
 }
 
-// menuOps bounds the ops a page's menu queues; a post never waits on the run
-const menuOps = 256
-
 // menuHost is the page as a host that draws the configuration menu itself, which a
-// worker defining vifMenu does: snapshots go to the page and its ops come back on a
-// channel the loop selects on. The ops channel outlives a run, as the host does.
+// page whose script handles the menu does: snapshots go to the page and its ops come
+// back on a channel the loop selects on. The ops channel outlives a run, as the host does.
 type menuHost struct {
 	*browserHost
 	ops chan mode.MenuOp
@@ -133,14 +182,18 @@ func (h *menuHost) Init() error {
 	if err := h.browserHost.Init(); err != nil {
 		return err
 	}
-	h.host.MenuOp = func(op, id, arg string) {
+	h.page.Handle(kindMenu, func(msg js.Value) {
 		select {
-		case h.ops <- mode.MenuOp{Op: op, ID: id, Arg: arg}:
+		case h.ops <- mode.MenuOp{Op: msg.Get("op").String(), ID: msg.Get("id").String(), Arg: msg.Get("arg").String()}:
 		default:
 		}
-	}
+	})
 	return nil
 }
 
-func (h *menuHost) Menu(snapshot []byte)        { h.host.Menu(snapshot) }
+// Menu hands the page the menu to draw, JSON in a string, empty once it closed
+func (h *menuHost) Menu(snapshot []byte) {
+	terminal.PagePost(kindMenu, map[string]any{"json": string(snapshot)})
+}
+
 func (h *menuHost) MenuOps() <-chan mode.MenuOp { return h.ops }

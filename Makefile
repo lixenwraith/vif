@@ -23,6 +23,8 @@ VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vif
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
+NOTICES ?= $(BIN_DIR)/NOTICES
+PAGE_DIR ?= $(WEB_DIR)
 RELEASE_TARGET ?= linux-amd64
 RELEASE_LABEL ?= nightly
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
@@ -68,8 +70,8 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # purego, which the desktop window links, builds with cgo off on fewer platforms
 # than the terminal does (not under Termux), so a client build tries it first and
 # names the terminal-only builds rather than leaving purego's errors to explain it.
-WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -q '/pkg/window$$' && \
-	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) ./pkg/window 2>&1); then \
+WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -qx 'github.com/lixenwraith/terminal/window' && \
+	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) github.com/lixenwraith/terminal/window 2>&1); then \
 	printf '%s\n' "The desktop window does not build for $$($(GO) env GOOS)/$$($(GO) env GOARCH) with cgo off:" \
 		"  $$(printf '%s\n' "$$err" | grep -v '^\#' | head -n 1)" "Build the terminal alone instead:" \
 		"  make cli                     bin/vif-cli" \
@@ -81,7 +83,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -97,7 +99,8 @@ help:
 	@echo "  android-toolchain Install what android needs: Go and a JDK (asking first), the SDK's"
 	@echo "           command-line tools, platform, NDK and platform-tools (android/README.md)"
 	@echo "  nolog    Release build without logger"
-	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted)"
+	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted), with the page's scripts"
+	@echo "  page     Write the page's terminal.js and worker.js into $(PAGE_DIR), from the terminal module and web/vif.js"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  router Build the website-to-K3s session router"
@@ -114,6 +117,8 @@ help:
 	@echo "           there, a player's bot files, keymap.toml and vif.toml with it)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
+	@echo "  notices  Write the licences of Go and of every module the build links as $(NOTICES), as release does"
+	@echo "           for install (GOOS, GOARCH, TAGS: another build's; NOTICES_OF=android: the Android library's)"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -170,9 +175,13 @@ serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
-release: check-go $(BIN_DIR)
+# The font's licence lies beside the atlas in the terminal module the build links,
+# in the module cache or vendor/: release copies it for install, which runs no Go
+release: check-go $(BIN_DIR) notices
 	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	@dir=$$($(GO) list -m -f '{{.Dir}}' github.com/lixenwraith/terminal); \
+	install -m 0644 "$${dir:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" $(BIN_DIR)/LICENSE.font
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
@@ -218,6 +227,20 @@ nolog: check-go $(BIN_DIR)
 wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
+	@$(MAKE) -s page
+	@GOOS=js GOARCH=wasm $(MAKE) -s notices NOTICES=$(WEB_DIR)/NOTICES
+
+# page writes the page's two scripts, which no commit holds: terminal.js is the
+# terminal module's page.js, the screen and its input, and then web/vif.js, and
+# worker.js is the module's, both of the version the build links. They go to
+# PAGE_DIR, web/ unless set, as the release sets it.
+page: check-go
+	@set -eu; mod=github.com/lixenwraith/terminal; \
+	$(GO) mod download $$mod; dir=$$($(GO) list -m -f '{{.Dir}}' $$mod); \
+	[ -f "$$dir/web/page.js" ] || { echo "page: $$mod has no web/page.js in '$$dir'" >&2; exit 1; }; \
+	mkdir -p '$(PAGE_DIR)'; \
+	cat "$$dir/web/page.js" $(WEB_DIR)/vif.js >'$(PAGE_DIR)/terminal.js'; \
+	install -m 0644 "$$dir/web/worker.js" '$(PAGE_DIR)/worker.js'
 
 # windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
@@ -245,7 +268,7 @@ verify: generate test
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
 	cd android && $(GO) vet ./... && $(GO) test ./...
-	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) ./pkg/window
+	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) github.com/lixenwraith/terminal/window
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	GOEXPERIMENT=simd $(GO) build ./...
 	GOOS=js GOARCH=wasm GOEXPERIMENT=simd $(GO) build ./...
@@ -254,7 +277,7 @@ verify: generate test
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
 	$(GO) vet ./...
-	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui ./pkg/window $(SRC)
+	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui github.com/lixenwraith/terminal/window $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
@@ -319,13 +342,46 @@ release-readme:
 	awk -v tags=" $$tags " -v label='$(RELEASE_LABEL)' -v target='$(RELEASE_TARGET)' -v name="$$name" \
 		'$(RELEASE_README_AWK)' $(PKG_DIR)/release-readme.md
 
+# What a build links, a line a package: its module's path, version and directory,
+# which a vendored tree leaves empty. The build is the one GOOS, GOARCH and TAGS
+# name, the host's release unless set; NOTICES_OF=android is the Android library,
+# both ABIs, into which gomobile links x/mobile.
+NOTICE_MODS = if [ '$(NOTICES_OF)' = android ]; then \
+		for arch in arm64 amd64; do GOOS=android GOARCH=$$arch $(GO) -C android list -deps -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' ./game || exit 1; done; \
+		$(GO) -C android mod download golang.org/x/mobile && \
+		$(GO) -C android list -m -f '{{.Path}}|{{.Version}}|{{.Dir}}' golang.org/x/mobile; \
+	else CGO_ENABLED=0 $(GO) list -deps -tags "$(TAGS)" -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' $(SRC); fi
+
+# notices writes the licences a binary copy carries: Go's, then each linked module's
+# licence, copying and notice files from the module cache or vendor/, so a new
+# dependency brings its own and one with none at its root stops the target. A
+# distribution's Go keeps its LICENSE outside GOROOT; the corpus carries the same
+# one (doc/packaging.md §1).
+notices: check-go
+	@set -eu; self=$$(sed -n 's/^module //p' go.mod); rule=$$(printf '%72s' '' | tr ' ' '='); \
+	mods=$$($(NOTICE_MODS)); \
+	goroot=$$($(GO) env GOROOT); [ -f "$$goroot/LICENSE" ] || goroot=$(WAD_DIR)/content; \
+	mkdir -p "$$(dirname '$(NOTICES)')"; \
+	{ printf 'Go|%s|%s\n' "$$($(GO) env GOVERSION | sed 's/^go//')" "$$goroot"; \
+	  printf '%s\n' "$$mods" | grep -v "^$$self[/|]" | LC_ALL=C sort -u; } | \
+	while IFS='|' read -r mod ver dir; do \
+		[ -n "$$dir" ] || dir=vendor/$$mod; \
+		files=$$(ls "$$dir" | grep -iE '^(licen[cs]e|copying|notice)' || true); \
+		[ -n "$$files" ] || { echo "notices: $$mod $$ver has no licence file at its root, $$dir" >&2; exit 1; }; \
+		printf '%s\n%s %s\n%s\n\n' "$$rule" "$$mod" "$$ver" "$$rule"; \
+		for f in $$files; do cat "$$dir/$$f" || exit 1; echo; done; \
+	done >'$(NOTICES)' || { rm -f '$(NOTICES)'; exit 1; }; \
+	echo "wrote $(NOTICES)"
+
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
-# licence, the manual, the desktop entry and icons, shell completion and the
+# licences, the manual, the desktop entry and icons, shell completion and the
 # documentation under PREFIX, once it can write all three places. Nothing it
 # installs is compiled here, so a packager controls the build flags.
 install:
 	@set -eu; \
 	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built: make release first, as in make release install" >&2; exit 1; }; \
+	[ -f '$(NOTICES)' ] || { echo "$(NOTICES) is not made: make notices first, as make release does" >&2; exit 1; }; \
+	[ -f $(BIN_DIR)/LICENSE.font ] || { echo "$(BIN_DIR)/LICENSE.font is not made: make release first" >&2; exit 1; }; \
 	for d in '$(PREFIX)/bin' '$(PREFIX)/share' '$(SYSCONFDIR)/vif'; do d='$(DESTDIR)'"$$d"; \
 		while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; \
 		[ -w "$$d" ] || { echo "no write access to $$d: sudo make install, or set PREFIX and SYSCONFDIR" >&2; exit 1; }; \
@@ -336,8 +392,8 @@ install:
 	dest='$(DESTDIR)$(PREFIX)'; \
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
-	put 0644 $(PKG_DIR)/LICENSE.purego "$$dest/share/licenses/vif/LICENSE.purego"; \
-	put 0644 internal/asset/font/LICENSE "$$dest/share/licenses/vif/LICENSE.font"; \
+	put 0644 '$(NOTICES)' "$$dest/share/licenses/vif/NOTICES"; \
+	put 0644 $(BIN_DIR)/LICENSE.font "$$dest/share/licenses/vif/LICENSE.font"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
 	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \
 	put 0644 $(PKG_DIR)/vif.svg "$$dest/share/icons/hicolor/scalable/apps/vif.svg"; \

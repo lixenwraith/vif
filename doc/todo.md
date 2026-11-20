@@ -329,7 +329,7 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - Guide: [Bots: The population file](bots.md#the-population-file)
 
 - A browser keeps no population. `bot.Store` is a document's bytes, so the
-  page's storage can hold one as it holds settings (`browser.KeepSettings`).
+  page's storage can hold one as it holds settings (`terminal.PageKeep`).
 - A run in a session does not learn. The first widening is a session only the
   bot occupies, the fleet's standing one
   ([there](#keep-a-standing-session-for-the-lobby)): `App.learn`'s `alone`
@@ -689,8 +689,9 @@ markers; the test play; library copies.
 ### Edit on Android and in a browser
 
 - Priority: P2
-- Affected files: `internal/resource`, `cmd/vif/browser.go`, `web/terminal.js`,
-  `android/app`, `doc/multi-platform.md`
+- Affected files: `internal/resource`, `cmd/vif/browser.go`, `web/vif.js`,
+  lixenwraith/terminal (`web/page.js`, the gestures), `android/app`,
+  `doc/multi-platform.md`
 - Prerequisite: [Build the map and scenario editor](#build-the-map-and-scenario-editor)
 
 A browser has no root to write a scenario in, and its storage is the few MiB the
@@ -781,9 +782,9 @@ and cues a lesson cleared.
 ### Fetch a content-addressed bundle over HTTP
 
 - Priority: P1
-- Affected files: `internal/resource`, `cmd/vif/browser.go`, `pkg/browser`,
-  `web/terminal.js`, `web/worker.js`, `Makefile` (`wasm`); on the site, `make vif`,
-  `make compress` and `_partials/apps/publish.html`
+- Affected files: `internal/resource`, `cmd/vif/browser.go`, `web/vif.js`,
+  `Makefile` (`wasm`); on the site, `make vif`, `make compress` and
+  `_partials/apps/publish.html`
 - Prerequisite: the decisions in the last paragraph
 
 The page plays the embedded `main` alone: a guest is served its coordinator's
@@ -827,7 +828,7 @@ HTTP's own, which a native run has in its downloads.
 
 - Priority: P2
 - Affected files: `internal/mode` (`config_menu.go`, `commands.go`),
-  `internal/resource` (`SaveDownload`), `cmd/vif/browser.go`, `web/terminal.js`
+  `internal/resource` (`SaveDownload`), `cmd/vif/browser.go`, `web/vif.js`
 - Guide: [Filesystem layout §2](filesystem-layout.md#2-installed-configuration-tree)
 
 `[session] save_downloads` keeps every scenario a host sends in
@@ -845,7 +846,7 @@ clean-up.
 ### Launch the page and Android without their start screen
 
 - Priority: P3
-- Affected files: `web/terminal.js`, `web/worker.js`, `pkg/browser`,
+- Affected files: `web/vif.js`, `cmd/vif/browser.go`,
   `android/app/src/main/java/com/lixen/vif/StartScreen.java`
 
 Both open on their start screen whatever `[play] wait` says. The page's is up
@@ -925,25 +926,14 @@ since it spells them. What it costs, and what it does not reach:
   removes only sensitive data that rotating a credential cannot make safe, so it
   will not purge them. PR titles and bodies are edited on GitHub by hand.
 
-### Ship the third-party notices with every binary
+### Wrap and scroll the About window
 
-- Priority: P1
-- Affected files: `Makefile`, `.github/workflows/release.yml`,
-  `android/app/build.gradle.kts`, `internal/system/meta.go`
+- Priority: P2
+- Affected files: `internal/render/renderer/overlay.go`
 
-A binary carries the licences of what it links, and they ask that their notices
-travel with every binary copy: Go's standard library, `golang.org/x/sys`,
-`x/term`, `x/crypto` and, on Android, `x/mobile` (BSD-3-Clause),
-`golang-jwt/jwt/v5` (MIT), `ebitengine/purego` (Apache-2.0) and the lixenwraith
-modules (BSD-3-Clause). The archives and `make install` carry vif's `LICENSE`,
-purego's (`LICENSE.purego`, with the desktop window) and the glyph atlas's font's
-(`LICENSE.font`), and the browser bundle its page fonts' (`web/fonts/LICENSE`),
-but none carries the Go modules' notices; the APK carries no licence at all,
-vif's own included, and the Play build must before it lists. One notices file
-made from `go.sum`'s modules (each module's licence from the module cache, by a
-make target, so a dependency added later comes with its own) goes into the
-archives beside the binary and into the APK's assets with the licence files,
-and the About overlay points to it or lists the names.
+The About window neither wraps a value nor scrolls, so at 80x24 it stops above
+its `licence` and `notices` rows; once it does both it can name what the build
+links, from its build info.
 
 ### Sign the Android build with a release key
 
@@ -1317,7 +1307,7 @@ a Wraith's cursor under a gold member's number; a hit's `TargetEntity` and
 
 - Priority: P3
 - Affected files: `tool/vif-router`, `internal/app/internal/membership/host.go`,
-  `internal/network`, `web/terminal.js`
+  `internal/network`, `web/vif.js`
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
@@ -1554,7 +1544,7 @@ correction brings the cursor, which wants a test.
 - Priority: P3, to evaluate when a cache fronts the site or an audience outgrows
   the sockets one router holds
 - Affected files: `pkg/network/feed.go`, `tool/vif-router/audience.go`,
-  `internal/app/internal/membership/watch.go`, `web/terminal.js`
+  `internal/app/internal/membership/watch.go`, `web/vif.js`
 - Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
   [Netcode design §3.8](netcode-design.md#38-the-feed)
 
@@ -1819,7 +1809,7 @@ removing one; `:merge`/`:split` for whole sessions.
 ### A passphrase prompt in the TUI and the launcher
 
 - Priority: P3, in a session of its own
-- Affected files: `internal/mode`, `internal/app/loop.go`, `web/terminal.js`,
+- Affected files: `internal/mode`, `internal/app/loop.go`, `web/vif.js`,
   `web/index.html`
 - Guide: [Auth and session design §3.5](auth-session-design.md#35-passphrase-doors),
   [§3.6](auth-session-design.md#36-admission-tickets-and-accounts)
@@ -2522,19 +2512,6 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
-### Zoom the window and Android out under the atlas
-
-- Priority: P3
-- Affected files: `tool/font-atlas/font-atlas.py`, `internal/asset/font`,
-  `pkg/glyph/atlas.go` (`Atlas.Cell`, `Zoom.Scale`), `pkg/window`, `android/game`
-- Guide: [Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
-
-The desktop window and Android draw one 12x24 atlas, stretched up and never
-down, so their zoom stops at it: a window at `-scale 1` only zooms in, 24 to 40,
-where a page, which draws its glyphs at any size, goes down to 4. Ship the atlas
-at smaller cells too, the generator taking a size, and draw a zoom from the
-largest one its cell holds, so a zoom out shows more map with whole glyphs.
-
 ### Console follow-ups
 
 - Priority: P3
@@ -2715,18 +2692,37 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Move the browser and Android frame pipeline into terminal
+### Repaint the grid once when a zoom crosses a strike on Android
 
 - Priority: P2
-- Affected files: `pkg/browser`, `pkg/glyph` (`Frames`, `Raster`, `Texture`),
-  `android/game/view.go`, `web/terminal.js`, `web/worker.js`, lixenwraith/terminal
+- Affected files: lixenwraith/terminal (`android/view.go`), `go.mod`,
+  `android/go.mod`
 
-What turns a cell frame into what a page or an Android view draws (the frames a
-drawer takes, the texture, the raster fallback, the page's bridge and its key and
-pointer events) lives in vif. Move it into lixenwraith/terminal as backends of its
-own, so another program renders in a browser or on Android through the same
-pipeline without wrapping vif; vif then takes them from terminal. For its own
-session.
+A pinch that crosses a strike costs the render thread one frame of 71 to 122 ms
+on a Pixel 8 Pro, against 37 to 56 ms for a zoom within one (2026-11-20). Go's
+share is under 2 ms on amd64 (the texture 0.4 to 1.6 ms, a whole frame of
+112x124 cells 0.3 ms), so the time is the drawer's, which paints every cell
+twice: `View.AtlasChanged` hands it the texture at the next vsync, when the
+newest frame is still the old grid, which it paints in the new strike (toward
+the larger strike a picture larger than the surface), and the run's frame of the
+zoomed grid follows. Holding the texture until the frame flushed is the view's
+grid leaves one repaint. A device run then measures the swap, and says whether
+what a whole repaint still costs, a cell at a time through a software canvas at
+any zoom or rotation, asks for a faster painter.
+
+### Free a replaced picture's pixels at once on Android
+
+- Priority: P2
+- Affected files: `android/app/src/main/java/com/lixen/vif/CellDrawer.java`,
+  `GameView.java`
+
+A drawer's picture is a bitmap of the grid's pixels, replaced when the grid
+changes and with its drawer when a zoom crosses a strike; the old one and the old
+texture wait for the collector. Eight quick swaps on a Pixel 8 Pro raised the
+app's PSS from 309 MB to 410 MB, and a collection brought it back (2026-11-20).
+`Bitmap.recycle` on a replaced picture, and on a replaced drawer's picture and
+texture, frees each then; the strip's height, which the UI thread reads from the
+bitmap, then comes from the grid's numbers.
 
 ## Audio
 
@@ -2747,16 +2743,15 @@ the user root's `audio/` documents, so a pattern written on the phone plays in t
 phone's game. The foundation is in place: the `stapes` package holds the session,
 documents, verbs and TUI, `NewSession` takes the host's speakers as its sink
 (`Options.Sink`), and `RunTUI` runs over any `terminal.Terminal`, the host posting
-`EventClosed` to end it; the Android host already turns taps, drags, keys and the
-system keyboard's text into `terminal.Event`s and flushes cell frames through
-`glyph.Frames`. The TUI's side, taps and a layout a phone held portrait fits, is
+`EventClosed` to end it; `terminal.NewWithHost` makes one of the Android view
+(`terminal/android`'s `View`). The TUI's side, taps and a layout a phone held
+portrait fits, is
 [stapes' todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#play-the-screen-by-touch).
 What remains here:
 
-1. A `terminal.Terminal` over the Android view (its grid as `Size`, its event
-   queue as `PollEvent`, `glyph.Frames.Flush`) runs it, started by a second bound
-   entry beside `game.Start` that hands `NewSession` the `Speaker` as its sink;
-   the start screen offers stapes beside the game.
+1. A second bound entry beside `game.Start` runs it over that `Terminal` and
+   hands `NewSession` the `Speaker` as its sink; the start screen offers stapes
+   beside the game.
 2. The system keyboard serves `:` and the prompts, as in the game, and the pinch
    zoom gives the views their 60×16 cells on a phone held portrait.
 3. Files: the verbs name paths, which reach stapes' root and the user root's
