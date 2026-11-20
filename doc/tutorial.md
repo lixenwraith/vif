@@ -26,7 +26,8 @@ cell: a line's last, never a count of glyphs, which one deleted another way
 would leave short for good), a mode entered (`EventModeChanged`), or a captured
 key pressed (`EventInputPressed`)
 ([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map's bottom
-row is read from `map_height` (`ConfigToVar`, then the arithmetic actions); a
+row is read from `map_height` each tick (`on_update`: `ConfigToVar`, then the
+arithmetic actions), so a resize mid-lesson moves the goal with the map; a
 heading stands at the top left, and a lesson is laid again when its state is
 entered again.
 

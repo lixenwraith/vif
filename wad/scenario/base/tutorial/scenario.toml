@@ -103,6 +103,14 @@ body = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 0.3, duration_ms = 150 } },
 ]
 
+[macros.Bottom]
+doc = "Read the map's bottom row into `bottom`, each tick, so a lesson ending there follows a resize."
+params = {}
+body = [
+    { action = "ConfigToVar", payload = { field = "map_height", name = "bottom" } },
+    { action = "DecrementVar", payload = { name = "bottom" } },
+]
+
 [macros.Reached]
 doc = "Go to `target` once the cursor stands on `x`, `y`."
 params = { target = "string", x = "int", y = "int" }
@@ -701,9 +709,8 @@ transitions = [
 [states.Marks]
 parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
+on_update = [{ macro = "Bottom" }]
 on_enter = [
-    { action = "ConfigToVar", payload = { field = "map_height", name = "bottom" } },
-    { action = "DecrementVar", payload = { name = "bottom" } },
     { macro = "Heading", text = "m ' `" },
     { macro = "Note", text = "m and a letter mark the cursor's cell; ' and the letter return to its row.", row = 8 },
     { macro = "Note", text = "' lands on the row's first glyph, ` on the cell itself; d'a deletes rows.", row = 9 },
@@ -728,13 +735,11 @@ transitions = [
     { macro = "Reached", target = "Map", x = 4, y = 14 },
 ]
 
-# The map's bottom row is a variable, so the lesson fits any map
 [states.Map]
 parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
+on_update = [{ macro = "Bottom" }]
 on_enter = [
-    { action = "ConfigToVar", payload = { field = "map_height", name = "bottom" } },
-    { action = "DecrementVar", payload = { name = "bottom" } },
     { macro = "Heading", text = "gg G M" },
     { macro = "Note", text = "gg jumps to the top row of the map and G to its bottom row.", row = 8 },
     { macro = "Note", text = "M finds the map's middle row.", row = 9 },

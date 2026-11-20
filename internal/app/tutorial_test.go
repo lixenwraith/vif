@@ -439,6 +439,25 @@ func TestTutorialsLessonsOpenInNormalMode(t *testing.T) {
 	}
 }
 
+// Marks and Map end on the map's bottom row as it stands, read each tick, so G still
+// ends them after a window is resized or a phone turned in the lesson.
+func TestTutorialsBottomRowLessonsFollowAResize(t *testing.T) {
+	for _, c := range []struct {
+		lesson, keys, want string
+	}{{"Marks", "maG", "MarksBack"}, {"Map", "G", "MapTop"}} {
+		for _, size := range [][2]int{{100, 40}, {100, 27}, {60, 20}} {
+			a := newTutorial(t, 100, 30)
+			tutorialTo(t, a, c.lesson)
+			a.Resize(size[0], size[1])
+			a.Tick(3)
+			if tutorialKeys(t, a, c.keys); tutorialState(a) != c.want {
+				t.Errorf("%q in %s after a resize to %dx%d left the tutorial in %s, want %s",
+					c.keys, c.lesson, size[0], size[1], tutorialState(a), c.want)
+			}
+		}
+	}
+}
+
 // The shield that gives Visual its reach drains while it stands, so the lesson sets
 // energy enough that it still stands for a learner who takes their time.
 func TestTutorialsVisualShieldOutlastsASlowLearner(t *testing.T) {
