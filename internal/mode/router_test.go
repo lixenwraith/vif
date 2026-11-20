@@ -714,3 +714,50 @@ func TestParagraphMotionsCrossARunOfEmptyRows(t *testing.T) {
 		}
 	}
 }
+
+// A play mode a scenario asks for is entered as its key enters it, the parser with
+// it, on the input tick or before the next intent, journaled as that key's change;
+// an ask made under a search waits for the search to close, which it would cut short.
+func TestTheRouterEntersThePlayModeAScenarioAskedFor(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	ctx.AutoFire.Store(engine.AutoFireOff)
+	key := func(k terminal.Key, ch rune) {
+		if in := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); in != nil {
+			r.Handle(in)
+		}
+	}
+	key(terminal.KeyRune, 'i')
+	w.Resources.Event.Queue.Consume()
+	ctx.AskMode(core.ModeNormal)
+	r.ProcessInputTick()
+	var origin []event.Origin
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventModeChanged {
+			origin = append(origin, ev.Origin)
+		}
+	}
+	if ctx.GetMode() != core.ModeNormal || len(origin) != 1 || origin[0] != event.OriginInput {
+		t.Fatalf("an ask for Normal from Insert left %v, its changes from %v, want Normal from input", ctx.GetMode(), origin)
+	}
+	if key(terminal.KeyRune, 'v'); ctx.GetMode() != core.ModeVisual {
+		t.Fatalf("v after the ask left %v, want Visual: the parser stayed in Insert", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, '/')
+	ctx.AskMode(core.ModeInsert)
+	if r.ProcessInputTick(); ctx.GetMode() != core.ModeSearch {
+		t.Fatalf("an ask under a search left %v, want the search", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	if r.ProcessInputTick(); ctx.GetMode() != core.ModeInsert {
+		t.Fatalf("the ask once the search closed left %v, want Insert", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	ctx.AskMode(core.ModeVisual)
+	if key(terminal.KeyRune, 'l'); ctx.GetMode() != core.ModeVisual {
+		t.Fatalf("an ask before the next key left %v, want Visual", ctx.GetMode())
+	}
+}

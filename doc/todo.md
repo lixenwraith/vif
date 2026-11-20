@@ -693,21 +693,6 @@ tutorial attach. What is left:
   where a delete also takes the layers under it
   ([below](#decide-what-a-delete-removes-under-a-drift-stack)).
 
-### Let a scenario ask for a play mode
-
-- Priority: P3
-- Affected files: `internal/mode/router.go`, `internal/system/meta.go`,
-  `wad/scenario/base/tutorial/scenario.toml`
-- Guide: [Tutorial §3](tutorial.md#3-the-next-round)
-
-A scenario cannot put its player in a mode: the tutorial ends each lesson that ends
-on a typed glyph in a step that waits for esc, so the next starts in Normal, and a
-capture cannot answer a key with a mode change, for a key that does what no action
-does. A live run's mode changes through the router alone, which keeps the input
-machine in step, so a request from the FSM needs the router to take it, and the
-journal and a session to carry it. Rewriting intents in the router for one
-scenario stays out: a second mechanism beside the key table and the capture.
-
 ### Grow the tutorial
 
 - Priority: P3

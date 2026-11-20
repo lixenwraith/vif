@@ -122,6 +122,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventKeyCaptureRequest,
 		event.EventInputReport,
 		event.EventModeChanged,
+		event.EventModeRequest,
 		event.EventLevelSetup,
 		event.EventScreenResize,
 		event.EventMetaTelemetryRequest,
@@ -182,6 +183,12 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.ctx.SetPlayMode(p.Mode)
 		s.ctx.World.UpdateBoundsRadius()
+
+	case event.EventModeRequest:
+		// A replay viewer's play mode is the recording's, which journals the change
+		if p, ok := ev.Payload.(*event.ModeChangedPayload); ok && core.ModeMaskPlay.Has(p.Mode) && !s.ctx.Viewer.Load() {
+			s.ctx.AskMode(p.Mode)
+		}
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {

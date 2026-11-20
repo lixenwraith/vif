@@ -516,6 +516,8 @@ const (
 
 	// EventModeChanged (ModeChangedPayload) [local] signals change of the mode
 	EventModeChanged
+	// EventModeRequest (ModeChangedPayload) [local] asks this instance's router for a play mode, entered as its key enters it
+	EventModeRequest
 
 	// --- Wall ---
 

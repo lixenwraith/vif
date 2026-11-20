@@ -219,6 +219,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		r.ctx.MacroRecording.Store(false)
 		r.ctx.MacroPlaying.Store(false)
 	}
+	r.takeModeAsk() // before the intent, which meets the mode asked for
 
 	// Pointer admission gate. Dropped input is not an action. The status bar keeps
 	// its hold with the mouse disabled and through a hold: a phone has no key for
@@ -1038,6 +1039,19 @@ func (r *Router) transitionMode(newMode core.GameMode) {
 	r.machine.SetMode(inputMode)
 }
 
+// takeModeAsk enters the play mode a scenario asked for, as its key would, before the
+// next intent or on the input tick; an ask under the command line, an overlay or a
+// search waits for it to close. It is journaled as a key's change, so a replay, which
+// runs no router, takes none.
+func (r *Router) takeModeAsk() {
+	if m := r.ctx.GetMode(); m.Operator() || m == core.ModeSearch {
+		return
+	}
+	if m, ok := r.ctx.TakeModeAsk(); ok && m != r.ctx.GetMode() {
+		r.ctx.WithOrigin(event.OriginInput, func() { r.transitionMode(m) })
+	}
+}
+
 // openBreak puts the command line over a run a breakpoint paused, so the operator
 // inspects it there and leaving the line resumes it. An overlay keeps the screen.
 func (r *Router) openBreak() {
@@ -1679,6 +1693,7 @@ func (r *Router) ProcessInputTick() bool {
 	r.syncKeyReport()
 	r.endHolds()
 	r.openBreak()
+	r.takeModeAsk()
 
 	if r.menuHold && time.Since(r.menuSince) >= parameter.MenuHoldDuration { // [wall]
 		r.menuHold = false

@@ -244,6 +244,7 @@ type GameContext struct {
 	PauseMenu, PauseCommand atomic.Bool
 
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
+	modeAsk    atomic.Int32     // A play mode the scenario asked for, plus one, till the router takes it
 
 	// Viewer marks the command line as a replay viewer's: the recording authors the
 	// world, so a command may inspect it but not change it.
@@ -888,6 +889,16 @@ func (ctx *GameContext) RequestMode(m core.GameMode) {
 	}
 	ctx.World.UpdateBoundsRadius()
 	ctx.PushLocal(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
+}
+
+// AskMode leaves a play mode for the router to enter, which it does before its next
+// intent or on its input tick: the router alone moves a live run's mode (TakeModeAsk)
+func (ctx *GameContext) AskMode(m core.GameMode) { ctx.modeAsk.Store(int32(m) + 1) }
+
+// TakeModeAsk returns the play mode asked for since the last take, if any
+func (ctx *GameContext) TakeModeAsk() (core.GameMode, bool) {
+	v := ctx.modeAsk.Swap(0)
+	return core.GameMode(v - 1), v != 0
 }
 
 // IsInsertMode returns true if in insert mode

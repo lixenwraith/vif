@@ -176,6 +176,7 @@ Docs · Libraries · Branches.
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
   mode changes only through the router (`transitionMode`), which keeps the input
   machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
+  A scenario's `EventModeRequest` is left on the context for the router to take.
 - `World.PushLocal` stamps player in any scope, and the FSM bridge pushes every
   class but local in the ambient domain, Shared during a region's actions. A
   request a region raises on every instance that changes Shared state is

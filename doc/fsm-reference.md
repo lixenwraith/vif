@@ -760,6 +760,16 @@ already pending, so `fs` and `qs` still take an `s` the scenario captures, and d
 a count before it, so `2s` is `s`; the tutorial's lessons do both, for the `s` and
 `S` that skip one and go back.
 
+`EventModeRequest { mode }` asks this instance's router for a play mode, `normal`,
+`visual` or `insert`, which it enters as that mode's key would, before its next
+intent or on its input tick; an ask made under the command line, an overlay or a
+search waits for it to close. The change is journaled as the key's would be, so a
+replay, which runs no router, plays it from the journal. The ask takes no
+`reconcile`: a correction would replay it and pull a player out of the mode they
+are in. The tutorial's lessons ask for Normal as they stand the cursor, so each
+opens there whatever mode the key that ended the last left, and a transition on a
+captured key can answer it with a mode the same way.
+
 A button lights and sounds on every press of its key by itself, held lit until the
 release, so a machine judges a press and never plays its tone.
 `EventButtonLightRequest { button, duration_ms }` lights the button at that place
