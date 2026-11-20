@@ -197,7 +197,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         // Asked before the frame: from this call on the run's frames name the new texture's glyphs
         byte[] atlas = Game.atlasChanged();
         if (atlas != null) {
+            CellDrawer replaced = drawer;
             drawer = drawerOf(atlas);
+            replaced.release();
         }
         byte[] frame = Game.frame();
         if (frame == null && away) {
