@@ -75,12 +75,13 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - A seated bot belongs to its holder, so it is never a candidate: the
   succession list holds only independent participants. A watched or headless bot is one and
   takes over as any other does, where its run says so (`-listen`, `[play] takeover`).
-- A bot's defeat or crush ends the game only where every cursor in play is a
-  bot's, this run's or another's: a seat, or a run `-bot` plays itself. Beside a
-  person it comes back a second later as a new game makes it, at the cell and
-  with the heat, energy and loadout a cursor starts on, and the game ends at a
-  person's defeat, at `:n`, or as the last person leaves a bot inside that
-  second ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+- A bot's defeat or crush ends the game only where no person holds a place.
+  Every cursor there is a bot's: a seat, or a run `-bot` plays itself. Beside a
+  person, one who is away included, the bot comes back a second of game time
+  later. It comes back as a new game makes it, at the cell and with the heat,
+  energy and loadout a cursor starts on. The game then ends at a person's
+  defeat, at `:n`, or when the last person's place is given up while a bot is
+  down ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - `:bot drop <slot>` drops one of your bots; the host may drop any player's.
   `:player drop <slot>` (host only) drops a player with all its bots, one bot,
   or a run a bot plays itself, which `:bot drop` does not reach.
@@ -1036,11 +1037,11 @@ unattended.
   around the bot. So a person's bots play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
 - It plays the game a person plays. The game differs for a bot in two decided
-  ways only: its defeat ends a game only where every cursor in play is a bot's,
-  and beside a person it comes back a second later
-  ([Ownership and leaving](#ownership-and-leaving)). No other mechanic, event
-  or engine path is made for a bot, and none is to be added (Lixen,
-  2026-11-20).
+  ways only: its defeat ends a game only where no person holds a place, and
+  beside a person, one who is away included, it comes back a second of game
+  time later ([Ownership and leaving](#ownership-and-leaving)). No other
+  mechanic, event or engine path is made for a bot, and none is to be added
+  (Lixen, 2026-11-20).
 - A solo bot run is reproducible from its seed, and a learning one from its
   seed, its count of games and the population it started with. In a session only
   a journal reproduces a run: the front instance's, or a seat's this process

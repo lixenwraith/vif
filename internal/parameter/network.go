@@ -121,9 +121,9 @@ const (
 	// session ages nobody's wait, and two minutes covers a reload or a reconnect.
 	WraithTimeout = 2 * time.Minute
 
-	// BotRespawnTicks is how long a bot that went down beside a person stays down
-	// before it is equipped again: a second of game time, long enough to be seen.
-	BotRespawnTicks = uint64(time.Second / GameUpdateInterval)
+	// BotRespawn is how long a bot that went down beside a person stays down before
+	// it is equipped again, long enough to be seen. Game time, in the run's ticks.
+	BotRespawn = time.Second
 
 	// PlacesKept is how many places a process keeps the keys of to come back to its
 	// sessions with: a player and every bot it can hold, twice, so one joined since
@@ -461,13 +461,11 @@ const (
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024
 
-	// AuthNonceBytes is the randomness in a door's admission nonce: past guessing for
-	// the seconds a dial's proof is good. TicketLifetime is how long an admission
-	// ticket admits, one dial's worth: it is spent at its door, and SpentTicketsKept
-	// bounds the ids a door remembers for that long. PassLifetime caps a session
-	// pass, which a redial renews past half of; a session shorter than it caps it
-	// sooner. AuthClockLeeway is the skew a token's window allows either way, so a
-	// phone's clock a half-minute off is still admitted.
+	// AuthNonceBytes is the randomness in a door's admission nonce, past guessing for
+	// the seconds a dial's proof is good. A ticket admits one dial for TicketLifetime,
+	// spent at its door, which remembers SpentTicketsKept ids that long. PassLifetime
+	// caps a session pass, renewed by a redial past half of it and capped sooner by a
+	// shorter session. AuthClockLeeway is the skew a token's window allows either way.
 	AuthNonceBytes   = 16
 	TicketLifetime   = time.Minute
 	SpentTicketsKept = 4096

@@ -369,19 +369,23 @@ The rest wait.
 ### Settle what a bot's defeat leaves standing
 
 - Priority: P3
-- Affected files: `internal/system/meta.go`, `internal/engine/world.go`,
-  `internal/app/internal/membership/session.go`, `internal/status`
+- Affected files: `internal/system/meta.go`, `internal/system/network.go`,
+  `internal/engine/world.go`, `internal/app/internal/membership/session.go`,
+  `internal/status`, `wad/scenario/base/recall/scenario.toml`
 - Guide: [Multiplayer §5.4](multi-player.md#54-wraiths)
 
-A bot's defeat ends a game only where every cursor in play is a bot's
-(`World.DefeatDecides`), and beside a person it comes back a second later. What
-that leaves:
+A bot's defeat ends a game only where no person holds a place
+(`World.DefeatDecides`), and beside a person, one away included, it comes back a
+second of game time later. What that leaves:
 
 - A dedicated host sizes its map by the first joiner that names no holder, a
   run a bot plays itself among them (`noteJoinerReport`'s `firstPerson`).
 - No status key says which slots are bots', so a scenario's guard cannot ask.
-- `parameter.BotRespawnTicks` is a second of the default tick, not of the
-  run's (`World.TickInterval`), so under `-tick` a bot is down for another time.
+- A defeat a bot's owner crossed inside its lead of the bot's return latches
+  the bot again, and it comes back a second time (`NetworkSystem.settles`).
+  Refuse a report produced before the slot's last spawn.
+- `recall` arms every cursor again at any cursor's spawn, a bot's return among
+  them (`PlayerActive`'s `EventCursorSpawned` transition).
 
 ### Hold every scenario to the shared-region rule at load
 

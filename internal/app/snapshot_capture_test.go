@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -123,6 +124,32 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 				t.Fatalf("commit: %v", err)
 			}
 		})
+	}
+}
+
+// TestAStagingWorldPlaysItsRunsTick: a projection re-runs ticks on the staging
+// world, so it is built on its run's tick, which an install does not write.
+func TestAStagingWorldPlaysItsRunsTick(t *testing.T) {
+	t.Parallel()
+	const seed, tick = 0x71C5, 20 * time.Millisecond
+	run := func() *App {
+		a, err := NewHeadless(Config{Seed: seed, Width: 120, Height: 40, TickInterval: tick,
+			Resources: resource.Options{Embedded: true}})
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		t.Cleanup(a.Close)
+		return a
+	}
+	source, receiver := run(), run()
+	tickUntilCursor(t, source)
+	staged, err := receiver.StageShared(mustCaptureShared(t, source))
+	if err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	defer staged.Discard()
+	if got := stagingOf(staged).world.TickInterval(); got != tick {
+		t.Fatalf("the staging world of a run ticking at %s ticks at %s", tick, got)
 	}
 }
 

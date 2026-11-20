@@ -1384,7 +1384,7 @@ func TestABotsDefeatStartsNoNewGameBesideAPerson(t *testing.T) {
 		t.Fatalf("the bot's defeat reached the instances %v times, started %v new games and brought it back %v times; want it on both, none and not yet",
 			downs, resets, back)
 	}
-	for range parameter.BotRespawnTicks {
+	for range parameter.BotRespawn / apps[0].World().TickInterval() {
 		tickAll(apps)
 	}
 	for i, a := range apps {

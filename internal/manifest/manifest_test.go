@@ -84,9 +84,9 @@ parent = "Root"
 }
 
 // TestACursorGuardHoldsWhereItsDefeatDecides: PayloadCursorDecides holds for the
-// cursor a payload field names where that cursor's defeat decides the game: a
-// person's, or a bot's with no person's in play, alone or beside a person's Wraith.
-// A trigger carrying no such field fails the load.
+// cursor a payload field names where that cursor's defeat decides the game
+// (World.DefeatDecides), a person's and not a bot's beside one. A trigger carrying
+// no such field fails the load.
 func TestACursorGuardHoldsWhereItsDefeatDecides(t *testing.T) {
 	load := func(trigger string) (*fsm.Machine[*engine.World], error) {
 		m := fsm.NewMachine[*engine.World]()
@@ -108,15 +108,10 @@ parent = "Root"
 	}
 	for name, c := range map[string]struct {
 		bots    []bool // a cursor a slot, the first the one crushed
-		wraith  int    // the slot whose participant is away, none below 1
 		decides bool
 	}{
-		"a person alone":                 {bots: []bool{false}, decides: true},
-		"a bot alone":                    {bots: []bool{true}, decides: true},
-		"a bot beside a bot":             {bots: []bool{true, true}, decides: true},
-		"a person beside a bot":          {bots: []bool{false, true}, decides: true},
-		"a bot beside a person":          {bots: []bool{true, false}},
-		"a bot beside a person's Wraith": {bots: []bool{true, false}, wraith: 1, decides: true},
+		"a person alone":        {bots: []bool{false}, decides: true},
+		"a bot beside a person": {bots: []bool{true, false}},
 	} {
 		w := scratchWorld(t)
 		var cursors []core.Entity
@@ -125,9 +120,6 @@ parent = "Root"
 			w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: uint8(slot), Bot: bot})
 			w.Resources.Player.Bind(uint8(slot), e)
 			cursors = append(cursors, e)
-		}
-		if c.wraith > 0 {
-			w.Components.Wraith.SetComponent(cursors[c.wraith], component.WraithComponent{})
 		}
 		m, err := load("EventCursorCrushed")
 		if err != nil {

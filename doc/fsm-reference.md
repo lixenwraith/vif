@@ -579,13 +579,14 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 `player.count` and `player.slot` describe the roster.
 `session.any_defeated` becomes true when a cursor whose defeat decides the game
 reports zero heat and zero energy, or is crushed; all shipped scenarios use it for
-game over. Those cursors are the persons' in play, a Wraith being out of it, and
-every one in play where none is a person's: a bot's defeat ends no game beside a
-person. `session.all_defeated`, every one of them defeated, serves a scenario that
-needs unanimous defeat. Both derive from replicated owner reports and shared cursor
-state and are safe shared-region guards. Reports carry their production tick; a
-reset rejects reports from the previous attempt. A transition on the defeat's own
-event runs before the keys move: guard it with `PayloadCursorDecides`.
+game over. Those cursors are the persons' in play, a Wraith being out of it, or
+every bot's in play where no person holds a place: a bot's defeat ends no game
+beside a person, in play or away. `session.all_defeated`, every one of them
+defeated, serves a scenario that needs unanimous defeat. Both derive from
+replicated owner reports and shared cursor state and are safe shared-region
+guards. Reports carry their production tick; a reset rejects reports from the
+previous attempt. A transition on the defeat's own event runs before the keys
+move: guard it with `PayloadCursorDecides`.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
@@ -824,9 +825,10 @@ fails the load.
 ```
 
 Passes when the cursor `field` names is one whose defeat decides the game, as the
-`session.*_defeated` keys fold it: a person's in play, or a bot's while no person's
-is. The machine takes an event ahead of the systems, so on a defeat's own event
-those keys still read as before it, and this guard reads the roster instead.
+`session.*_defeated` keys fold it: a person's in play, or a bot's in play where no
+person holds a place. The machine takes an event ahead of the systems, so on a
+defeat's own event those keys still read as before it, and this guard reads the
+roster instead.
 
 ### PayloadExists
 

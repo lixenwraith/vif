@@ -594,11 +594,12 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    and `main` resumes with that text. Losing the tower fails the run.
    Encounter transitions preserve uncollected loot.
 6. Any person reaching zero heat **and** zero energy ends the run. A bot doing so,
-   or crushed, ends it only where every cursor in play is a bot's; beside a person
-   it is equipped again a second later, at its starting cell with a new game's
-   heat, energy and loadout. The shared monitor consumes
-   owner-authored defeat state and starts a new game, as `:n` does: the world, the
-   kill tallies and every other statistic start over and the roster is rearmed.
+   or crushed, ends it only where no person holds a place; beside a person, one
+   who is away included, it is equipped again a second of game time later, at its
+   starting cell with a new game's heat, energy and loadout. The shared monitor
+   consumes owner-authored defeat state and starts a new game, as `:n` does: the
+   world, the kill tallies and every other statistic start over and the roster is
+   rearmed.
    Every shipped scenario uses this defeat rule; tower defense also retains its
    objective-failure and victory conditions.
 

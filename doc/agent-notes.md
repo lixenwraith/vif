@@ -171,6 +171,11 @@ Libraries · Branches.
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant.
+- A staging world's `Config` is written out field by field (`App.newStagingApp`),
+  and a field left out takes its default. It names what decides the simulation and
+  an install does not write, as the run's tick: `World.tick` stays as built, and the
+  header's `TickInterval` moves only the clock. Without it a projection plays ticks
+  the live world does not (`TestAStagingWorldPlaysItsRunsTick`).
 - `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
   world reads and the journal records; Command and Overlay are the operator's, held
   on the context over it (`GameMode.Operator`), and reach neither. A live run's

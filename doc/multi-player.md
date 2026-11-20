@@ -956,18 +956,17 @@ builds it with the rest from the template (`PlayerResource.JoinRestore`).
 A notice dismisses only a seat, which its holder dropped; a player whose link
 closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
-A defeat is the persons left in play: a Wraith neither loses nor holds one up, and
-nor does a bot beside a person, whose defeat or crush ends no game. `MetaSystem`
-keeps the tick each latch was set at, and `BotRespawnTicks` later, a second of
-game time, asks for that bot's cursor to be equipped again
-(`EventCursorRespawnRequest`): the boot request's heat and energy, the innate
-loadout, and the free cell nearest the one a cursor starts on, announced as
-spawned, which lifts its defeat. Every instance holds the latch from one tick, so
-each asks at the same one, and the tick travels with the meta system's record.
-Where every cursor in play is a bot's, this node's or another's, they decide as
-persons would and none comes back, so a person leaving a bot inside that second
-ends the game (`World.DefeatDecides`, which the session's defeat keys and the
-scenario guard `PayloadCursorDecides` read).
+A defeat is the persons left in play: a Wraith neither loses nor holds a person's
+defeat up. While a person holds a place, in play or away, a bot's defeat or crush
+ends no game. `MetaSystem` keeps the tick each latch was set at and asks for that
+bot's cursor to be equipped again `BotRespawn` later, a second of game time
+counted in the run's ticks (`EventCursorRespawnRequest`): the boot request's heat
+and energy, the innate loadout, and the free cell nearest the one a cursor starts
+on, announced as spawned, which lifts its defeat. Every instance holds the latch
+from one tick and plays one tick interval, so each asks at the same one, and the
+tick travels with the meta system's record. Where no person holds a place the
+bots decide as persons would and none comes back (`World.DefeatDecides`, which
+the session's defeat keys and the scenario guard `PayloadCursorDecides` read).
 
 **Unheard.** A person whose relay left, with no other path found, is behind nobody
 who would see its link go. The authority keeps its own news of each participant,
@@ -1059,7 +1058,8 @@ successor carrying the session keeps its own; a run redialling the host it lost
 stops it at the drop and keeps it again if it stays; a dismissal forgets the place. The
 arrival crossing carries it, and `CursorSystem.reclaim` equips the Wraith at the free
 cell nearest the one it held, on every instance, and writes the record over the
-template only where it names the game being played and holds what a sync may
+template only where it names the game being played, holds what a sync may and
+reads no defeat, zero heat and zero energy: a cursor comes back as new, never down
 (`CursorSystem.restore`, `heldInRange`). A reset starts another game, at `:n` or a
 defeat, so a player back after one, or whose arrival the reset crossed again, plays
 the cursor the new game built: leaving ahead of a loss brings nothing back. A Wraith

@@ -63,6 +63,51 @@ func TestASupersededCursorIsDrivenByNobody(t *testing.T) {
 	}
 }
 
+// TestABotsDefeatDecidesOnlyWhereNoPersonHoldsAPlace: a person's played cursor
+// decides, and a bot's only while no person holds a place, in play or away. A
+// Wraith's own and a cursor off the roster decide nothing.
+func TestABotsDefeatDecidesOnlyWhereNoPersonHoldsAPlace(t *testing.T) {
+	// roster is a letter a slot, the first the cursor asked of: p a person's, b a
+	// bot's, w a person's Wraith, - a cursor bound to no slot that names the next
+	for name, c := range map[string]struct {
+		roster  string
+		decides bool
+	}{
+		"a person alone":                 {"p", true},
+		"a bot alone":                    {"b", true},
+		"a bot beside a bot":             {"bb", true},
+		"a person beside a bot":          {"pb", true},
+		"a bot beside a person":          {"bp", false},
+		"a bot beside a person's Wraith": {"bw", false},
+		"a Wraith":                       {"w", false},
+		"a cursor off the roster":        {"-p", false},
+	} {
+		w := NewWorld()
+		NewGameContextWithClock(w, 40, 24, NewManualClock())
+		var asked core.Entity
+		for slot, kind := range c.roster {
+			e := w.CreateEntity(core.DomainShared)
+			cursor := component.CursorComponent{Slot: uint8(slot), Bot: kind == 'b'}
+			switch kind {
+			case 'w':
+				w.Components.Wraith.SetComponent(e, component.WraithComponent{X: -1, Y: -1})
+			case '-':
+				cursor.Slot++
+			}
+			w.Components.Cursor.SetComponent(e, cursor)
+			if kind != '-' {
+				w.Resources.Player.Bind(uint8(slot), e)
+			}
+			if slot == 0 {
+				asked = e
+			}
+		}
+		if got := w.DefeatDecides(asked); got != c.decides {
+			t.Errorf("%s: its defeat decides %t, want %t", name, got, c.decides)
+		}
+	}
+}
+
 // TestAViewerLeavesAWraithOnlyForOneWhoPlays: with nobody playing, a viewer stays on
 // the Wraith it follows rather than hop to the next each tick; a cursor somebody
 // plays takes its view, and so does any cursor once its own slot is empty.
