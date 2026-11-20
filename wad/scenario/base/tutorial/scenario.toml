@@ -524,7 +524,7 @@ on_enter = [
     { macro = "Heading", text = "." },
     { macro = "Note", text = ". repeats the last change: a delete, a change, a retype or a put.", row = 8 },
     { macro = "Note", text = "A count before it replaces the change's own: dw then 2. takes two words.", row = 9 },
-    { macro = "Note", text = "What insert mode typed after I, A, a, o or c is typed again with it.", row = 10 },
+    { macro = "Note", text = "What insert mode typed after i, I, a, A, o, O or c is typed again with it.", row = 10 },
     { macro = "Note", text = "Clear no from each line: I, type no, esc, then j and . twice.", row = 11 },
     { macro = "Line", text = "no way", row = 14 },
     { macro = "Line", text = "no fear", row = 15 },
