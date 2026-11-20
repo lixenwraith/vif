@@ -585,8 +585,10 @@ instrumented test checks against `glyph.Raster` pixel for pixel at each strike,
 and posts it on a hardware canvas stretched over the whole view, filtered, so no
 margin is left; a tap maps to its cell in proportion. Before each frame the thread
 asks `game.AtlasChanged`, and builds its drawer anew from the texture of a strike
-a zoom crossed to, the run's first too. `FromRaster`, Go's raster as pixels, is
-the fallback. The APK's `wad/` is copied to the app's files directory as the
+a zoom crossed to, the run's first too; the view hands that texture over once the
+run drew the zoomed grid, so the grid is repainted once. A replaced picture's and
+drawer's pixels are freed then (`Bitmap.recycle`), not at the next collection.
+`FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Nearby games
