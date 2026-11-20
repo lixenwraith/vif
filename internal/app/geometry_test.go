@@ -823,8 +823,8 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 			return at
 		}
 		at := cursor()
-		if rc := a.renderContext(); !a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.IsPaused || rc.Prompt != "Click or press a key to start" || !rc.PromptAsks {
-			t.Fatalf("%s: waiting %v, dimmed %v, asking %q (a press %v) at launch", name, a.ctx.TimeCtl.Holds(engine.HoldStart), rc.IsPaused, rc.Prompt, rc.PromptAsks)
+		if rc := a.renderContext(); !a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.IsPaused || rc.Prompt != "Click or press a key to start" {
+			t.Fatalf("%s: waiting %v, dimmed %v, asking %q at launch", name, a.ctx.TimeCtl.Holds(engine.HoldStart), rc.IsPaused, rc.Prompt)
 		}
 		for i, ev := range kept {
 			if !a.takeEvent(ev) || !a.ctx.TimeCtl.Holds(engine.HoldStart) {

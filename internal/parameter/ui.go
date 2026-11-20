@@ -46,7 +46,8 @@ var AudioText = [4]string{" X ", " S ", " M ", " O "}
 // StatusKind ranks a status message and colours it in the console. One replaces the
 // message shown unless that one outranks it and has been up for less than its kind's
 // Min; Shown is how long a message stays. Both are wall time, so a message is read
-// at the rate it was written.
+// at the rate it was written. A Held kind's line stays apart, under every message
+// and the start prompt, until the next of its kind or a new game.
 type StatusKind uint8
 
 const (
@@ -56,6 +57,7 @@ const (
 	StatusError                      // a command refused or failed: an answer, still
 	StatusAlert                      // a failure or session change the player did not ask about
 	StatusAnnounce                   // what a server tells its players; nothing posts one yet
+	StatusGoal                       // what a scenario waits on the player for
 	StatusKindCount
 )
 
@@ -67,15 +69,20 @@ var StatusKindNames = [StatusKindCount]string{
 	StatusError:    "error",
 	StatusAlert:    "alert",
 	StatusAnnounce: "announce",
+	StatusGoal:     "goal",
 }
 
-var StatusKinds = [StatusKindCount]struct{ Min, Shown time.Duration }{
+var StatusKinds = [StatusKindCount]struct {
+	Min, Shown time.Duration
+	Held       bool
+}{
 	StatusNotice:   {Shown: 5 * time.Second},
 	StatusProgress: {Shown: NetworkSessionRequestTimeout}, // the longest wait a run reports on
 	StatusInput:    {Shown: 5 * time.Second},
 	StatusError:    {Shown: 5 * time.Second},
 	StatusAlert:    {Min: 3 * time.Second, Shown: 8 * time.Second},
 	StatusAnnounce: {Min: 3 * time.Second, Shown: 8 * time.Second},
+	StatusGoal:     {Held: true},
 }
 
 // The console backtick opens is a band across the screen right above the status bar:

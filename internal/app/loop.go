@@ -606,21 +606,21 @@ func (a *App) joinPrompt() string {
 	return "Click or press a key to join " + host
 }
 
-// startPrompt is the status line a waiting game stands with, and whether it asks
-// for a press: a guest waits for its host, and a player is asked for the press their
-// last one suggests. A replay's hold is the recording's, which no press ends.
-func (a *App) startPrompt() (string, bool) {
+// startPrompt is the status line a waiting game stands with: a guest waits for its
+// host, and a player is asked for the press their last one suggests. A replay's
+// hold is the recording's, which no press ends.
+func (a *App) startPrompt() string {
 	switch {
 	case !a.cfg.Mode.OwnsInput() || !a.ctx.TimeCtl.Holds(engine.HoldStart):
-		return "", false
+		return ""
 	case a.world.LiveSession() && !a.world.IsSessionCoordinator():
-		return "Waiting for the host to start", false
+		return "Waiting for the host to start"
 	case a.touched:
-		return "Tap to start", true
+		return "Tap to start"
 	case a.ctx.MouseDisabled.Load():
-		return "Press a key to start", true
+		return "Press a key to start"
 	}
-	return "Click or press a key to start", true
+	return "Click or press a key to start"
 }
 
 // menuOp applies what the host's menu asked and dispatches what it pushed, as a
@@ -673,7 +673,7 @@ func (a *App) renderContext() render.RenderContext {
 			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
 		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
-		out.Prompt, out.PromptAsks = a.startPrompt()
+		out.Prompt = a.startPrompt()
 		// The start screen lifts with the launch's hold, whatever ended it
 		a.startScreen = a.startScreen && a.ctx.TimeCtl.Holds(engine.HoldStart)
 	})

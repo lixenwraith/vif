@@ -17,7 +17,6 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -607,21 +606,18 @@ func TestTutorialSeatsNoBot(t *testing.T) {
 	}
 }
 
-// A lesson's prompt is a progress line, up till the next lesson's rather than for a
-// notice's five seconds, and the lesson a step reaches posts its own the same way.
+// A lesson's prompt is the game's goal, held under every other message till the next
+// lesson's, and the lesson a step reaches posts its own the same way.
 func TestTutorialsPromptsStayUp(t *testing.T) {
 	a := newTutorial(t, 100, 30)
-	shown := func() (string, parameter.StatusKind) {
-		return a.Context().ShownStatus(a.Context().TimeCtl.RealTime().Add(time.Minute).UnixNano())
-	}
-	if text, kind := shown(); kind != parameter.StatusProgress || !strings.HasPrefix(text, "Lesson 1 of 22") {
-		t.Fatalf("a minute on the bar shows %q, a %s line; want lesson 1's prompt", text, parameter.StatusKindNames[kind])
+	if goal := a.Context().StatusGoal(); !strings.HasPrefix(goal, "Lesson 1 of 22") {
+		t.Fatalf("the goal held is %q, want lesson 1's prompt", goal)
 	}
 	if tutorialKeys(t, a, "s"); tutorialState(a) != "Words" {
 		t.Fatalf("s left the tutorial in %s", tutorialState(a))
 	}
-	if text, kind := shown(); kind != parameter.StatusProgress || !strings.HasPrefix(text, "Lesson 2 of 22") {
-		t.Fatalf("a minute into Words the bar shows %q, a %s line; want lesson 2's prompt", text, parameter.StatusKindNames[kind])
+	if goal := a.Context().StatusGoal(); !strings.HasPrefix(goal, "Lesson 2 of 22") {
+		t.Fatalf("the goal held in Words is %q, want lesson 2's prompt", goal)
 	}
 }
 

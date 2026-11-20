@@ -335,4 +335,5 @@ var RgbConsoleKind = [parameter.StatusKindCount]color.RGB{
 	parameter.StatusError:    color.Salmon,
 	parameter.StatusAlert:    color.Orange,
 	parameter.StatusAnnounce: color.Orchid,
+	parameter.StatusGoal:     RgbStatusMessageText,
 }

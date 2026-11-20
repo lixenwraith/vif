@@ -15,8 +15,8 @@ responsive map, combat off. Each lesson is laid out the same way, top to bottom:
   (`EventGlyphLineRequest`, `scenery = true`), which nothing types or deletes;
 - a practice line, laid as typeable glyphs, and the cursor moved onto it
   (`EventCursorMoveRequest`);
-- a status-bar prompt (`EventMetaStatusMessageRequest`, `kind = "progress"`) for
-  what the lesson waits on, up until the next for two minutes at most.
+- a status-bar prompt (`EventMetaStatusMessageRequest`, `kind = "goal"`) for what
+  the lesson waits on, held under every other message until the next.
 
 A lesson ends when its state's guard sees the result: the cursor at a cell
 (`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), an edit asked for
@@ -65,9 +65,9 @@ makes of the keys the tutorial gave back to vi. What it stands on:
 - `EventModeRequest` asks the router for a play mode, which it enters as the
   mode's key would: each lesson asks for Normal as it stands the cursor.
 - `EventMetaStatusMessageRequest` takes a `kind`, a notice unless it names
-  another: the prompts are progress lines, up until the next rather than for a
-  notice's five seconds, and a game held for the press that starts it asks for the
-  press over a progress line, so after `:n` the bar says a key starts lesson 1.
+  another: the prompts are goals, which the bar holds under every message and the
+  start prompt rather than showing for a notice's five seconds, so after `:n` it
+  says a key starts lesson 1, and a command's answer gives the goal back as it ends.
 - The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
   bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
   `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to

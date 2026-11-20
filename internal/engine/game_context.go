@@ -288,6 +288,7 @@ type GameContext struct {
 	commandText   atomic.Pointer[string]
 	searchText    atomic.Pointer[string]
 	statusMessage atomic.Pointer[statusLine] // nil when none was posted
+	statusGoal    atomic.Pointer[string]     // the held line (parameter.StatusKinds' Held)
 	lastCommand   atomic.Pointer[string]
 	// Every message posted, for the console; it locks only itself
 	console consoleLog
@@ -1051,10 +1052,15 @@ func (ctx *GameContext) AdoptConsole(lines []ConsoleLine) {
 }
 
 // SetStatusMessage posts msg, unless the message shown outranks it and has been up
-// for less than its kind's Min (parameter.StatusKinds). The console lists it either way.
+// for less than its kind's Min (parameter.StatusKinds), or holds it where its kind is
+// Held. The console lists it either way.
 func (ctx *GameContext) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	now := ctx.TimeCtl.RealTime().UnixNano()
 	ctx.console.add(msg, kind, now)
+	if parameter.StatusKinds[kind].Held {
+		ctx.statusGoal.Store(&msg)
+		return
+	}
 	next := &statusLine{text: msg, kind: kind, since: now}
 	for {
 		cur := ctx.statusMessage.Load()
@@ -1084,13 +1090,20 @@ func (ctx *GameContext) ShownStatus(now int64) (string, parameter.StatusKind) {
 	return "", parameter.StatusNotice
 }
 
-func (ctx *GameContext) ShownStatusMessage(now int64) string {
-	text, _ := ctx.ShownStatus(now)
-	return text
+// StatusGoal is the held line, which the bar shows under any message and the start
+// prompt: what the scenario waits on the player for
+func (ctx *GameContext) StatusGoal() string {
+	if p := ctx.statusGoal.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
-// ClearStatusMessage removes the message, whatever its kind
-func (ctx *GameContext) ClearStatusMessage() { ctx.statusMessage.Store(nil) }
+// ClearStatusMessage removes the message, whatever its kind, and the held line
+func (ctx *GameContext) ClearStatusMessage() {
+	ctx.statusMessage.Store(nil)
+	ctx.statusGoal.Store(nil)
+}
 
 func (ctx *GameContext) GetLastCommand() string {
 	if p := ctx.lastCommand.Load(); p != nil {
