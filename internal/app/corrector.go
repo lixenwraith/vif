@@ -42,10 +42,10 @@ type stagingRun struct{ *App }
 func (s stagingRun) Corrector() *corrector.Corrector { return &s.glue }
 
 // newStagingApp builds the second world a capture is resolved into: this instance's
-// configuration with every outward-facing part removed — no transport, no journal,
-// no telemetry cadence — keeping what decides whether a capture loads, which is the
-// seed, the scenario and the corpus. The map latch and the session come from the
-// capture: a world on other bounds or another session's roots answers another question.
+// configuration with every outward-facing part removed (no transport, journal or
+// telemetry cadence), keeping what decides whether a capture loads, the seed, the
+// scenario and the corpus, and the tick a projection steps by. The map latch and the
+// session come from the capture: other bounds or roots answer another question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// Only inputs that can change the simulated world are projected: subtracting I/O
 	// options from the live Config lets a new local option reach the staging world.
@@ -61,11 +61,12 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 			Embedded: a.cfg.Resources.Embedded,
 			Provided: &staged,
 		},
-		Seed:      a.cfg.Seed,
-		Session:   cap.Header.Session,
-		RecTicks:  -1,
-		StatTicks: -1,
-		LockMap:   true,
+		Seed:         a.cfg.Seed,
+		Session:      cap.Header.Session,
+		TickInterval: a.world.TickInterval(),
+		RecTicks:     -1,
+		StatTicks:    -1,
+		LockMap:      true,
 	}
 	if cap.Header.MapWidth > 0 && cap.Header.MapHeight > 0 {
 		cfg.MapWidth, cfg.MapHeight = cap.Header.MapWidth, cap.Header.MapHeight

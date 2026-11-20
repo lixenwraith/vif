@@ -48,7 +48,8 @@ _arguments \
   '-tick[Game time one tick advances, 10ms to 100ms; a host'\''s is its session'\''s, which joiners take (default 50ms)]:dur: ' \
   '-script[Run an authored deterministic TOML tick script]:path:_files' \
   '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal'\''s digests unattended]' \
-  '-games[With -headless, how many games a bot alone whose graph learns plays at once, all teaching its learners (default one more than the cores)]:n: ' \
+  '-games[With -headless, how many games a bot alone whose graph learns plays at once, all teaching its learners, or with -field only fielding (default one more than the cores)]:n: ' \
+  '-field[With -watch or -headless, a bot alone whose graph learns plays what its populations field and teaches them nothing: no round is scored and no population written, each round still ends at the graph'\''s round_seconds, and a headless run prints each round'\''s score]' \
   '-watch[Watch the first bot or a script on this terminal, with no human player]' \
   '(-r -replay)'{-r,-replay}'[Replay a recorded journal instead of playing]:path:_files' \
   '-check[Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit]' \

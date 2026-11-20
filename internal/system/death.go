@@ -3,8 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -77,7 +75,6 @@ func NewDeathSystem(world *engine.World) engine.System {
 	return s
 }
 
-// Init resets session state for new game
 func (s *DeathSystem) Init() {
 	s.destroyBuf = s.destroyBuf[:0]
 	for _, stat := range []*atomic.Int64{
@@ -107,7 +104,6 @@ func (s *DeathSystem) Init() {
 	s.enabled = true
 }
 
-// Name returns system's name
 func (s *DeathSystem) Name() string {
 	return "death"
 }
@@ -216,7 +212,6 @@ func (s *DeathSystem) processBatchSilent(entities []core.Entity) {
 		return
 	}
 
-	// Filter protected entities
 	s.destroyBuf = s.destroyBuf[:0]
 	for _, e := range entities {
 		if e == 0 {
@@ -232,9 +227,8 @@ func (s *DeathSystem) processBatchSilent(entities []core.Entity) {
 	s.destroyCollected()
 }
 
-// processBatchWith is the generic two-pass batch processor
-// Pass 1: extract effect data from live entities, collect for destruction
-// Pass 2: destroy collected entities, emit single batch event
+// processBatchWith reads every entity's effect data before destroying any, then
+// sends the batch as one event
 func processBatchWith[T any](s *DeathSystem, pool *event.BatchPool[T], eventType event.EventType, entities []core.Entity, extract func(core.Entity) (T, bool)) {
 	batch := pool.Acquire()
 	s.destroyBuf = s.destroyBuf[:0]
@@ -289,7 +283,7 @@ func (s *DeathSystem) shown(entity core.Entity) (cell component.EffectCell, ok b
 		return cell, false
 	}
 	cell.Solid = wall.RenderBg
-	cell.Fg, cell.Bg = wallFadeoutColors(wall)
+	cell.Fg, cell.Bg = visual.WallRGB(wall)
 	if wall.RenderFg {
 		cell.Rune = wall.Rune
 	}
@@ -327,19 +321,6 @@ func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.Par
 	return entry, ok
 }
 
-// wallFadeoutColors returns a wall's colours as RGB for the fadeout to blend: a
-// 256-colour pattern wall holds palette indices in its colours' R bytes
-func wallFadeoutColors(wall *component.WallComponent) (color.RGB, color.RGB) {
-	fg, bg := wall.FgColor, wall.BgColor
-	if wall.Attrs&terminal.AttrFg256 != 0 {
-		fg = visual.Palette256RGB(fg.R)
-	}
-	if wall.Attrs&terminal.AttrBg256 != 0 {
-		bg = visual.Palette256RGB(bg.R)
-	}
-	return fg, bg
-}
-
 // --- Shared helpers ---
 
 // isProtected checks death protection and removes DeathComponent tag if protected
@@ -357,7 +338,6 @@ func (s *DeathSystem) isProtected(entity core.Entity) bool {
 	return false
 }
 
-// destroyCollected destroys all entities in destroyBuf using batch API
 func (s *DeathSystem) destroyCollected() {
 	if len(s.destroyBuf) == 0 {
 		return

@@ -504,8 +504,8 @@ client rather than the link.
 
 `VIF_DIVERGENCE=1 go test ./internal/app -run TestADivergenceOverAShapedLinkNamesItsRows -v`
 fights a host and a guest for 1,200 ticks over an in-process mesh link shaped both
-ways (`VIF_DIVERGENCE_SHAPE=latency,jitter,every,loss`, in ticks and frames: the
-default `3,3,97,0`, field-like `2,2,3,100`, sparse `3,3,251,0`, heavy `4,3,41,50`),
+ways (`VIF_DIVERGENCE_SHAPE=latency,jitter,every,loss`, in ticks and frames: rare
+`3,3,97,0`, the default, field-like `2,2,3,100`, sparse `3,3,251,0`, heavy `4,3,41,50`),
 paces the guest from its real trim and step, raises a storm at one simulation tick
 on both ends, and prints what the link cost (late commits, late copies, pages and
 cells repaired, keyframes, the lead held and the highest held) with every repair
@@ -525,7 +525,10 @@ both costing a jittery link one to three ticks of lead and a steady link nothing
 two per-instance counts inside the compared surface, a player-domain death pending
 adaptation and `explosion.triggered`, moved out of it; and the storm-spawn
 divergence at the site, which was the FSM's transition tick, each end entering
-`StormSetup` on its own `kills.quasar`, closed by batch 2's first item.
+`StormSetup` on its own `kills.quasar`, closed by batch 2's first item. The lead's
+window has to span the gap between spikes: 100 ticks spans the rare shape's 97 but
+not the sparse shape's 251, whose fight then read 8 late commits against 3 at 300,
+the other shapes alike.
 
 The four shapes before and after, 1,200 ticks each (pg pages repaired, kf
 keyframes, lc late commits, lcp late copies, lead held at the end with the highest
@@ -606,7 +609,7 @@ only with the frames the corrector holds (`ObserveHold`, two probe intervals), t
 queue those frames wait in; held frames at the baseline trip are the sender's own
 bound on a long link, which the heavy shape's keyframes showed, 4.2 s paced over a
 400 ms link that would have carried them in one trip. A plan priced on a link's
-rate keeps it after the link takes its frames again, doubling it every 5 s a
+rate keeps it after the link takes its frames again, doubling it every 300 ticks a
 constrained plan goes without a hold (`SnapshotLinkCapacityTicks`), so the fit
 holds instead of creeping back and queueing the link each second; a long trip's
 index spacing past the quiet cadence reports as the constraint it is. The same
@@ -640,7 +643,7 @@ over the last 230 ticks, by rate, averaged 2.76, 1.54, 0.31 and 0.34 s before an
 **The authority's lead from its first tick.** The authority stamped the default
 three ticks for its first `NetworkBarrierRenegotiateTicks`, the window's seed, and
 one after. It now holds no window ([Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)),
-so a host's crossings land two ticks sooner over its first five seconds: with
+so a host's crossings land two ticks sooner over its first 300 ticks: with
 hosting opened at tick 62 the lead read 1 at tick 362 before and 63 after. The
 harness starts its host and guest together, so every fight holds those 300
 ticks: late commits and late copies after the storm, and their sums with the
@@ -656,7 +659,7 @@ heavy      lc 1  lcp 1   lc 1  lcp 3   lc 8   lcp 10        lc 8   lcp 20
 
 The late commits hold. The late copies rise by one to three a fight: the spikes
 of the first 300 ticks, which the default covered and a guest now pays as it
-pays every later one. A guest that joins a host five seconds old met one tick
+pays every later one. A guest that joins a host 300 ticks old met one tick
 already.
 
 **A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a

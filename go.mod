@@ -7,7 +7,7 @@ require (
 	github.com/lixenwraith/audio v0.32.0
 	github.com/lixenwraith/auth v0.5.3
 	github.com/lixenwraith/color v0.1.5
-	github.com/lixenwraith/genetic v0.3.0
+	github.com/lixenwraith/genetic v0.4.0
 	github.com/lixenwraith/log v0.1.19
 	github.com/lixenwraith/terminal v0.7.0
 	github.com/lixenwraith/terminal/window v0.7.0

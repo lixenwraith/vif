@@ -267,13 +267,13 @@ func TestSessionFlags(t *testing.T) {
 	if bots, err := app.BotSpecs("2"); err != nil || !slices.Equal(bots, []string{"", ""}) {
 		t.Fatalf("-bot 2 seats %q, %v; want two seats naming no graph, each its scenario's own bot", bots, err)
 	}
-	if bots, err := app.BotSpecs("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
-		t.Fatalf("-bot 1:patrol seats %v, %v", bots, err)
+	if bots, err := app.BotSpecs("1:default"); err != nil || !slices.Equal(bots, []string{"default"}) {
+		t.Fatalf("-bot 1:default seats %v, %v", bots, err)
 	}
 	if bots, err := app.BotSpecs("0"); err != nil || len(bots) != 0 {
 		t.Fatalf("-bot 0 seats %v, %v", bots, err)
 	}
-	for _, spec := range []string{"17", "-1", ":roam"} {
+	for _, spec := range []string{"17", "-1", ":default"} {
 		if err := (sessionFlags{bot: spec}).validateInvocation(false, false, ""); err == nil {
 			t.Fatalf("-bot %s was accepted", spec)
 		}
@@ -448,7 +448,7 @@ func TestScriptInvocation(t *testing.T) {
 		t.Fatalf("watched hosted script rejected: %v", err)
 	}
 	hostedBot := hosted
-	hostedBot.bot = "roam"
+	hostedBot.bot = "default"
 	if err := validateInvocation(false, false, "", "", true, hostedBot); err != nil {
 		t.Fatalf("watched hosting bot rejected: %v", err)
 	}
@@ -458,13 +458,13 @@ func TestScriptInvocation(t *testing.T) {
 	if err := validateInvocation(true, false, "", "scenario.toml", false, sessionFlags{}); err == nil {
 		t.Fatal("-schema and -script were accepted together")
 	}
-	if err := validateInvocation(false, false, "", "scenario.toml", false, sessionFlags{bot: "roam"}); err != nil {
+	if err := validateInvocation(false, false, "", "scenario.toml", false, sessionFlags{bot: "default"}); err != nil {
 		t.Fatalf("-script refused the bots seated beside it: %v", err)
 	}
-	if err := validateInvocation(false, false, "run.jrn", "", false, sessionFlags{bot: "roam"}); err == nil {
+	if err := validateInvocation(false, false, "run.jrn", "", false, sessionFlags{bot: "default"}); err == nil {
 		t.Fatal("-replay accepted bots, which a journal's playback cannot seat")
 	}
-	if err := validateInvocation(false, false, "", "", false, sessionFlags{serve: ":7777", bot: "roam"}); err != nil {
+	if err := validateInvocation(false, false, "", "", false, sessionFlags{serve: ":7777", bot: "default"}); err != nil {
 		t.Fatalf("-serve cannot seat bots: %v", err)
 	}
 	for _, none := range []sessionFlags{{}, {bot: "0"}} {

@@ -633,6 +633,10 @@ func (w *World) Watches() bool { return w.watches.Load() }
 // and its replay reads it there. Call before the session is first latched.
 func (w *World) DriveByBot() { w.botDriven.Store(true) }
 
+// DrivenByBot reports a bot's run as it stands, for an operator's path; simulation
+// reads the latch's SessionState.Bot.
+func (w *World) DrivenByBot() bool { return w.botDriven.Load() }
+
 // TickGranted reports whether the next tick may run: any may, but a viewer's, which
 // waits for its feed to close it. Caller MUST hold updateMutex.
 func (w *World) TickGranted() bool {
@@ -1262,9 +1266,9 @@ func (w *World) played(slot uint8) bool {
 }
 
 // DefeatDecides reports whether the defeat of cursor e decides the game: a played
-// one of the roster that is a person's, or a bot's while no person's is played. The
-// session's defeat keys and a scenario's guard both ask it, so a bot's defeat ends
-// no game beside a person. Caller MUST hold updateMutex.
+// one of the roster that is a person's, or a bot's while no person holds a place,
+// away or not. The session's defeat keys and a scenario's guard both ask it, so a
+// bot's defeat ends no game beside a person. Caller MUST hold updateMutex.
 func (w *World) DefeatDecides(e core.Entity) bool {
 	c, ok := w.Components.Cursor.GetComponent(e)
 	if !ok || w.Resources.Player.Slot(c.Slot) != e || !w.played(c.Slot) {
@@ -1274,7 +1278,7 @@ func (w *World) DefeatDecides(e core.Entity) bool {
 		return true
 	}
 	for slot := range uint8(parameter.MaxPlayers) {
-		if o, _ := w.Components.Cursor.GetComponent(w.Resources.Player.Slot(slot)); !o.Bot && w.played(slot) {
+		if o, ok := w.Components.Cursor.GetComponent(w.Resources.Player.Slot(slot)); ok && !o.Bot {
 			return false
 		}
 	}

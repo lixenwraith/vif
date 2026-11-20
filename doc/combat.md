@@ -175,6 +175,16 @@ Nothing spends the burn family's immunity, so only a ward refuses a burn or its
 tick; a tick spends no window, so a player's own burn never blocks their direct
 hits. The digest names every slot field, so a status is compared state.
 
+A magic square's attacks are a tower's (`CombatEntityTower` attacking), each kind's
+family landing where the matrix has a row for it: `strike` takes a swarm's hit
+points, `hold` stuns it as long as the hold, a stun lasting its profile's
+`Duration` (a pulse's `PulseStunDuration`), and its shield's push is the cursor
+shield's row. A family lands alike from every attacker, which a data species' row
+takes as given, so the square's strike and hold are families of their own. The
+`contact` family is a swarm's body wearing the tower cells it covers, area damage
+the square raises for each body and block; the square's shield wards every cell
+while it holds.
+
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields
 first. Species contact costs `profile.Contact` through `strikeCursor`, a data

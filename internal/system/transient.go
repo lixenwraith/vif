@@ -16,7 +16,8 @@ import (
 )
 
 // TransientSystem manages player-domain presentation: screen overlays,
-// short-lived spatial explosion centers and the Krakens burning away.
+// short-lived spatial explosion centers, the Krakens burning away and the walls a
+// maze laid fading in.
 type TransientSystem struct {
 	world *engine.World
 
@@ -70,6 +71,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
 		event.EventKrakenBurnRequest,
+		event.EventWallFadeInRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -133,17 +135,19 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 			transient.BurnBacking[transient.BurnCount] = *p
 			transient.BurnCount++
 		}
+
+	case event.EventWallFadeInRequest:
+		// One maze stands at a time: a new one's walls take over the fade
+		if p, ok := ev.Payload.(*component.WallFadeIn); ok {
+			s.world.Resources.Transient.WallFadeIn = *p
+		}
 	}
 }
 
-// scopedHere reports whether a scoped local effect belongs to this instance.
-//
-// The grayout is a screen effect, so "this instance" is the cursor a player is
-// looking through: Resources.Player.Entity. An effect naming no cursor is
-// session-wide and applies everywhere, which is what a region belonging to nobody
-// — a storm, a reset — emits. An effect naming another participant's cursor is
-// that participant's to see, and darkening this screen for it was the defect this
-// check removes.
+// scopedHere reports whether a scoped screen effect is this instance's: one naming
+// the cursor its player looks through (Resources.Player.Entity), or none, which is
+// session-wide, as a region belonging to nobody emits. Another participant's is
+// that participant's to see.
 func (s *TransientSystem) scopedHere(ev event.GameEvent) bool {
 	p, ok := ev.Payload.(*event.CursorScopePayload)
 	if !ok {
@@ -164,6 +168,12 @@ func (s *TransientSystem) Update() {
 	}
 	s.updateExplosions()
 	s.updateKrakenBurns()
+	if fade := &s.world.Resources.Transient.WallFadeIn; fade.Duration > 0 {
+		fade.Elapsed += s.world.Resources.Time.DeltaTime
+		if fade.Elapsed >= fade.Duration {
+			*fade = component.WallFadeIn{}
+		}
+	}
 
 	strobe := &s.world.Resources.View.Strobe
 	if !strobe.Active {

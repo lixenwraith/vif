@@ -16,7 +16,8 @@ const (
 	BehaviorEye
 	BehaviorTower
 	BehaviorKraken
-	BehaviorData // a species a scenario's behavior program defines
+	BehaviorData  // a species a scenario's behavior program defines
+	BehaviorBlock // a magic square's block
 )
 
 // BehaviorNames are what a document calls each Behavior
@@ -32,6 +33,7 @@ var BehaviorNames = [...]string{
 	BehaviorTower:  "tower",
 	BehaviorKraken: "kraken",
 	BehaviorData:   "data",
+	BehaviorBlock:  "block",
 }
 
 // BehaviorSpecies is the code species whose composites each Behavior routes; a data
@@ -48,6 +50,7 @@ var BehaviorSpecies = [...]SpeciesType{
 	BehaviorTower:  SpeciesTower,
 	BehaviorKraken: SpeciesKraken,
 	BehaviorData:   SpeciesNone,
+	BehaviorBlock:  SpeciesNone,
 }
 
 // CompositeType defines how the composite handles damage and lifecycle

@@ -579,13 +579,14 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 `player.count` and `player.slot` describe the roster.
 `session.any_defeated` becomes true when a cursor whose defeat decides the game
 reports zero heat and zero energy, or is crushed; all shipped scenarios use it for
-game over. Those cursors are the persons' in play, a Wraith being out of it, and
-every one in play where none is a person's: a bot's defeat ends no game beside a
-person. `session.all_defeated`, every one of them defeated, serves a scenario that
-needs unanimous defeat. Both derive from replicated owner reports and shared cursor
-state and are safe shared-region guards. Reports carry their production tick; a
-reset rejects reports from the previous attempt. A transition on the defeat's own
-event runs before the keys move: guard it with `PayloadCursorDecides`.
+game over. Those cursors are the persons' in play, a Wraith being out of it, or
+every bot's in play where no person holds a place: a bot's defeat ends no game
+beside a person, in play or away. `session.all_defeated`, every one of them
+defeated, serves a scenario that needs unanimous defeat. Both derive from
+replicated owner reports and shared cursor state and are safe shared-region
+guards. Reports carry their production tick; a reset rejects reports from the
+previous attempt. A transition on the defeat's own event runs before the keys
+move: guard it with `PayloadCursorDecides`.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
@@ -764,6 +765,17 @@ button is refused. A button shows its key in the splash font once it is about te
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/base/recall` is the worked example.
 
+A magic square takes the presses of the keys a state captures for it: a digit
+selects the block it names for the pressing slot, and h, l, k and j turn that
+block's row or column a place. `EventSquareSpawnRequest { x, y, layout, groups,
+hp, block_width, block_height, target_group_id }` lays it centred on the cell,
+`layout` the nine digits row by row and `groups` the digits of each kind in order,
+attack, hold and defense; one square stands at a time. `EventSquareAligned { kind,
+line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0 attack, 1
+hold, 2 defense), and `EventSquareBlockFallen { digit, remaining }` a block lost
+its last cell. `EventGatewayHoldRequest { duration_ms }` holds every gateway's
+spawns. `wad/scenario/base/magic` is the worked example.
+
 ### Splash text and glyph lines
 
 ```toml
@@ -824,9 +836,10 @@ fails the load.
 ```
 
 Passes when the cursor `field` names is one whose defeat decides the game, as the
-`session.*_defeated` keys fold it: a person's in play, or a bot's while no person's
-is. The machine takes an event ahead of the systems, so on a defeat's own event
-those keys still read as before it, and this guard reads the roster instead.
+`session.*_defeated` keys fold it: a person's in play, or a bot's in play where no
+person holds a place. The machine takes an event ahead of the systems, so on a
+defeat's own event those keys still read as before it, and this guard reads the
+roster instead.
 
 ### PayloadExists
 
@@ -1033,7 +1046,7 @@ restitution = 0.5                   # Speed kept off a wall or the map's edge, 0
 
 [prototype.attacks]                 # Its own attack row: each family named replaces its combat row's keys (optional)
 pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and knockback (where the row takes it)
-missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn
+missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, contact, strike, hold
 
 [prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
 color = { r = 255, g = 120, b = 0 }  # The beams' colour

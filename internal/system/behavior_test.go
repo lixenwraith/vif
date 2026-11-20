@@ -839,11 +839,11 @@ func TestCombatRefusesToStunAShieldedDataSpecies(t *testing.T) {
 	c, _ := w.Components.Combat.GetPtr(header)
 
 	b.Shielded = true
-	if combat.applyStunEffect(header, c) {
+	if combat.applyStunEffect(header, c, 0) {
 		t.Fatal("a shielded warden was stunned")
 	}
 	b.Shielded = false
-	if !combat.applyStunEffect(header, c) {
+	if !combat.applyStunEffect(header, c, 0) {
 		t.Fatal("an unshielded warden refused the stun")
 	}
 }
@@ -1032,7 +1032,7 @@ on_update = [{ action = "Freeze" }]
 			t.Errorf("the guard read variable %q", name)
 		}
 		return wave
-	}, nil)
+	})
 	spawn := func(x int) {
 		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest,
 			Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: x, Y: 25}})

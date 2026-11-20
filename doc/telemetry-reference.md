@@ -167,7 +167,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `<d>.protected_rejects`, `<d>.protected_player_rejects` | Death, drain, the particle behaviors, and the shared species (behavior, eye, quasar, snake, storm, swarm) | Interactions refused by a protection mask. The shared sweep systems count player-domain victims in `protected_player_rejects` so that `protected_rejects` stays comparable |
 | `<d>.buf_<name>_hwm` | `newBufferTelemetry` | High-water live length of one reusable buffer or state collection. Outside the shared surface |
 | `combat.{damage,absorbed}_{attacker,defender}_<type>` | Combat | Damage points dealt, or rejected by immunity, by attacker or defender type. Types are `component.CombatEntityNames`: cursor, drain, quasar, swarm, storm, pylon, snake_head, snake_body, eye, tower, kraken |
-| `combat.damage_family_<family>` | Combat | Damage points per attack family (`combatAttackNames`): tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn |
+| `combat.damage_family_<family>` | Combat | Damage points per attack family (`component.CombatAttackNames`): tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, contact, strike, hold |
 | `combat.live_<type>` | Combat | Live Combat-store population per type. It decomposes `combat.count`, so a type still counted while its species reports inactive is a lifecycle leak |
 | `weapon.<kind>`, `weapon.<kind>_fired`, `player.<slot>.weapon.<kind>` | Weapon | Whether a cursor holds the kind, and discharges per kind. `weapon.main_fired` counts main-fire actions past the cooldown, each of which fires the loadout |
 | `storm.<color>_active_frames` | Storm | Attack ticks of a circle of that colour (red, green, blue) |
@@ -188,7 +188,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `player.slot` (int) | The slot this instance drives, or -1 when it drives none |
 | `player.entity` (int) | The cursor entity this instance drives, the number an `:emit` payload names it by, or zero |
 | `player.peer` (int) | The participant that owns the cursor this instance drives: its own identity in a session, zero outside one |
-| `session.any_defeated` (bool) | The defeat latch (owner-authored `EventCursorDefeatState`, or a crush) of a cursor whose defeat decides is set: a person's in play or, where no person's is, any in play; never a Wraith's, nor a bot's beside a person. A shipped game-over guard |
+| `session.any_defeated` (bool) | The defeat latch (owner-authored `EventCursorDefeatState`, or a crush) of a cursor whose defeat decides is set: a person's in play or, where no person holds a place, a bot's in play; never a Wraith's, nor a bot's beside a person, in play or away. A shipped game-over guard |
 | `session.all_defeated` (bool) | The latch of every cursor whose defeat decides is set, there being one |
 | `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower's death is never counted: the structure is the players' own, and `kills.tower` stays zero |
 | `kills.total`, `kills.uncredited` (int) | All counted deaths, and those whose killer resolves to no roster cursor |

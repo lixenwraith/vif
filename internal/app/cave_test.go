@@ -24,12 +24,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
-// cave scenario with nobody steering, through the resets its crushes and
-// collisions bring: raiders of several types materialize at the right edge, each
-// landing as its materialize ends, no drain ever standing, at most three fly at
-// once, and no tick ends with one standing in rock, which pushes them as it scrolls
-// and which their landings and teleports keep clear of.
+// TestRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped cave
+// with nobody steering, through the resets its crushes and collisions bring:
+// raiders of several types materialize at the right edge, each landing as its
+// materialize ends, no drain ever standing, three at most at once, and no tick
+// ends with one in rock, which their landings and teleports keep clear of.
 func TestRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
@@ -253,11 +252,10 @@ func upgradeDrops(w *engine.World) []core.Entity {
 }
 
 // TestARaiderKilledInAPairDropsEachPlayerOneU ends raiders by the host player's
-// shot on a mesh pair until each instance has dropped its player a U, two kills at
-// most. Each instance rolls the raider table once a kill for the player it
-// simulates, the guest when its ledger confirms the death, and each player's ship
-// takes its own U's and goes up a level a U. The rank counts each kill by an
-// internal transition on it, which each instance crosses once.
+// shot on a mesh pair until each instance has dropped its player a U, two kills
+// at most. Each instance rolls the raider table once a kill for the player it
+// simulates, the guest when its ledger confirms the death; each ship takes its
+// own U's and goes up a level a U, and the rank counts each kill once.
 func TestARaiderKilledInAPairDropsEachPlayerOneU(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
@@ -431,7 +429,7 @@ func TestABotSeatFliesTheShipsGunPath(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"roam"}}, Resources: opts}, "patrol", nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"default"}}, Resources: opts}, "default", nil)
 	waitForCursors(t, holder, 2)
 	// gun reads the gun on the cursor a run flies: whether it holds one, and its path
 	gun := func(a *App) (armed bool, levels int) {
@@ -796,17 +794,11 @@ func TestALostCaveGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 	}
 }
 
-// TestTheRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
-// shoots down as they arrive come from the first rank's two types until three fall,
-// then the next rank's, to the fourth, whose third kill holds the raid and, with no
-// raider left, strobes green and ends the cave. No raider comes while the cave opens
-// to no rock, the rock and the drift at twice their pace, and its scroll halts, and
-// the Kraken rises at the right edge with the scenario's hit points, twice the last
-// one's in the next tier. The player's kill of it drops a missile charge, heat and
-// two energy, doubles species damage and lays the next cave in another stone art,
-// the raider table's streaks carried into it, scrolling a fifth faster once its pace
-// has eased in, its drift four times that, where the climb starts over at the first
-// rank of that cave's types.
+// TestTheRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders shot down as
+// they arrive come a rank at a time, three kills a rank, and the fourth rank's
+// third kill ends the cave. It opens to no rock, its scroll halts, and the Kraken
+// rises with the scenario's hit points, twice the last one's in the next tier. Its
+// kill pays its loot and lays the next cave, faster, where the climb starts over.
 func TestTheRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
 	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/base/cave"), "scenario.toml")
