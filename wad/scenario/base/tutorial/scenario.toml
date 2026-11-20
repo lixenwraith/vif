@@ -473,36 +473,20 @@ on_enter = [
     { macro = "Say", message = "Lesson 11 of 22: cw on the first word" },
 ]
 transitions = [
-    { macro = "Span", target = "ChangeEsc", y = 14, from = 8, to = 9 },
+    { macro = "Span", target = "ChangeLine", y = 14, from = 8, to = 9 },
     { macro = "Next", target = "Replace" },
     { macro = "Back", target = "Open" },
 ]
 
-[states.ChangeEsc]
-parent = "Change"
-on_enter = [
-    { macro = "Say", message = "c left you in insert mode: esc returns to normal" },
-]
-transitions = [
-    { macro = "Normal", target = "ChangeLine" },
-]
-
+# The deletes go on whether c or d made them: d leaves normal mode, where esc opens
+# the menu, so no step here waits for esc
 [states.ChangeLine]
 parent = "Change"
 on_enter = [
-    { macro = "Say", message = "Now j and cc clear the second line" },
+    { macro = "Say", message = "Esc if c left you in insert mode; then j and cc on line two" },
 ]
 transitions = [
-    { macro = "Deleted", target = "ChangeLineEsc", range = 1, y = 15 },
-]
-
-[states.ChangeLineEsc]
-parent = "Change"
-on_enter = [
-    { macro = "Say", message = "Insert mode again: esc to go on" },
-]
-transitions = [
-    { macro = "Normal", target = "Replace" },
+    { macro = "Deleted", target = "Replace", range = 1, y = 15 },
 ]
 
 [states.Replace]
@@ -515,7 +499,7 @@ on_enter = [
     { macro = "Note", text = "Fix the z with rs, then stand on SHOUT and quieten it with 5~.", row = 10 },
     { macro = "Line", text = "thiz line has a SHOUT in it", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
-    { macro = "Say", message = "Lesson 12 of 22: fz to the z, then rs" },
+    { macro = "Say", message = "Lesson 12 of 22: in normal mode, fz to the z, then rs" },
 ]
 transitions = [
     { macro = "Retyped", target = "ReplaceCase", x = 7, text = "s" },

@@ -444,6 +444,30 @@ func TestTutorialStandsACursorThatCameBack(t *testing.T) {
 	}
 }
 
+// The change lesson goes on however its deletes were made: c leaves insert mode
+// for esc to end, and d stays in normal mode, where esc would open the menu, so
+// no step waits for an esc that d never needs.
+func TestTutorialsChangeLessonTakesADeleteToo(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	for _, keys := range []string{"cw\x1bjcc\x1b", "dwjdd", "cw\x1bjdd", "dejcc\x1b"} {
+		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		a.Tick(10)
+		tutorialKeys(t, a, strings.Repeat("s", 10)+keys)
+		var state string
+		a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
+		if state != "Replace" {
+			t.Errorf("%q in the change lesson left the tutorial in %s, want Replace", keys, state)
+		}
+		a.Close()
+	}
+}
+
 // tutorialRow reads the glyphs on row y from column 4, a gap as a space.
 func tutorialRow(a *App, y int) string {
 	w := a.World()
