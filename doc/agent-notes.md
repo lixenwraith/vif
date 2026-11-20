@@ -825,6 +825,11 @@ Docs · Libraries · Branches.
   "this player's place is still linked to the run it left". `-nw` seats a run
   without its press, a run started with `-bot -watch` is driven and never redials,
   and `kill -9` on a `-serve` host is a host lost, where a signal it takes drains.
+- A browser plays a scenario that is not embedded, as the tutorial, only as a
+  server's guest, so a change to one is read there too: `-serve <addr> -players 1
+  -probe <addr>` and a `-join` in tmux. A page's reload is `kill -9` on that guest
+  and a second run from its `XDG_STATE_HOME`, which takes the place back while the
+  probe reads `ready=true` with `guests` at `capacity`.
 - A tree is a guest with `-relay <addr>`, a run that joined there with a `-relay` of
   its own, and one behind that: `./script/test.sh tree` loses its host. A Go test
   has no restart loop, so a run coming back through its relay's new run is seen

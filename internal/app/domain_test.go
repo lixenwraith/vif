@@ -77,13 +77,11 @@ func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	}
 }
 
-// TestFSMTriggersAreReplicated is D-20 made mechanical: every FSM region is shared
-// state, so a region stays in agreement only if every event that moves it is an
-// event every instance holds. A ClassLocal trigger never replicates, so the region
-// advances on the producing instance and nowhere else, and nothing re-derives the
-// missing event — which is how MonitorActive on EventHeatBurst diverged a session.
-// Validation refuses one in a scenario seating more than one player, and every
-// scenario that ships passes it: the tutorial plays alone.
+// TestFSMTriggersAreReplicated is D-20 made mechanical: a region is shared state, so
+// every event that moves it must be one every instance holds, and a local trigger
+// moves it on the producing instance alone. Validation refuses one in a scenario
+// seating more than one player, and every scenario that ships passes it: the
+// tutorial plays alone.
 func TestFSMTriggersAreReplicated(t *testing.T) {
 	t.Parallel()
 	event.EnsureRegistry()

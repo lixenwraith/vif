@@ -726,6 +726,21 @@ tutorial attach. What is left:
   where a delete also takes the layers under it
   ([below](#decide-what-a-delete-removes-under-a-drift-stack)).
 
+### End the tutorial's lessons for a guest of a server
+
+- Priority: P1
+- Affected files: `internal/fsm/machine.go` (`handleEventInRegion`),
+  `internal/engine/scheduler.go` (`proposeTransition`),
+  `internal/system/network.go` (`admissibleFromSource`)
+- Guide: [D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions),
+  [Tutorial §2](tutorial.md#2-what-it-holds)
+
+A browser plays the tutorial only as a server's guest, where a transition a local
+event triggers is never taken: eleven of the twenty-two lessons end by `s` alone.
+What closes it: the one player's instance asks the authority for the transition
+its local event passed, which the authority takes as its own; or the tutorial is
+embedded, so a page plays it alone.
+
 ### Grow the tutorial
 
 - Priority: P3

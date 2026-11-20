@@ -68,6 +68,8 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   another: the prompts are goals, which the bar holds under every message and the
   start prompt rather than showing for a notice's five seconds, so after `:n` it
   says a key starts lesson 1, and a command's answer gives the goal back as it ends.
+  Each fits the line's 62 columns of an 80 column screen: a longer one would hold
+  the items' row for its whole lesson.
 - The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
   bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
   `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to
@@ -109,12 +111,13 @@ player: a seat is refused before a session opens and a bot's own run at the
 door, for good, though a bot may play it alone (`-watch -bot 1`). Its lessons
 end on a player's edits, typed glyphs and mode changes, local events that move
 the machine only where that player's instance holds it (D-20). A guest of a
-server holding it moves on by the cursor, `s` and `S` alone; `:leave` plays on
-alone, where every lesson ends. A server's probe reads ready while its one place
-waits for a player away, so a reloaded page takes that place back, which no
-other dial is given; a second person is refused as the session full, a host of
-it lets others spectate only, and a scripted host refuses a lobby that would
-wait for a guest forever.
+server holding it, as a browser's page is, moves on by the cursor, `s` and `S`
+alone ([todo](todo.md#end-the-tutorials-lessons-for-a-guest-of-a-server));
+`:leave` plays on alone, where every lesson ends. A server's probe reads ready
+while its one place waits for a player away, so a reloaded page takes that
+place back, which no other dial is given; a second person is refused as the
+session full, a host of it lets others spectate only, and a scripted host
+refuses a lobby that would wait for a guest forever.
 
 ## 3. The next round
 
