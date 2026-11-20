@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -82,18 +83,24 @@ func TestTutorialALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 func tutorialKeys(t *testing.T, a *App, keys string) {
 	t.Helper()
 	for _, r := range keys {
-		ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
-		switch r {
-		case '\x1b':
-			ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
-		case '\x12':
-			ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlR}
-		}
-		for intent := a.inputMachine.Process(ev); intent != nil; intent = a.inputMachine.Next() {
-			inject(t, a, intent)
-		}
+		tutorialPress(t, a, r)
 		a.Tick(2)
 		a.InputTick()
+	}
+}
+
+// tutorialPress types one key into a, with no tick after it
+func tutorialPress(t *testing.T, a *App, r rune) {
+	t.Helper()
+	ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
+	switch r {
+	case '\x1b':
+		ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
+	case '\x12':
+		ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlR}
+	}
+	for intent := a.inputMachine.Process(ev); intent != nil; intent = a.inputMachine.Next() {
+		inject(t, a, intent)
 	}
 }
 
@@ -662,6 +669,118 @@ func TestTutorialsGoalsFitTheStatusLine(t *testing.T) {
 	}
 	if goals == 0 {
 		t.Fatal("the tutorial posts no goal; the check passed vacuously")
+	}
+}
+
+// tutorialSession is a server of the tutorial, which plays nothing, and its one
+// guest on a mesh; advance ticks both and takes the guest's input
+func tutorialSession(t *testing.T) (host, guest *App, advance func(ticks int)) {
+	t.Helper()
+	host, guest = newTutorial(t, 100, 30), newTutorial(t, 100, 30)
+	offer := cursorlessOffer(host.JoinAnchor(), 1)
+	if err := host.HostSession(offer); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	if err := guest.JoinSession(offer); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	host.AttachTransport(mesh.Node(1))
+	guest.AttachTransport(mesh.Node(2))
+	host.membership.ActivateNetworkSession()
+	guest.membership.ActivateNetworkSession()
+	advance = func(ticks int) {
+		for range ticks {
+			host.Tick(1)
+			guest.Tick(1)
+			guest.InputTick()
+		}
+	}
+	advance(2 * parameter.NetworkBarrierDelayTicks)
+	return host, guest, advance
+}
+
+// A server's guest holds the events its player's edits make, which the server never
+// sees: its machine asks for the transition each triggers and the server takes it,
+// so both end the lesson, and an esc pressed behind a typed glyph waits for the
+// state that glyph asked for. An ask from the server, which plays nothing, is refused.
+func TestAServersGuestEndsTheTutorialsLessonsByAsking(t *testing.T) {
+	host, guest, advance := tutorialSession(t)
+	reaches := func(keys, want string) {
+		t.Helper()
+		for _, r := range keys {
+			tutorialPress(t, guest, r)
+		}
+		for range 4 * parameter.NetworkBarrierDelayTicks {
+			if advance(1); tutorialState(guest) == want && tutorialState(host) == want {
+				return
+			}
+		}
+		t.Fatalf("%q left the guest in %s and its server in %s, want both in %s", keys, tutorialState(guest), tutorialState(host), want)
+	}
+	for _, lesson := range []string{"Words", "Line", "Find", "Count", "DeleteChar"} {
+		reaches("s", lesson)
+	}
+	reaches("x", "DeleteLine")
+	reaches("s", "DeleteMotion")
+	reaches("s", "Insert")
+	for _, key := range "j$i" {
+		tutorialPress(t, guest, key)
+		advance(2)
+	}
+	reaches("e\x1b", "Append")
+
+	host.World().PushEventFull(event.EventFSMTransitionRequest,
+		&event.FSMTransitionRequestPayload{Region: "tutorial"}, event.OriginSystem, core.DomainPlayer)
+	host.Settle()
+	advance(2 * parameter.NetworkBarrierDelayTicks)
+	if statOf(host, "network.artifacts_refused") == 0 || statOf(guest, "network.artifacts_refused") == 0 {
+		t.Fatal("an ask from the server, which holds no cursor, was admitted")
+	}
+}
+
+// A session whose guest asked replays tick for tick from either side's journal,
+// which holds each ask beside the transition it won: a replay grants nothing, and
+// takes each transition where its record stands.
+func TestASessionThatAskedReplaysFromEitherSide(t *testing.T) {
+	host, guest, advance := tutorialSession(t)
+	recs := map[*App]*journal.Capture{host: journal.NewCapture(), guest: journal.NewCapture()}
+	wants := map[*App]map[event.Stamp][]string{host: {}, guest: {}}
+	for a, rec := range recs {
+		a.cfg.JournalSink = rec
+		if _, err := a.scribe.OpenJournal(); err != nil {
+			t.Fatalf("open: %v", err)
+		}
+	}
+	for _, key := range "sssssxssj$ie\x1b" {
+		tutorialPress(t, guest, key)
+		for range 3 * parameter.NetworkBarrierDelayTicks {
+			advance(1)
+			for a, want := range wants {
+				p := a.Position()
+				want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+			}
+		}
+	}
+	if got := tutorialState(host); got != "Append" || tutorialState(guest) != got {
+		t.Fatalf("the session ended with its server in %s and its guest in %s, want both in Append", got, tutorialState(guest))
+	}
+	for a, rec := range recs {
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
+		asks := 0
+		for _, r := range rec.Records() {
+			if r.Type == event.EventFSMTransitionRequest {
+				asks++
+			}
+		}
+		if asks != 3 {
+			t.Fatalf("a journal holds %d asks of the 3 the guest made", asks)
+		}
+	}
+	for a, rec := range recs {
+		replayMatches(t, rec, wants[a], guestSurface, func(c *Config) { c.Resources.Dir = soakRoot })
 	}
 }
 

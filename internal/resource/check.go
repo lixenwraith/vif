@@ -102,9 +102,9 @@ func ValidateScenario(o Options) (Scenario, error) {
 
 // CheckLocalTriggers refuses a scenario seating more than one player whose machine
 // a local event moves, naming the first such transition: only the instance whose
-// player made the event holds it, so where that instance does not hold the machine
-// alone the transition is never taken (D-20). Such a scenario plays alone, with
-// max_players = 1.
+// player made the event can judge it, and an authority that is another takes its
+// word (D-20), which one player may give for a machine no other plays under. Such
+// a scenario has max_players = 1.
 func CheckLocalTriggers(sc Scenario, local []string) error {
 	if sc.MaxPlayers <= 1 || len(local) == 0 {
 		return nil

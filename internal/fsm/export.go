@@ -227,6 +227,9 @@ func (m *Machine[T]) importState(ctx T, state MachineState, reconcile bool) (int
 		if _, existed := m.regions[p.snap.Name]; !existed {
 			m.regions[p.snap.Name] = p.region
 		}
+		if p.region.asked && p.region.ActiveStateID != p.stateID {
+			p.region.asked, p.region.parked = false, nil // asked of a state it no longer stands in
+		}
 		p.region.ActiveStateID = p.stateID
 		p.region.TimeInState = p.snap.TimeInState
 		p.region.Paused = p.snap.Paused

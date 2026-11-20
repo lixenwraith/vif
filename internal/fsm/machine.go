@@ -213,6 +213,12 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 		}
 	}
 
+	// An ask the authority never answered, lost or refused, is given up
+	if region.asked && m.AskUpdates > 0 {
+		if region.waited++; region.waited >= m.AskUpdates {
+			m.land(ctx, region)
+		}
+	}
 	if m.following || region.proposed || region.ticking {
 		return
 	}
@@ -237,13 +243,18 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 // in (fold). An internal one parks nothing, so every event it counts is proposed;
 // on Tick it holds the region's Ticks, as its guard would pass again until it lands.
 func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, trigger event.EventType, payload any) {
+	m.takeWith(ctx, region, owner, index, trigger, payloadVars(payload, m.nodes[owner].Transitions[index].CaptureVars))
+}
+
+// takeWith is take with the variables already captured, as a granted ask brings them.
+func (m *Machine[T]) takeWith(ctx T, region *RegionState, owner StateID, index int, trigger event.EventType, vars []event.FSMVar) {
 	trans := &m.nodes[owner].Transitions[index]
-	vars := payloadVars(payload, trans.CaptureVars)
 	if m.proposing && m.Propose != nil {
 		then, end := m.fold(trans)
 		switch {
 		case !trans.Internal:
-			region.proposed, region.target = true, end
+			region.proposed = true
+			m.await(region, end)
 		case trans.Event == 0:
 			region.ticking = true
 		}
@@ -251,6 +262,20 @@ func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, 
 		return
 	}
 	m.commit(ctx, region, trans, trigger, vars)
+}
+
+// await sets the state a region, proposed or asked, waits to enter, whose events
+// its masks then let through to be parked; unawait ends a wait no transition
+// landed to end, leaving the machine's mask to its caller.
+func (m *Machine[T]) await(region *RegionState, end StateID) {
+	region.target = end
+	m.refreshRegionMask(region)
+	m.refreshActive()
+}
+
+func (m *Machine[T]) unawait(region *RegionState) {
+	region.proposed, region.asked, region.ticking, region.parked = false, false, false, nil
+	m.refreshRegionMask(region)
 }
 
 // foldMax bounds the hops a crossing carries, as a cycle of unguarded hops would
@@ -261,7 +286,7 @@ const foldMax = 32
 // ends in, which the authority carries in the crossing it proposes so every
 // instance takes the chain at one tick rather than a lead a hop: from each state
 // entered, up its path, the first Tick transition met decides, an unguarded
-// external one a hop and any other the end, since a guest evaluates no guard.
+// external one a hop and any other the end, since a guest evaluates no Tick's guard.
 func (m *Machine[T]) fold(trans *Transition[T]) ([]event.FSMHop, StateID) {
 	at := trans.TargetID
 	if trans.Internal {
@@ -369,7 +394,8 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 	owner := StateID(p.Owner)
 	node, ok := m.nodes[owner]
 	if !ok || !slices.Contains(region.ActivePath, owner) || p.Index < 0 || p.Index >= len(node.Transitions) {
-		region.proposed, region.ticking, region.parked = false, false, nil
+		m.unawait(region)
+		m.refreshActive()
 		return fmt.Errorf("region %q in %s has no transition %d of state %d", p.Region, m.StateName(region.ActiveStateID), p.Index, p.Owner)
 	}
 	trans := &node.Transitions[p.Index]
@@ -380,7 +406,7 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 		m.commit(ctx, region, trans, p.Trigger, p.Vars)
 		return nil
 	}
-	region.proposed = false
+	region.proposed, region.asked = false, false
 	parked := region.parked
 	region.parked = nil
 	m.commit(ctx, region, trans, p.Trigger, p.Vars)
@@ -389,28 +415,42 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 			return err
 		}
 	}
-	// What arrived during the wait reaches the state entered, in order; a
-	// transition one takes parks the rest again.
+	m.replay(ctx, region, parked)
+	return nil
+}
+
+// replay hands a region the events it parked, in order, where it now stands; a
+// transition one takes, or asks for, parks the rest again.
+func (m *Machine[T]) replay(ctx T, region *RegionState, parked []event.GameEvent) {
 	for _, ev := range parked {
 		if r, ok := m.regions[region.Name]; ok && r == region {
 			m.handleEventInRegion(ctx, region, ev)
 		}
 	}
-	return nil
 }
 
-// Steer sets who moves the machine: following, Apply alone; proposing, Propose
-// and then Apply; neither, the machine itself, in place. A change drops what was
-// proposed and not applied, so nothing waits on an authority this is no longer.
-func (m *Machine[T]) Steer(following, proposing bool) {
-	if following == m.following && proposing == m.proposing {
+// land ends a region's wait on a transition it asked for, with none landed.
+func (m *Machine[T]) land(ctx T, region *RegionState) {
+	parked := region.parked
+	m.unawait(region)
+	m.refreshActive()
+	m.replay(ctx, region, parked)
+}
+
+// Steer sets who moves the machine: following, Apply alone, and asking beside it,
+// Ask for what a local event triggers; proposing, Propose and then Apply; none, the
+// machine itself, in place. A change drops what was proposed or asked and not
+// applied, so nothing waits on an authority this is no longer, or no longer has.
+func (m *Machine[T]) Steer(following, proposing, asking bool) {
+	asking = asking && following
+	if following == m.following && proposing == m.proposing && asking == m.asking {
 		return
 	}
-	m.following, m.proposing = following, proposing
+	m.following, m.proposing, m.asking = following, proposing, asking
 	for _, name := range m.regionOrder {
-		r := m.regions[name]
-		r.proposed, r.ticking, r.parked = false, false, nil
+		m.unawait(m.regions[name])
 	}
+	m.refreshActive()
 }
 
 // ExecuteAction runs a registered action by name, for embedder hooks such as
@@ -471,9 +511,9 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.D
 func (m *Machine[T]) Reacts(et event.EventType) bool { return m.reacts.has(et) }
 
 // LocalTriggers names each transition a local event triggers, "State on Event" in
-// name order. No other instance holds such an event, so the transition is taken
-// only where the instance whose player made it holds the machine (D-20): a run
-// that plays alone.
+// name order. Only the instance whose player made such an event holds it and can
+// judge the transition, which it takes where the machine is its own and asks the
+// authority for where it follows (D-20): one player's to do, never one of several.
 func (m *Machine[T]) LocalTriggers() []string {
 	var out []string
 	for _, node := range m.nodes {
@@ -482,13 +522,19 @@ func (m *Machine[T]) LocalTriggers() []string {
 			if et == event.EventNone {
 				continue // Tick, the machine's own pulse on every instance
 			}
-			if c := event.ClassOf(et); c == event.ClassLocal || c == event.ClassUnset {
+			if localTrigger(et) {
 				out = append(out, node.Name+" on "+event.GetEventName(et))
 			}
 		}
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// localTrigger reports an event only the instance that made it holds.
+func localTrigger(et event.EventType) bool {
+	c := event.ClassOf(et)
+	return c == event.ClassLocal || c == event.ClassUnset
 }
 
 // HandleEvent routes an external event through all active regions.
@@ -516,14 +562,18 @@ func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 	return handled
 }
 
-// handleEventInRegion processes event in a single region. A region with a
-// transition in flight parks an event its target reacts to, so a lead-long wait
-// loses nothing the state about to be entered would have seen.
+// handleEventInRegion processes event in a single region: a machine that follows
+// judges only a local event, and that only where it asks. A region with a
+// transition in flight, proposed or asked, parks an event its target reacts to, so
+// a lead-long wait loses nothing the state about to be entered would have seen.
 func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.GameEvent) bool {
-	if region.ActiveStateID == StateNone || m.following {
+	if region.ActiveStateID == StateNone {
 		return false
 	}
-	if region.proposed {
+	if m.following && !(m.asking && m.Ask != nil && localTrigger(ev.Type)) {
+		return false
+	}
+	if region.proposed || region.asked {
 		if !m.reactsAlong(region.target, ev.Type) || len(region.parked) >= parkedEventsMax {
 			return false
 		}
@@ -542,13 +592,70 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 		for i := range node.Transitions {
 			trans := &node.Transitions[i]
 			if trans.Event == ev.Type && (trans.Guard == nil || trans.Guard(ctx, region, ev.Payload)) {
-				m.take(ctx, region, currID, i, ev.Type, ev.Payload)
+				if m.following {
+					m.ask(region, currID, i, ev)
+				} else {
+					m.take(ctx, region, currID, i, ev.Type, ev.Payload)
+				}
 				return true
 			}
 		}
 		currID = node.ParentID
 	}
 	return false
+}
+
+// ask hands the authority a transition a local event triggered here and whose
+// guard passed here, where the event is. The region then waits as a proposing one
+// does, parking what the state asked for reacts to; an internal one parks nothing.
+func (m *Machine[T]) ask(region *RegionState, owner StateID, index int, ev event.GameEvent) {
+	trans := &m.nodes[owner].Transitions[index]
+	if !trans.Internal {
+		_, end := m.fold(trans)
+		region.asked, region.waited = true, 0
+		m.await(region, end)
+	}
+	m.Ask(region.Name, owner, index, ev.Type, payloadVars(ev.Payload, trans.CaptureVars))
+}
+
+// Grant proposes a transition another instance asked for (ask): one a local event
+// triggers, of a state its running region stands in with no transition in flight,
+// setting only variables it captures. The asker judged its guard; anything else is
+// refused and changes nothing, so the region still moves by this machine alone,
+// and only one that proposes grants: what it takes must cross to the asker.
+func (m *Machine[T]) Grant(ctx T, p *event.FSMTransitionRequestPayload) error {
+	region, ok := m.regions[p.Region]
+	switch {
+	case !m.proposing || m.Propose == nil:
+		return fmt.Errorf("a machine that proposes nothing grants nothing")
+	case !ok || region.Paused || region.ActiveStateID == StateNone:
+		return fmt.Errorf("region %q is not running", p.Region)
+	case region.proposed:
+		return fmt.Errorf("region %q has a transition in flight", p.Region)
+	}
+	owner := StateID(p.Owner)
+	node, ok := m.nodes[owner]
+	if !ok || !slices.Contains(region.ActivePath, owner) || p.Index < 0 || p.Index >= len(node.Transitions) {
+		return fmt.Errorf("region %q in %s has no transition %d of state %d", p.Region, m.StateName(region.ActiveStateID), p.Index, p.Owner)
+	}
+	trans := &node.Transitions[p.Index]
+	if trans.Event != p.Trigger || !localTrigger(trans.Event) {
+		return fmt.Errorf("transition %d of %s is not one %s triggers as a local event", p.Index, node.Name, event.GetEventName(p.Trigger))
+	}
+	if len(p.Vars) > len(trans.CaptureVars) {
+		return fmt.Errorf("transition %d of %s captures %d variable(s), not %d", p.Index, node.Name, len(trans.CaptureVars), len(p.Vars))
+	}
+	for _, v := range p.Vars {
+		captured := false
+		for _, name := range trans.CaptureVars {
+			captured = captured || name == v.Name
+		}
+		if !captured {
+			return fmt.Errorf("transition %d of %s captures no variable %q", p.Index, node.Name, v.Name)
+		}
+	}
+	m.takeWith(ctx, region, owner, p.Index, p.Trigger, p.Vars)
+	return nil
 }
 
 // payloadVars reads the payload fields a transition captures into variables, by
@@ -770,12 +877,21 @@ func (m *Machine[T]) IncrementVar(name string, delta int64) int64 {
 
 // === Trigger Masks and Observation ===
 
-// refreshRegionMask recomputes the union of trigger sets along the active path.
+// refreshRegionMask recomputes the union of trigger sets along the active path,
+// and along the path of the state a waiting region is to enter, which it parks for.
 func (m *Machine[T]) refreshRegionMask(r *RegionState) {
 	r.triggers.clear()
-	for _, id := range r.ActivePath {
+	m.orPath(&r.triggers, r.ActivePath)
+	if target, ok := m.nodes[r.target]; ok && (r.proposed || r.asked) {
+		m.orPath(&r.triggers, target.Path)
+	}
+}
+
+// orPath adds the trigger sets of the states along path to mask.
+func (m *Machine[T]) orPath(mask *triggerMask, path []StateID) {
+	for _, id := range path {
 		if n, ok := m.nodes[id]; ok {
-			r.triggers.or(&n.triggers)
+			mask.or(&n.triggers)
 		}
 	}
 }
