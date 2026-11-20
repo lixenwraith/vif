@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -408,6 +409,38 @@ func TestTutorialsFreeLaysEachBlockAlone(t *testing.T) {
 	}
 	if state() != "Free" || runs < 2 {
 		t.Fatalf("the tutorial stands in %s with %d blocks laid, want Free with its corpus", state(), runs)
+	}
+}
+
+// Stand places the cursor last spawned: one that went and came back as a new
+// entity, as a rejoin after its wraith went does, is stood on the next lesson's
+// practice line all the same.
+func TestTutorialStandsACursorThatCameBack(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	a.Tick(10)
+	var first, second core.Entity
+	w.RunSafe(func() { first = w.Resources.Player.Entity })
+	a.Context().PushEventOrigin(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: 0}, event.OriginDebug)
+	a.Settle()
+	a.Context().PushEventOrigin(event.EventCursorSpawnRequest,
+		&event.CursorSpawnRequestPayload{X: 40, Y: 20, Heat: 100, Energy: 100}, event.OriginDebug)
+	a.Settle()
+	w.RunSafe(func() { second = w.Resources.Player.Entity })
+	if second == 0 || second == first {
+		t.Fatalf("the cursor came back as entity %d, want a new one beside %d", second, first)
+	}
+	tutorialKeys(t, a, "s")
+	if pos, _ := w.LocalCursor(); pos.X != 4 || pos.Y != 14 {
+		t.Fatalf("s left the new cursor at (%d, %d), want it stood at (4, 14)", pos.X, pos.Y)
 	}
 }
 

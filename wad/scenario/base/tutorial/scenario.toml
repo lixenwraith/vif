@@ -830,7 +830,7 @@ on_enter = [
     { macro = "Say", message = "That is the tutorial: the code around you is yours to move through, type and edit; :n starts over" },
 ]
 
-# --- Player: one cursor at the practice line, with no gun, so Enter and Space do nothing ---
+# --- Player: one cursor at the practice line; with no weapon or particle system, Enter and Space do nothing ---
 
 [states.PlayerBoot]
 parent = "Root"
@@ -848,8 +848,10 @@ transitions = [
     { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
+# The cursor last spawned is the one Stand places: a rejoin after the wraith went
+# brings a new one
 [states.PlayerActive]
 parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventWeaponRemoveRequest", payload = { entity = 0, weapon = "gun" }, payload_vars = { entity = "player_entity" } },
+transitions = [
+    { trigger = "EventCursorSpawned", internal = true, capture_vars = { entity = "player_entity" } },
 ]
