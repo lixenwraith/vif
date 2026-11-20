@@ -158,6 +158,11 @@ func (m *Membership) SeatBots() error {
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
 func (m *Membership) addSeatLocked(spec string) error {
+	// A seat is a roster guest: under a scenario seating one player it would take
+	// the place the person has, or wait for one that never frees
+	if m.scenario.MaxPlayers <= 1 {
+		return fmt.Errorf("scenario %s seats one player, so no bot joins it", m.scenario.Shown())
+	}
 	graph, err := LoadBotGraph(m.run.Resources(), *m.scenario, spec)
 	if err != nil {
 		return err

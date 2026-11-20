@@ -311,3 +311,26 @@ func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {
 		}
 	}
 }
+
+// The tutorial seats one player, so a bot asked for is refused before any session
+// opens for it, saying why, and the run plays on alone.
+func TestTutorialSeatsNoBot(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	a.Tick(10)
+	injectExCommand(t, a, "bot")
+	a.Tick(2)
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "seats one player, so no bot joins it") {
+		t.Fatalf(":bot in the tutorial reports %q", got)
+	}
+	if a.membership.SessionTransport() != nil {
+		t.Fatal(":bot opened a session for a bot the tutorial has no seat for")
+	}
+}

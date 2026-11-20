@@ -81,7 +81,7 @@ join or a reload that installs a later lesson lays that lesson's text in place o
 the first one its own boot laid. Lesson 1's x is a typeable glyph, which `$`, `w`
 and `e` reach as they reach a word.
 
-The tutorial seats one player (`max_players = 1`). Its lessons end
+The tutorial seats one player (`max_players = 1`) and takes no bot. Its lessons end
 on a player's edits, typed glyphs and mode changes, local events that move the
 machine only where that player's instance holds it (D-20). A guest of a server
 holding it moves on by the cursor, `s` and `S` alone; `:leave` plays on alone,

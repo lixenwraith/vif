@@ -1027,6 +1027,8 @@ unattended.
   pending delayed actions, the prediction ledger or network state. A keystroke can
   miss, as a person's can.
 - It issues no commands.
+- A scenario seating one player (`max_players = 1`, as the tutorial) takes none:
+  `-bot` and `:bot` are refused before a session opens, and a fleet offers none.
 - It reaches only what its view shows. A seat's view is the size of its holder's
   screen, about the bot's own cursor: on a map no larger than that screen it
   shows the cells its holder sees, and on a larger one a window of that size
