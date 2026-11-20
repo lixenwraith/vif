@@ -207,6 +207,7 @@ Docs · Libraries · Branches.
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
   mode changes only through the router (`transitionMode`), which keeps the input
   machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
+  A scenario's `EventModeRequest` is left on the context for the router to take.
 - `World.PushLocal` stamps player in any scope, and the FSM bridge pushes every
   class but local in the ambient domain, Shared during a region's actions. A
   request a region raises on every instance that changes Shared state is
@@ -824,6 +825,11 @@ Docs · Libraries · Branches.
   "this player's place is still linked to the run it left". `-nw` seats a run
   without its press, a run started with `-bot -watch` is driven and never redials,
   and `kill -9` on a `-serve` host is a host lost, where a signal it takes drains.
+- A browser plays a scenario that is not embedded, as the tutorial, only as a
+  server's guest, so a change to one is read there too: `-serve <addr> -players 1
+  -probe <addr>` and a `-join` in tmux. A page's reload is `kill -9` on that guest
+  and a second run from its `XDG_STATE_HOME`, which takes the place back while the
+  probe reads `ready=true` with `guests` at `capacity`.
 - A tree is a guest with `-relay <addr>`, a run that joined there with a `-relay` of
   its own, and one behind that: `./script/test.sh tree` loses its host. A Go test
   has no restart loop, so a run coming back through its relay's new run is seen
@@ -1261,17 +1267,14 @@ Docs · Libraries · Branches.
 - A transition on a request runs its entry before the system that handles the
   request, so what that system pushes lands after the entry's events: typing's step
   right overtook the next lesson's cursor placement until the tutorial's `Stand`
-  took `delay_ms = 1`. A mode is the router's alone, so a lesson entered from
-  Insert stays in Insert.
+  took `delay_ms = 1`. A mode is the router's alone: `Stand` asks for Normal, which
+  the router takes on its input tick, so a headless test runs `InputTick` too.
 - The router's change history ends at a glyph clear (`glyph.cleared`) and a new
   game: without the first, `u` in a lesson laid back the line the lesson before
   deleted, into cells the new one left empty.
 - Reading a pane: the status bar's first item is the FSM state and its time, the
   column ruler counts from the cursor, and the large glyph some way off the cursor
   is the magnifier, the glyph under it in the large face.
-- `TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists
-  (`internal/app/domain_test.go`), not every one shipped: a new scenario adds its
-  directory there, or its triggers go unchecked.
 - The entry's top-level keys the FSM loader does not know are the embedder's
   (`resource.entryKeys` lists them), so a new entry key needs no loader change
   beyond reading its files into the container.

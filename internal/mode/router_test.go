@@ -659,3 +659,106 @@ func TestDeletingToTheRowsEndNeverReachesBack(t *testing.T) {
 		}
 	}
 }
+
+// TestARepeatedFindTakesItsCountAndPassesATillsTarget: ; and , repeat the last find
+// a count of times, and a till the cursor already stands against goes on to the
+// next target, as vim's do, so ; after t never sticks.
+func TestARepeatedFindTakesItsCountAndPassesATillsTarget(t *testing.T) {
+	for _, c := range []struct {
+		keys string
+		at   int
+	}{
+		{"fx;", 3},
+		{"fx2;", 5},
+		{"fx3;,", 5},
+		{"tx", 1},
+		{"tx;", 2},
+		{"tx;;", 4},
+		{"tx2;", 2},
+		{"$Tx;", 6},
+		{"$Tx,", 8},
+		{"$Tx2;", 6},
+	} {
+		ctx, keys := lineWorld(t, "a xx x x x", 0)
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); pos.X != c.at {
+			t.Errorf("%q on \"a xx x x x\" left the cursor at %d, want %d", c.keys, pos.X, c.at)
+		}
+	}
+}
+
+// { and } cross a run of empty rows to the empty row past the next block, as vim's
+// cross a run of blank lines, and stop at the map's edge row where no block follows.
+func TestParagraphMotionsCrossARunOfEmptyRows(t *testing.T) {
+	for _, c := range []struct {
+		keys string
+		row  int // -1: the map's last
+	}{
+		{"}", 1},
+		{"j}", 5},
+		{"j2}", 7},
+		{"j3}", -1},
+		{"6j{", 5},
+		{"6j2{", 3},
+		{"3j{", 0},
+		{"jj}{", 3},
+	} {
+		ctx, keys := lineWorld(t, "a\n\n\n\nb\n\nc", 0)
+		want := c.row
+		if want < 0 {
+			want = ctx.World.Resources.Config.MapHeight - 1
+		}
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); pos.Y != want {
+			t.Errorf("%q over a, three empty rows, b, one and c left the cursor on row %d, want %d", c.keys, pos.Y, want)
+		}
+	}
+}
+
+// A play mode a scenario asks for is entered as its key enters it, the parser with
+// it, on the input tick or before the next intent, journaled as a macro's change, a
+// move no key made; an ask made under a search waits for the search to close, which
+// it would cut short.
+func TestTheRouterEntersThePlayModeAScenarioAskedFor(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	ctx.AutoFire.Store(engine.AutoFireOff)
+	key := func(k terminal.Key, ch rune) {
+		if in := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); in != nil {
+			r.Handle(in)
+		}
+	}
+	key(terminal.KeyRune, 'i')
+	w.Resources.Event.Queue.Consume()
+	ctx.AskMode(core.ModeNormal)
+	r.ProcessInputTick()
+	var origin []event.Origin
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventModeChanged {
+			origin = append(origin, ev.Origin)
+		}
+	}
+	if ctx.GetMode() != core.ModeNormal || len(origin) != 1 || origin[0] != event.OriginMacro {
+		t.Fatalf("an ask for Normal from Insert left %v, its changes from %v, want Normal from a macro", ctx.GetMode(), origin)
+	}
+	if key(terminal.KeyRune, 'v'); ctx.GetMode() != core.ModeVisual {
+		t.Fatalf("v after the ask left %v, want Visual: the parser stayed in Insert", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, '/')
+	ctx.AskMode(core.ModeInsert)
+	if r.ProcessInputTick(); ctx.GetMode() != core.ModeSearch {
+		t.Fatalf("an ask under a search left %v, want the search", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	if r.ProcessInputTick(); ctx.GetMode() != core.ModeInsert {
+		t.Fatalf("the ask once the search closed left %v, want Insert", ctx.GetMode())
+	}
+	key(terminal.KeyEscape, 0)
+	ctx.AskMode(core.ModeVisual)
+	if key(terminal.KeyRune, 'l'); ctx.GetMode() != core.ModeVisual {
+		t.Fatalf("an ask before the next key left %v, want Visual", ctx.GetMode())
+	}
+}

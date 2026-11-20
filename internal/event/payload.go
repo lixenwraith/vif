@@ -218,11 +218,11 @@ type DrainDefeatedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// MetaStatusMessagePayload is a message for the status bar: a notice, or an alert
-// when a failure or a change to the session must be seen (parameter.StatusKind).
+// MetaStatusMessagePayload is a message for the status bar, ranked and shown for as
+// long as its kind says (parameter.StatusKinds): a notice unless it names another.
 type MetaStatusMessagePayload struct {
-	Message string `toml:"message"`
-	Alert   bool   `toml:"alert"`
+	Message string               `toml:"message"`
+	Kind    parameter.StatusKind `toml:"kind"`
 }
 
 // MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)
@@ -621,9 +621,9 @@ var CharacterTypedPayloadPool = sync.Pool{
 
 // KeyCapturePayload names the keys to capture, empty to release them. Entity scopes it
 // to the instance driving that cursor, every instance when zero; Modes to the play
-// modes it holds in, every one when unset. Idle leaves a key to a count, operator or
-// prefix already pending, so a find or a register still takes it, and Releases asks a
-// console keyboard for releases too, switching it raw while the capture holds.
+// modes it holds in, every one when unset. Idle leaves a key to an operator, prefix
+// or label pending, as a find's or a macro's, and drops a lone count; Releases asks
+// a console keyboard for releases too, switching it raw while the capture holds.
 type KeyCapturePayload struct {
 	Keys     string        `toml:"keys"`
 	Entity   core.Entity   `toml:"entity"`

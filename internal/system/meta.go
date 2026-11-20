@@ -120,6 +120,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventKeyCaptureRequest,
 		event.EventInputReport,
 		event.EventModeChanged,
+		event.EventModeRequest,
 		event.EventLevelSetup,
 		event.EventScreenResize,
 		event.EventMetaTelemetryRequest,
@@ -180,6 +181,13 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.ctx.SetPlayMode(p.Mode)
 		s.ctx.World.UpdateBoundsRadius()
+
+	case event.EventModeRequest:
+		// A replay's play mode is the recording's, whose journal holds the change: an
+		// ask left there would be taken by its viewer's next key
+		if p, ok := ev.Payload.(*event.ModeChangedPayload); ok && core.ModeMaskPlay.Has(p.Mode) && !s.world.FollowsJournal() {
+			s.ctx.AskMode(p.Mode)
+		}
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
@@ -547,11 +555,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 
 // handleMessageRequest displays a message in status bar
 func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
-	kind := parameter.StatusNotice
-	if payload.Alert {
-		kind = parameter.StatusAlert
-	}
-	s.ctx.SetStatusMessage(payload.Message, kind)
+	s.ctx.SetStatusMessage(payload.Message, payload.Kind)
 }
 
 // handleLevelSetup reconfigures map dimensions and clears entities

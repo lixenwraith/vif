@@ -2,6 +2,7 @@ package content
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/core"
@@ -20,8 +21,9 @@ type tomlBlock struct {
 	Lines []string `toml:"lines"`
 }
 
-// parseTOML reads an authored corpus. Lines are literal: no comment stripping
-// and no minimum length. Oversized blocks are split, never dropped.
+// parseTOML reads an authored corpus. Lines are literal: no comment stripping,
+// no minimum length, and a line's indent kept, as the gap a block lays before it.
+// Oversized blocks are split, never dropped.
 func parseTOML(data []byte, p *Policy) ([]core.CodeBlock, error) {
 	parser := toml.NewParser(data)
 	parsed, err := parser.Parse()
@@ -44,10 +46,10 @@ func parseTOML(data []byte, p *Policy) ([]core.CodeBlock, error) {
 	for _, b := range cfg.Blocks {
 		lines := make([]string, 0, len(b.Lines))
 		for _, raw := range b.Lines {
-			text, _, s := sanitizeLine([]byte(raw), scratch, p)
+			text, indent, s := sanitizeLine([]byte(raw), scratch, p)
 			scratch = s
 			if text != "" {
-				lines = append(lines, text)
+				lines = append(lines, strings.Repeat(" ", indent)+text)
 			}
 		}
 		for len(lines) > 0 {

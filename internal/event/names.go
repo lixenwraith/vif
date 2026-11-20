@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // PayloadNames are the names a payload's enum fields take, each type's from its
@@ -123,6 +124,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.Behavior](component.BehaviorNames[:]...).
 		Enum[component.CombatAttackType](component.CombatAttackNames[:]...).
 		Enum[core.GameMode](core.ModeNames[:]...).
+		Enum[parameter.StatusKind](parameter.StatusKindNames[:]...).
 		Mask[core.ModeMask](core.ModeMaskNames).
 		Enum[AudioMuteToggleMode](muteToggleModeNames[:]...).
 		Enum[InputSource](inputSourceNames[:]...).

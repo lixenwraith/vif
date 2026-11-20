@@ -7,7 +7,7 @@ type Origin uint8
 const (
 	OriginSystem  Origin = iota // Simulation-internal, not journaled
 	OriginInput                 // Keyboard or mouse, via the mode router
-	OriginMacro                 // Macro playback and auto-fire, which is a macro by another name
+	OriginMacro                 // Macro playback and auto-fire, which is a macro by another name, and a scenario's mode ask the router takes
 	OriginCommand               // Ex command line
 	OriginNetwork               // Remote producer
 	OriginDebug                 // Harness and out-of-band control, such as App.Region and -script events

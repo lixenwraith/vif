@@ -171,6 +171,7 @@ var ConsoleKind256 = [parameter.StatusKindCount]uint8{
 	parameter.StatusError:    ConBrightRed,
 	parameter.StatusAlert:    ConBrightYellow,
 	parameter.StatusAnnounce: ConBrightMagenta,
+	parameter.StatusGoal:     ConWhite,
 }
 
 const ConsoleStamp256 = ConGray

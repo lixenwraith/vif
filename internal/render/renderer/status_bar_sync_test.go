@@ -361,3 +361,32 @@ func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 		}
 	}
 }
+
+// TestTheBarShowsAMessageThenThePromptThenTheGoal: a scenario's goal is held under
+// every message and the press a held game waits on, so what the run reports shows
+// over the prompt, and the goal returns once the game runs and a message has gone.
+// The start screen, whose button asks, shows neither.
+func TestTheBarShowsAMessageThenThePromptThenTheGoal(t *testing.T) {
+	const ask, goal, joining = "Click or press a key to start", "Lesson 1 of 22: move onto the x", "Joining 127.0.0.1:7777..."
+	r, clock := newStatusBar(t)
+	held, running := statusContext(80), statusContext(80)
+	held.Prompt = ask
+	reads := func(rc render.RenderContext, want, when string) {
+		t.Helper()
+		if bar, _ := statusRow(r, rc, 23); !strings.Contains(bar, want) {
+			t.Errorf("%s the bar reads %q, want %q", when, bar, want)
+		}
+	}
+	r.gameCtx.SetStatusMessage(goal, parameter.StatusGoal)
+	reads(held, ask, "with a goal under the start prompt")
+	start := held
+	start.StartScreen = true
+	if bar, _ := statusRow(r, start, 23); strings.Contains(bar, ask) || strings.Contains(bar, goal) {
+		t.Errorf("under the start screen the bar reads %q, want neither its button's prompt nor the goal", bar)
+	}
+	r.gameCtx.SetStatusMessage(joining, parameter.StatusProgress)
+	reads(held, joining, "with a join under way")
+	r.gameCtx.SetStatusMessage("Auto: on", parameter.StatusNotice)
+	clock.Step(parameter.StatusKinds[parameter.StatusNotice].Shown)
+	reads(running, goal, "a notice's time after the start")
+}

@@ -66,11 +66,12 @@ func (m *Membership) announcedLocked() *link.Beacon {
 	if len(doors) == 0 {
 		return nil
 	}
-	// Who is at the game now: a place a Wraith keeps is one a newcomer may be given.
+	// Who is at the game now: a place a Wraith keeps is one a newcomer may be given,
+	// where the session yields places (yieldsPlaces).
 	m.sessionMu.Lock()
-	players := 0
+	players, yields := 0, m.yieldsPlaces()
 	for _, p := range m.sessionRoster {
-		if !p.Away && p.Slot != parameter.NoPlayerSlot {
+		if (!p.Away || !yields) && p.Slot != parameter.NoPlayerSlot {
 			players++
 		}
 	}

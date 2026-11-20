@@ -35,11 +35,11 @@ A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
 (empty `keys` releases them; `entity` scopes the capture to one cursor's instance;
 `modes` names the play modes it holds in, every one when unset; `idle = true`
-leaves a key to a count, operator or prefix already pending; `releases = true`
+leaves a key to an operator, prefix or label already pending; `releases = true`
 asks a console keyboard for releases too) and `MetaSystem` stores the set in
 `GameContext.KeyCapture`, which the parser reads without the world lock. In the
 modes the capture holds in, a captured key cancels any pending count or operator,
-unless the capture is idle, and becomes `IntentKeyPress`, its release
+an idle capture a count alone, and becomes `IntentKeyPress`, its release
 `IntentKeyRelease` in any mode, and its repeat nothing while it is held. Search
 and Command text, Escape and other special keys are untouched, and a reset
 releases the capture.
@@ -142,6 +142,13 @@ world, the journal and a reset never see them, nor the pause a solo game takes f
 them, nor what an overlay shows. Leaving one returns to Normal, recorded when that
 changes the play mode, but for the command line the console opens, which returns
 to the console.
+
+A scenario asks for Normal, Visual or Insert with `EventModeRequest { mode }`:
+`MetaSystem` leaves the ask on the context (`GameContext.AskMode`), and the router
+enters it as the mode's key would, before its next intent or on its input tick,
+journaled as a macro's change, which counts as no action; an ask under the command
+line, an overlay or a search waits for it to close, and a replay takes none, playing
+the change from its journal.
 
 A new game a person plays waits at its first tick in a start hold, the `:pause`
 hold marked `engine.HoldStart`: at launch, on `:n`, the menu's Restart game and Start and a
@@ -287,7 +294,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 | `0 ^ $` | Line start, first non-whitespace, line end. |
 | `[ O` / `] o` | Nearest glyph above / below in the same column. |
 | `M m G` | Map middle row, middle column, bottom row. |
-| `{ }` | Previous / next paragraph. |
+| `{ }` | Previous / next paragraph: the empty row past the next block, across a run of empty rows. |
 | `%` | Matching bracket. |
 | `f F t T` + character | Find/till forward or backward. |
 | `; ,` | Repeat the last find in the same or opposite direction. |
@@ -337,7 +344,9 @@ search forward and back for the word under the cursor, or else the first after i
 on its row, whole, so no word glyph adjoins a match; on a row with no word from the
 cursor on, the first run of punctuation from it, matched anywhere. Each becomes the
 search `n` and `N` repeat. A count on `n`, `N`, `*` or `#` goes that many matches
-on, round the map as often as it takes. A step searches the one way it goes: a
+on, round the map as often as it takes. A count on `;` or `,` repeats the find that
+many times, and a till repeated once from against its target goes on to the next,
+as Vim's does, so `;` after `t` never sticks. A step searches the one way it goes: a
 forward step with its match ahead on a 499 by 246 map read 2.4 ms while it also
 ran the backward search round the map, and 1.5 µs since.
 

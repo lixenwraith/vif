@@ -305,9 +305,24 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}, nil
 	})
 
+	// PayloadCovers passes when the event's range takes cell x, y, as the typing
+	// system reads a delete's: of any shape, its ends in either order
+	m.RegisterPayloadGuard("PayloadCovers", func(a *cellArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
+		if _, ok := t.Payload.(cellRange); !ok {
+			return nil, fmt.Errorf("event '%s' carries no range of cells", t.Event)
+		}
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			r, ok := payload.(cellRange)
+			return ok && r.Covers(a.X, a.Y)
+		}, nil
+	})
+
 	// PayloadExists reports whether the event carried a payload (useful inside Or)
 	static(m, "PayloadExists", func(_ T, _ *fsm.RegionState, payload any) bool { return payload != nil })
 }
+
+// cellRange is a payload naming cells, as a delete's range does
+type cellRange interface{ Covers(x, y int) bool }
 
 // === Payload Field Extraction ===
 

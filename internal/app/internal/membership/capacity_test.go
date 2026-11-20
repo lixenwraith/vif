@@ -4,12 +4,19 @@
 package membership
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/config"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/lifecycle"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // stubRun is a run as a membership decision that reads only its mode and its lobby
@@ -99,5 +106,51 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 				t.Fatalf("quorum = %d, want %d", got, tt.quorum)
 			}
 		})
+	}
+}
+
+// TestASessionsOnePlaceWaitsForItsOwnPlayer: the place of a session's one player who
+// left waits for that player's key, as a reloaded page dials back with: the probe
+// reads ready for that dial, and a stranger's or a bot's is refused full, dismissing
+// nobody, where a session of more places gives the place up (yieldLocked).
+func TestASessionsOnePlaceWaitsForItsOwnPlayer(t *testing.T) {
+	t.Parallel()
+	sc, err := resource.LoadScenario(resource.Options{Embedded: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := network.NewKey().ID()
+	m := &Membership{run: stubRun{mode: config.ModeServer}, scenario: &sc, cfg: &config.Membership{Participants: 1},
+		wiring: &Wiring{}, life: lifecycle.New(lifecycle.Policy{}), awayOrder: []link.PeerID{2},
+		sessionRoster: []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: parameter.NoPlayerSlot},
+			{ID: 2, Slot: 0, Away: true, Key: key}}}
+	if !m.PlaceWaits() {
+		t.Fatal("a one-place session whose player left reads as seating no dial; its door takes that player back")
+	}
+	for range 2 {
+		_, err := m.assignFor(event.JoinAnchor{}, 0, nil, []string{network.NewKey().ID()}, nil, nil, seatAnyone)
+		if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) || m.dismissWraith.Load() != 0 {
+			t.Fatalf("a newcomer to a one-place session whose player left was answered %v, participant %d dismissed; want it full, nobody dismissed",
+				err, m.dismissWraith.Load())
+		}
+	}
+	if p, err := m.keyedLocked([]string{key}, 0, nil, false); err != nil || p.ID != 2 {
+		t.Fatalf("the player's own key took back place %d (%v); want its own, 2", p.ID, err)
+	}
+}
+
+// TestAHostsOwnOneSeatRefusesADialForGood: a host playing a scenario of one player
+// holds its one seat itself, so a dial is refused for good, the door a spectator's.
+func TestAHostsOwnOneSeatRefusesADialForGood(t *testing.T) {
+	t.Parallel()
+	sc, err := resource.LoadScenario(resource.Options{Embedded: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc.MaxPlayers = 1
+	m := &Membership{run: stubRun{mode: config.ModeHeadless}, scenario: &sc, cfg: &config.Membership{}, wiring: &Wiring{}}
+	if err := m.fullLocked(); !errors.Is(err, &network.Refusal{Code: network.RefusalNoSeat}) || network.RetryOf(err) != network.RetryNever ||
+		!strings.Contains(err.Error(), "seats one player, so others can only spectate") {
+		t.Fatalf("a dial at a host whose one seat is its own was refused %v; want no seat, for good, others spectating", err)
 	}
 }

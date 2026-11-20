@@ -616,6 +616,9 @@ func (a *App) initScheduler() error {
 	if err := a.scheduler.LoadScenarioFromFS(a.scenario.FS(), a.scenario.Entry(), register); err != nil {
 		return fmt.Errorf("load scenario %s: %w", a.scenario.Name, err)
 	}
+	if err := resource.CheckLocalTriggers(a.scenario, a.scheduler.LocalTriggers()); err != nil {
+		return fmt.Errorf("scenario %s: %w", a.scenario.Name, err)
+	}
 
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
