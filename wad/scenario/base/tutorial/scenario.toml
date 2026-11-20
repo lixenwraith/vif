@@ -189,7 +189,7 @@ on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "h j k l" },
     { macro = "Note", text = "h moves the cursor left and l right; j moves it down and k up.", row = 8 },
-    { macro = "Note", text = "The arrow keys move the same way; H J K L leap half a screen at a time.", row = 9 },
+    { macro = "Note", text = "The arrow keys move the same way; page up and page down leap half a screen.", row = 9 },
     { macro = "Note", text = "A lesson ends when you reach its goal; s skips a lesson and S goes back.", row = 10 },
     { macro = "Note", text = "Stand on the x at the end of the third line below to go on.", row = 11 },
     { macro = "Line", text = "start on this line", row = 14 },
@@ -354,6 +354,7 @@ on_enter = [
     { macro = "Note", text = "In insert mode, type the glyph under the cursor to clear it and move on.", row = 9 },
     { macro = "Note", text = "A match feeds the heat and the boost; a miss burns ten heat.", row = 10 },
     { macro = "Note", text = "Type both lines: esc, j, ^ and i again take you to the second one.", row = 11 },
+    { macro = "Note", text = "In normal mode esc opens the menu and pauses; esc again closes it.", row = 12 },
     { macro = "Line", text = "type me", row = 14 },
     { macro = "Line", text = "then me", row = 15 },
     { macro = "Stand", x = 4, y = 14 },
@@ -365,7 +366,8 @@ transitions = [
     { macro = "Back", target = "DeleteMotion" },
 ]
 
-# A lesson that ends on a typed glyph waits for esc, so the next starts in normal mode
+# A lesson that ends on a typed glyph waits for the esc that ends typing, which would
+# open the menu over the next lesson
 [states.InsertEsc]
 parent = "Insert"
 on_enter = [
@@ -620,7 +622,7 @@ transitions = [
 [states.UndoAgain]
 parent = "Undo"
 on_enter = [
-    { macro = "Say", message = "ctrl-r makes the delete again" },
+    { macro = "Say", message = "ctrl-r makes the delete again, or . repeats it" },
 ]
 transitions = [
     { trigger = "EventDeleteRequest", target = "Bracket" },
@@ -735,7 +737,7 @@ on_enter = [
     { action = "DecrementVar", payload = { name = "bottom" } },
     { macro = "Heading", text = "gg G M" },
     { macro = "Note", text = "gg jumps to the top row of the map and G to its bottom row.", row = 8 },
-    { macro = "Note", text = "M finds the middle row; gm is the map's centre.", row = 9 },
+    { macro = "Note", text = "M finds the map's middle row.", row = 9 },
     { macro = "Note", text = "go is the top left corner and g$ the bottom right.", row = 10 },
     { macro = "Note", text = "Press G to reach the bottom row, then gg to come back to the top.", row = 11 },
     { macro = "Line", text = "G and gg move along this column", row = 14 },
