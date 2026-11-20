@@ -856,18 +856,14 @@ since it spells them. What it costs, and what it does not reach:
   removes only sensitive data that rotating a credential cannot make safe, so it
   will not purge them. PR titles and bodies are edited on GitHub by hand.
 
-### Carry the notices in the session image
+### Wrap and scroll the About window
 
 - Priority: P2
-- Affected files: `deploy/docker/Dockerfile`, `internal/render/renderer/overlay.go`
+- Affected files: `internal/render/renderer/overlay.go`
 
-The release archives, `make install`, the page and the APK carry `NOTICES`
-([Packaging §1](packaging.md#1-shared-guidelines)); the session image is the
-binary alone on `scratch`. Its builder, which has no `make`, would run `make
-notices TAGS=vif_headless NOTICES=/out/NOTICES` and the runtime stage copy that
-and `LICENSE`. The About window neither wraps a value nor scrolls, so at 80x24
-it stops above its `licence` and `notices` rows; once it does both it can name
-what the build links, from its build info.
+The About window neither wraps a value nor scrolls, so at 80x24 it stops above
+its `licence` and `notices` rows; once it does both it can name what the build
+links, from its build info.
 
 ### Sign the Android build with a release key
 

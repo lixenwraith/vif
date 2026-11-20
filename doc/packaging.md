@@ -55,11 +55,13 @@ These hold regardless of which repository is targeted first.
   file stops the target; purego's (Apache-2.0, for the desktop window) is in it
   wherever the build links purego. `make release` writes it and `make install`
   stops without it; the release workflow writes each archive's for that
-  archive's build, and Gradle the Android library's (`NOTICES_OF=android`, which
-  fetches `golang.org/x/mobile` where the cache lacks it). The font atlas the
-  window and `vif.wasm` draw cells with, `internal/asset/font/mono.toml`, is
-  rendered from a font under the Bitstream-Vera licence and comes from no module,
-  so `internal/asset/font/LICENSE` travels beside `NOTICES` as `LICENSE.font`.
+  archive's build, Gradle the Android library's (`NOTICES_OF=android`, which
+  fetches `golang.org/x/mobile` where the cache lacks it) and the session
+  image's builder the headless build's, which the image holds as `/NOTICES`
+  beside `/LICENSE`. The font atlas the window and `vif.wasm` draw cells with,
+  `internal/asset/font/mono.toml`, is rendered from a font under the
+  Bitstream-Vera licence and comes from no module, so
+  `internal/asset/font/LICENSE` travels beside `NOTICES` as `LICENSE.font`.
   The About overlay points to `NOTICES`.
 
 ## 2. Release surface

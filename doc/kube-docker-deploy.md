@@ -222,7 +222,9 @@ that just ended rather than hours of finished ones.
 ./deploy/update.sh image
 ```
 
-It builds the `vif_headless` profile once with Docker, refuses an image without the
+The image is the static `vif_headless` binary with `/LICENSE` and its build's
+`/NOTICES` ([Packaging §1](packaging.md#1-shared-guidelines)) beside it. The
+command builds it once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
 imports it into K3s pinned, records it as an installed router's
 `VIF_ROUTER_IMAGE` (§11 writes the first), removes older tags, and restores the

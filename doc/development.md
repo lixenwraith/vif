@@ -91,7 +91,7 @@ a user install, else `$(PREFIX)/etc`) retarget `install`. See [Packaging](packag
 `CONTAINER_ENGINE`, `IMAGE` and `IMAGE_TAG` retarget the image build — the engine
 defaults to `docker` and accepts `podman` — and `IMAGE_VERSION` and `IMAGE_REVISION`
 (default the tag and `HEAD`) become its OCI labels. The image is a `scratch` layer
-holding one static non-root `vif_headless` binary; `image-check` is the only way to
+holding one static non-root `vif_headless` binary with its `NOTICES` and `LICENSE`; `image-check` is the only way to
 prove it starts, because there is no shell in it to ask.
 Release-style profile targets use stripped linker flags; `dev` intentionally
 retains diagnostics and enables race instrumentation.
