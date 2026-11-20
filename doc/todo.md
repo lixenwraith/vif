@@ -731,11 +731,8 @@ tutorial attach. What is left:
 - Affected files: `wad/scenario/base/tutorial/`
 - Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
-The tutorial runs twenty-two lessons: the motions, counts, `x dd`, `d` with a
-motion, `i` and typing, `A I a`, `o O`, `c cc`, `r ~`, `.`, `y p P`, `u` and
-Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
-keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
-round adds `[ ]`, the markers and macros, practises the keys it only tells
+The next round of lessons ([Tutorial §2](tutorial.md#2-what-it-holds) lists
+what runs) adds `[ ]`, the markers and macros, practises the keys it only tells
 (`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
 map's edge (`origin`, [FSM reference](fsm-reference.md#event-emission)),
 and cues a lesson cleared.
