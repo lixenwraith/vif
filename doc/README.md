@@ -50,7 +50,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end checks](../script/README.md) | Operational detail | Which checks need a built binary, a terminal or the deploy scripts, and what does each assert or measure? |
-| [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
+| [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph, have its networks learn and tell whether they did? What does a network read and ask for? |
 | [Configuration menu](config-menu.md) | User guide | What does each page of the Ctrl-G menu control? |
 
 Focused references:

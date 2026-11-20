@@ -665,6 +665,9 @@ as the run stops. A browser keeps none. The learner lives beside the driver,
 outside the world and its captures. The file is JSON because one cut short
 never parses, where a TOML one could read as fewer members.
 
+`make install-config CLEAN=1` removes the user root's `bot/` whole, a player's
+graphs and populations with it: copy them out first.
+
 A population starts over when its file is removed (`clear`), when the network's
 layout changes (the inputs read, `hidden`, or the outputs it has), which the
 file's `layout` digest names, or when what a round scores changes, which its
