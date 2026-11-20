@@ -376,12 +376,8 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   - the gun for a bot whose auto-fire is off: the special attack is every
     shipped network's to ask for, and no output asks for the gun, which
     auto-fire `main` fires for each of them;
-  - what an ask costs. Each is an action of the bot's rate, four a second of
-    `default`'s twelve while it asks always, and unlearned it fields 616,485
-    for 624,846 in the embedded scenario and a median of 5,331 for 9,341 over
-    twelve rounds of `td`. At sixteen a second it falls inside 3,000 ticks
-    of the embedded scenario, where auto-fire's special played fourteen to
-    twenty as twelve: not explained, so the rate is not raised to pay;
+  - when to ask. The one weight written asks always, four of `default`'s
+    sixteen actions a second, and no run has yet learned to ask for less;
   - a round that needs no new game: closing the embedded one each half hour
     earns a tenth less than an unbroken game does, and waits on a death that
     resets none;

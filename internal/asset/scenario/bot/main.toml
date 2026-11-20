@@ -4,7 +4,8 @@
 # are a model learned here: the member a run alone fielded. A solo run learns on
 # from them, a round each half hour, and any other fields the best it kept, or these.
 [bot]
-actions_per_second = 12
+# Twelve for the keys and four for the special attack walk asks for
+actions_per_second = 16
 # The gun fires by itself and the special attack where walk asks for it
 auto_fire = "main"
 learn = true
@@ -27,8 +28,10 @@ inputs = [
 [regions.play]
 initial = "Seek"
 
-# The special attack is walk's to ask for whatever play is doing
-[regions.fire]
+# The special attack is walk's to ask for whatever play is doing. Regions update
+# in name order, so this one follows play: a key goes ahead of a special attack
+# asked for in its step, whose blast would take the key's glyph
+[regions.special]
 initial = "Fire"
 
 [states.Fire]
