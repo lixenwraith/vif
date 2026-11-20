@@ -40,7 +40,7 @@ func Schema(w io.Writer) error {
 	// a bot graph's, which refuses the actions that write the world, and a behavior
 	// program's, with its probes, sustained verbs and flags. Names lists, by Go
 	// type, the names a payload field of that type takes, and BotCatalogue what a
-	// bot graph's network reads and asks for.
+	// bot graph's network reads and asks for and what its score may pay for.
 	schema := struct {
 		SchemaVersion    int                        `json:"schema_version"`
 		Events           []eventSchema              `json:"events"`

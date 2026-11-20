@@ -266,7 +266,7 @@ func main() {
 			if st.Games > 1 {
 				games = fmt.Sprintf("%d games, ", st.Games)
 			}
-			fmt.Printf("Bot stopped: %s%d ticks, %d actions, fitness %d\n", games, st.Ticks, st.Injected, st.Fitness)
+			fmt.Printf("Bot stopped: %s%d ticks, %d actions, %d rounds, score %.0f\n", games, st.Ticks, st.Injected, st.Rounds, st.Score)
 			for _, l := range st.Learn {
 				if l.Scored > 0 {
 					fmt.Printf("Bot learned %s: rounds %d of %d, recent %.0f, fielding %.0f over %d\n",

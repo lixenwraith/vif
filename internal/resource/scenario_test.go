@@ -583,7 +583,7 @@ func TestAScenarioCarriesItsBotsAsFilesOfItsOwn(t *testing.T) {
 
 // flyer is a bot of two networks, fly and kraken, each with the table given
 func flyer(fly, kraken string) string {
-	return "# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
+	return "# a bot that flies\n[bot]\nlearn = true\nscore = { travel = 1 }\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
 		"\n[network.kraken]\ninputs = [\"row\"]\noutputs = [\"move\"]\n" + kraken +
 		"\n[regions.play]\ninitial = \"A\"\n\n[states.A]\non_update = [{ action = \"Steer\", payload = { network = \"fly\" } }]\n"
 }

@@ -294,7 +294,9 @@ of Lixen's that bind, as they stood on 2026-11-20:
   and its rounds then score that.
 - No command reads a model held out: it takes a scratch test
   ([agent notes](agent-notes.md#measuring)).
-- A code species' kill weighs 5 whatever its hit points, the Kraken's aside.
+- The source `kill` pays a code species' kill flat, whatever its hit points.
+- A score names sources of the catalogue only. An event by name, with the field
+  that names its owner, would let a scenario pay for one without Go.
 
 ### Let a scenario expose values of its own to a bot
 
@@ -306,6 +308,7 @@ a region of the scenario runs (`fsm.<region>.index`). Neither reads a state of
 the scenario by name or a variable of its own, as `cave`'s `raid_rank`, though
 `ScenarioResource` lends variables to behavior programs. An input over one needs
 a scale its scenario declares, and a bot listing it plays only such scenarios.
+Nor does a score pay for one.
 
 ### Draw a watched run's wait on its screen
 
@@ -327,9 +330,10 @@ the viewer's. Lay the wait out as `player.frame` does.
 
 A solo `-headless` run already learns with a game on every core. Not built:
 `lixenwraith/genetic`'s batch `Engine` scoring whole runs over a fixed matrix of
-scenarios and seeds, and a graph's own constants as genes. Fitness weighs no
+scenarios and seeds, and a graph's own constants as genes. No source pays a
 nugget, since nothing pushes `EventNuggetCollected`: push it in
-`NuggetSystem.collectNugget` and drop that function's own `statCollected`.
+`NuggetSystem.collectNugget`, drop that function's own `statCollected`, and add
+its row to `sources`.
 
 ### Teach a bot its player's style, for an auto-pilot
 

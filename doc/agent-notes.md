@@ -485,6 +485,9 @@ Libraries · Branches.
   runs each, failed a quarter of the processes where a quiet run never did. A flake
   that appears after a merge can be older: one quiet process at `-test.count=40`
   read 2 failures on the commit before and 7 after, a merge that only moved timing.
+  `TestAJoinerLandsInAGameWaitingForItsHostsStart` is one: `shared snapshot
+  diverged` at its last parity, the two a tick apart, in 3 of 192 processes run
+  eight at once on four cores and in none of 20 run alone.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
@@ -939,20 +942,24 @@ Libraries · Branches.
   branch's. Two binaries read it with no harness: each plays `-headless -speed
   max -seed N -games G` on `-config-dir <checkout>/wad` under its own
   `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a `stop`
-  region that quits at a game time, as `botfitness` appends one. The line's
+  region that quits at a game time, as `botscore` appends one. The line's
   `actions` and ticks of several games move by one between runs: compare the
-  files.
+  files, and across a change of `version` or `scored_by` with those keys cut
+  (`jq -S 'del(.version, .scored_by)'`).
 - A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
   script that puts each fix's lines back and runs the one test of its rule,
   which must fail. A mutation that deadlocks the games' order hangs where it
   should fail: run it under `timeout`, whose 124 is the test holding, and give
-  a scratch run past ten minutes `-test.timeout 0`.
+  a scratch run past ten minutes `-test.timeout 0`. One file's mutation needs
+  no copy: `go test -overlay <json>` compiles a scratch file in its place
+  (`{"Replace":{"<the file's absolute path>":"<the scratch file>"}}`).
 - A merge under a measurement is checked before a baseline is kept: main's
   binary after it and before it play one seed from nothing, and the same
   population bytes say the runs read so far are main's still. A gameplay change
   is held the same way against `cave`'s own bot learning alone.
-- A population kept under an older `version` is fielded by a newer binary from
-  a copy with its `version` raised, by a JSON round trip and not by `sed`,
+- A population kept under an older `version` or another `scored_by` is fielded
+  by a newer binary from a copy with its `version` raised and its `scored_by`
+  the document's, by a JSON round trip that keeps every key and not by `sed`,
   whose spacing is its writer's. A model is landed in a bot document by `-bot
   export`, and moves to a graph that reads its inputs and more by `-bot
   import` ([Bots](bots.md#a-players-bot-files)). `toml.Document.Delete` takes a

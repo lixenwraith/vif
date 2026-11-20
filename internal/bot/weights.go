@@ -207,7 +207,7 @@ func (g *Graph) Kept(name string, store Store) (Kept, bool, error) {
 	if err != nil {
 		return Kept{}, false, err
 	}
-	doc, members, err := readPopulation(data, n.digest, n.geneCount())
+	doc, members, err := readPopulation(data, n.digest, g.scoredBy, n.geneCount())
 	if err != nil {
 		return Kept{}, false, fmt.Errorf("%s population could not be parsed: %w", name, err)
 	}

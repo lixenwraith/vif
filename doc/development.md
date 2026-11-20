@@ -503,7 +503,7 @@ binary on a real terminal, `make` or the deploy scripts: the release wad archive
 (`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
 it (`scenario`, `follow`), the session template against the router (`fleet`) and
 what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
-or FAIL; `botfitness` and `load` measure and stay out of it.
+or FAIL; `botscore` and `load` measure and stay out of it.
 
 ```sh
 ./script/test.sh list

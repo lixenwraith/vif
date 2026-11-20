@@ -271,7 +271,7 @@ func (m *Membership) playSeat(s *seat, play SeatPlay) {
 			st := driver.Stats()
 			m.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "peer", s.id.Load(),
 				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "dropped", st.Dropped,
-				"fitness", st.Fitness, "state", st.State, "error", fmt.Sprint(err))
+				"rounds", st.Rounds, "score", st.Score, "state", st.State, "error", fmt.Sprint(err))
 		}
 		return
 	}

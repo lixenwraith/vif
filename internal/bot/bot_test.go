@@ -96,6 +96,9 @@ on_update = [{ action = "Steer" }]`, `network "" is none of the graph's`},
 		{"[network.a]\ninputs = [\"column\"]" + region + `[states.A]
 on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" is none of the graph's`},
 		{"[bot]\nlearn = true" + region + "[states.A]", "learn needs a [network.<name>]"},
+		{"[bot]\nlearn = true\n[network.a]\ninputs = [\"column\"]" + region + "[states.A]", "learn needs a [bot] score"},
+		{"[bot]\nscore = { loot = 1 }" + region + "[states.A]", `"loot" is no source`},
+		{"[bot]\nscore = { travel = 0 }" + region + "[states.A]", "a number other than zero"},
 		{"[network]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: "inputs" is no table: a network is named`},
 		{"[network.\"../a\"]\ninputs = [\"column\"]" + region + "[states.A]", `[network]: name "../a" is not lowercase letters`},
 		{"[network.a]\ninputs = [\"column\", \"radar\"]" + region + "[states.A]", `[network]: a: inputs: "radar" is no sensor`},
@@ -405,20 +408,17 @@ on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "I
 	}
 }
 
-// TestABotIsWeighedOnlyOnItsOwnEvents: a bot is weighed on what its own steps dispatched
-// for the cursor it drives, a predicted kill only once confirmed.
-func TestABotIsWeighedOnlyOnItsOwnEvents(t *testing.T) {
+// TestAScorePaysOnlyWhatTheBotsOwnCursorDid: a score pays for what the bot's own
+// steps dispatched for the cursor it drives, each source what its document gives it.
+func TestAScorePaysOnlyWhatTheBotsOwnCursorDid(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
-	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	d, rec := botFor(t, ctx, "[bot]\nscore = { typed = 1, kill = 5 }\n[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
 	own := w.Resources.Player.Entity
-	killed := &event.SpeciesKilledPayload{KillerEntity: own}
 	rec.dispatch = []event.GameEvent{
 		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}},
 		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own + 1}},
-		{Type: event.EventSpeciesKilled, Payload: killed, Phase: event.PhasePredicted},
-		{Type: event.EventSpeciesKillConfirmed, Payload: killed},
-		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own}},
-		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
+		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own}},
+		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own + 1}},
 	}
 	step := func() {
 		for range rec.dispatch {
@@ -433,17 +433,8 @@ func TestABotIsWeighedOnlyOnItsOwnEvents(t *testing.T) {
 	w.Components.Cursor.SetComponent(own, component.CursorComponent{Control: component.ControlRemote})
 	rec.dispatch = []event.GameEvent{{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}}}
 	step()
-	weight := func(t event.EventType) (sum int64) {
-		for _, row := range fitness {
-			if row.event == t {
-				sum += row.weight
-			}
-		}
-		return sum
-	}
-	want := weight(event.EventBoostReward) + weight(event.EventSpeciesKillConfirmed) + weight(event.EventCursorDefeatState)
-	if got := d.Stats().Fitness; got != want {
-		t.Fatalf("fitness %d, want %d", got, want)
+	if got := d.Stats().Score; got != 1+5 {
+		t.Fatalf("score %g, want 6: the character its own cursor typed and the kill its own cursor made", got)
 	}
 }
 
@@ -861,20 +852,22 @@ func TestDefaultTypesAheadOfTheSpecialAttackItAsksFor(t *testing.T) {
 	}
 }
 
-// TestARoundScoresHowFarItTravelledAndWhatItEarned: a new game closes a round,
-// scored by the columns its cave scrolled and its events' worth, a data species'
-// kill twelve times its hit points. Its end weighs once on the fitness alone, a
-// crush and the defeat it brings together, as one ends every round.
-func TestARoundScoresHowFarItTravelledAndWhatItEarned(t *testing.T) {
+// TestARoundScoresWhatItsDocumentPays: a new game closes a round, scored by what
+// the graph's score paid in it: here three a column scrolled and twelve a hit
+// point of a declared species' kill. The run's score holds the round in play
+// too, a kill no source of the document measures pays nothing, and a graph with
+// no score scores nothing.
+func TestARoundScoresWhatItsDocumentPays(t *testing.T) {
+	const states = "[regions.play]\ninitial = \"A\"\n[states.A]\n"
 	w, ctx := soloWorld(0, 0)
 	w.Resources.Cave.Steps = 2
 	w.Resources.Behaviors = []component.BehaviorPrototype{{HitPoints: 28}}
-	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	d, rec := botFor(t, ctx, "[bot]\nscore = { travel = 3, hit_points = 12 }\n"+states, 0)
 	own := w.Resources.Player.Entity
-	rec.dispatch = []event.GameEvent{
-		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesDataFirst}},
-		{Type: event.EventCursorCrushed, Payload: &event.CursorCrushedPayload{Entity: own}},
-		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
+	round := 0.0
+	d.Round = func(_ uint64, score float64) { round = score }
+	declared := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own, Species: component.SpeciesDataFirst}}
+	rec.dispatch = []event.GameEvent{declared, {}, {},
 		{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}},
 		{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: own}},
 	}
@@ -883,9 +876,14 @@ func TestARoundScoresHowFarItTravelledAndWhatItEarned(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if st := d.Stats(); st.Rounds != 1 || st.Score != 4*2+12*28 || st.Fitness != 12*28-100+5 {
-		t.Fatalf("rounds %d, score %g, fitness %d: want one round of 4 ticks at two columns each and a kill of 28 hit points paid twelve times, and a fitness of %d",
-			st.Rounds, st.Score, st.Fitness, 12*28-100+5)
+	if st := d.Stats(); st.Rounds != 1 || round != 4*2*3+12*28 || st.Score != round+2*3 {
+		t.Fatalf("rounds %d, the round %g, the run %g: want one round of 4 ticks at two columns each paid three times and a kill of 28 hit points paid twelve times, and the run two columns more",
+			st.Rounds, round, st.Score)
+	}
+	none, rec := botFor(t, ctx, states, 0)
+	rec.dispatch = []event.GameEvent{declared}
+	if _, err := none.Step(); err != nil || none.Stats().Score != 0 {
+		t.Fatalf("a graph with no score scored %g, %v: want nothing", none.Stats().Score, err)
 	}
 }
 
@@ -899,17 +897,24 @@ func (m *memory) Store(doc []byte) error { m.doc = doc; return nil }
 // that draw its first genomes at random
 func keeping(t *testing.T, layout string, members ...member) *memory {
 	t.Helper()
-	doc, err := json.Marshal(population{Version: populationVersion, Layout: layout, Rounds: learnPool, Members: members})
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: layout, ScoredBy: learnsBy, Rounds: learnPool, Members: members})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &memory{doc: doc}
 }
 
+// learns is the [bot] table of a graph that learns, and learnsBy how its score
+// is spelt, which a population is kept under
+const (
+	learns   = "[bot]\nlearn = true\nscore = { travel = 1, kill = 5 }"
+	learnsBy = "kill=5 travel=1"
+)
+
 // learning is a learning graph, a driver on it and the instance it plays
 func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 	t.Helper()
-	doc := strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)
+	doc := strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", learns, 1)
 	g, err := ParseGraph("net", []byte(doc))
 	if err != nil {
 		t.Fatal(err)
@@ -1010,7 +1015,7 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
-	if saved.Layout != net.digest || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 2 ||
+	if saved.Layout != net.digest || saved.ScoredBy != learnsBy || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 2 ||
 		saved.Members[entered].Born != learnPool+1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 0 ||
 		saved.Members[0].Born != 5 || saved.Members[1].Born != 7 {
 		t.Fatalf("saved %+v: want the three kept with their births, the two proved first and the more trusted fielded, and the genome scored 45 born at round 1",
@@ -1391,7 +1396,7 @@ func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
 // the run can be written.
 func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
 	g, _, _ := learning(t)
-	doc, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, Rounds: -1})
+	doc, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, ScoredBy: learnsBy, Rounds: -1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1411,7 +1416,7 @@ func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
 // stepped, as a start drawn about on every weight is lost among copies that fly
 // worse.
 func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
-	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", "[bot]\nlearn = true", 1)))
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", learns, 1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1439,7 +1444,7 @@ func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
 // its first learnPool rounds play genomes drawn about zero, each its own; one
 // past them breeds, and the written genome, having no weight, is not tried.
 func TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom(t *testing.T) {
-	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
+	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", learns, 1)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1645,9 +1650,8 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 func twoNetworks(t *testing.T) (*engine.World, *Driver, *recorder, []*Learner) {
 	t.Helper()
 	w, ctx := soloWorld(10, 2)
-	g, err := ParseGraph("net", []byte(`[bot]
+	g, err := ParseGraph("net", []byte(learns+`
 actions_per_second = 20
-learn = true
 
 [network.fly]
 inputs = ["column"]
@@ -1702,13 +1706,14 @@ func (r *recorder) rounds(t *testing.T, d *Driver, ticks ...int) {
 	}
 }
 
-// TestALearnerIsScoredByTheTicksItsNetworkSteered: a round's ticks and what they
-// earned are the network's that steered last, so one that steers only while a
-// Kraken is up is scored by the fight and the other by the rest of the round.
+// TestALearnerIsScoredByTheTicksItsNetworkSteered: what a round's ticks were paid
+// is the network's that steered last, so one that steers only while a Kraken is
+// up is scored by the fight and the other by the rest of the round.
 func TestALearnerIsScoredByTheTicksItsNetworkSteered(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	// A kill is worth 5: one lands in fly's first two ticks and one in the three a
+	w.Resources.Cave.Steps = 2
+	// A kill pays 5: one lands in fly's first two ticks and one in the three a
 	// Kraken is up for, before the round's last two
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
 	rec.dispatch = []event.GameEvent{kill, {}}
@@ -1722,34 +1727,9 @@ func TestALearnerIsScoredByTheTicksItsNetworkSteered(t *testing.T) {
 	}
 	w.DestroyEntity(up)
 	rec.rounds(t, d, 2)
-	if f, k := fly.Stats(), kraken.Stats(); f.Scored != 1 || f.Recent != 4+5 || k.Scored != 1 || k.Recent != 3+5 {
-		t.Fatalf("fly scored %d rounds at %g and kraken %d at %g: want one each, fly's four ticks and its kill, 9, and kraken's three and its own, 8",
+	if f, k := fly.Stats(), kraken.Stats(); f.Scored != 1 || f.Recent != 4*2+5 || k.Scored != 1 || k.Recent != 3*2+5 {
+		t.Fatalf("fly scored %d rounds at %g and kraken %d at %g: want one each, the two columns of fly's four ticks and its kill, 13, and of kraken's three and its own, 11",
 			f.Scored, f.Recent, k.Scored, k.Recent)
-	}
-}
-
-// TestARoundScoresNoTickItsCaveStoodStill: time alone moves no score, so the ticks
-// of a fight the scroll halts for add nothing to the round or to the candidate
-// that fought it, which what it shot down pays.
-func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
-	w, d, rec, learners := twoNetworks(t)
-	rec.rounds(t, d, 4) // five columns: the tick that starts the graph and four steered
-	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
-	rec.dispatch = []event.GameEvent{kill, {}}
-	for range 2 {
-		d.Step()
-	}
-	place(w, core.DomainShared, 40, 10, func(e core.Entity) { w.Components.Kraken.SetComponent(e, component.KrakenComponent{}) })
-	w.Resources.Cave.Steps = 0
-	rec.dispatch = []event.GameEvent{kill, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
-	for range 3 {
-		d.Step()
-	}
-	if got := d.Stats().Score; got != 5+2+10 {
-		t.Fatalf("two rounds score %g, want 17: the first's five columns, the second's two before the scroll halted and its two kills of 5", got)
-	}
-	if got := learners[1].Stats().Recent; got != 5 {
-		t.Fatalf("kraken's candidate scored %g, want the kill after the Kraken rose alone", got)
 	}
 }
 
@@ -1759,10 +1739,10 @@ func TestARoundScoresNoTickItsCaveStoodStill(t *testing.T) {
 // predicted is weighed then and paid once proved.
 func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
-	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	d, rec := botFor(t, ctx, "[bot]\nscore = { kraken = 1 }\n[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
 	own := w.Resources.Player.Entity
 	// 120 hit points are thirty seconds at par
-	par := int64(30 * time.Second / w.TickInterval())
+	par := float64(30 * time.Second / w.TickInterval())
 	for _, lived := range []float64{20, 60, 600} {
 		kraken := place(w, core.DomainShared, 40, 10, func(e core.Entity) {
 			w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 120, Time: lived})
@@ -1775,8 +1755,8 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got, want := d.Stats().Fitness, par+par/2+par/4; got != want {
-		t.Fatalf("three Krakens shot down in 20, 60 and 600 seconds weigh %d, want %d: par's %d ticks, half and a quarter", got, want, par)
+	if got, want := d.Stats().Score, par+par/2+par/4; got != want {
+		t.Fatalf("three Krakens shot down in 20, 60 and 600 seconds pay %g, want %g: par's %g ticks, half and a quarter", got, want, par)
 	}
 	// A session's guest predicts the death and is paid as it is proved, the Kraken gone
 	kraken := place(w, core.DomainShared, 40, 10, func(e core.Entity) {
@@ -1788,8 +1768,8 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 	w.DestroyEntity(kraken)
 	rec.dispatch = []event.GameEvent{{Type: event.EventSpeciesKillConfirmed, Payload: killed}}
 	d.Step()
-	if got, want := d.Stats().Fitness, 2*par+par/2+par/4; got != want {
-		t.Fatalf("a predicted kill proved after its Kraken is gone brings the weight to %d, want %d, par's ticks more", got, want)
+	if got, want := d.Stats().Score, 2*par+par/2+par/4; got != want {
+		t.Fatalf("a predicted kill proved after its Kraken is gone brings the score to %g, want %g, par's ticks more", got, want)
 	}
 }
 
@@ -1821,7 +1801,7 @@ func TestALearnersCandidateWaitsForTheRoundItsNetworkSteers(t *testing.T) {
 // weighing is a graph of two networks whose table is given, each steering in turn
 func weighing(t *testing.T, name, fly, kraken string) *Graph {
 	t.Helper()
-	g, err := ParseGraph(name, []byte("# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\n"+fly+
+	g, err := ParseGraph(name, []byte("# a bot that flies\n"+learns+"\ninputs = [\"column\"]\n\n[network.fly]\n"+fly+
 		"\n[network.kraken]\n"+kraken+"\n[regions.play]\ninitial = \"A\"\n\n[states.A] # steers\non_update = [{ action = \"Steer\", payload = { network = \"fly\" } }]\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -1927,23 +1907,26 @@ func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
-	doc := func(version int, layout string) *memory {
-		data, err := json.Marshal(population{Version: version, Layout: layout, Rounds: 70, Recent: 12.5, Members: []member{
+	doc := func(version int, layout, scoredBy string) *memory {
+		data, err := json.Marshal(population{Version: version, Layout: layout, ScoredBy: scoredBy, Rounds: 70, Recent: 12.5, Members: []member{
 			{Genes: genome(0.1), Score: 90, Rounds: 2}, {Genes: genome(0.2), Score: 60, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return &memory{doc: data}
 	}
-	k, ok, err := g.Kept("fly", doc(populationVersion, net.digest))
+	k, ok, err := g.Kept("fly", doc(populationVersion, net.digest, learnsBy))
 	if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
 		t.Fatalf("kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", k, ok, err)
 	}
-	if _, ok, err := g.Kept("fly", doc(populationVersion, "another")); ok || err != nil {
+	if _, ok, err := g.Kept("fly", doc(populationVersion, "another", learnsBy)); ok || err != nil {
 		t.Fatalf("a population of another layout was read: %v, %v", ok, err)
 	}
-	if _, ok, err := g.Kept("fly", doc(populationVersion-1, net.digest)); ok || err != nil {
+	if _, ok, err := g.Kept("fly", doc(populationVersion-1, net.digest, learnsBy)); ok || err != nil {
 		t.Fatalf("a population another version scored was read: %v, %v", ok, err)
+	}
+	if _, ok, err := g.Kept("fly", doc(populationVersion, net.digest, "kill=6 travel=1")); ok || err != nil {
+		t.Fatalf("a population another score paid was read: %v, %v", ok, err)
 	}
 	if _, ok, err := g.Kept("fly", &memory{}); ok || err != nil {
 		t.Fatalf("no population was read as one: %v, %v", ok, err)

@@ -114,9 +114,10 @@ Asserted (print PASS/FAIL; `all` runs them)
   all               every asserted check above
 
 Measured (print what they measured; not part of `all`)
-  botfitness [graph] [seeds] [secs]
-                    sum default's fitness per scenario over seeds 1..N (4) of secs
-                    (60) each; given a graph file, fail unless it beats default
+  botscore [graph] [seeds] [secs]
+                    sum default's score per scenario over seeds 1..N (4) of secs
+                    (60) each; given a graph file, fail unless it beats default,
+                    each graph by the score it declares
   load [sessions] [bots] [secs]
                     per session a host seating its own bots and a networked bot
                     joiner; prints each host's cost and fails on a slipping clock,
@@ -125,8 +126,8 @@ Measured (print what they measured; not part of `all`)
 EOF
 	;;
 
-botfitness)
-	# A graph's fitness is summed per scenario over a fixed seed set, flat out at one
+botscore)
+	# A graph's score is summed per scenario over a fixed seed set, flat out at one
 	# size. blank is left out: it disables glyph, nugget and gold, so nothing there
 	# separates two graphs. A graph given is also measured against default, which
 	# plays as written: learning, it would play what the user root's population holds.
@@ -140,14 +141,14 @@ botfitness)
 		[ -f "$graph" ] || fail "no graph file $graph"
 		{ cat "$graph"; stop $((secs * 1000)); } >"$dir/graph.toml"
 	fi
-	# fitness plays one graph on one scenario and seed, in one game where the graph
-	# learns, and prints its fitness
-	fitness() {
+	# score plays one graph on one scenario and seed, in one game where the graph
+	# learns, and prints its score
+	score() {
 		# shellcheck disable=SC2086 # $2 is a flag list
 		"$BIN" -headless -games 1 -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
 			>"$dir/run.log" 2>&1 || fail "$1 did not end cleanly on $2 seed $3: $dir/run.log"
-		v=$(botstat "$dir/run.log" fitness)
-		[ -n "$v" ] || fail "$1 left no fitness on $2 seed $3: $dir/run.log"
+		v=$(botstat "$dir/run.log" score)
+		[ -n "$v" ] || fail "$1 left no score on $2 seed $3: $dir/run.log"
 		echo "$v"
 	}
 	lost=
@@ -160,10 +161,10 @@ botfitness)
 		printf '%-6s %10s %10s\n' seed default "${graph:+$(basename "$graph" .toml)}"
 		base=0 mine=0 s=1
 		while [ "$s" -le "$seeds" ]; do
-			b=$(fitness "$dir/default.toml" "$flags" "$s") || exit 1
+			b=$(score "$dir/default.toml" "$flags" "$s") || exit 1
 			m=
 			if [ -n "$graph" ]; then
-				m=$(fitness "$dir/graph.toml" "$flags" "$s") || exit 1
+				m=$(score "$dir/graph.toml" "$flags" "$s") || exit 1
 				mine=$((mine + m))
 			fi
 			base=$((base + b))

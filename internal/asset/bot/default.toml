@@ -9,6 +9,9 @@ auto_fire = "main"
 learn = true
 # The embedded game ends no round by itself, so one is closed each half hour
 round_seconds = 1800
+# default plays any scenario, so its score pays for every source there is. A
+# kill is paid by one of kill, hit_points and kraken, whichever measures it.
+score = { typed = 1, mistyped = -1, gold = 25, kill = 5, hit_points = 12, kraken = 1, travel = 1 }
 
 # walk reads where the two nearest species and the Kraken are and the bot's own
 # place, energy and heat: more inputs learn slower. What it learns is its

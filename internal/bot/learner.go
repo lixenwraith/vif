@@ -33,9 +33,10 @@ const (
 	// learnSaveEvery is the least wall time between two saves of a population in play
 	learnSaveEvery = 30 * time.Second
 
-	// populationVersion names the document a population is kept as and how its
-	// rounds were scored: one kept under another starts over
-	populationVersion = 3
+	// populationVersion names the document a population is kept as and the code's
+	// own rules of scoring and search, a source's worth among them: one kept under
+	// another starts over. What its bot document pays is the file's scored_by.
+	populationVersion = 4
 )
 
 // Store keeps one population's document: Load returns what was kept, nothing for
@@ -46,27 +47,30 @@ type Store interface {
 }
 
 // population is the document a learner keeps: its archive in its order, the
-// proved first, and what reads it without the code. Rounds is every round scored
-// since the population began, Recent their mean lately, and Fielded the member a
-// run that is not learning plays, -1 with none.
+// proved first, and what reads it without the code. ScoredBy spells the score
+// its rounds were paid by, Rounds is every round scored since the population
+// began, Recent their mean lately, and Fielded the member a run that is not
+// learning plays, -1 with none.
 type population struct {
-	Version int      `json:"version"`
-	Layout  string   `json:"layout"`
-	Rounds  int      `json:"rounds"`
-	Recent  float64  `json:"recent"`
-	Fielded int      `json:"fielded"`
-	Members []member `json:"members"`
+	Version  int      `json:"version"`
+	Layout   string   `json:"layout"`
+	ScoredBy string   `json:"scored_by"`
+	Rounds   int      `json:"rounds"`
+	Recent   float64  `json:"recent"`
+	Fielded  int      `json:"fielded"`
+	Members  []member `json:"members"`
 }
 
-// readPopulation is the population data holds under layout, with its members of
-// genes weights as the engine takes them. It is nil where data holds none, one
-// of another layout or one another version's rule scored: each starts over.
-func readPopulation(data []byte, layout string, genes int) (*population, []genetic.Candidate[[]float64, float64], error) {
+// readPopulation is the population data holds under layout and the score spelt
+// scoredBy, with its members of genes weights as the engine takes them. It is nil
+// where data holds none, one of another layout, one another score paid or one
+// another version's rule scored: each starts over.
+func readPopulation(data []byte, layout, scoredBy string, genes int) (*population, []genetic.Candidate[[]float64, float64], error) {
 	var doc population
 	if len(data) == 0 {
 		return nil, nil, nil
 	}
-	if err := json.Unmarshal(data, &doc); err != nil || doc.Version != populationVersion || doc.Layout != layout {
+	if err := json.Unmarshal(data, &doc); err != nil || doc.Version != populationVersion || doc.Layout != layout || doc.ScoredBy != scoredBy {
 		return nil, nil, err
 	}
 	var members []genetic.Candidate[[]float64, float64]
@@ -97,7 +101,9 @@ type Learner struct {
 	store  Store
 	name   string // the network it learns
 	layout string
-	seed   []float64
+	// scoredBy spells the score of the graph, which its population is kept under
+	scoredBy string
+	seed     []float64
 
 	slots   []slot         // what each game has in play
 	rng     *rand.Rand     // what a population's first genomes are drawn from
@@ -150,16 +156,16 @@ type LearnStats struct {
 
 // NewLearner builds the learner of g's network name for games games at once, its
 // stream drawn from seed, on the population store keeps; a nil store keeps it for
-// the run. A population of another layout or one that cannot be parsed is started
-// over, one that cannot be read is left alone and the run keeps none, and any
-// weights g wrote by hand are the first candidate of every run.
+// the run. A population of another layout or another score, or one that cannot be
+// parsed, is started over, one that cannot be read is left alone and the run
+// keeps none, and any weights g wrote by hand are the first candidate of every run.
 func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Learner, error) {
 	i := slices.IndexFunc(g.nets, func(n *network) bool { return n.name == name })
 	if i < 0 {
 		return nil, fmt.Errorf("bot %s: no [network.%s] to learn", g.Name, name)
 	}
 	n := g.nets[i]
-	l := &Learner{store: store, name: name, layout: n.digest, seed: slices.Clone(n.genes),
+	l := &Learner{store: store, name: name, layout: n.digest, scoredBy: g.scoredBy, seed: slices.Clone(n.genes),
 		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
 	l.rng = rand.New(rand.NewPCG(vmath.DeriveSeed(seed, "bot.learner."+name), vmath.DeriveSeed(seed, "bot.learner.draw")))
 	l.written = slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
@@ -173,7 +179,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 			// The file may be a good one, so nothing this run learns replaces it
 			l.store, l.failed = nil, fmt.Errorf("%s population could not be read and is left as it is: %w", name, err)
 			l.untold = l.failed
-		} else if kept, members, err = readPopulation(data, l.layout, len(l.seed)); err != nil {
+		} else if kept, members, err = readPopulation(data, l.layout, l.scoredBy, len(l.seed)); err != nil {
 			l.untold = fmt.Errorf("%s population could not be parsed and starts over: %w", name, err)
 		}
 	}
@@ -456,7 +462,7 @@ func (l *Learner) save() {
 	if l.store == nil {
 		return
 	}
-	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent}
+	doc := population{Version: populationVersion, Layout: l.layout, ScoredBy: l.scoredBy, Rounds: l.rounds, Recent: l.recent}
 	members := l.engine.Snapshot().Members
 	_, doc.Fielded = l.field(members)
 	for _, c := range members {
@@ -485,14 +491,14 @@ func (l *Learner) save() {
 	}
 }
 
-// ahead is the failure of a save onto a population of this layout that holds
-// more rounds: another run's, further on, which keeps the file
+// ahead is the failure of a save onto a population of this layout and score that
+// holds more rounds: another run's, further on, which keeps the file
 func (l *Learner) ahead() error {
 	data, err := l.store.Load()
 	if err != nil {
 		return nil
 	}
-	if kept, _, _ := readPopulation(data, l.layout, len(l.seed)); kept != nil && kept.Rounds > l.rounds {
+	if kept, _, _ := readPopulation(data, l.layout, l.scoredBy, len(l.seed)); kept != nil && kept.Rounds > l.rounds {
 		return fmt.Errorf("another run has it %d rounds further on", kept.Rounds-l.rounds)
 	}
 	return nil

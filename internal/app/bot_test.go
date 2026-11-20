@@ -346,11 +346,12 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 
 	// Proved, a member is what export writes into the bot's document and list tells
 	var pop struct {
-		Version int     `json:"version"`
-		Layout  string  `json:"layout"`
-		Rounds  int     `json:"rounds"`
-		Recent  float64 `json:"recent"`
-		Members []struct {
+		Version  int     `json:"version"`
+		Layout   string  `json:"layout"`
+		ScoredBy string  `json:"scored_by"`
+		Rounds   int     `json:"rounds"`
+		Recent   float64 `json:"recent"`
+		Members  []struct {
 			Score  float64   `json:"score"`
 			Rounds int       `json:"rounds"`
 			Genes  []float64 `json:"genes"`
@@ -439,7 +440,7 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 // one, and refuses a count above it.
 func TestOnlyALearningRunAloneAndFlatOutPlaysMoreThanOneGame(t *testing.T) {
 	const states = "[regions.play]\ninitial = \"A\"\n[states.A]\n"
-	learns, err := bot.ParseGraph("g", []byte("[bot]\nlearn = true\n[network.a]\ninputs = [\"column\"]\n"+states))
+	learns, err := bot.ParseGraph("g", []byte("[bot]\nlearn = true\nscore = { travel = 1 }\n[network.a]\ninputs = [\"column\"]\n"+states))
 	if err != nil {
 		t.Fatal(err)
 	}

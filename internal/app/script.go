@@ -155,7 +155,7 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	err = errors.Join(err, beside.close(&stats))
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "games", games, "ticks", stats.Ticks,
-		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,
+		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
 		"rounds", stats.Rounds, "score", stats.Score,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
@@ -274,7 +274,7 @@ func (s *sideGames) close(st *bot.Stats) error {
 		if i < len(s.drivers) && st != nil {
 			played := s.drivers[i].Stats()
 			st.Ticks, st.Injected, st.Dropped = st.Ticks+played.Ticks, st.Injected+played.Injected, st.Dropped+played.Dropped
-			st.Fitness, st.Rounds, st.Score = st.Fitness+played.Fitness, st.Rounds+played.Rounds, st.Score+played.Score
+			st.Rounds, st.Score = st.Rounds+played.Rounds, st.Score+played.Score
 		}
 		game.Close()
 	}

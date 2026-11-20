@@ -500,6 +500,9 @@ func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
 	for _, row := range outputs {
 		rows["output "+row.name] = row.doc
 	}
+	for _, row := range sources {
+		rows["source "+row.name] = row.doc
+	}
 	for row, doc := range rows {
 		if doc == "" || strings.HasSuffix(row, " ") {
 			t.Errorf("the %s row has no name or no line saying what it is", row)
@@ -530,11 +533,11 @@ func reference() string {
 	}
 	b.WriteString(`## Catalogue
 
-What a graph's guards and ` + "`PointAt`" + ` take as a target, and what a network
-reads and asks for. This section is generated from the tables of
-` + "`internal/bot/catalogue.go`" + `: change a row there, then run
+What a graph's guards and ` + "`PointAt`" + ` take as a target, what a network reads
+and asks for, and what a score pays for. This section is generated from the
+tables of ` + "`internal/bot/catalogue.go`" + `: change a row there, then run
 ` + "`VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`" + `. ` + "`vif -schema`" + `
-lists the same inputs, outputs and scales under ` + "`bot_catalogue`" + `.
+lists the same inputs, outputs, scales and sources under ` + "`bot_catalogue`" + `.
 
 ### Kinds
 
@@ -621,6 +624,16 @@ output's weights in a table named for each of its units.
 `)
 	for _, row := range outputs {
 		item("", code(row.name)+", units "+code(slices.Clone(row.units)...)+": "+row.doc+".")
+	}
+	b.WriteString(`
+### Score sources
+
+What a document's ` + "`[bot] score`" + ` may pay for. The document gives each source it
+names what one of it pays. A source it leaves out pays nothing.
+
+`)
+	for _, row := range sources {
+		item("", code(row.name)+": "+row.doc+".")
 	}
 	return b.String()
 }

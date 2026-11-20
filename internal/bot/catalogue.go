@@ -1,12 +1,16 @@
 package bot
 
 import (
+	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -696,8 +700,108 @@ func (m *mind) point(out []float64) bool {
 	return true
 }
 
+// source is one thing a score may pay for: an event the bot's own step dispatched,
+// owner the payload field that names its cursor, or what each counts as a tick
+// ends. worth is what one of it is worth, 1 where nil.
+type source struct {
+	name, doc string
+	event     event.EventType
+	owner     string
+	worth     func(m *mind, payload any) float64
+	each      func(m *mind) float64
+}
+
+// sources is what a document's [bot] score may pay for, a row a name. A kill is
+// measured by one of its three rows and no other (mind.kill). A character typed
+// right is the boost it earns and an error the boost it ends.
+var sources = [...]source{
+	{name: "typed", doc: "a character typed right", event: event.EventBoostReward, owner: "entity"},
+	{name: "mistyped", doc: "a typing error", event: event.EventBoostDeactivate, owner: "entity"},
+	{name: "gold", doc: "a gold sequence completed", event: event.EventGoldCompleted, owner: "entity"},
+	{name: "kill", doc: "a kill neither hit_points nor kraken measures: of a species the game's own code flies, or of a Kraken whose fight could not be timed",
+		event: event.EventSpeciesKilled, owner: "killer_entity", worth: killed(killPlain)},
+	{name: "hit_points", doc: "a kill of a species a scenario declares, by the hit points its program gives it",
+		event: event.EventSpeciesKilled, owner: "killer_entity", worth: killed(killDeclared)},
+	{name: "kraken", doc: "a Kraken shot down, by the ticks its hit points take at four a second: all of them at that pace or faster, the share that pace is of a slower one, a quarter at least",
+		event: event.EventSpeciesKilled, owner: "killer_entity", worth: killed(killKraken)},
+	{name: "travel", doc: "a column the cave scrolled",
+		each: func(m *mind) float64 { return float64(max(m.ctx.World.Resources.Cave.Steps, 0)) }},
+}
+
+// The classes of a kill, one source each
+const (
+	killPlain = iota
+	killDeclared
+	killKraken
+)
+
+// krakenPar is the hit points a second a gun kept on a Kraken takes, and
+// bountyFloor the least of its bounty a slow kill keeps
+const (
+	krakenPar   = 4.0
+	bountyFloor = 0.25
+)
+
+// kill is a kill's class and what one of it is worth: a declared species' the hit
+// points its program gives it, a Kraken's the ticks its hit points take at
+// krakenPar, so a fight at that pace earns its own time, by the share that pace
+// is of the one it died at, and any other's 1.
+func (m *mind) kill(payload any) (class int, worth float64) {
+	p, ok := payload.(*event.SpeciesKilledPayload)
+	if !ok {
+		return killPlain, 1
+	}
+	if i := int(p.Species - component.SpeciesDataFirst); p.Species >= component.SpeciesDataFirst && i < len(m.ctx.World.Resources.Behaviors) {
+		return killDeclared, float64(m.ctx.World.Resources.Behaviors[i].HitPoints)
+	}
+	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken && k.Time > 0 {
+		par := float64(k.MaxHitPoints) / krakenPar
+		return killKraken, float64(int64(par / m.ctx.World.TickInterval().Seconds() * min(max(par/k.Time, bountyFloor), 1)))
+	}
+	return killPlain, 1
+}
+
+// killed is the worth of a kill of class, nothing for one of another
+func killed(class int) func(*mind, any) float64 {
+	return func(m *mind, payload any) float64 {
+		if of, worth := m.kill(payload); of == class {
+			return worth
+		}
+		return 0
+	}
+}
+
+// paying is a source a graph's score names and what one of it pays
+type paying struct {
+	row    *source
+	weight float64
+}
+
+// scoring is what a declared score pays, in sources' order so a sum takes one
+// order every run, and its spelling, which a population is kept under
+func scoring(declared map[string]float64) (pays []paying, spelt string, err error) {
+	names := slices.Sorted(maps.Keys(declared))
+	for i, name := range names {
+		w := declared[name]
+		if !slices.ContainsFunc(sources[:], func(s source) bool { return s.name == name }) {
+			return nil, "", fmt.Errorf("%q is no source of the catalogue's", name)
+		}
+		if w == 0 {
+			return nil, "", fmt.Errorf("%s = %v: a source pays a number other than zero", name, w)
+		}
+		names[i] = name + "=" + strconv.FormatFloat(w, 'g', -1, 64)
+	}
+	for i := range sources {
+		if w, ok := declared[sources[i].name]; ok {
+			pays = append(pays, paying{&sources[i], w})
+		}
+	}
+	return pays, strings.Join(names, " "), nil
+}
+
 // Input is one name a network's inputs take and Output one thing it may ask for;
-// Scale is one way a reading is kept within 1 of zero
+// Scale is one way a reading is kept within 1 of zero, and Source one thing a
+// score may pay for
 type (
 	Input struct {
 		Name  string `json:"name"`
@@ -713,14 +817,20 @@ type (
 		Name string `json:"name"`
 		Doc  string `json:"doc"`
 	}
+	Source struct {
+		Name string `json:"name"`
+		Doc  string `json:"doc"`
+	}
 	Listing struct {
 		Inputs  []Input  `json:"inputs"`
 		Outputs []Output `json:"outputs"`
 		Scales  []Scale  `json:"scales"`
+		Sources []Source `json:"sources"`
 	}
 )
 
-// Catalogue lists what a network reads and may ask for, for -schema
+// Catalogue lists what a network reads and may ask for and what a score may pay
+// for, for -schema
 func Catalogue() (l Listing) {
 	for _, s := range sensors {
 		l.Inputs = append(l.Inputs, Input{s.name, scales[s.scale].name, s.doc})
@@ -730,6 +840,9 @@ func Catalogue() (l Listing) {
 	}
 	for _, s := range scales {
 		l.Scales = append(l.Scales, Scale{s.name, s.doc})
+	}
+	for _, s := range sources {
+		l.Sources = append(l.Sources, Source{s.name, s.doc})
 	}
 	return l
 }
