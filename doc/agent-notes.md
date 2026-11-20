@@ -922,6 +922,10 @@ Docs · Libraries · Branches.
 
 ## Measuring
 
+- `Bitmap.recycle` shows in `dumpsys meminfo`'s native heap, not in its Graphics,
+  which still rose 54 MB over eight strike swaps on a Pixel 8 Pro and fell most
+  of the way back within 24 s; `dumpsys meminfo` itself makes the app collect.
+  Read the native heap to tell a bitmap held from one freed.
 - A browser-build bench runs under Node
   ([Development §5](development.md#5-validation-and-tests)), which refuses a run
   whose arguments and environment pass about 8 KB ("total length of command line

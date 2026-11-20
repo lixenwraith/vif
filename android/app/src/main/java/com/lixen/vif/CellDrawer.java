@@ -29,6 +29,9 @@ interface CellDrawer {
     /** Draws the last row's left half, the status bar's mode and input, above a keyboard covering the bottom pixels. */
     void drawStrip(Canvas surface, int covered);
 
+    /** Frees the drawer's pixels as another replaces it, where the collector would later; it draws nothing after. */
+    void release();
+
     /**
      * The picture painted so far at the atlas's size, kept between frames. The GPU
      * stretches it over the surface, filtered, so the grid leaves no margin; painting
@@ -37,6 +40,7 @@ interface CellDrawer {
     abstract class Picture implements CellDrawer {
         final int cellWidth, cellHeight;
         Bitmap screen;
+        private volatile int rows; // the grid's, which the UI thread reads for the strip's height
         private final Paint pixels = new Paint();
         private final Rect onSurface = new Rect(), stripSrc = new Rect(), stripDst = new Rect();
 
@@ -51,9 +55,23 @@ interface CellDrawer {
         final void size(int cols, int rows) {
             int w = cols * cellWidth, h = rows * cellHeight;
             if (screen == null || screen.getWidth() != w || screen.getHeight() != h) {
+                free();
                 screen = Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
+                this.rows = rows;
                 resized();
             }
+        }
+
+        private void free() {
+            if (screen != null) {
+                screen.recycle();
+                screen = null;
+            }
+        }
+
+        @Override
+        public void release() {
+            free();
         }
 
         void resized() {
@@ -71,7 +89,8 @@ interface CellDrawer {
 
         @Override
         public final int stripHeight(int surfaceHeight) {
-            return screen == null ? 0 : 2 * surfaceHeight * cellHeight / screen.getHeight();
+            int rows = this.rows;
+            return rows == 0 ? 0 : 2 * surfaceHeight / rows;
         }
 
         // Twice the size each way, so the glyphs keep their shape: the left half fills
@@ -107,6 +126,12 @@ interface CellDrawer {
         @Override
         void resized() {
             canvas = new Canvas(screen);
+        }
+
+        @Override
+        public void release() {
+            super.release();
+            atlas.recycle();
         }
 
         @Override

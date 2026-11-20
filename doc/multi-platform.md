@@ -585,8 +585,16 @@ instrumented test checks against `glyph.Raster` pixel for pixel at each strike,
 and posts it on a hardware canvas stretched over the whole view, filtered, so no
 margin is left; a tap maps to its cell in proportion. Before each frame the thread
 asks `game.AtlasChanged`, and builds its drawer anew from the texture of a strike
-a zoom crossed to, the run's first too. `FromRaster`, Go's raster as pixels, is
-the fallback. The APK's `wad/` is copied to the app's files directory as the
+a zoom crossed to, the run's first too; the view hands that texture over once the
+run drew the zoomed grid, so the grid is repainted once and no frame shows the
+old grid in the new strike. On a Pixel 8 Pro the swap's longest frame, two
+readings each way, was 88 and 122 ms before and 67 and 70 ms after toward the
+larger strike, and 71 ms before and 77 and 90 ms after toward the smaller. A
+replaced picture's and drawer's pixels are freed then (`Bitmap.recycle`), not at
+the next collection: eight swaps grew the native heap by 0.5 MB where they grew
+it by 47 MB, and sixteen raised the app's PSS by 33 MB where they raised it by
+127 MB.
+`FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Nearby games

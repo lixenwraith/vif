@@ -2682,37 +2682,30 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Repaint the grid once when a zoom crosses a strike on Android
+### Paint a whole frame faster on Android
 
 - Priority: P2
-- Affected files: lixenwraith/terminal (`android/view.go`), `go.mod`,
-  `android/go.mod`
+- Affected files: `android/app/src/main/java/com/lixen/vif/CellDrawer.java`
 
-A pinch that crosses a strike costs the render thread one frame of 71 to 122 ms
-on a Pixel 8 Pro, against 37 to 56 ms for a zoom within one (2026-11-20). Go's
-share is under 2 ms on amd64 (the texture 0.4 to 1.6 ms, a whole frame of
-112x124 cells 0.3 ms), so the time is the drawer's, which paints every cell
-twice: `View.AtlasChanged` hands it the texture at the next vsync, when the
-newest frame is still the old grid, which it paints in the new strike (toward
-the larger strike a picture larger than the surface), and the run's frame of the
-zoomed grid follows. Holding the texture until the frame flushed is the view's
-grid leaves one repaint. A device run then measures the swap, and says whether
-what a whole repaint still costs, a cell at a time through a software canvas at
-any zoom or rotation, asks for a faster painter.
+A zoom, a rotation and a resume repaint every cell, a rectangle and a glyph each
+through a software canvas, and the frame's time follows the cells: on a Pixel 8
+Pro (2026-11-20) 67 to 70 ms for 7,800 cells at 9.5 dp, 77 to 90 ms for about
+13,000 at 7 dp and 146 to 164 ms for 29,000 at the 5 dp floor, 5 to 9 µs a cell,
+where an idle frame's mean is 9 to 14 ms. Go's share is the encoding, 0.3 ms for
+112x124 cells on amd64. Profile one on a device before choosing: a whole frame
+composed straight into the picture's pixels, or a GLES drawer taking the same
+frames.
 
-### Free a replaced picture's pixels at once on Android
+### Post nothing to Android's render thread once it has quit
 
-- Priority: P2
-- Affected files: `android/app/src/main/java/com/lixen/vif/CellDrawer.java`,
-  `GameView.java`
+- Priority: P3
+- Affected files: `android/app/src/main/java/com/lixen/vif/GameView.java`
 
-A drawer's picture is a bitmap of the grid's pixels, replaced when the grid
-changes and with its drawer when a zoom crosses a strike; the old one and the old
-texture wait for the collector. Eight quick swaps on a Pixel 8 Pro raised the
-app's PSS from 309 MB to 410 MB, and a collection brought it back (2026-11-20).
-`Bitmap.recycle` on a replaced picture, and on a replaced drawer's picture and
-texture, frees each then; the strip's height, which the UI thread reads from the
-bitmap, then comes from the grid's numbers.
+`surfaceDestroyed` quits the render thread and keeps its `Handler`, so a resume
+before the next surface (`away`) and a keyboard that moves then
+(`keyboardCovers`) post to it: Android logs "sending message to a Handler on a
+dead thread" and drops the post, which `surfaceChanged` makes up for. Clearing
+`handler` there, which the UI thread alone reads, closes it.
 
 ## Audio
 
