@@ -163,7 +163,7 @@ func TestTheVimKeymapPlaysTheKeysTheTutorialTaught(t *testing.T) {
 // systems: a delete by motion, the Insert entries, a change, a retype, a repeat
 // with its Insert text, a yank and its puts, an undo and redo, which take back no
 // earlier lesson's change, the word searches, a mark and Visual, whose lesson alone
-// raises the shield its d takes a block under.
+// raises the shield its d takes a block under. One that ends typing waits for esc.
 func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -189,9 +189,11 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 		{"ssssss", "DeleteMotion"},
 		{"dwfxD", "Insert"},
 		{"s", "Append"},
-		{"A}\x1bI{\x1bj^a>", "Open"},
-		{"\x1bobelow\x1bkOabove", "Change"},
-		{"\x1bcw\x1bjcc\x1b", "Replace"},
+		{"A}\x1bI{\x1bj^a>", "AppendEsc"},
+		{"\x1b", "Open"},
+		{"obelow\x1bkOabove", "OpenEsc"},
+		{"\x1b", "Change"},
+		{"cw\x1bjcc\x1b", "Replace"},
 		{"fzrsfS5~", "Repeat"},
 		{"Ino\x1bj.j.", "Yank"},
 		{"yypddp", "Undo"},

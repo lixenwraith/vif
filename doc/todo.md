@@ -663,12 +663,12 @@ tutorial attach. What is left:
   `wad/scenario/base/tutorial/scenario.toml`
 - Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
-A tutorial lesson that ends on a typed glyph leaves the next one in Insert, where
-its first key types, and the lesson can only say so on the status bar. A live run's
-mode changes through the router alone, which keeps the input machine in step, so a
-request from the FSM needs the router to take it, and the journal and a session to
-carry it. The same request would let a capture answer a key with a mode change, for
-a key that does what no action does. Rewriting intents in the router for one
+A scenario cannot put its player in a mode: the tutorial ends each lesson that ends
+on a typed glyph in a step that waits for esc, so the next starts in Normal, and a
+capture cannot answer a key with a mode change, for a key that does what no action
+does. A live run's mode changes through the router alone, which keeps the input
+machine in step, so a request from the FSM needs the router to take it, and the
+journal and a session to carry it. Rewriting intents in the router for one
 scenario stays out: a second mechanism beside the key table and the capture.
 
 ### Grow the tutorial

@@ -71,15 +71,18 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   binds each the same, so `-k vim` plays any game on the keys taught here, and
   the last lesson says so.
 
-A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph
-and the heading, under a white flash; the parent's exit runs only when the last
-lesson leaves) and whose entry lays its text; `s` goes to the next and `S` to the
-one before, and a lesson in steps nests each further step as a child, which keeps
-the text laid. `Stand` places the cursor a tick after the entry, behind the step
-right that typing a lesson's last glyph still owes. The map floor is 79 by 20, the
-view an 80 by 24 terminal shows, so no lesson there scrolls and `G` leaves the next
-heading in sight: the heading at row 1, the notes at rows 8 to 12 and the practice
-lines at rows 14 to 17, all from column 4 and ending by column 78. The Visual lesson practises on five rows and turns the
+A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every
+glyph and the heading, under a white flash; the parent's exit runs only when the
+last lesson leaves) and whose entry lays its text; `s` goes to the next and `S`
+to the one before, and a lesson in steps nests each further step as a child,
+which keeps the text laid. A lesson that ends on a typed glyph ends in a step
+that waits for esc, so the next starts in Normal; `.`, which ends its replay in
+Normal, passes it at once. `Stand` places the cursor a tick after the entry,
+behind the step right that typing a lesson's last glyph still owes. The map
+floor is 79 by 20, the view an 80 by 24 terminal shows, so no lesson there
+scrolls and `G` leaves the next heading in sight: the heading at row 1, the
+notes at rows 8 to 12 and the practice lines at rows 14 to 17, all from column 4
+and ending by column 78. The Visual lesson practises on five rows and turns the
 shield system on for itself alone, so the ping bounds have a reach to show.
 
 The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
@@ -98,9 +101,6 @@ where every lesson ends.
 - **More lessons**: `[ ]`, `gl` and the colour markers, `q` and `@` macros, and
   `N`, `M`, `C`, `X`, `P` and `s S` practised rather than told (`s` and `S` skip
   and go back here).
-- **Normal at a lesson's start**: a lesson that ends on a typed glyph leaves the
-  next one in Insert, and its prompt can only say so; the scenario cannot ask for
-  a play mode ([todo](todo.md#let-a-scenario-ask-for-a-play-mode)).
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions.
