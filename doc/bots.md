@@ -136,9 +136,12 @@ keeps bot files acts, prints and exits, for the scenario `-s` names.
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:pause`, `:bot`, `:bot drop` and `:player` work there, and what its viewer
-changes of `[play]` or the zoom is saved as a player's is: a preference is the
-operator's, whatever the run presents.
+`:n`, `:pause`, `:speed`, `:bot`, `:bot drop` and `:player` work there, and what
+its viewer changes of `[play]` or the zoom is saved as a player's is: a preference
+is the operator's, whatever the run presents. What the bot plays under is its own
+and reads `Unavailable while a bot plays`: `:auto`, `:mouse`, `:free`, `:wait` and
+`:edge`, the grants such as `:god` and `:energy`, and `:emit`, `:system` and
+`:region` ([Input §9](input-and-modes.md#9-command-mode)).
 
 ### A player's bot files
 
@@ -447,8 +450,9 @@ them through it and acts on its outputs: it asks for the special attack where
 they ask, then points the cursor at the cell they name.
 
 A network needs the pointer free, so a bot's run starts each game on the
-embedded `[play]`'s pointer whatever the player's own says, and on the
-auto-fire its `[bot]` names. Every shipped bot takes `auto_fire = "main"`, the
+embedded `[play]`'s pointer and camera edge, which bounds where it points,
+whatever the player's own says, and on the auto-fire its `[bot]` names; its
+viewer changes none of them. Every shipped bot takes `auto_fire = "main"`, the
 gun alone, and gives its networks the output `special`: the special attack is a
 network's to ask for, and each ask costs one action of the bot's rate. Left to
 auto-fire in `cave` it spends, in a game's first seconds, the heat a ship lives

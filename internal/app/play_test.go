@@ -3,6 +3,7 @@
 package app
 
 import (
+	"errors"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -174,6 +175,45 @@ func TestAWatchedRunKeepsWhatItsViewerChangesOfItsSettings(t *testing.T) {
 	if err != nil || kept.Play.MaxFPS != 24 || kept.Play.AutoFire != paths.DefaultPlay().AutoFire {
 		t.Fatalf("kept max_fps %d and auto_fire %q, %v: want the 24 its viewer set written back, and the auto-fire the stream turned left as it was",
 			kept.Play.MaxFPS, kept.Play.AutoFire, err)
+	}
+}
+
+// TestAWatchedBotsViewerSetsNothingTheBotPlaysUnder: a bot plays its run, so the
+// command line its viewer opens refuses what the bot plays under, as its auto-fire,
+// and keeps what runs the clock.
+func TestAWatchedBotsViewerSetsNothingTheBotPlaysUnder(t *testing.T) {
+	t.Parallel()
+	stop := errors.New("stop")
+	run := runConfig{Config: Config{Seed: fixtureSeed, Resources: resource.Options{Embedded: true}, Play: paths.DefaultPlay()}}
+	_, err := drive(run, "bot", "viewer", nil, nil, func(a *App) (pacedSource, error) {
+		p := &player{a: a, driven: true, interactive: true}
+		press := func(ev terminal.Event) {
+			ev.Type = terminal.EventKey
+			if !p.key(ev) {
+				t.Fatal("the viewer quit")
+			}
+		}
+		command := func(line string) {
+			press(terminal.Event{Key: terminal.KeyRune, Rune: ':'})
+			for _, r := range line {
+				press(terminal.Event{Key: terminal.KeyRune, Rune: r})
+			}
+			press(terminal.Event{Key: terminal.KeyEnter})
+		}
+		auto := a.ctx.AutoFire.Load()
+		command("auto")
+		if got := a.ctx.GetStatusMessage(); a.ctx.AutoFire.Load() != auto || got != "Unavailable while a bot plays: :auto" {
+			t.Errorf("the viewer's :auto turned auto-fire %d to %d, told %q", auto, a.ctx.AutoFire.Load(), got)
+		}
+		double, _ := engine.ParseScale("2")
+		command("speed 2")
+		if got := a.ctx.TimeCtl.Scale(); got != double {
+			t.Errorf("the viewer's :speed 2 left the rate at %sx, told %q", got, a.ctx.GetStatusMessage())
+		}
+		return nil, stop
+	})
+	if !errors.Is(err, stop) {
+		t.Fatal(err)
 	}
 }
 
