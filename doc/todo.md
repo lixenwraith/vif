@@ -250,12 +250,11 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   files row; and `clear` in a run learning the population is undone by that
   run's next save.
 - **Training on from `main`'s model.** The embedded scenario's bot is
-  `default`'s graph with a walk two runs of two minutes fielded, four games
-  each and 265 rounds in all. A round pays by its Krakens, 50,000 each, so its
-  score moves in steps: the model fields 708,665 over 100 held-out rounds,
-  fourteen Krakens down in 82, and a fifteenth can be had inside the half
-  hour, met in three of them and shot down in two
-  ([Bots](bots.md#examples)).
+  `default`'s graph with a walk six minutes of four games fielded from
+  nothing, 396 rounds. A round pays by its Krakens, 50,000 each, so its score
+  moves in steps: the model fields 711,496 over 100 held-out rounds, fourteen
+  Krakens down in 88, and a fifteenth can be had inside the half hour, met
+  in four of them ([Bots](bots.md#examples)).
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and a run can field less than it began
   with: of eight read on the model before this one, two field 284,269 and
@@ -355,9 +354,11 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
 - **`default`'s network `walk`** learns in a run alone, a population a
   scenario, which a seat fields too, and writes no weight
   ([Bots](bots.md#writing-a-graph)). Owed:
-  - a use for the wheel. `td` and `recall` are all text, where it is the
-    network's one say, and 142 rounds of `td` learned nothing by it; a start
-    written by hand that asks for it as a threat nears is the next to try;
+  - a use for the wheel, or its end. `td` and `recall` are all text, where
+    it is the network's one say, and 142 rounds of `td` learned nothing by
+    it; the embedded scenario's model takes none from text and walks less
+    than the unlearned, 13 to 14 ticks in 100 for 16 to 18. A start written
+    by hand that asks for it as a threat nears is the one use left to try;
   - a bot of its own for each scenario, the embedded one first, carrying what
     `default` learns there as `cave` carries its model: what one scenario
     teaches loses in another, so `default` writes none;
@@ -373,9 +374,10 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   - a round that needs no new game: closing the embedded one each half hour
     earns a tenth less than an unbroken game does, and waits on a death that
     resets none;
-  - its inputs cut to what a policy uses: the 161 are those that read on its
-    ticks, and which ranks of eight species and eight bullets earn their
-    weights is unmeasured. A population of them is 860 KB a scenario.
+  - which of its seventeen inputs earn their weights: sets of 13 to 25
+    around them read alike over three seeds of the fixed-shooter `armada`,
+    where the fielded members of one set ran from 6,489 to 50,826, so six
+    seeds and longer runs are owed before one is told from another.
 - **A move that names a place**, not built: `outputs` leaves room for one. An
   output's units are its own and a network has those of the outputs it lists,
   so a move to a place in the view takes `move`'s place in a list, where `move`
