@@ -169,7 +169,8 @@ Libraries · Branches.
   `[local]` event a system pushes, which is neither journaled nor sent.
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
-  reads the run's, as tests may keep the constant.
+  reads the run's, as tests may keep the constant. A comment or doc giving ticks in
+  seconds says "at the default tick", 20 a second: 300 ticks once read five seconds.
 - `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
   world reads and the journal records; Command and Overlay are the operator's, held
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
