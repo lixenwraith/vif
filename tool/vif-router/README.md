@@ -90,9 +90,12 @@ One session row has this shape:
 there is one, except that `expires_in` is the sooner of the game's countdown and the
 Job's `activeDeadlineSeconds`. An occupied game runs no countdown, so the Job's
 deadline is what it reports. `guests` counts the session's own bots too, since each
-holds a seat; `bots` is how many of them are bots. A pod that is not ready, or
-whose probe fails, reports `live=false` with its pod phase or `starting`, and
-`routable` is false until its address is a ready endpoint. `scenario` and `size` are
+holds a seat; `bots` is how many of them are bots. `ready` says the door takes a dial
+for a place: a seat is free, or a guest away holds one, which their reload takes
+back and, past a session's one place, a newcomer is given; `guests` below `capacity`
+tells which. A pod that is not ready, or whose probe fails, reports `live=false`
+with its pod phase or `starting`, and `routable` is false until its address is a
+ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
 it has, from the first tick on. `build` is the binary the session runs, named as a
 refusal of another build names it, so a page can be told before it dials one.
@@ -150,10 +153,11 @@ never clamped. `size` is `first`, or a `WxH` screen whose game area (the screen 
 the game's gutters and status rows) is a map the grid can hold.
 
 `bots` seats that many of the session's own bots, each a roster guest playing the
-embedded `default` graph. A session is ready only while a seat is free, so a request
-is also refused bots that leave no seat for a person: at most `players - 1`. The
-bots occupy the session as people do, so one nobody else joins plays on until a
-drain or the Job's one-hour `activeDeadlineSeconds` ends it.
+embedded `default` graph. A new session is ready only while a seat is free, since
+nobody is away from it yet, so a request is also refused bots that leave no seat for
+a person: at most `players - 1`. The bots occupy the session as people do, so one
+nobody else joins plays on until a drain or the Job's one-hour
+`activeDeadlineSeconds` ends it.
 `-bots-max` is at most 6, the most whose pod envelope fits the namespace's
 `LimitRange`. Each bot is a world of its own, measured on a 120x40 screen, so bots
 are refused on a larger map: a scenario's fixed one, or a `size` past 4,800 cells.

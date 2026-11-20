@@ -286,6 +286,8 @@ func TestAPayloadFieldIsOneItsEventCarries(t *testing.T) {
 			"event 'EventInputPressed' carries no bool field 'tick'"},
 		{`transitions = [{ trigger = "Tick", target = "B", guard = "Not", guard_args = { guard = { name = "PayloadStringEquals", args = { field = "message" } } } }]`,
 			"guard 'Not': guard 'PayloadStringEquals': field 'message': Tick carries no payload"},
+		{`transitions = [{ trigger = "EventCharacterTyped", target = "B", guard = "PayloadCovers", guard_args = { x = 1, y = 2 } }]`,
+			"guard 'PayloadCovers': event 'EventCharacterTyped' carries no range of cells"},
 		{`on_enter = [{ action = "SetVar", payload = { name = "v" }, guard = "PayloadIntCompare", guard_args = { field = "tick" } }]`,
 			"field 'tick': an action guard sees no payload"},
 		{`transitions = [{ trigger = "EventSpeciesKilled", target = "B", capture_vars = { xx = "v" } }]`,

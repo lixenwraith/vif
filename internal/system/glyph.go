@@ -370,8 +370,8 @@ func (s *GlyphSystem) nextGlyphToSpawn() GlyphKey {
 }
 
 // spawnGlyphs pulls the next content block and places it: a line at a time, or
-// where the scenario asks for blocks, whole where a slot holds it, so a bracket pair
-// or a paragraph reads across its rows
+// where the scenario asks for blocks, whole on rows of its own or not at all, so a
+// bracket pair or a paragraph reads across its rows; drifting glyphs enter line by line
 func (s *GlyphSystem) spawnGlyphs() {
 	res := s.world.Resources.Content
 	if res == nil || res.Provider == nil {
@@ -386,7 +386,8 @@ func (s *GlyphSystem) spawnGlyphs() {
 	s.updateCensus()
 	key := s.nextGlyphToSpawn()
 
-	if s.world.Resources.Config.ContentBlocks && s.placeBlock(block.Lines, key.Type, key.Level) {
+	if s.world.Resources.Config.ContentBlocks && !s.statDriftActive.Load() {
+		s.placeBlock(block.Lines, key.Type, key.Level)
 		return
 	}
 	for _, line := range block.Lines {
@@ -406,13 +407,14 @@ func crop(line string, width int) (text string, length int) {
 	return line, length
 }
 
-// placeBlock lays a block's lines on consecutive rows from one column, in the
-// open and in one batch; a block of one line, one taller than the map, or one no
-// slot holds in MaxPlacementTries is not placed, and glyphs drifting enter line by line
-func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
+// placeBlock lays a block's lines on consecutive rows from one column, in one
+// batch, on rows nothing else holds with an empty one each side, so % and { } read
+// it alone; a block taller than the map, or one no slot holds in
+// MaxPlacementTries, is passed over
+func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) {
 	config := s.world.Resources.Config
-	if len(lines) < 2 || len(lines) > config.MapHeight || s.statDriftActive.Load() || s.world.Resources.Player.Count() == 0 {
-		return false
+	if len(lines) == 0 || len(lines) > config.MapHeight || s.world.Resources.Player.Count() == 0 {
+		return
 	}
 	width := 0
 	for _, line := range lines {
@@ -420,7 +422,7 @@ func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, 
 		width = max(width, length)
 	}
 	if width == 0 {
-		return false
+		return
 	}
 
 	for range parameter.MaxPlacementTries {
@@ -433,6 +435,9 @@ func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, 
 				break
 			}
 		}
+		for r := max(row-1, 0); clear && r <= min(row+len(lines), config.MapHeight-1); r++ {
+			clear = !s.occupied(r, 0, config.MapWidth)
+		}
 		if !clear {
 			continue
 		}
@@ -443,10 +448,9 @@ func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, 
 		}
 		// Text placed under a scenery drift is scenery for life
 		if s.commit(glyphType, glyphLevel, s.statDriftScenery.Load(), false) {
-			return true
+			return
 		}
 	}
-	return false
 }
 
 // placeLine attempts to place a single line on the map, or while glyphs drift starts

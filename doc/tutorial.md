@@ -15,18 +15,20 @@ responsive map, combat off. Each lesson is laid out the same way, top to bottom:
   (`EventGlyphLineRequest`, `scenery = true`), which nothing types or deletes;
 - a practice line, laid as typeable glyphs, and the cursor moved onto it
   (`EventCursorMoveRequest`);
-- a status-bar prompt (`EventMetaStatusMessageRequest`) for what the lesson waits
-  on, repeated as an alert when the player stalls.
+- a status-bar prompt (`EventMetaStatusMessageRequest`, `kind = "goal"`) for what
+  the lesson waits on, held under every other message until the next.
 
 A lesson ends when its state's guard sees the result: the cursor at a cell
 (`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), an edit asked for
 (`EventDeleteRequest` by its range, `EventGlyphReplaceRequest` by its text,
 `EventGlyphPutRequest`), a glyph typed (`EventCharacterTyped` by its `char` and
-cell, or a count of `EventEnergyGlyphConsumed`), a mode entered
-(`EventModeChanged`), or a captured key pressed (`EventInputPressed`)
-([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map is laid
-from `map_width` and `map_height` (`ConfigToVar`, then the arithmetic actions): a
-heading centred at `(map_width - 6 * len) / 2`, lessons re-laid when the state is
+cell: a line's last, never a count of glyphs, and a delete of any shape taking
+it, `PayloadCovers`, moves on too), a mode entered (`EventModeChanged`), or a
+captured key pressed (`EventInputPressed`)
+([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map's bottom
+row is read from `map_height` each tick (`on_update`: `ConfigToVar`, then the
+arithmetic actions), so a resize mid-lesson moves the goal with the map; a
+heading stands at the top left, and a lesson is laid again when its state is
 entered again.
 
 ## 2. What it holds
@@ -35,7 +37,7 @@ entered again.
 tutorial` plays it, `vif -s tutorial -check` validates it with its corpus. In order:
 `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x dd`, `dw D`, `i` and typing,
 `A I a`, `o O`, `c cc`, `r ~`, `.` with its Insert text, `y p P`, `u` and
-Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v` and its `d`, then what a game
+Ctrl-R, `%`, `/ n`, `* #`, ``m ' ` ``, `gg G M`, `v` and its `d`, then what a game
 makes of the keys the tutorial gave back to vi. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
@@ -52,41 +54,81 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   files, in its container under its digest, which the run types in place of its
   roots'. The tutorial's is code in blocks of two to five lines.
 - `[content] blocks = true` lays a corpus block whole, its lines on consecutive
-  rows from one column, so `%` finds a bracket's pair across rows and `{` `}` hop
-  between blocks; where no slot holds it, and in every scenario that leaves the
-  key unset, line by line, spread as before.
+  rows from one column, rows nothing else holds with an empty one each side, so
+  `%` finds a bracket's pair in its block and `{` `}` hop between blocks; a block
+  no slot holds is passed over, and every scenario that leaves the key unset
+  spreads lines as before. A block is five lines at most, the corpus's limit, so
+  no longer one is split.
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutorial captures `s` and
-  `S` in Normal and Visual with nothing pending, so `fs` and `qs` still take
-  their letter and Insert types it.
-- The entry's `[keymap.normal]` and `[keymap.normal_keys]` bind, over the player's
-  keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
-  `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
-  `redo_change`, and `m` to `mark_set`
+  `S` in Normal and Visual with no operator, prefix or label pending, so `fs` and
+  `qs` still take their letter, Insert types it and `2s` skips once.
+- `EventModeRequest` asks the router for a play mode, which it enters as the
+  mode's key would: each lesson asks for Normal as it stands the cursor.
+- `EventMetaStatusMessageRequest` takes a `kind`, a notice unless it names
+  another: the prompts are goals, which the bar holds under every message and the
+  start prompt rather than showing for a notice's five seconds, so after `:n` it
+  says a key starts lesson 1, and a command's answer gives the goal back as it ends.
+  Each fits the line's 62 columns of an 80 column screen: a longer one would hold
+  the items' row for its whole lesson.
+- The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
+  bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
+  `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to
+  `undo_change` and `redo_change`, `m` to `mark_set`, and the backtick, the
+  console's key, to `mark_jump`, after an operator too, so `` `a `` returns to the
+  marked cell and `:console` opens the console
   ([Input §10](input-and-modes.md#10-keymap-override-files)). The vim keymap
   binds each the same, so `-k vim` plays any game on the keys taught here, and
   the last lesson says so.
 
-A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph
-and the heading, under a white flash; the parent's exit runs only when the last
-lesson leaves) and whose entry lays its text; `s` goes to the next and `S` to the
-one before, and a lesson in steps nests each further step as a child, which keeps
-the text laid. `Stand` places the cursor a tick after the entry, behind the step
-right that typing a lesson's last glyph still owes. The map floor is 80 by 24: the
-heading at row 1, the notes at rows 8 to 11 and the practice lines at rows 14 to
-16, all from column 4. The Visual lesson practises on five rows and turns the
-shield system on for itself alone, so the ping bounds have a reach to show.
+A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every
+glyph and the heading, under a white flash; the parent's exit runs only when the
+last lesson leaves) and whose entry lays its text; `s` goes to the next and `S`
+to the one before, and a lesson in steps nests each further step as a child,
+which keeps the text laid. A lesson that ends on a typed glyph ends in a step
+that waits for esc, which drills it; `.`, which ends its replay in Normal,
+passes it at once, and a delete that takes the glyph goes on past it, since an
+`x` in Normal leaves no esc to wait for. One that ends on a delete waits for no
+esc, which a `d` in place of a `c` never needs. `Stand` asks for Normal
+(`EventModeRequest`), so every lesson opens there whatever mode the key that
+ended the last left, `cc`'s Insert or the Visual an `s` skipped from, and places
+the cursor a tick after the entry, behind the step right that typing a lesson's
+last glyph still owes. The map floor is 79 by 20, the view an 80 by 24 terminal
+shows, so no lesson there scrolls and `G` leaves the next heading in sight: the
+heading at row 1, the notes at rows 8 to 12 and the practice lines at rows 13 to
+17, Open's note between its two, all from column 4 and ending by column 78. The
+Visual lesson practises on five rows and turns the shield system on for itself
+alone, so the ping bounds have a reach to show, and Free turns the glyph spawner
+on: each through a region it spawns (`reach`, `practice`), whose systems a
+join's or a reload's install re-derives, as it would not an action's toggle.
+
+The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
+join or a reload that installs a later lesson lays that lesson's text in place of
+the first one its own boot laid. Lesson 1's x is a typeable glyph, which `$`, `w`
+and `e` reach as they reach a word.
+
+The tutorial seats one player (`max_players = 1`) and takes no bot beside that
+player: a seat is refused before a session opens and a bot's own run at the
+door, for good, though a bot may play it alone (`-watch -bot 1`). Its lessons
+end on a player's edits, typed glyphs and mode changes, local events that move
+the machine only where that player's instance holds it (D-20). A guest of a
+server holding it, as a browser's page is, moves on by the cursor, `s` and `S`
+alone ([todo](todo.md#end-the-tutorials-lessons-for-a-guest-of-a-server));
+`:leave` plays on alone, where every lesson ends. A server's probe reads ready
+while its one place waits for a player away, so a reloaded page takes that
+place back, which no other dial is given; a second person is refused as the
+session full, a host of it lets others spectate only, and a scripted host
+refuses a lobby that would wait for a guest forever.
 
 ## 3. The next round
 
 - **More lessons**: `[ ]`, `gl` and the colour markers, `q` and `@` macros, and
   `N`, `M`, `C`, `X`, `P` and `s S` practised rather than told (`s` and `S` skip
   and go back here).
-- **Normal at a lesson's start**: a lesson that ends on a typed glyph leaves the
-  next one in Insert, and its prompt can only say so; the scenario cannot ask for
-  a play mode ([todo](todo.md#let-a-scenario-ask-for-a-play-mode)).
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
-  since a state re-entering itself runs no entry actions.
+  since a state re-entering itself runs no entry actions. Below 80 columns the
+  camera cuts the notes, which reach column 78; a lesson laid from the viewport's
+  width would show them whole.
 - **Centring from the map's edge**: a text or line placed from the right or the
   bottom edge, or the centre (an `origin` on the request,
   [FSM reference](fsm-reference.md#event-emission)), would spare the scenario
@@ -109,3 +151,8 @@ shield system on for itself alone, so the ping bounds have a reach to show.
   before.
 - The tutorial's cursor has no shield outside the Visual lesson, so Visual there
   moves and edits as Normal does.
+- The tutorial runs no particle system: Space, a game's special fire, which auto
+  fire presses too, would turn the practice code's dark glyphs to dust.
+- A click or tap on a lesson's goal ends it as the motion would:
+  `CursorMovedPayload` carries no pointer bit, and a tap is how a phone moves the
+  cursor.

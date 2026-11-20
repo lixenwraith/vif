@@ -547,6 +547,36 @@ func TestAScenarioPlayerRangeBoundsTheRequest(t *testing.T) {
 	}
 }
 
+// TestABotRefusalNamesWhatLeavesNoSeat: where no bot fits, the refusal says what
+// leaves none, never a range from 0 to 0.
+func TestABotRefusalNamesWhatLeavesNoSeat(t *testing.T) {
+	cfg := testAllocatorConfig(t)
+	entry := filepath.Join(cfg.WadDir, "scenario", "td", "scenario.toml")
+	if err := os.WriteFile(entry, []byte("max_players = 1\n[regions]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refusal := func(cfg allocatorConfig, request sessionRequest) string {
+		_, err := newAllocator(&fakeKube{}, fakeHealth{}, cfg).resolve(request)
+		if !errors.Is(err, errRequestRefused) {
+			t.Fatalf("resolve(%+v) returned %v, want a refusal", request, err)
+		}
+		return err.Error()
+	}
+	for request, want := range map[sessionRequest]string{
+		{Scenario: "td", Bots: 1}: "scenario td seats one player, so no bot joins it",
+		{Players: 1, Bots: 1}:     "keeps its seat for the person who asked",
+		{Players: 4, Bots: 4}:     "between 0 and 3 for 4 players",
+	} {
+		if got := refusal(cfg, request); !strings.Contains(got, want) {
+			t.Errorf("resolve(%+v) refused with %q, want %q", request, got, want)
+		}
+	}
+	cfg.BotsMax = 0
+	if got := refusal(cfg, sessionRequest{Players: 4, Bots: 1}); !strings.HasSuffix(got, "this fleet seats no bot") {
+		t.Errorf("a fleet opening no bot seat refused with %q", got)
+	}
+}
+
 // TestScenarioDescriptionsComeFromTheirEntries reads each one from the file the
 // game reads, the embedded fallback standing in for a main the volume lacks. An
 // entry that states none, or whose preamble overruns the scan, is still offered.

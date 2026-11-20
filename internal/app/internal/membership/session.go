@@ -258,7 +258,7 @@ func (m *Membership) PlayersFit(sc resource.Scenario) error {
 		return fmt.Errorf("-players %d is below scenario %s's min_players %d", n, sc.Shown(), sc.MinPlayers)
 	}
 	if n := m.rosterPlayers(); n > sc.MaxPlayers {
-		return fmt.Errorf("scenario %s holds at most %d players; this session has %d", sc.Shown(), sc.MaxPlayers, n)
+		return fmt.Errorf("scenario %s seats at most %d player(s), bots counted; this session has %d", sc.Shown(), sc.MaxPlayers, n)
 	}
 	return nil
 }
@@ -267,6 +267,10 @@ func (m *Membership) PlayersFit(sc resource.Scenario) error {
 func (m *Membership) noteJoinerReport(id link.PeerID, report network.JoinerReport) error {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
+	// A bot's own run is refused here as a seat is where it is added, for good
+	if err := botRefused(*m.scenario); err != nil && (report.Bot || report.Holder != 0) {
+		return &network.Refusal{Code: network.RefusalNoSeat, Reason: err.Error()}
+	}
 	if report.Holder != 0 {
 		i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == report.Holder })
 		if i < 0 || report.Holder == id || m.sessionRoster[i].Holder != 0 || report.Listen != "" {
@@ -816,7 +820,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 		return network.SessionOffer{}, errNotReturning
 	}
 	if len(m.sessionRoster) >= limit {
-		if m.yieldLocked() {
+		if m.mayYieldLocked() && m.yieldLocked() {
 			return network.SessionOffer{}, &network.Refusal{Code: network.RefusalYielding,
 				Reason: "session is full, and a player who left is giving up a place"}
 		}
@@ -1019,11 +1023,25 @@ func (m *Membership) refusedLocked(seats seating) error {
 	return nil
 }
 
-// fullLocked is the refusal of a dial a full session has no place for. Caller holds
-// sessionMu.
+// fullLocked is the refusal of a dial a full session has no place for, for good where
+// its one seat is the host's. Caller holds sessionMu.
 func (m *Membership) fullLocked() error {
-	return &network.Refusal{Code: network.RefusalFull,
-		Reason: fmt.Sprintf("session is full at %d participant(s)", m.playerCapacity())}
+	if m.SessionCapacity() == 0 {
+		return &network.Refusal{Code: network.RefusalNoSeat, Reason: m.oneSeat() + ", so others can only spectate"}
+	}
+	reason := fmt.Sprintf("session is full at %d participant(s)", m.playerCapacity())
+	if m.scenario.MaxPlayers <= 1 {
+		reason = m.oneSeat()
+	}
+	return &network.Refusal{Code: network.RefusalFull, Reason: reason}
+}
+
+// oneSeat names what seats a single player: the scenario, or this session's -players
+func (m *Membership) oneSeat() string {
+	if m.scenario.MaxPlayers <= 1 {
+		return "scenario " + m.scenario.Shown() + " seats one player"
+	}
+	return "this session seats one player"
 }
 
 // holdsPlaceLocked reports whether one of the keys a dial proved holds a place in
@@ -1225,9 +1243,30 @@ func (m *Membership) yieldLocked() bool {
 	return true
 }
 
+// PlaceWaits reports whether a place waits for a participant away and not coming
+// back, which a full session's door still seats a dial on: its player's, as a
+// reloaded page dials back with, and past a session's one place a newcomer's. What
+// the readiness probe reads beside the room left.
+func (m *Membership) PlaceWaits() bool {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return m.awayPlaceLocked()
+}
+
+// yieldsPlaces reports whether a full session gives a newcomer the place of a
+// participant away: never a session's one place, which waits for its own player's
+// key, so no stranger or bot takes a solo game from a player reloading.
+func (m *Membership) yieldsPlaces() bool { return m.playerCapacity() > 1 }
+
 // mayYieldLocked reports whether yieldLocked would find a place on its way, asking
-// nothing. Caller holds sessionMu.
+// nothing (yieldsPlaces). Caller holds sessionMu.
 func (m *Membership) mayYieldLocked() bool {
+	return m.yieldsPlaces() && m.awayPlaceLocked()
+}
+
+// awayPlaceLocked reports whether a participant away and not coming back holds a
+// place, or one is on its way. Caller holds sessionMu.
+func (m *Membership) awayPlaceLocked() bool {
 	_, ok := m.awayLocked(m.yielding)
 	return ok || m.yieldableLocked() != 0
 }
@@ -1403,6 +1442,11 @@ func (m *Membership) StartHostSession(signals <-chan os.Signal) error {
 // gate, dials are refused: no gate can serve one in that window.
 func (m *Membership) startHostSessionOn(port *link.SocketPort, signals <-chan os.Signal) error {
 	quorum, capacity := m.lobbyQuorum(), m.SessionCapacity()
+	// A quorum past the room never gathers: a host's own cursor fills a one-seat game
+	if quorum > capacity {
+		return fmt.Errorf("scenario %s seats %d player(s), this host's among them, so a lobby waiting for %d guest(s) never starts",
+			m.scenario.Shown(), m.scenario.MaxPlayers, quorum)
+	}
 	addr := m.cfg.HostAddress
 	if bound := port.Addr(); bound != nil {
 		addr = bound.String()

@@ -1044,6 +1044,7 @@ const (
 	RefusalDropped                           // the authority dropped this participant, and its key or account stays out
 	RefusalAudience                          // the session feeds every viewer it takes
 	RefusalUnstarted                         // the game has not started, and its lobby holds players alone
+	RefusalNoSeat                            // no seat is ever this dial's: its one is the host's, or it takes no bot
 )
 
 // Retry is what a refused dialer can do about it.
@@ -1077,6 +1078,7 @@ var refusals = [...]struct {
 	RefusalDropped:    {RetryNever, ""},
 	RefusalAudience:   {RetryLater, "retry when a spectator leaves"},
 	RefusalUnstarted:  {RetryLater, "retry once it has"},
+	RefusalNoSeat:     {RetryNever, ""},
 }
 
 // Refusal is a join turned away. Code is the kind and Reason what the player

@@ -486,7 +486,8 @@ evaluates nothing and follows, so a guard may read what the authority alone hold
 same crossing (`FSMTransitionPayload.Then`), so a chain of them costs one lead and
 lasts no tick in a session; alone, a run takes them one an update. A `Local`
 event still cannot steer a region: it would move it for the authority's player
-alone. Per-instance effects are emitted by the local owning system or by a
+alone, so a scenario that steers one by a local event seats one player
+(`max_players = 1`), which validation holds it to. Per-instance effects are emitted by the local owning system or by a
 cursor-scoped action without moving the region differently.
 
 ### D-21 — Simulation time is tick-derived

@@ -1,10 +1,13 @@
 package membership
 
 import (
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/resource"
 )
 
 func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
@@ -31,5 +34,20 @@ func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
 	}
 	if err := m.removeSeat(pending.number); err != nil || !m.botSeats()[0].Stopping {
 		t.Fatal("pending bot could not be cancelled")
+	}
+}
+
+// TestABotSeatRefusalIsTheRunsOwnFailure: a bot a scenario seating one player is
+// asked to seat is refused as this run's own failure, which no session answered, so
+// a run that dials nothing exits as one that failed, never as one a session refused.
+func TestABotSeatRefusalIsTheRunsOwnFailure(t *testing.T) {
+	t.Parallel()
+	sc, err := resource.LoadScenario(resource.Options{Embedded: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc.MaxPlayers = 1
+	if err := botRefused(sc); err == nil || errors.As(err, new(*network.Refusal)) {
+		t.Fatalf("a bot asked of a scenario seating one player is refused %v; want the run's own failure, no session's refusal", err)
 	}
 }

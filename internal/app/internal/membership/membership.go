@@ -72,8 +72,9 @@ type Membership struct {
 	sessionRoster []network.RosterEntry
 
 	// awayOrder is who of the roster is away, in the order they left: a full session
-	// gives a newcomer the place of the first. yielding is that one while its dismissal
-	// is on its way, and dismissWraith hands it to the authority's next tick.
+	// of more than one place gives a newcomer the place of the first (yieldsPlaces).
+	// yielding is that one while its dismissal is on its way, and dismissWraith hands
+	// it to the authority's next tick.
 	awayOrder     []link.PeerID
 	yielding      link.PeerID
 	dismissWraith atomic.Uint32

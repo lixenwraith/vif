@@ -446,11 +446,12 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		text := ":" + r.gameCtx.GetCommandText()
 		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbCommandInputText, r.gameCtx.GetCommandCursorPos()+1)
 	default:
-		prompt := ctx.Prompt
+		held := cmp.Or(ctx.Prompt, r.gameCtx.StatusGoal())
 		if ctx.StartScreen {
-			prompt = "" // the start screen's button asks
+			held = "" // the start screen's button asks, and shows no game a goal is for
 		}
-		msg := r.runesOf(cmp.Or(r.gameCtx.ShownStatusMessage(realNow.UnixNano()), prompt))
+		text, _ := r.gameCtx.ShownStatus(realNow.UnixNano())
+		msg := r.runesOf(cmp.Or(text, held))
 		// One longer than its room rises onto the items' row while it shows, as vim's
 		// long message rises over the window, and ends here; a keyboard hides that row
 		if len(msg) > textWidth && !ctx.StatusCovered {
@@ -626,9 +627,8 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	}
 
 	// slow!     no cadence delivers a whole world inside the guaranteed window;
-	// desync n  this instance is n ticks out of step with the authority's epochs,
-	//           beyond what its pacing trims quietly: ahead, so committed
-	//           crossings reach it late, or behind by a step, so its lead grows;
+	// desync n  this instance is n ticks out of step with the authority's epochs past
+	//           what pacing trims: ahead, late crossings; behind, a growing lead;
 	// loss n%   probes went unanswered often enough for the link to be the cause;
 	// slow      the cadence backed off and prediction carries more.
 	rtt := r.statRTT.Load()

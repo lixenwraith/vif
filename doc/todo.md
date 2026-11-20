@@ -451,27 +451,6 @@ second of game time later. What that leaves:
 - `recall` arms every cursor again at any cursor's spawn, a bot's return among
   them (`PlayerActive`'s `EventCursorSpawned` transition).
 
-### Hold every scenario to the shared-region rule at load
-
-- Priority: P1
-- Affected files: `internal/resource/check.go` (`ValidateScenario`),
-  `internal/app/domain_test.go` (`scenarioTrees`),
-  `wad/scenario/base/tutorial/scenario.toml`
-- Guide: [D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)
-
-A region a local event moves advances on the instance that produced the event and
-nowhere else. `TestFSMTriggersAreReplicated` holds the shipped scenarios to that
-through a list kept by hand (`scenarioTrees`), which leaves out `armada`, which
-passes, and `tutorial`, which fails: its lessons step on a player's edit requests,
-typed glyphs and mode changes and count `EventEnergyGlyphConsumed`. A scenario an
-author writes is never read by it: it loads, plays alone and comes apart in a
-session.
-
-What closes it: `ValidateScenario` refuses a transition a local event triggers in
-a scenario seating more than one player, naming the state and the trigger, so
-`-check`, a start, `:n` and the editor hold every scenario alike; the tutorial
-takes `max_players = 1`; and `scenarioTrees`' list goes with the rule's move.
-
 ### Describe a scenario document in the schema
 
 - Priority: P1
@@ -747,20 +726,20 @@ tutorial attach. What is left:
   where a delete also takes the layers under it
   ([below](#decide-what-a-delete-removes-under-a-drift-stack)).
 
-### Let a scenario ask for a play mode
+### End the tutorial's lessons for a guest of a server
 
-- Priority: P3
-- Affected files: `internal/mode/router.go`, `internal/system/meta.go`,
-  `wad/scenario/base/tutorial/scenario.toml`
-- Guide: [Tutorial §3](tutorial.md#3-the-next-round)
+- Priority: P1
+- Affected files: `internal/fsm/machine.go` (`handleEventInRegion`),
+  `internal/engine/scheduler.go` (`proposeTransition`),
+  `internal/system/network.go` (`admissibleFromSource`)
+- Guide: [D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions),
+  [Tutorial §2](tutorial.md#2-what-it-holds)
 
-A tutorial lesson that ends on a typed glyph leaves the next one in Insert, where
-its first key types, and the lesson can only say so on the status bar. A live run's
-mode changes through the router alone, which keeps the input machine in step, so a
-request from the FSM needs the router to take it, and the journal and a session to
-carry it. The same request would let a capture answer a key with a mode change, for
-a key that does what no action does. Rewriting intents in the router for one
-scenario stays out: a second mechanism beside the key table and the capture.
+A browser plays the tutorial only as a server's guest, where a transition a local
+event triggers is never taken: eleven of the twenty-two lessons end by `s` alone.
+What closes it: the one player's instance asks the authority for the transition
+its local event passed, which the authority takes as its own; or the tutorial is
+embedded, so a page plays it alone.
 
 ### Grow the tutorial
 
@@ -768,11 +747,8 @@ scenario stays out: a second mechanism beside the key table and the capture.
 - Affected files: `wad/scenario/base/tutorial/`
 - Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
-The tutorial runs twenty-two lessons: the motions, counts, `x dd`, `d` with a
-motion, `i` and typing, `A I a`, `o O`, `c cc`, `r ~`, `.`, `y p P`, `u` and
-Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
-keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next
-round adds `[ ]`, the markers and macros, practises the keys it only tells
+The next round of lessons ([Tutorial §2](tutorial.md#2-what-it-holds) lists
+what runs) adds `[ ]`, the markers and macros, practises the keys it only tells
 (`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
 map's edge (`origin`, [FSM reference](fsm-reference.md#event-emission)),
 and cues a lesson cleared.
@@ -2334,6 +2310,20 @@ the capture with it, and any shield draws at them; missing are the request, whic
 the entity's owner applies as a cursor's owner writes its own shield (D-2), and a
 contact rule: `CursorContactAt` reads cursors' shields alone and only a cursor's
 drains energy, so a mounted shield guards nothing yet.
+
+### Lower the shields a scenario's switch-off leaves up
+
+- Priority: P3
+- Affected files: `internal/system/shield.go` (`HandleEvent`)
+- Guide: [Gameplay §5](gameplay.md#5-energy-heat-boost-and-shield)
+
+A scenario that turns the shield system off, by its toggle or by ending a region
+that runs it, leaves a raised shield up: drawn, its ping bounds held and its drain
+stopped, and a deactivate, the energy system's at zero energy or a scenario's own,
+is refused while the system is off. The tutorial's Visual lesson lowers the shield
+in its exit before it ends its region, so nothing stands there. The smallest fix
+lowers each shield its owner simulates as the command turns the system off, as
+`setActive` does (D-2).
 
 ## Species
 

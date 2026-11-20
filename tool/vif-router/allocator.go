@@ -329,6 +329,23 @@ func fixedMap(data []byte) string {
 	return size
 }
 
+// botsRefused names the bot count that fits, or what leaves none: the fleet, the
+// scenario's one seat or the one the asker keeps.
+func (a *allocator) botsRefused(most int, workload workloadConfig, scenarioMax int) error {
+	switch {
+	case most > 0:
+		return fmt.Errorf("%w: bots must be between 0 and %d for %d players",
+			errRequestRefused, most, workload.Players)
+	case a.cfg.BotsMax == 0:
+		return fmt.Errorf("%w: this fleet seats no bot", errRequestRefused)
+	case scenarioMax == 1:
+		return fmt.Errorf("%w: scenario %s seats one player, so no bot joins it",
+			errRequestRefused, workload.Scenario)
+	}
+	return fmt.Errorf("%w: a session of one player keeps its seat for the person who asked",
+		errRequestRefused)
+}
+
 // resolve folds a caller's choices into this deployment's workload. An omitted
 // choice keeps the default, moved into the scenario's player range; one outside what
 // the operator opened or the scenario plays is refused rather than clamped, because
@@ -363,11 +380,10 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 	default:
 		workload.Players = req.Players
 	}
-	// Bots are roster guests and a session is ready only while a seat is free, so
-	// they leave at least one for the person who asked.
+	// Bots are roster guests, and a new session, which nobody is away from yet, is
+	// ready only while a seat is free, so they leave one for the person who asked.
 	if most := min(a.cfg.BotsMax, workload.Players-1); req.Bots < 0 || req.Bots > most {
-		return workloadConfig{}, fmt.Errorf("%w: bots must be between 0 and %d for %d players",
-			errRequestRefused, most, workload.Players)
+		return workloadConfig{}, a.botsRefused(most, workload, limits.MaxPlayers[workload.Scenario])
 	}
 	workload.Bots = req.Bots
 	if req.LogLevel != "" {

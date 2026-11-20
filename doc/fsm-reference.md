@@ -74,7 +74,7 @@ bots = ["bot/pilot.toml"]           # The bots made for this map, relative to th
 
 [content]                           # The scenario's own corpus, carried in its container: the run types it, not its content root
 files = ["lessons.toml"]            # Corpus files, relative to this file
-blocks = true                       # Lay each block whole, its lines on consecutive rows; line by line when unset
+blocks = true                       # Lay each block whole on rows of its own, or pass it over; line by line when unset
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
@@ -172,8 +172,11 @@ transitions and every instance applies each at one tick, a playout lead after th
 authority took it; the unguarded `Tick` hops after a transition's target ride the
 same crossing, so a chain of them costs one lead. A `[local]` event (its
 class in `internal/event/type.go`) cannot steer a region, since only the
-authority's player could move it (D-20). The loader accepts one;
-`TestFSMTriggersAreReplicated` holds the shipped scenarios to the rule.
+authority's player could move it (D-20), so a scenario one triggers a transition
+on plays alone: validation (`-check`, a start, `:n`) refuses it a `max_players`
+above 1, naming the transition (`resource.CheckLocalTriggers`). A guest of a
+server holding such a scenario never moves it by a local event; `:leave` plays on
+alone, where it does.
 
 ### Variable Capture from Payloads
 
@@ -725,6 +728,16 @@ miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
 
 `value` defaults to `true`.
 
+### PayloadCovers
+
+```toml
+{ trigger = "EventDeleteRequest", target = "Gone", guard = "PayloadCovers", guard_args = { x = 10, y = 15 } }
+```
+
+Passes when the event's range takes the cell, read as the typing system reads a
+delete's: a span, line or block, its ends in either order. A trigger whose payload
+names no range fails the load.
+
 ### PayloadStringEquals
 
 ```toml
@@ -753,9 +766,21 @@ where the slot's keyboard reports one, as a bot's does, at once with `lost = tru
 where it taps. `releases = true` on the capture asks a console keyboard for
 releases too, and `EventInputReport { slot, releases }` says which a slot does
 while keys are captured. `modes` names the play modes the capture holds in, every
-one when unset, and `idle = true` leaves a key to a count, operator or prefix
-already pending, so `fs` and `qs` still take an `s` the scenario captures; the
-tutorial's lessons do both, for the `s` and `S` that skip one and go back.
+one when unset, and `idle = true` leaves a key to an operator, prefix or label
+already pending, so `fs` and `qs` still take an `s` the scenario captures, and drops
+a count before it, so `2s` is `s`; the tutorial's lessons do both, for the `s` and
+`S` that skip one and go back.
+
+`EventModeRequest { mode }` asks this instance's router for a play mode, `normal`,
+`visual` or `insert`, which it enters as that mode's key would, before its next
+intent or on its input tick; an ask made under the command line, an overlay or a
+search waits for it to close. The change is journaled under the macro origin, a
+move no key made and no action, and a replay takes no ask, playing the change from
+its journal. The ask takes no
+`reconcile`: a correction would replay it and pull a player out of the mode they
+are in. The tutorial's lessons ask for Normal as they stand the cursor, so each
+opens there whatever mode the key that ended the last left, and a transition on a
+captured key can answer it with a mode the same way.
 
 A button lights and sounds on every press of its key by itself, held lit until the
 release, so a machine judges a press and never plays its tone.

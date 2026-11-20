@@ -185,7 +185,8 @@ What each surface checks, and what it trusts:
   places in the site's `localStorage`, held by one tab at a time under a Web Lock, a
   terminal or a desktop window in `places.json` under the user's state directory,
   Android in the app's files, each as `[session] resume_after_restart` says. A key
-  keeps a place from another player for `WraithTimeout` (2 min of game time)
+  keeps a place from another player for `WraithTimeout` (2 min of game time), except
+  where a full session of more than one place gives it to a newcomer
   ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
   challenge both ways, each end proving the roster's key for itself over the

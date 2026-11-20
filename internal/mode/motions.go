@@ -466,7 +466,7 @@ func MotionParaBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
 	for range count {
 		prev := endY
-		endY = findPrevEmptyLine(ctx, endY)
+		endY = emptyRowPast(ctx, endY, -1)
 		if endY == prev {
 			break
 		}
@@ -484,7 +484,7 @@ func MotionParaForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
 	for range count {
 		prev := endY
-		endY = findNextEmptyLine(ctx, endY)
+		endY = emptyRowPast(ctx, endY, 1)
 		if endY == prev {
 			break
 		}

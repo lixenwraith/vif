@@ -34,7 +34,10 @@ func TestAStatusMessageYieldsOnlyToItsRankOrItsMinimum(t *testing.T) {
 		t.Fatalf("the bar reads %q once the alert's minimum has passed", got)
 	}
 	shown := clock.Now().Add(parameter.StatusKinds[parameter.StatusNotice].Shown)
-	if ctx.ShownStatusMessage(shown.UnixNano()-1) == "" || ctx.ShownStatusMessage(shown.UnixNano()) != "" {
-		t.Fatal("the notice is not shown for exactly its kind's time")
+	if before, _ := ctx.ShownStatus(shown.UnixNano() - 1); before == "" {
+		t.Fatal("the notice is gone before its kind's time")
+	}
+	if after, _ := ctx.ShownStatus(shown.UnixNano()); after != "" {
+		t.Fatal("the notice outlives its kind's time")
 	}
 }

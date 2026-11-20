@@ -3217,6 +3217,10 @@ func TestAFullSessionGivesTheLongestWaitingWraithsPlaceToANewcomer(t *testing.T)
 		leave[i]()
 		waitUntil(t, func() bool { return wraithIn(host, g.slot) }, "the guest's cursor waiting as a Wraith")
 	}
+	// Its probe answers as its door does, so a router sends the dial on
+	if snap := host.probeSnapshot(); !snap.Ready {
+		t.Fatalf("a full session with Wraiths reads not ready (%s); its door seats a newcomer on a Wraith's place", snap.Reason)
+	}
 
 	// The place on its way is given up as the host ticks, so a host standing still
 	// answers every newcomer the same.

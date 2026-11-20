@@ -91,10 +91,30 @@ func ValidateScenario(o Options) (Scenario, error) {
 	if err == nil {
 		err = checkSystems(m)
 	}
+	if err == nil {
+		err = CheckLocalTriggers(sc, m.LocalTriggers())
+	}
 	if err != nil {
 		return Scenario{}, fmt.Errorf("scenario %s: %w", sc.Name, err)
 	}
 	return sc, nil
+}
+
+// CheckLocalTriggers refuses a scenario seating more than one player whose machine
+// a local event moves, naming the first such transition: only the instance whose
+// player made the event holds it, so where that instance does not hold the machine
+// alone the transition is never taken (D-20). Such a scenario plays alone, with
+// max_players = 1.
+func CheckLocalTriggers(sc Scenario, local []string) error {
+	if sc.MaxPlayers <= 1 || len(local) == 0 {
+		return nil
+	}
+	first := local[0]
+	if len(local) > 1 {
+		first += fmt.Sprintf(" and %d more", len(local)-1)
+	}
+	return fmt.Errorf("a local event moves its machine (%s), which a run of one player alone takes: "+
+		"max_players is %d, want 1", first, sc.MaxPlayers)
 }
 
 // machineOf compiles sc's machine as a run does, its regions and states declared

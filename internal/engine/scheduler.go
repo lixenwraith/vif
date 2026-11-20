@@ -386,6 +386,9 @@ func (s *Scheduler) SetJournalDigest(fn func() event.JournalDigest) { s.digest =
 // travels with the build. Caller MUST hold updateMutex: the machine is tick-owned.
 func (s *Scheduler) ExportFSM() fsm.MachineState { return s.fsm.Export() }
 
+// LocalTriggers names the loaded machine's transitions a local event triggers.
+func (s *Scheduler) LocalTriggers() []string { return s.fsm.LocalTriggers() }
+
 // SchedulerCopy is the FSM position and the scheduler's own accumulators, for a
 // replay copy restored where another stood.
 type SchedulerCopy struct {

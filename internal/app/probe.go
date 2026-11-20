@@ -59,7 +59,9 @@ func (a *App) probeSnapshot() probe.Snapshot {
 	// supplies the observations; this settles nothing the loop has not already
 	// reached, and reports what it finds.
 	life := a.life.State(now)
-	ready := live && !closing && guests < capacity && life.Admit
+	// Full, the door still seats a dial on the place of a participant away, so a
+	// one-seat session takes its player back from a reload (PlaceWaits)
+	ready := live && !closing && (guests < capacity || a.membership.PlaceWaits()) && life.Admit
 
 	// Ordered by which outranks which: a session that is ending is not merely
 	// full, and one that is not live is neither.

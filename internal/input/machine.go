@@ -24,8 +24,8 @@ func Capturable(r rune) bool { return r >= ' ' && r <= '~' }
 
 // Set replaces the captured keys; an empty string releases them all. modes are
 // the play modes the capture holds in, every one when zero, and idle leaves a key
-// to a count, operator or prefix pending. It reports the runes it refused, which
-// lie outside printable ASCII.
+// to an operator, prefix or label pending, dropping a lone count. It reports the
+// runes it refused, which lie outside printable ASCII.
 func (c *KeyCapture) Set(keys string, modes core.ModeMask, idle, releases bool) (refused string) {
 	var bits [2]uint64
 	for _, r := range keys {
@@ -271,8 +271,9 @@ func (i *Intent) changes() bool {
 func (m *Machine) pressKey(ev terminal.Event) *Intent {
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
-		// A captured key outranks any pending grammar, unless its capture is idle
-		if ev.Key == terminal.KeyRune && m.capture.Takes(ev.Rune, m.mode, len(m.cmdBuffer) > 0) {
+		// A captured key outranks any pending grammar, unless its capture is idle and a
+		// sequence waits on the next key, q's label among them; it drops a lone count
+		if ev.Key == terminal.KeyRune && m.capture.Takes(ev.Rune, m.mode, m.state != StateIdle && m.state != StateCount) {
 			if ev.Action == terminal.KeyRepeat {
 				return nil // its hold is down already
 			}
