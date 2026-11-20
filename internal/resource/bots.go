@@ -165,16 +165,13 @@ func listBots(o Options, sc Scenario, dir string) []string {
 			told := network + " "
 			switch {
 			case err != nil:
-				told += err.Error()
+				told = err.Error() // which names the network
 			case !ok:
 				continue
 			case k.Fielded == nil:
 				told += fmt.Sprintf("%d rounds, recent %.0f, none proved to field", k.Rounds, k.Recent)
 			default:
 				told += fmt.Sprintf("%d rounds, recent %.0f, fields %.0f over %d", k.Rounds, k.Recent, k.Score, k.Proved)
-			}
-			if k.Stale {
-				told += ", scored by an older rule so a run starts it over"
 			}
 			learned = append(learned, told)
 		}
@@ -261,7 +258,11 @@ func importBot(o Options, sc Scenario, dir, source, name string) (string, error)
 	// What a population kept outranks what the document writes until it is cleared
 	kept := slices.DeleteFunc(stems(dir, ".json"), func(stem string) bool {
 		_, network, _ := strings.Cut(strings.TrimPrefix(stem, name+"."), ".")
-		return !strings.HasPrefix(stem, name+".") || w[network] == nil
+		if !strings.HasPrefix(stem, name+".") || w[network] == nil {
+			return true
+		}
+		_, read, _ := to.Kept(network, paths.PlaceFile{Path: filepath.Join(dir, stem+".json")})
+		return !read
 	})
 	if len(kept) > 0 {
 		told += "; it still fields what it learned, and learns on from that, until cleared: " + strings.Join(kept, ", ")

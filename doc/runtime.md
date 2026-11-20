@@ -717,9 +717,10 @@ flowchart LR
 - A new game's request closes the round, whichever goroutine dispatched it, and
   the driver scores it as `Step` returns, off the world lock; a learning graph's
   learners hand the next round its weights there ([Bots](bots.md#learning)).
-  Drivers that learn together (`bot.Learn`) take that turn in the order of their
-  ticks and then of their games, one waiting on the rest's ticks, and
-  `Driver.End` names the tick past which none steps or is scored.
+  A run's games (`bot.Learn`, with its learners or, fielding, none) take that
+  turn in the order of their ticks and then of their games, one waiting on the
+  rest's ticks, and `Driver.End` names the tick past which none steps and no
+  round is scored or told (`Driver.Round`).
 - Draws come from `vmath.NewSeededRand(seed, "bot.<participant>")`. Graph state is
   in no capture, journal or fingerprint. `app.RunBot` starts its run on the
   embedded `[play]`'s pointer and the auto-fire its graph names, that `[play]`'s

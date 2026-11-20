@@ -1,9 +1,6 @@
 description = "Survive escalating storms, lure Krakens through mazes, and defend the tower."
 min_players = 1
 max_players = 16
-# The bot made for this game: main, which a seat that names no graph plays, is
-# default's graph with a walk learned here
-bots = ["bot/main.toml"]
 
 # Root configuration with region definitions
 

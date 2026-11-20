@@ -315,16 +315,17 @@ func (s *MetaSystem) latch(slot uint8, defeated bool) {
 	s.publishDefeatState()
 }
 
-// respawnBots asks for each bot's cursor that has been down BotRespawnTicks beside
-// a person to be equipped again: its defeat decides nothing there, so the game goes
-// on and it comes back as a new game would make it. Every instance holds the latch
-// from one tick, so each asks at the same one. A cursor no cell could take is asked
-// for again after as long.
+// respawnBots asks for each bot's cursor that has been down BotRespawn of game time
+// beside a person to be equipped again: its defeat decides nothing there, so it
+// comes back as a new game would make it. Every instance holds the latch from one
+// tick and plays one tick interval, so each asks at the same one. A cursor no cell
+// could take is asked for again after as long.
 func (s *MetaSystem) respawnBots() {
 	now := s.world.Resources.Game.State.GetGameTicks()
+	due := uint64(parameter.BotRespawn / s.world.TickInterval())
 	roster := s.world.Resources.Player
 	for i := range parameter.MaxPlayers {
-		if !s.defeated[i] || now-s.downSince[i] < parameter.BotRespawnTicks {
+		if !s.defeated[i] || now-s.downSince[i] < due {
 			continue
 		}
 		e := roster.Slot(uint8(i))
@@ -337,8 +338,8 @@ func (s *MetaSystem) respawnBots() {
 }
 
 // Shared guards fold owner-authored defeat latches, never stale energy/heat mirrors.
-// The cursors whose defeat decides are folded (World.DefeatDecides): the persons'
-// in play, or every one in play where no person's is; with none, nobody lost.
+// The cursors whose defeat decides are folded (World.DefeatDecides): the persons' in
+// play, or every bot's in play where no person holds a place. With none, nobody lost.
 func (s *MetaSystem) publishDefeatState() {
 	roster := s.world.Resources.Player
 	deciding, lost := 0, 0

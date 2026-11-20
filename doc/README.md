@@ -103,7 +103,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | the audio module's `bank/*.toml` ([`lixenwraith/audio/bank`](https://github.com/lixenwraith/audio/tree/main/bank)) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
-| Bot targets, a network's inputs and outputs | the tables in `internal/bot/catalogue.go` | `bot.Catalogue` for `-schema`, the Catalogue section of `doc/bots.md` |
+| Bot targets, a network's inputs and outputs, a score's sources | the tables in `internal/bot/catalogue.go` | `bot.Catalogue` for `-schema`, the Catalogue section of `doc/bots.md` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |

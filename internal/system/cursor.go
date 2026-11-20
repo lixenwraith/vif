@@ -388,13 +388,15 @@ func (s *CursorSystem) respawn(slot uint8) {
 }
 
 // restore writes what a returning player brought back over the template its cursor
-// was equipped with, where that is of the game being played and holds what play
-// produces. A reset starts another game, so a Wraith it rebuilt comes back as new.
+// was equipped with, where that is of the game being played, holds what play
+// produces and reads no defeat: a cursor comes back as new, never down. A reset
+// starts another game, so a Wraith it rebuilt comes back as new.
 func (s *CursorSystem) restore(e core.Entity, slot uint8, r *event.CursorRecord) {
 	if r == nil {
 		return
 	}
-	if run := s.world.Resources.Event.Queue.Stamp().Run; r.Run != run || !heldInRange(r.Heat, r.HitPoints, r.Charges) {
+	if run := s.world.Resources.Event.Queue.Stamp().Run; r.Run != run || !heldInRange(r.Heat, r.HitPoints, r.Charges) ||
+		r.Energy == 0 && r.Heat == 0 {
 		s.world.Log().Info("app", "msg", "cursor record left out", "slot", int(slot), "run", r.Run, "playing", run)
 		return
 	}
