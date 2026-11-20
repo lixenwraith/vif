@@ -1041,14 +1041,14 @@ func (r *Router) transitionMode(newMode core.GameMode) {
 
 // takeModeAsk enters the play mode a scenario asked for, as its key would, before the
 // next intent or on the input tick; an ask under the command line, an overlay or a
-// search waits for it to close. It is journaled as a key's change, so a replay, which
-// runs no router, takes none.
+// search waits for it to close. The change is journaled as a macro's, a move no key
+// made, so it counts as no action, and a replay, which takes no ask, plays it back.
 func (r *Router) takeModeAsk() {
 	if m := r.ctx.GetMode(); m.Operator() || m == core.ModeSearch {
 		return
 	}
 	if m, ok := r.ctx.TakeModeAsk(); ok && m != r.ctx.GetMode() {
-		r.ctx.WithOrigin(event.OriginInput, func() { r.transitionMode(m) })
+		r.ctx.WithOrigin(event.OriginMacro, func() { r.transitionMode(m) })
 	}
 }
 

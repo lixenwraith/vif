@@ -672,3 +672,24 @@ func TestTutorialsScriptedHostRefusesALobbyThatNeverStarts(t *testing.T) {
 		t.Fatal("the tutorial's scripted host waits for a guest its one seat has no place for")
 	}
 }
+
+// The router's take of a lesson's mode ask is no action of the player's: the tally
+// the APM and the music read stands where the player's own keys left it.
+func TestTutorialsModeAskCountsAsNoAction(t *testing.T) {
+	a := newTutorial(t, 100, 30)
+	tutorialKeys(t, a, "v")
+	ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 's'}
+	for intent := a.inputMachine.Process(ev); intent != nil; intent = a.inputMachine.Next() {
+		inject(t, a, intent)
+	}
+	a.Tick(1)
+	if tutorialState(a) != "Words" || !a.Context().IsVisualMode() {
+		t.Fatalf("s from Visual left the tutorial in %s, visual %v", tutorialState(a), a.Context().IsVisualMode())
+	}
+	actions := &a.World().Resources.Game.State.PendingActions
+	before := actions.Load()
+	if a.InputTick(); !a.Context().IsNormalMode() || actions.Load() != before {
+		t.Fatalf("the input tick that took Words' ask left normal %v and %d action(s) from %d",
+			a.Context().IsNormalMode(), actions.Load(), before)
+	}
+}

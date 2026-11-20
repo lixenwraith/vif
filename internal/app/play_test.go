@@ -55,6 +55,51 @@ func TestReplayViewStopsAtTheMapEdges(t *testing.T) {
 	}
 }
 
+// TestAReplaysViewerKeyLeavesTheRecordedMode: a replay takes no mode ask its scenario
+// makes, the change being its journal's, so a key its viewer presses mid-lesson, Ctrl+S
+// cycling the audio, leaves the recorded mode be, and the tutorial's replay ends
+// where its recording did.
+func TestAReplaysViewerKeyLeavesTheRecordedMode(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts,
+		Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	a.Tick(10)
+	tutorialTo(t, a, "Append")
+	tutorialKeys(t, a, "A}\x1bI{\x1bj^a>")
+	a.Tick(300)
+	state, insert := tutorialState(a), a.Context().IsInsertMode()
+	a.Close()
+
+	set := setOf(rec)
+	soak := func(c *Config) { c.Resources.Dir = soakRoot }
+	whole := replayPlayer(t, set, soak)
+	playSteps(whole, 1<<20)
+	settle(t, whole)
+	p := replayPlayer(t, set, soak)
+	playSteps(p, whole.rw.shown.steps-200)
+	settle(t, p)
+	if m, ok := p.a.ctx.TakeModeAsk(); ok {
+		t.Fatalf("the replay holds an ask for %v, which its journal answers", m)
+	}
+	if !p.key(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlS}) {
+		t.Fatal("Ctrl+S ended the replay")
+	}
+	playSteps(p, 1<<20)
+	settle(t, p)
+	if got := tutorialState(p.a); got != state || p.a.ctx.IsInsertMode() != insert || p.rw.divergedAt >= 0 {
+		t.Fatalf("after the viewer's Ctrl+S the replay ends in %s (insert %v, diverged at step %d); the recording ends in %s (insert %v)",
+			got, p.a.ctx.IsInsertMode(), p.rw.divergedAt, state, insert)
+	}
+}
+
 // TestReplayViewerCommandLineReturnsTheRecordedState is the rule the viewer's command
 // line keeps: it inspects the recording and changes none of it, so the world neither
 // pauses nor hears of the mode it borrowed, which is the recording's again once it closes.

@@ -143,11 +143,12 @@ them, nor what an overlay shows. Leaving one returns to Normal, recorded when th
 changes the play mode, but for the command line the console opens, which returns
 to the console.
 
-A scenario asks for a play mode with `EventModeRequest { mode }`: `MetaSystem`
-leaves the ask on the context (`GameContext.AskMode`), and the router enters it as
-the mode's key would, before its next intent or on its input tick, journaled as
-that key's change; an ask under the command line, an overlay or a search waits for
-it to close, and a replay viewer takes none.
+A scenario asks for Normal, Visual or Insert with `EventModeRequest { mode }`:
+`MetaSystem` leaves the ask on the context (`GameContext.AskMode`), and the router
+enters it as the mode's key would, before its next intent or on its input tick,
+journaled as a macro's change, which counts as no action; an ask under the command
+line, an overlay or a search waits for it to close, and a replay takes none, playing
+the change from its journal.
 
 A new game a person plays waits at its first tick in a start hold, the `:pause`
 hold marked `engine.HoldStart`: at launch, on `:n`, the menu's Restart game and Start and a

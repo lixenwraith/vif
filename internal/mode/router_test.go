@@ -716,8 +716,9 @@ func TestParagraphMotionsCrossARunOfEmptyRows(t *testing.T) {
 }
 
 // A play mode a scenario asks for is entered as its key enters it, the parser with
-// it, on the input tick or before the next intent, journaled as that key's change;
-// an ask made under a search waits for the search to close, which it would cut short.
+// it, on the input tick or before the next intent, journaled as a macro's change, a
+// move no key made; an ask made under a search waits for the search to close, which
+// it would cut short.
 func TestTheRouterEntersThePlayModeAScenarioAskedFor(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
@@ -739,8 +740,8 @@ func TestTheRouterEntersThePlayModeAScenarioAskedFor(t *testing.T) {
 			origin = append(origin, ev.Origin)
 		}
 	}
-	if ctx.GetMode() != core.ModeNormal || len(origin) != 1 || origin[0] != event.OriginInput {
-		t.Fatalf("an ask for Normal from Insert left %v, its changes from %v, want Normal from input", ctx.GetMode(), origin)
+	if ctx.GetMode() != core.ModeNormal || len(origin) != 1 || origin[0] != event.OriginMacro {
+		t.Fatalf("an ask for Normal from Insert left %v, its changes from %v, want Normal from a macro", ctx.GetMode(), origin)
 	}
 	if key(terminal.KeyRune, 'v'); ctx.GetMode() != core.ModeVisual {
 		t.Fatalf("v after the ask left %v, want Visual: the parser stayed in Insert", ctx.GetMode())

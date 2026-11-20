@@ -764,8 +764,9 @@ a count before it, so `2s` is `s`; the tutorial's lessons do both, for the `s` a
 `EventModeRequest { mode }` asks this instance's router for a play mode, `normal`,
 `visual` or `insert`, which it enters as that mode's key would, before its next
 intent or on its input tick; an ask made under the command line, an overlay or a
-search waits for it to close. The change is journaled as the key's would be, so a
-replay, which runs no router, plays it from the journal. The ask takes no
+search waits for it to close. The change is journaled under the macro origin, a
+move no key made and no action, and a replay takes no ask, playing the change from
+its journal. The ask takes no
 `reconcile`: a correction would replay it and pull a player out of the mode they
 are in. The tutorial's lessons ask for Normal as they stand the cursor, so each
 opens there whatever mode the key that ended the last left, and a transition on a

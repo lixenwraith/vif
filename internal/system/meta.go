@@ -185,8 +185,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		s.ctx.World.UpdateBoundsRadius()
 
 	case event.EventModeRequest:
-		// A replay viewer's play mode is the recording's, which journals the change
-		if p, ok := ev.Payload.(*event.ModeChangedPayload); ok && core.ModeMaskPlay.Has(p.Mode) && !s.ctx.Viewer.Load() {
+		// A replay's play mode is the recording's, whose journal holds the change: an
+		// ask left there would be taken by its viewer's next key
+		if p, ok := ev.Payload.(*event.ModeChangedPayload); ok && core.ModeMaskPlay.Has(p.Mode) && !s.world.FollowsJournal() {
 			s.ctx.AskMode(p.Mode)
 		}
 

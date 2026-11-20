@@ -10,7 +10,7 @@ import (
 
 // A scenario's ask for a play mode waits on the context for the router, which alone
 // moves a live run's mode; an ask for any other mode is none, and so is one a replay
-// viewer's run makes, whose recording journals the change itself.
+// makes, whose recording journals the change itself.
 func TestMetaLeavesAPlayModeAskForTheRouter(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -30,11 +30,11 @@ func TestMetaLeavesAPlayModeAskForTheRouter(t *testing.T) {
 	if m, ok := ctx.TakeModeAsk(); ok {
 		t.Fatalf("asks for a search and the command line left %v, want none", m)
 	}
-	ctx.Viewer.Store(true)
+	w.FollowJournal()
 	if ask(core.ModeNormal); ctx.GetMode() != core.ModeNormal {
-		t.Fatalf("a viewer's ask moved the mode to %v", ctx.GetMode())
+		t.Fatalf("a replay's ask moved the mode to %v", ctx.GetMode())
 	}
 	if _, ok := ctx.TakeModeAsk(); ok {
-		t.Fatal("a replay viewer kept an ask its recording answers")
+		t.Fatal("a replay kept an ask its recording answers")
 	}
 }
