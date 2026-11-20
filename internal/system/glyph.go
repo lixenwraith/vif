@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -486,13 +487,15 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 // placeLineAt lays a scenario's line from its cell, cropped at the map's right edge
 // as a corpus line is; one that starts off the map, or meets a wall, rock or glyph,
 // is dropped whole. A cursor or an effect on a cell is no obstacle: the line is
-// laid for the cursor to stand on.
+// laid for the cursor to stand on. It is text to read, which the magnifier keeps
+// off, and the runes its accent brackets are laid bright white.
 func (s *GlyphSystem) placeLineAt(p *event.GlyphLinePayload) bool {
 	config := s.world.Resources.Config
 	if p.X < 0 || p.X >= config.MapWidth || p.Y < 0 || p.Y >= config.MapHeight {
 		return false
 	}
-	text, length := crop(p.Text, config.MapWidth-p.X)
+	plain, called := accents(p.Text, p.Accent)
+	text, length := crop(plain, config.MapWidth-p.X)
 	if length == 0 || s.blocked(p.Y, p.X, length) {
 		return false
 	}
@@ -503,7 +506,34 @@ func (s *GlyphSystem) placeLineAt(p *event.GlyphLinePayload) bool {
 	}
 	s.placement = s.placement[:0]
 	s.stage(text, p.X, p.Y)
-	return s.commit(p.Type, p.Level, p.Scenery, true)
+	s.commit(p.Type, p.Level, p.Scenery, true)
+	for _, gp := range s.placement {
+		if col := gp.pos.X - p.X; col < len(called) && called[col] {
+			s.world.Components.Glyph.SetComponent(gp.entity, component.GlyphComponent{Rune: gp.char, Type: component.GlyphWhite, Level: component.GlyphBright})
+		}
+		prot, _ := s.world.Components.Protection.GetComponent(gp.entity)
+		prot.Mask |= component.ProtectFromSplash
+		s.world.Components.Protection.SetComponent(gp.entity, prot)
+	}
+	return true
+}
+
+// accents takes the accent marks out of a line: plain is the text laid, a rune a
+// column, and called marks the columns between a pair of marks, nil with no mark
+func accents(line, mark string) (plain string, called []bool) {
+	if mark == "" || !strings.Contains(line, mark) {
+		return line, nil
+	}
+	var b strings.Builder
+	on := false
+	for part := range strings.SplitSeq(line, mark) {
+		for range part {
+			called = append(called, on)
+		}
+		b.WriteString(part)
+		on = !on
+	}
+	return b.String(), called
 }
 
 // stage lays text's runes out from a cell, skipping spaces, for the next commit
