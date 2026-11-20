@@ -193,14 +193,7 @@ var CrystalHues = [...]CrystalHue{
 }
 
 // CrystalGlyphs are the points' glyphs, drawn evenly, so a doubled one comes twice as often
-var CrystalGlyphs = [...]rune{CrystalPoint, CrystalPoint, '*', '+'}
-
-// CrystalPoint is the diamond a crystal's point draws, and CrystalPoint256 the suit a
-// console's font holds in its place: no graphical host draws the second
-const (
-	CrystalPoint    = '◆'
-	CrystalPoint256 = '\u2666'
-)
+var CrystalGlyphs = [...]rune{'♦', '♦', '*', '+'}
 
 // Masonry: courses a row high of blocks a group's width over MasonryBlocksAcross long,
 // within the bounds, every other course set half a block over, each joint up to

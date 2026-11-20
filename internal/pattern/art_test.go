@@ -79,7 +79,7 @@ func TestArtIsFixedByItsPresetSeedAndCell(t *testing.T) {
 		b = [9]byte{byte(r >> 16), byte(r >> 8), byte(r), fg.R, fg.G, fg.B, bg.R, bg.G, bg.B}
 		h.Write(b[:])
 	})
-	if got, want := h.Sum64(), uint64(0xdeb3eef4531b6926); got != want {
+	if got, want := h.Sum64(), uint64(0x25c7e09c2298fe02); got != want {
 		t.Fatalf("stone digest %#x, want %#x", got, want)
 	}
 }
@@ -105,9 +105,6 @@ func TestOnlyMossAndCrystalsKeepAHueIn256Colours(t *testing.T) {
 	sweep(func(p ArtPreset, seed uint64, c ArtCell) {
 		r, _, _ := Art(p, seed, c)
 		r256, fg, bg := Art256(p, seed, c)
-		if r == visual.CrystalPoint {
-			r = visual.CrystalPoint256 // the suit a console's font holds
-		}
 		if r256 != r || !grey(bg) || !grey(fg) && p != ArtMoss && p != ArtCrystal {
 			t.Fatalf("%v seed %d %+v: %q drew %q in %d on %d", p, seed, c, r, r256, fg, bg)
 		}

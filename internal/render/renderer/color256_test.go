@@ -156,7 +156,7 @@ func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 			for i := range 1 << 12 {
 				cell := pattern.ArtCell{X: int64(i % 128), Y: int64(i / 128), Depth: i % (pattern.FaceReach + 1),
 					Face: pattern.Face(i / 7 % 4), W: stoneGroupWidth, H: 32}
-				if r, _, _ := pattern.Art256(preset, seed, cell); !stone[r] {
+				if r, _, _ := pattern.Art(preset, seed, cell); !stone[r] {
 					stone[r] = true
 					glyphs = append(glyphs, r)
 				}
