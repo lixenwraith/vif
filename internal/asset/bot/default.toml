@@ -2,7 +2,8 @@
 # when text is absent, collect nuggets between patrols, which the network walk
 # steers as far as a run alone has learned to.
 [bot]
-actions_per_second = 12
+# Twelve for the keys and four for the special attack walk asks for
+actions_per_second = 16
 # The gun fires by itself and the special attack where walk asks for it
 auto_fire = "main"
 learn = true
@@ -28,8 +29,10 @@ special = { bias = 1 }
 [regions.play]
 initial = "Seek"
 
-# The special attack is walk's to ask for whatever play is doing
-[regions.fire]
+# The special attack is walk's to ask for whatever play is doing. Regions update
+# in name order, so this one follows play: a key goes ahead of a special attack
+# asked for in its step, whose blast would take the key's glyph
+[regions.special]
 initial = "Fire"
 
 [states.Fire]

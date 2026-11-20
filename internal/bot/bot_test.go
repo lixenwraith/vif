@@ -878,6 +878,45 @@ on_update = [{ action = "Steer"` + fire + ` }]
 	}
 }
 
+// TestAShippedGraphTypesAheadOfTheSpecialAttackItAsksFor: default and the embedded
+// scenario's main ask for the special attack from a region that updates after the
+// one that types, so a step that does both sends the key first. Asked ahead of
+// it, the blast takes the key's glyph and the key is an error.
+func TestAShippedGraphTypesAheadOfTheSpecialAttackItAsksFor(t *testing.T) {
+	for path, files := range map[string]fs.FS{"default.toml": asset.DefaultBots, "bot/main.toml": asset.MainScenario} {
+		data, err := fs.ReadFile(files, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// At forty a second every step has room for the key and the special attack both
+		doc := strings.Replace(string(data), "actions_per_second = 16", "actions_per_second = 40", 1)
+		if doc == string(data) {
+			t.Fatalf("%s: its rate is no longer sixteen a second", path)
+		}
+		w, ctx := soloWorld(10, 2)
+		ctx.SetMode(core.ModeInsert)
+		place(w, core.DomainShared, 10, 2, func(e core.Entity) {
+			w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'k'})
+		})
+		_, rec := botFor(t, ctx, doc, 12)
+		both := 0
+		for i := 1; i < len(rec.got); i++ {
+			if rec.at[i] != rec.at[i-1] {
+				continue
+			}
+			switch first, second := rec.got[i-1].Type, rec.got[i].Type; {
+			case first == input.IntentFireSpecial && second == input.IntentTextChar:
+				t.Errorf("%s: step %d asks for the special attack ahead of its key", path, rec.at[i])
+			case first == input.IntentTextChar && second == input.IntentFireSpecial:
+				both++
+			}
+		}
+		if both == 0 {
+			t.Errorf("%s: no step of twelve both typed and asked for the special attack: %+v", path, rec.got)
+		}
+	}
+}
+
 // TestARoundScoresHowFarItTravelledAndWhatItEarned: a new game closes a round,
 // scored by the columns its cave scrolled and its events' worth, a data species'
 // kill twelve times its hit points. Its end weighs once on the fitness alone, a
