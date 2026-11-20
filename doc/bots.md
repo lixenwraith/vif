@@ -457,8 +457,9 @@ them through it and acts on its outputs: it asks for the special attack where
 they ask, then points the cursor at the cell they name.
 
 A network needs the pointer free, so a bot's run starts each game on the
-embedded `[play]`'s pointer whatever the player's own says, and on the
-auto-fire its `[bot]` names. Every shipped bot takes `auto_fire = "main"`, the
+embedded `[play]`'s pointer and camera edge, which bounds where it points,
+whatever the player's own says, and on the auto-fire its `[bot]` names; its
+viewer changes none of them. Every shipped bot takes `auto_fire = "main"`, the
 gun alone, and gives its networks the output `special`: the special attack is a
 network's to ask for, and each ask costs one action of the bot's rate. Left to
 auto-fire in `cave` it spends, in a game's first seconds, the heat a ship lives
