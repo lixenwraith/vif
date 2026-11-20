@@ -2,6 +2,8 @@ package visual
 
 import (
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -113,6 +115,19 @@ var Explosion256 = [3][3]uint8{
 	{ConBlue, ConCyan, ConBrightCyan},
 	{ConRed, ConYellow, ConBrightWhite},
 	{ConMagenta, ConBrightMagenta, ConBrightWhite},
+}
+
+// WallRGB is a wall's colors as RGB for a fade to blend: a 256-color pattern wall
+// holds palette indices in its colors' R bytes
+func WallRGB(wall *component.WallComponent) (fg, bg color.RGB) {
+	fg, bg = wall.FgColor, wall.BgColor
+	if wall.Attrs&terminal.AttrFg256 != 0 {
+		fg = Palette256RGB(fg.R)
+	}
+	if wall.Attrs&terminal.AttrBg256 != 0 {
+		bg = Palette256RGB(bg.R)
+	}
+	return fg, bg
 }
 
 // Palette256RGB returns the xterm RGB of a 256-color index, so an RGB blend can compose

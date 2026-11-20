@@ -816,6 +816,12 @@ Docs · Libraries · Branches.
   frame is dimmed by half (`DimFactor`): for true colors resume and capture every
   50 ms, which lands one capture a tick. A drain's end raises `EventSpeciesKilled`
   too, so `:system drain disable` first.
+- A campaign encounter is entered from a running game by `:emit
+  EventFSMRegionRequest { op = "pause", region = "main" }`, then `{ op = "spawn",
+  region = "kraken", state = "KrakenSetup" }`. A fresh cursor stands where the
+  Kraken rises, so `:energy 900000000` first, or its strike starts a new game. A
+  capture of a 256-color run writes entries 0-15 as `30`-`37`, `90`-`97` and their
+  backgrounds, not `38;5;n`: a parser reading only that form reads them as unset.
 - `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive
   (`:energy 900000000`) and the formation ended (`:emit EventBehaviorCancelRequest
   {}`), which brings the squadron wave on. A headless probe reads the route a
@@ -876,12 +882,13 @@ Docs · Libraries · Branches.
 
 ## Measuring
 
-- A browser-build bench runs under Node (`BenchmarkKrakenRegion`'s comment), which
-  refuses a run whose arguments and environment pass about 8 KB ("total length of
-  command line and environment variables exceeds limit"), as a cloud container's
-  environment does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test
-  file calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go`
-  does, or that package's wasm test binary stops building.
+- A browser-build bench runs under Node
+  ([Development §5](development.md#5-validation-and-tests)), which refuses a run
+  whose arguments and environment pass about 8 KB ("total length of command line
+  and environment variables exceeds limit"), as a cloud container's environment
+  does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test file
+  calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go` does,
+  or that package's wasm test binary stops building.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs. A bench file the

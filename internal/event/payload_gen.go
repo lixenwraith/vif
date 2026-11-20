@@ -1907,6 +1907,7 @@ var codecMazeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MazeSpawnRequ
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.DefaultRoomWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.DefaultRoomHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Braiding), kind: kindFloat},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.FadeInMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},

@@ -151,9 +151,9 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, a Kraken's
-burn, a cursor's pulses, particles (dust, decay and blossom), orbs, bullets,
-missiles, and loot are Player-domain; a materialize takes its requester's domain
-(§3). Encounter level clears explicitly preserve loot; run resets clear it. Shared
+burn, a maze's fade-in, a cursor's pulses, particles (dust, decay and blossom),
+orbs, bullets, missiles, and loot are Player-domain; a materialize takes its
+requester's domain (§3). Encounter level clears explicitly preserve loot; run resets clear it. Shared
 corrections retain each receiver's drops and ownership, and loot revalidates its
 bounds and walls after an install. Collected weapon charges travel through the
 existing owner-state sync (D-13). These effects may depend on local view state and
