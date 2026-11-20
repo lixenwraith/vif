@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -930,7 +931,7 @@ func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 
 // TestALearnerScoresTheRoundsItsBotPlayedOutAlone: a candidate plays a round, the
 // hand-written genome first, and is scored as the game ends it. A round an operator
-// ended scores nothing, and a bot not alone plays what the learner fields.
+// ended scores nothing, and a bot no longer alone plays what its learner fields.
 func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	g, d, rec := learning(t)
 	l, err := NewLearner(g, "fly", 1, 1, nil)
@@ -968,39 +969,16 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 }
 
 // TestALearnerKeepsItsPopulationByItsLayout: a population kept under the layout's
-// digest comes back with its rounds, and the best member its rounds have proved is
-// the one fielded, not the best scored; one of another layout, or none, starts
-// over from the hand-written genome. A save says each member's rounds and birth,
-// the proved first with the fielded at their head.
+// digest comes back with its rounds, and a save says each member's rounds and
+// birth, the proved first with the fielded at their head.
 func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
-	g, d, _ := learning(t)
+	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
-	kept := func(layout string) *memory {
-		return keeping(t, layout,
-			member{Genes: genome(0.1), Score: 50, Rounds: learnProven - 1, Born: 3},
-			member{Genes: genome(0.2), Score: 40, Rounds: learnProven, Born: 5},
-			member{Genes: genome(0.3), Score: 10, Rounds: learnProven + 4, Born: 7})
-	}
-	for name, c := range map[string]struct {
-		store Store
-		want  []float64
-	}{
-		"kept":    {kept(net.digest), genome(0.2)},
-		"another": {kept("another layout"), net.genes},
-		"none":    {&memory{}, net.genes},
-	} {
-		l, err := NewLearner(g, "fly", 1, 1, c.store)
-		if err != nil {
-			t.Fatal(err)
-		}
-		Learn(func() bool { return false }, []*Learner{l}, d)
-		if got := d.mind.nets[0].genes; !slices.Equal(got, c.want) {
-			t.Errorf("%s: fields %v, want %v", name, got[:2], c.want[:2])
-		}
-	}
-
-	store := kept(net.digest)
+	store := keeping(t, net.digest,
+		member{Genes: genome(0.1), Score: 50, Rounds: learnProven - 1, Born: 3},
+		member{Genes: genome(0.2), Score: 40, Rounds: learnProven, Born: 5},
+		member{Genes: genome(0.3), Score: 10, Rounds: learnProven + 4, Born: 7})
 	l, err := NewLearner(g, "fly", 1, 1, store)
 	if err != nil {
 		t.Fatal(err)
@@ -1529,8 +1507,8 @@ func (p *paced) Tick(int) {
 }
 
 // together has games paced games learn from one learner as play steps them, each
-// quitting at the tick quit gives it, and returns the population they kept and
-// its rounds
+// quitting at the tick quit gives it, and returns the population they kept, with
+// the rounds their drivers told in the order told, and its rounds
 func together(t *testing.T, games int, quit func(game int) int, play func(drivers []*Driver)) (string, int) {
 	t.Helper()
 	g, _, _ := learning(t)
@@ -1539,6 +1517,7 @@ func together(t *testing.T, games int, quit func(game int) int, play func(driver
 	if err != nil {
 		t.Fatal(err)
 	}
+	var told strings.Builder
 	drivers := make([]*Driver, games)
 	for i := range drivers {
 		_, ctx := soloWorld(0, 0)
@@ -1546,6 +1525,7 @@ func together(t *testing.T, games int, quit func(game int) int, play func(driver
 		if inst.d, err = NewDriver(inst, ctx, g, 1, 0); err != nil {
 			t.Fatal(err)
 		}
+		inst.d.Round = func(n uint64, score float64) { fmt.Fprintf(&told, " %d:%d:%g", i, n, score) }
 		drivers[i] = inst.d
 	}
 	Learn(func() bool { return true }, []*Learner{l}, drivers...)
@@ -1557,7 +1537,7 @@ func together(t *testing.T, games int, quit func(game int) int, play func(driver
 	if err := json.Unmarshal(store.doc, &doc); err != nil {
 		t.Fatal(err)
 	}
-	return string(store.doc), doc.Rounds
+	return string(store.doc) + told.String(), doc.Rounds
 }
 
 // inTurn steps drivers a tick each in turn, each until it has no more to play or
@@ -1580,8 +1560,8 @@ func inTurn(ticks int) func(drivers []*Driver) {
 
 // TestGamesThatLearnTogetherSearchAsIfTheyTookTurns: rounds close into a learner
 // in the order of their ticks and then of their games, so games stepped side by
-// side, each as its core runs it, keep the population they keep stepped in turn,
-// and a game whose graph quits holds none of the rest back.
+// side, each as its core runs it, keep the population and tell the rounds they
+// do stepped in turn, and a game whose graph quits holds none of the rest back.
 func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
 	const games = 4
 	quit := func(game int) int { return 400 - 40*game }
@@ -1604,15 +1584,15 @@ func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
 			wg.Wait()
 		})
 		if beside != turns {
-			t.Fatalf("side by side the games kept %d rounds and a population that differs from the %d rounds kept in turn", scored, rounds)
+			t.Fatalf("side by side the games kept %d rounds, and a population or told rounds that differ from the %d rounds kept in turn", scored, rounds)
 		}
 	}
 }
 
 // TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game's
 // graph quit at, and the games beside it, which play on as their cores allow,
-// stop at that tick and score no round past it, however late the run says so
-// again, so what the run kept follows from its seed.
+// stop at that tick and score and tell no round past it, however late the run
+// says so again, so what the run kept and told follows from its seed.
 func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 	const games, ticks = 4, 300
 	quit := func(game int) int {
@@ -1639,7 +1619,7 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 			wg.Wait()
 		})
 		if beside != turns {
-			t.Fatalf("a run ended at tick %d kept %d rounds and a population that differs from the %d rounds its games keep stepped in turn to that tick",
+			t.Fatalf("a run ended at tick %d kept %d rounds, and a population or told rounds that differ from the %d rounds its games keep stepped in turn to that tick",
 				ticks, scored, rounds)
 		}
 	}
@@ -1900,10 +1880,12 @@ func TestABotTakesAnothersWeightsByNameOrNothing(t *testing.T) {
 	}
 }
 
-// TestWhatAPopulationFieldsIsReadWhateverScoredIt: a population's document gives
-// its rounds and the first member eight rounds have proved, for the layout it was
-// kept under and none other, whatever version scored it: a model is its genes.
-func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
+// TestAPopulationIsReadUnderItsLayoutScoreAndVersion: a population's document
+// gives its rounds and the most trusted member eight rounds have proved, under
+// the layout, the score and the version it was kept by. One of another layout,
+// score or version, or none, is no population, to a run that learns as to one
+// that fields.
+func TestAPopulationIsReadUnderItsLayoutScoreAndVersion(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
@@ -1916,19 +1898,57 @@ func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
 		return &memory{doc: data}
 	}
 	k, ok, err := g.Kept("fly", doc(populationVersion, net.digest, learnsBy))
-	if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
+	if err != nil || !ok || k.Network != "fly" || k.Rounds != 70 || k.Recent != 12.5 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
 		t.Fatalf("kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", k, ok, err)
 	}
-	if _, ok, err := g.Kept("fly", doc(populationVersion, "another", learnsBy)); ok || err != nil {
-		t.Fatalf("a population of another layout was read: %v, %v", ok, err)
+	for name, store := range map[string]Store{
+		"another layout":  doc(populationVersion, "another", learnsBy),
+		"another version": doc(populationVersion-1, net.digest, learnsBy),
+		"another score":   doc(populationVersion, net.digest, "kill=6 travel=1"),
+		"none":            &memory{},
+	} {
+		if _, ok, err := g.Kept("fly", store); ok || err != nil {
+			t.Errorf("%s was read as a population: %v, %v", name, ok, err)
+		}
+		l, err := NewLearner(g, "fly", 1, 1, store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := l.take(0, false); !slices.Equal(got, net.genes) || l.Stats().Rounds != 0 {
+			t.Errorf("%s: a learner took it up: fields %v after %d rounds", name, got[:2], l.Stats().Rounds)
+		}
 	}
-	if _, ok, err := g.Kept("fly", doc(populationVersion-1, net.digest, learnsBy)); ok || err != nil {
-		t.Fatalf("a population another version scored was read: %v, %v", ok, err)
+}
+
+// TestARunThatDoesNotLearnPlaysWhatItsPopulationFields: a driver handed what a
+// population keeps plays the member it fields and reports the population, with
+// no learner: no round is scored and nothing is written. With none proved it
+// plays what the graph writes.
+func TestARunThatDoesNotLearnPlaysWhatItsPopulationFields(t *testing.T) {
+	g, d, rec := learning(t)
+	net := g.nets[0]
+	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
+	store := keeping(t, net.digest, member{Genes: genome(0.1), Score: 90, Rounds: learnProven - 1}, member{Genes: genome(0.2), Score: 40, Rounds: learnProven})
+	before := slices.Clone(store.doc)
+	k, ok, err := g.Kept("fly", store)
+	if err != nil || !ok {
+		t.Fatal(ok, err)
 	}
-	if _, ok, err := g.Kept("fly", doc(populationVersion, net.digest, "kill=6 travel=1")); ok || err != nil {
-		t.Fatalf("a population another score paid was read: %v, %v", ok, err)
+	d.Field(k)
+	rec.dispatch = []event.GameEvent{{}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}}}
+	for range 2 {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, ok, err := g.Kept("fly", &memory{}); ok || err != nil {
-		t.Fatalf("no population was read as one: %v, %v", ok, err)
+	want := []LearnStats{{Network: "fly", Rounds: learnPool, Fielded: 40, FieldedRounds: learnProven}}
+	if st := d.Stats(); !slices.Equal(d.mind.nets[0].genes, genome(0.2)) || !slices.Equal(st.Learn, want) || st.Rounds != 1 || !bytes.Equal(store.doc, before) {
+		t.Fatalf("a round on plays %v and reports %+v: want the proved member, its population as kept and no file written", d.mind.nets[0].genes[:2], st.Learn)
+	}
+
+	_, bare, _ := learning(t)
+	unproved, _, _ := g.Kept("fly", keeping(t, net.digest, member{Genes: genome(0.1), Score: 90, Rounds: 1}))
+	if bare.Field(unproved); !slices.Equal(bare.mind.nets[0].genes, net.genes) || len(bare.Stats().Learn) != 1 {
+		t.Fatalf("with none proved it plays %v, want what the graph writes", bare.mind.nets[0].genes[:2])
 	}
 }

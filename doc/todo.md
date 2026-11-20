@@ -288,12 +288,15 @@ of Lixen's that bind, as they stood on 2026-11-20:
   page's storage can hold one as it holds settings (`browser.KeepSettings`).
 - A run in a session does not learn. The first widening is a session only the
   bot occupies, the fleet's standing one
-  ([there](#keep-a-standing-session-for-the-lobby)): `bot.Learn`'s `alone` is
-  the seam, and a store needs one writer.
+  ([there](#keep-a-standing-session-for-the-lobby)): `App.learn`'s `alone`
+  decides who builds learners and who scores, a seat fields without asking it
+  (`PlaySeat`), and a store needs one writer.
 - A watched run's viewer may turn auto-fire or the pointer off under the bot,
   and its rounds then score that.
-- No command reads a model held out: it takes a scratch test
-  ([agent notes](agent-notes.md#measuring)).
+- `-field` prints a round's score and not what ended it: Krakens met and shot
+  down take a scratch test's tap ([agent notes](agent-notes.md#measuring)).
+- A headless run that only fields says nothing of what it read: `Bot stopped`
+  and a seat's `bot left` record carry no `fielding S over C`.
 - The source `kill` pays a code species' kill flat, whatever its hit points.
 - A score names sources of the catalogue only. An event by name, with the field
   that names its owner, would let a scenario pay for one without Go.

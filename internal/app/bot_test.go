@@ -383,6 +383,49 @@ func TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot(t *testing.T) {
 	if lines, err := resource.BotFiles(opts, sc, []string{"list"}); err != nil || !strings.Contains(strings.Join(lines, "\n"), "over 50") {
 		t.Fatalf("list tells %q, %v; want the member raid fields", lines, err)
 	}
+
+	// A run that does not learn, here one told to field, plays that member too, and
+	// one of another version is no population to any of them
+	a.cfg.Field = true
+	fielding := func() ([]bot.LearnStats, error) {
+		f, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = a.learn(graph, f)
+		return slices.DeleteFunc(f.Stats().Learn, func(l bot.LearnStats) bool { return l.Network != "raid" }), err
+	}
+	if st, err := fielding(); err != nil || len(st) != 1 || st[0].FieldedRounds != 50 || st[0].Fielded != pop.Members[0].Score {
+		t.Fatalf("a run that fields reports %+v, %v; want the member list and export name", st, err)
+	}
+	told := func(words ...string) string {
+		lines, err := resource.BotFiles(opts, sc, words)
+		if err != nil {
+			t.Fatal(words, err)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if told("create", "cave", "import", "cave"); !strings.Contains(told("import", "cave.raid", "cave"), "cave.cave.raid") {
+		t.Fatal("import into a bot of that population's does not say it still plays")
+	}
+	pop.Version++
+	if doc, err = json.Marshal(pop); err == nil {
+		err = os.WriteFile(filepath.Join(paths.PopulationDir(), "cave.cave.raid.json"), doc, 0o600)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := fielding()
+	if lines, again := told("list"), told("import", "cave.raid", "cave"); err != nil || len(st) != 0 || strings.Contains(lines, "over 50") || strings.Contains(again, "cave.cave.raid") {
+		t.Fatalf("of a population of another version a run fields %+v, %v, list tells %q and import %q; want none to read it", st, err, lines, again)
+	}
+	// One it cannot parse ends a run told to field, which was asked for the model
+	if err := os.WriteFile(filepath.Join(paths.PopulationDir(), "cave.cave.raid.json"), []byte("not json {"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fielding(); err == nil {
+		t.Fatal("a run told to field played on past a population it could not parse")
+	}
 }
 
 // TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit: a graph's round_seconds
@@ -489,19 +532,9 @@ func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	data := shippedGraphs(t)["cave"]
 	// Rounds of fifteen seconds, eight a game before the graph quits at two minutes
 	const games, ticks = 3, 2 * time.Minute / parameter.GameUpdateInterval
-	graph := strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 15", 1) + `
-[regions.stop]
-initial = "Wait"
-
-[states.Wait]
-transitions = [{ trigger = "Tick", target = "Quit", guard = "StateTimeExceeds", guard_args = { ms = 120000 } }]
-
-[states.Quit]
-on_enter = [{ action = "Intent", payload = { name = "quit" } }]
-`
+	graph := quitting(t, 15*time.Second, 2*time.Minute)
 	kept := func(name string) (bot.Stats, string) {
 		path := filepath.Join(dir, name+".toml")
 		if err := os.WriteFile(path, []byte(graph), 0o644); err != nil {
@@ -532,6 +565,61 @@ on_enter = [{ action = "Intent", payload = { name = "quit" } }]
 	}
 	if _, second := kept("second"); second != first {
 		t.Fatal("two runs of one seed and one count of games kept populations that differ")
+	}
+}
+
+// quitting is cave's shipped graph with rounds of round and a region that quits
+// its run at a game time of stop
+func quitting(t *testing.T, round, stop time.Duration) string {
+	t.Helper()
+	limit := fmt.Sprintf("round_seconds = %d", round/time.Second)
+	return strings.Replace(string(shippedGraphs(t)["cave"]), "round_seconds = 1800", limit, 1) + fmt.Sprintf(`
+[regions.stop]
+initial = "Wait"
+
+[states.Wait]
+transitions = [{ trigger = "Tick", target = "Quit", guard = "StateTimeExceeds", guard_args = { ms = %d } }]
+
+[states.Quit]
+on_enter = [{ action = "Intent", payload = { name = "quit" } }]
+`, stop.Milliseconds())
+}
+
+// TestARunToldToFieldTellsEachRoundAndKeepsNothing: a headless run told to field
+// builds no learner. Its games still close their rounds at the graph's limit and
+// tell each in its turn, none that closes past the run's end, and the run scores
+// no round and writes no population.
+func TestARunToldToFieldTellsEachRoundAndKeepsNothing(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, dir)
+	}
+	if root := paths.UserRoot(); !strings.HasPrefix(root, dir) {
+		t.Skipf("the user root %q is not in %s", root, dir)
+	}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	// Rounds of two seconds, which no raider ends: four a game before the graph quits at nine
+	const games, rounds = 2, 4
+	path := filepath.Join(dir, "cave.toml")
+	if err := os.WriteFile(path, []byte(quitting(t, 2*time.Second, 9*time.Second)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	told := uint64(0)
+	st, err := RunBot(Config{Seed: fixtureSeed, Games: games, Field: true, Resources: opts, Round: func(n uint64, _ float64) {
+		if told++; n != told {
+			t.Errorf("round %d was told as round %d", told, n)
+		}
+	}}, Host{}, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, _ := filepath.Glob(filepath.Join(paths.PopulationDir(), "*.json"))
+	if st.Games != games || told != games*rounds || st.Rounds < told || len(st.Learn) != 0 || len(kept) != 0 {
+		t.Fatalf("%d games told %d of %d rounds, report learners %+v and kept %v: want the %d each game closed at its limit by the run's end, no round scored and no file",
+			st.Games, told, st.Rounds, st.Learn, kept, rounds)
 	}
 }
 

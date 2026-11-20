@@ -164,6 +164,12 @@ type Config struct {
 	// once, each on a seed drawn from Seed; zero is one more than the cores
 	Games int
 
+	// Field has a bot's run play what its graph's populations field and teach them
+	// nothing; Round, when set, hears each round the run closes, its count and its
+	// score
+	Field bool
+	Round func(n uint64, score float64)
+
 	// Session is the RNG session a run reproduces rather than counts to: the seed
 	// names the family of streams, this names the game in it. Zero counts from one;
 	// a join and a replay adopt the anchor's number, because a restarted session is

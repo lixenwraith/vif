@@ -132,12 +132,11 @@ func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membersh
 	cfg.Play = botPlay(cfg.Play, p.Graph)
 	finished, err = drive(cfg, "bot", p.Graph.Name, p.Stop, p.Hold, func(b *App) (pacedSource, error) {
 		d, err := bot.NewDriver(b, b.ctx, p.Graph, b.Seed(), b.membership.LocalParticipant())
-		if err == nil {
-			_, err = b.learn(p.Graph, d)
-		}
 		if err != nil {
 			return nil, err
 		}
+		// A seat is in its holder's session: it never learns, and plays what it could read
+		_ = b.field(p.Graph, d)
 		played = &seatRun{run: b, slot: seated(&b.membership, d), stop: p.Stop, number: p.Number}
 		r.a.addSeatRun(played)
 		return &seatSource{botSource: botSource{d}, ends: seatEnds(p.Mode, r.a.world, b.world), screen: &r.a.seatScreen,

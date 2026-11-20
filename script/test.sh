@@ -130,7 +130,8 @@ botscore)
 	# A graph's score is summed per scenario over a fixed seed set, flat out at one
 	# size. blank is left out: it disables glyph, nugget and gold, so nothing there
 	# separates two graphs. A graph given is also measured against default, which
-	# plays as written: learning, it would play what the user root's population holds.
+	# plays as written: its learning left off, under a user root of its own, as a
+	# graph plays what a population kept for it fields.
 	need_bin
 	graph=${2:-}
 	seeds=${3:-4}
@@ -145,7 +146,8 @@ botscore)
 	# learns, and prints its score
 	score() {
 		# shellcheck disable=SC2086 # $2 is a flag list
-		"$BIN" -headless -games 1 -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
+		env HOME="$dir/root" XDG_CONFIG_HOME="$dir/root" \
+			"$BIN" -headless -games 1 -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
 			>"$dir/run.log" 2>&1 || fail "$1 did not end cleanly on $2 seed $3: $dir/run.log"
 		v=$(botstat "$dir/run.log" score)
 		[ -n "$v" ] || fail "$1 left no score on $2 seed $3: $dir/run.log"

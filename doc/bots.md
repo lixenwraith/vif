@@ -17,6 +17,7 @@ vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot -watch -size fit             #   on a map the size of this terminal
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -s cave -bot -watch               # watch cave's own bot fly it, learning on as it goes
+vif -s cave -bot -watch -field        #   or what it has learned, teaching it nothing
 vif -s cave -bot -headless -speed max # the same flat out on every core, kept at each Ctrl-C
 vif -s cave -bot seed -headless -speed max   # learn from its start written by hand instead
 vif -replay <journal>                 # replay what it recorded
@@ -32,7 +33,8 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-bot <verb> …` | Keep bot files and exit: `list`, `create`, `import`, `export` or `clear` with what follows it ([A player's bot files](#a-players-bot-files)). |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, R rounds, score S`, the rounds closed and all the run was paid ([Score](#score-and-comparing-graphs)), summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
-| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
+| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners, or with `-field` only fielding: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
+| `-field` | With `-watch` or `-headless`, a bot alone whose graph learns plays what its populations field and teaches them nothing. No round is scored and no file written. Each round still ends at the graph's `round_seconds`, and headless the run prints `Round N scored S` as each closes, from every game ([Learning](#learning)). |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH\|fit>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. `fit` takes the screen's as the run starts, the terminal, window or page that shows it or, headless, the terminal it was started in, and 120x40 with none. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise, as with `fit`, the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
@@ -181,8 +183,9 @@ failing that a scenario's name, for that scenario's own bot; `clear` takes a
 name alone. `.<network>` after it is one of its `[network.<name>]`, and
 `<name>` a graph of yours by its name.
 The scenario is never written: it is the run's, `-s` on the command line.
-`list` and `export` read what a run would: a population of the network's
-`layout`, the document's `score` and this build's `version`.
+A population is read by one rule, by a run, `list`, `export` and `import`'s
+note alike: its `layout` is the network's, its `scored_by` the document's
+`score` and its `version` this build's. Any other is none.
 
 ## Telling cursors apart
 
@@ -250,7 +253,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never. `score`: what pays the bot, each name a [source](#score-sources) and its number what one of it pays; `learn` needs one ([Score](#score-and-comparing-graphs)). `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights; without it the graph learns no more and still plays what was kept for it. `round_seconds`: the game time after which a solo run of a graph that learns ends a round the game has not, default 0 for never. `score`: what pays the bot, each name a [source](#score-sources) and its number what one of it pays; `learn` needs one ([Score](#score-and-comparing-graphs)). `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
 | `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs` and, if any, weights written by hand. |
 | `[regions.<name>]` | `initial` only. Regions update in name order, so what one queues in a step goes ahead of a later one's. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
@@ -428,9 +431,9 @@ The score is in the `-headless` summary, the `bot stopped` log record and a
 seat's `bot left` record, each beside the rounds closed. It is all the run was
 paid, the round in play included. From a checkout with `bin/vif` built,
 `./script/test.sh botscore [graph-file] [seeds] [secs]` plays `default` as
-written, its learning left off, headless and flat out at 120x40 for `secs` (60)
-over seeds 1..`seeds` (4) on the embedded scenario and `td`, and prints each
-scenario's sum. Given a graph file, it fails unless that graph beats `default`
+written, its learning left off and under a user root of its own, where nothing
+is kept for it, headless and flat out at 120x40 for `secs` (60) over seeds
+1..`seeds` (4) on the embedded scenario and `td`, and prints each scenario's sum. Given a graph file, it fails unless that graph beats `default`
 on every scenario. Each graph is read by the score its own document declares.
 It appends a `stop` region (states `StopWait` and `StopQuit`), so a graph
 cannot use those names.
@@ -526,7 +529,9 @@ on_update = [
 
 **What is learned.** The weights of each network of a graph whose `[bot]` says
 `learn = true`. Each network has a learner and a population of its own. The
-graph's states and rates are not learned.
+graph's states and rates are not learned. A graph plays what its populations
+field whether or not it still learns: take `learn` out to hold a model where it
+stands, and `clear` it to play what the document writes.
 
 **When.** Only while the bot plays alone: a `-watch` or `-headless` run of the
 graph with no session. Each round such a run plays one candidate for each
@@ -534,6 +539,15 @@ network and scores it. In a session a bot does not learn, a seat beside its
 player included, because a round there is not its own: another's defeat ends
 it. It plays what its population *fields*, the member its rounds have proved
 best, or the weights its graph writes where none is proved.
+
+- A seat, and a run in a session as it starts, reads each population once and
+  builds no learner.
+- A watched run that opens a session (`:host`, `:bot`) scores nothing from the
+  round in play on. It plays what its learners field from the next round, and
+  learns no more in that run, its bots dropped or not: a run never leaves a
+  session for none.
+- `-field` has a run alone field instead: it reads the model and teaches it
+  nothing.
 
 **From what signal.** [A round's score](#score-and-comparing-graphs), split
 between the networks by who steered.
@@ -611,6 +625,7 @@ or not, so a watched run and a headless one teach the same population:
 vif -s cave -bot -headless -speed max      # learn flat out, a game on every core
 vif -s cave -bot -watch                    # the same population, watched at speed 1
 vif -s cave -bot seed -headless -speed max # learn from the start written by hand
+vif -s cave -bot -headless -field -seed 101   # what is fielded over fresh rounds, a line each
 vif -s cave -bot list                      # what each population holds
 vif -s cave -bot clear cave                # start cave's populations over
 vif -s cave -bot clear cave.raid           #   or one network's
@@ -633,9 +648,13 @@ can be trusted:
   archive are those whose luck held. In runs from nothing it was 1.7 to 3 times
   what the same member scored held out.
 - *Held out* is what the fielded members score over fresh rounds, on seeds the
-  run never played, with no learner. It is what a seat will play. No command
-  reads it yet: it takes a scratch test
-  ([agent notes](agent-notes.md#measuring)).
+  run never played, with no learner. It is what a seat will play. `-headless
+  -field` reads it, on a `-seed` no learning run played. With an empty user
+  root it reads the document's own weights. Its games tell their rounds in the
+  order a learning run's close into its learners, and a round a game closes
+  past the run's end is not told. So a run its graph quits prints the same
+  lines for one seed and one count of games. What ended a round still takes a
+  scratch test ([agent notes](agent-notes.md#measuring)).
 
 Luck is wide in `cave`: a round scores from a few hundred, lost in the first
 cave, to 375,000 for nine Krakens down in its half hour. Read a median and
@@ -648,7 +667,9 @@ A watched run's bar says what each round came to as it closes and how far each
 learner is: `Round 12 scored 5480 | kraken recent 2210, fielding 2790 over 9 |
 raid recent 4100, fielding 5300 over 31`. A headless run prints `Bot learned
 raid: rounds R of T, recent M, fielding S over C` for each learner as it stops,
-and each save writes a `bot population kept` log record.
+and each save writes a `bot population kept` log record. A run that only fields
+says the same of each population it read, and the figures do not move; headless
+it prints no `Bot learned` line.
 
 #### The population file
 
@@ -690,8 +711,9 @@ What else the file holds:
   is proved.
 
 The candidate in play, the engine's queue and its random stream are not kept:
-a run resumes the archive, not the exact search. A learner in a run takes an
-`import` or a `clear` only from its next run.
+a run resumes the archive, not the exact search. A run reads a population
+once, as it starts or as its seat is taken. An `import` or a `clear` reaches
+the next run or seat, not one in play.
 
 A run whose disk fails learns on in memory and says so once, in the log (`bot
 population not kept`) and on a watched run's bar:
@@ -705,7 +727,11 @@ population not kept`) and on a watched run's bar:
 - a save that fails is tried again each half minute, and only the first is
   said.
 
-A run that ends without keeping what it learned ends with that error.
+A run that ends without keeping what it learned ends with that error. A run
+that only fields and cannot read or parse a population plays what its graph
+writes and says so once, in the log (`bot population not read`) and on a
+watched run's bar. A run told to field (`-field`) ends with that error instead,
+before it plays: it was asked for the model.
 
 ### The shipped bots
 
@@ -1087,6 +1113,8 @@ unattended.
 | `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
 | `-games N: only a -headless bot alone and flat out whose graph learns plays more than one game` | Run the graph alone, with no session, further bots or `-speed` but `max`, and with `learn = true` in its `[bot]`; or leave the count out. |
 | `-games is how many games a -headless -bot run learns from at once, 1 or more` | Give `-games` only with `-headless -bot`. |
+| `-field is how a -watch or -headless -bot run plays what its bot learned, teaching it nothing` | Give `-field` only with `-bot` and `-watch` or `-headless`. |
+| `<network> population could not be read: …` or `could not be parsed: …` ends a `-field` run | That network's file in the user root's `bot/` is unreadable or broken: put a good one back, or `clear` it to read the weights the document writes. |
 | `Bot <graph>: …` on the status bar | The seat failed to join; the log has `bot not seated` with the error. |
 
 The holder logs `bot seated`, `bot left` and `bot not seated` for each seat, whose

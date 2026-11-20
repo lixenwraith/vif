@@ -665,13 +665,13 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 		}
 	}
 
-	// What mine learned in flight outranks the weights it is given until cleared
+	// A file that is no population a run reads is not said to play on
 	if err := os.WriteFile(filepath.Join(user, "mine.flight.fly.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	told, err := verb("import", "pilot.fly", "mine")
-	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || !strings.Contains(told, "mine.flight.fly") {
-		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and the population that still plays", w, told, err)
+	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || strings.Contains(told, "mine.flight.fly") {
+		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and no word of a file no run reads", w, told, err)
 	}
 	for _, name := range []string{"none", "../bot/mine"} {
 		if told, err := verb("import", "pilot", name); err == nil {

@@ -897,19 +897,34 @@ Libraries · Branches.
   own, then `Driver.End` at its tick and `sideGames.close`. The binary learns
   as the harness does, a seed's rounds the same in both. A graph parsed under
   another name (`bot.ParseGraph`) keeps its populations apart.
-- What a model fields is read held out, with no learner: a driver on the graph
-  whose weights are the model's, `App.Reset(false)` closing each round at the
-  graph's limit, `Driver.Round` giving its score. An `Instance` wrapping the
-  App, whose `SetDispatchTap` calls the test's tap ahead of the driver's,
-  counts what ended a round: `EventKrakenSpawnRequest` for a Kraken met, its
+- A model or a population is read held out by `vif -headless -field`, a line a
+  round, under an `XDG_CONFIG_HOME` holding the population files, or an empty
+  one for the document's weights. What ended a round still takes a scratch
+  test: a driver given `App.field` and `bot.Learn` with no learner, which
+  closes its rounds at the graph's limit, `Driver.Round` giving each score. An
+  `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap
+  ahead of the driver's, counts `EventKrakenSpawnRequest` for a Kraken met, its
   `EventSpeciesKilled` for one shot down, `EventFireSpecialRequest` for a
-  special asked for and `EventHeatSpendRequest` for one spent. 100 rounds of
-  four seeds take a minute on four cores.
-- What a population fields is played the same way by learners attached not
-  alone (`bot.Learn`, `alone` false), which field and never save, each on its
-  file's path (`paths.PlaceFile`). The package's TestMain points
-  `XDG_CONFIG_HOME` at an empty directory, and a relative one is no root: a
-  learning run under it keeps no population and says nothing.
+  special asked for and `EventHeatSpendRequest` for one spent.
+- What a population fields is played with no learner: `App.field` reads each
+  network's file (`Graph.Kept`) and `Driver.Field` has the driver play its
+  member. The package's TestMain points `XDG_CONFIG_HOME` at an empty
+  directory, and a relative one is no root: a run under it reads and keeps no
+  population and says nothing.
+- A world's transport is never taken away once attached
+  (`Membership.attachResourceLocked`; `:leave` opens a session of the run's
+  own), so `alone` only ever turns false, and a run in a session as it starts
+  builds no learner.
+- Only a learner's save writes a population this build reads: a test outside
+  `internal/bot` gets one by playing a round, as
+  `TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot` does.
+- `-field` over rounds too short to reach a Kraken reads `raid` alone: at
+  `round_seconds = 15`, `cave`'s shipped weights and a trainer's populations
+  print the same lines. Read a `kraken` member at the graph's half-hour limit.
+- What a watched run's bar says for a moment, as `Round N scored S`, is read
+  from the terminal's bytes: `script -qfec '<vif ... -watch>' <file>` under
+  `timeout`, the CSI sequences stripped. A watched run stays up after its graph
+  quits.
 - Held-out rows are a function of the genomes played: two runs fielding one
   pair give the same rows, so a queue keeps them by the genomes. The i-th round
   of a seed draws one game's streams for every member
@@ -917,9 +932,9 @@ Libraries · Branches.
   so rounds are not paired. Cap a held-out round at the graph's limit, as a run
   would, and give a learning run ticks, not rounds: a learner that masters a
   phase makes its rounds long.
-- One member is held alone from a population of it only, kept in a `bot.Store`
-  in memory with its rounds raised to eight, which the learner then fields
-  (`LearnStats.Fielded`, `FieldedRounds`). A member is held beside another
+- One member is held alone from a population of it only, its rounds raised to
+  eight, which `Graph.Kept` then fields: a file in the run's user root, or a
+  `bot.Store` in memory for a scratch test. A member is held beside another
   network's by populations of a member each. Hold a member this way before
   calling it promising: its own mean over a few rounds does not say.
 - A learner's rule or setting is read as an arm: a `tar` copy of the tree
@@ -1019,8 +1034,8 @@ Libraries · Branches.
   (`SessionState.Bot`). `drive` with kind "bot" marks its run a bot's;
   `playBot` and a bare `NewHeadless` with a driver do not, and a harness built
   so holds a person's cursor, whose defeat ends its game.
-- A seat fields what its player's population holds: `PlaySeat` builds the
-  learners a run in a session does. Read what a seated bot plays on a run of two
+- A seat fields what its player's population holds, read once as the seat is
+  taken (`PlaySeat`, `App.field`). Read what a seated bot plays on a run of two
   bots with and without the population in the user root, at `-speed 8`, as a
   session cannot run flat out.
 - Compare graphs at one round length: the embedded game pays about twice as

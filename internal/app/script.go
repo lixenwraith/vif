@@ -191,8 +191,9 @@ func botRun(cfg Config, spec string) (*bot.Graph, int, error) {
 
 // botGames is how many games a bot's run plays at once: one, but for a headless
 // run alone and flat out whose graph learns, which plays cfg.Games, all teaching
-// the graph's learners. Where it names none that is one more than the cores,
-// as a game waiting its turn to close a round leaves its core to another.
+// the graph's learners or, told to, only fielding. Where it names none that is one
+// more than the cores, as a game waiting its turn to close a round leaves its
+// core to another.
 func botGames(cfg Config, learns bool) (int, error) {
 	paced, err := scriptPacing(cfg)
 	if err != nil {
@@ -296,12 +297,33 @@ func botPlay(play paths.Play, g *bot.Graph) paths.Play {
 	return play
 }
 
-// learn has drivers, this run's own first, each play a game of what this player's
-// runs have learned for g in this run's scenario, a population a network in the
-// user root, and learn on while the run is in no session, whose rounds are not
-// its bot's alone. None for a graph that does not learn.
+// learn has drivers, this run's own first, each play a game of g, and where g
+// learns and the run starts in no session, learn on from what this player's runs
+// taught it, a population a network in the user root. Any other run only fields
+// (field), as one told to does (Config.Field): a session's rounds are not its
+// bot's alone, and a run in one stays in one, so its learners could never score.
 func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error) {
-	if !g.Settings.Learn {
+	if d := drivers[0]; g.Settings.Learn && a.cfg.Mode.Presents() {
+		// A run somebody watches says what each round came to as it closes
+		d.Round = func(n uint64, score float64) {
+			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", n, score, learnLine(d.Stats())), parameter.StatusNotice)
+		}
+	} else if g.Settings.Learn && a.cfg.Round != nil {
+		// One nobody watches tells Config.Round, its rounds numbered across its games
+		var rounds atomic.Uint64
+		for _, d := range drivers {
+			d.Round = func(_ uint64, score float64) { a.cfg.Round(rounds.Add(1), score) }
+		}
+	}
+	// Games beside its own are played only by a run alone, which a headless one stays
+	alone := func() bool { return len(drivers) > 1 || a.membership.SessionTransport() == nil }
+	if !g.Settings.Learn || a.cfg.Field || !alone() {
+		if err := a.field(g, drivers...); err != nil && a.cfg.Field {
+			return nil, err // told to read a model, it plays no other
+		}
+		if g.Settings.Learn && a.cfg.Field {
+			bot.Learn(alone, nil, drivers...) // its rounds still close at g's limit
+		}
 		return nil, nil
 	}
 	var learners []*bot.Learner
@@ -324,15 +346,33 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 		}
 		learners = append(learners, l)
 	}
-	// Games beside its own are played only by a run alone, which a headless one stays
-	bot.Learn(func() bool { return len(drivers) > 1 || a.membership.SessionTransport() == nil }, learners, drivers...)
-	// A run somebody watches says what each round came to as it closes
-	if d := drivers[0]; a.cfg.Mode.Presents() {
-		d.Round = func(n uint64, score float64) {
-			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", n, score, learnLine(d.Stats())), parameter.StatusNotice)
+	bot.Learn(alone, learners, drivers...)
+	return learners, nil
+}
+
+// field has drivers play what this player's runs taught g in this run's
+// scenario: of each network the member its population fields (bot.Graph.Kept),
+// read once, and what g writes where none is proved. It builds no learner and
+// keeps nothing; a population that cannot be read is said once, not played, and
+// returned, which ends a run told to field.
+func (a *App) field(g *bot.Graph, drivers ...*bot.Driver) (unread error) {
+	for _, network := range g.Networks() {
+		file := resource.PopulationFile(g.Name, a.scenario.Shown(), network)
+		if file == "" {
+			return nil
+		}
+		k, ok, err := g.Kept(network, paths.PlaceFile{Path: file})
+		if err != nil {
+			a.log.Warn("app", "msg", "bot population not read", "name", g.Name, "error", err.Error())
+			a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusAlert)
+			unread = errors.Join(unread, err)
+		} else if ok {
+			for _, d := range drivers {
+				d.Field(k)
+			}
 		}
 	}
-	return learners, nil
+	return unread
 }
 
 // learnLine says how far each of a bot's learners is, a bar's part a network
