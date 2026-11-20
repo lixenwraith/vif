@@ -68,6 +68,8 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   another: the prompts are goals, which the bar holds under every message and the
   start prompt rather than showing for a notice's five seconds, so after `:n` it
   says a key starts lesson 1, and a command's answer gives the goal back as it ends.
+  Each fits the line's 62 columns of an 80 column screen: a longer one would hold
+  the items' row for its whole lesson.
 - The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
   bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
   `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to

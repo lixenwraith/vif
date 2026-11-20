@@ -10,14 +10,19 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/render/renderer"
 	"github.com/lixenwraith/vif/internal/resource"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
@@ -618,6 +623,50 @@ func TestTutorialsPromptsStayUp(t *testing.T) {
 	}
 	if goal := a.Context().StatusGoal(); !strings.HasPrefix(goal, "Lesson 2 of 22") {
 		t.Fatalf("the goal held in Words is %q, want lesson 2's prompt", goal)
+	}
+}
+
+// Every goal the tutorial posts fits the status line of the 80 column screen it is
+// laid for: a longer one rises onto the items' row for as long as it is held.
+func TestTutorialsGoalsFitTheStatusLine(t *testing.T) {
+	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "tutorial"})
+	if err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	tree, err := fsm.ResolveScenario(sc.FS(), sc.Entry())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	var doc fsm.ScenarioDoc
+	if err := toml.Decode(tree, &doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ctx := engine.NewGameContext(engine.NewWorld(), 80, 24)
+	bar := renderer.NewStatusBarRenderer(ctx)
+	rc := render.RenderContext{ScreenWidth: 80, ScreenHeight: 24, ViewportWidth: 80, ViewportHeight: 24 - parameter.BottomMargin}
+	goals := 0
+	for name, state := range doc.States {
+		for _, action := range state.OnEnter {
+			payload, _ := action.Payload.(map[string]any)
+			goal, _ := payload["message"].(string)
+			if action.Event != "EventMetaStatusMessageRequest" || payload["kind"] != "goal" {
+				continue
+			}
+			goals++
+			ctx.SetStatusMessage(goal, parameter.StatusGoal)
+			buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, rc.ScreenWidth, rc.ScreenHeight)
+			bar.Render(rc, buf)
+			var line strings.Builder
+			for x := range rc.ScreenWidth {
+				line.WriteRune(buf.CellAt(x, rc.ScreenHeight-1).Rune)
+			}
+			if !strings.Contains(line.String(), goal) {
+				t.Errorf("%s: the status line reads %q, want its goal %q whole", name, line.String(), goal)
+			}
+		}
+	}
+	if goals == 0 {
+		t.Fatal("the tutorial posts no goal; the check passed vacuously")
 	}
 }
 
