@@ -24,8 +24,8 @@ host the game.
 | Full native | `make release` | Terminal renderer; on Linux and FreeBSD the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
-| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
 
@@ -43,7 +43,7 @@ make headless                # bin/vif-headless
 make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
 make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
-make wasm                    # web/vif.wasm
+make wasm                    # web/vif.wasm and the page's scripts
 make windows                 # bin/vif.exe
 
 go build -tags=vif_noaudio ./cmd/vif
@@ -132,15 +132,20 @@ measured for each release.
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental; plays in Windows Terminal, and in Alacritty with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
-| Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after 30 s, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer over `terminal/android`'s view and `AudioTrack` (§8); the wad as the system root |
+| `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after 30 s, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`terminal.Page`, `web/vif.js`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
-| 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
+| 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `terminal/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
 A text console (Linux's or FreeBSD vt's, 256 colours, `Config.TextConsole`) draws
 with fonts that lack the half blocks, so the small splash face, which packs two
 pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
 twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
+
+The About overlay's `notices` row names `NOTICES`, which travels with every
+build: beside the binary in an archive, under `share/licenses/vif/` once
+installed, beside the page, and on Android as an asset in the APK, which the app
+shows no way to open.
 
 The zip plays in Windows Terminal, Windows 11's default terminal, whose console
 host forwards the game's request for mouse reports and, from 1.22, passes its
@@ -194,7 +199,7 @@ socket. A browser guest never declares a port, even in a migrate session, and
 
 ### What the browser adds to a link
 
-The Go program runs in a Worker (`web/worker.js`), so the page's drawing never holds
+The Go program runs in a Worker (terminal's `worker.js`), so the page's drawing never holds
 it, but it runs on one thread with no preemption: Go returns to the browser only
 when every goroutine is idle, and a socket message is a browser event. An arriving
 epoch or echo therefore waits for the tick, frame or correction install in progress,
@@ -217,7 +222,7 @@ whole screen once. Drawing on would hold frames behind the page's throttled time
 the host hands the page one at a time, so even then one waits, never a backlog to
 replay.
 
-A joined page hidden for five minutes (`LEAVE_HIDDEN_MS` in `web/terminal.js`)
+A joined page hidden for five minutes (`LEAVE_HIDDEN_MS` in `web/vif.js`)
 leaves: the page ends its Worker, the session sees the link close and the cursor
 waits as a Wraith ([Multiplayer §5.4](multi-player.md#54-wraiths)), dismissed after
 `WraithTimeout`, so a session nobody else plays empties and ends on its grace. Shown
@@ -320,17 +325,19 @@ Kubernetes lifecycle code into the game.
 ## 6. Browser launch arguments
 
 Go's browser support accepts an argument vector through `Go.argv` in
-`wasm_exec.js`. `web/terminal.js` builds it from two page-controlled sources and
-`web/worker.js` hands it to the program:
+`wasm_exec.js`. `web/vif.js` builds it from two page-controlled sources and hands
+it to `TerminalPage.open` as `argv`, which terminal's worker hands to the program:
 
 1. `window.VIF_ARGS`, set before the terminal script loads;
 2. repeated `arg` query parameters.
 
-`web/` is the launcher, and it is copied to a deployment as it stands: the same
-page, the same scripts and stylesheet, the same `vif.wasm` and `wasm_exec.js` the
-Makefile writes, from one Go. A deployment that
-edits any of them has forked the launcher, and the fork is only visible the next
-time one side changes.
+`web/` after `make wasm` is the launcher, and it is copied to a deployment as it
+stands: the page and its stylesheet, and what the Makefile writes there, `vif.wasm`
+and `wasm_exec.js` from one Go, and the two scripts no commit holds, `terminal.js`
+(the terminal module's `web/page.js`, then `web/vif.js`, vif's part) and
+`worker.js` (the module's), of the version the build links (`make page`). A
+deployment needs no `vif.js`, and one that edits any of the rest has forked the
+launcher, the fork only visible the next time one side changes.
 
 The page's text is Roboto, as lixen.com's is: the stylesheet takes it from
 `/fonts/`, where the site serves it, and then from `fonts/` beside the page, which
@@ -448,9 +455,10 @@ names none. A host also supplies its speakers as `Host.Audio`, a writer the mixe
 streams PCM to in place of a backend found by name. Adding a graphical host is
 therefore composition, not a simulation fork:
 
-1. implement `Presentation` over the window or view, drawing the cell grid with
-   the embedded font atlas (`asset.DefaultFont`, `pkg/glyph`): `glyph.Raster`
-   is the software drawer, a `Surface` any host can start from;
+1. implement `Presentation` over a `terminal.Host`, which lixenwraith/terminal
+   has for a desktop window, a page and an Android view, or over a view of one's
+   own drawn with a `terminal/glyph` font: its `Raster` is the software drawer,
+   a `Surface` to start from;
 2. call `app.Run` with a `Config` and that `Host` beside it, as `app.RunScript`
    and `app.RunBot` take one for a watched run; a library binding wraps that call;
 3. keep graphical assets and renderer construction out of the common manifest
@@ -467,70 +475,72 @@ as that key does, and help, the configuration menu and `:` open over the page as
 over the game; the status bar keeps its line. The press that starts the game or seats the join lifts it; a
 later new game asks on the status line, and `[play] wait` off opens none.
 
+The window and Android draw cells with Hack 3.003 as bitmaps at three cell sizes,
+its strikes, 6x12, 8x16 and 12x24 (`atlas.Hack()` of `terminal/atlas`, drawn by
+`terminal/glyph`): a cell takes the largest strike no taller than it, stretched up
+and never down, so a zoom out stops at the smallest and shows whole glyphs. A
+browser draws the same face at any size, from a web font inside `vif.wasm`
+(`atlas.HackWeb()`). The font's licence ships as `LICENSE.font`
+([Packaging §1](packaging.md#1-shared-guidelines)).
+
 The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
-build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
-asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does by
-default and `-cli` refuses; it opens holding the grid `-size` names, 120x40 with
-none, or maximized or full screen on `-maximized` or `-fullscreen`
-(`_NET_WM_STATE` set before the map), and `window.Open` returns once
-the window manager has placed it (`settle`): mapped, resized where a state was
-asked, and its size then held for `settleQuiet`, since a manager may size a window
-just after mapping it. `settleWait`, a second, bounds the wait, which a state no
-manager grants runs out. A run so starts at the grid on screen, as a page's does
-([Runtime §1](runtime.md#1-process-modes)), and a window placed later still is
-followed as any resize; the window draws each frame with
-`glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
-pointer as the events a terminal reports, each key's release too once a run asks
-(`hostkey.Report`, which the page and Android share): XKB's detectable autorepeat
-tells a held key's repeats from releases, a server without it reports presses
-alone, and focus leaving ends every hold; `-scale n` draws the texture `n` times
-its size with nearest filtering, for a HiDPI screen. Ctrl with `=` or `+` zooms
-its cell in, with `-` out and with `0` back to the atlas's own, the keypad's keys
-too, and so does Ctrl and the wheel, as the page's: the chords a terminal emulator
-and a browser keep for their own zoom, so a terminal's zoom is its emulator's and
-a page's keys its browser's, and `pkg/window` takes them itself (`zoomKey`), no
-terminal reporting them and no game key bound to them. A step is the page's wheel
-notch within Android's range (`glyph.Zoom`, `-scale` the density, never under the
-atlas), the frame stretched over the cell, filtered where that is no whole
-multiple of the atlas's; the grid the window holds follows as a resize, and the
-run keeps the cell in `[presentation] cell` and opens at it. Its libraries
-(`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
-the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
-as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
-Wayland through XWayland. purego's `fakecgo` links the binary to the system libc,
-so a Linux client binary needs glibc and runs neither on musl nor under Termux;
-`vif_nogui` and `vif_headless` binaries stay static.
+build but `vif_nogui`, sets `Host.Presentation` to a `terminal/window` window, a
+module nested in terminal's repository, when `-g` asks for it, as a `vif_gui` build
+or `vif.toml`'s `[presentation] window` does by default and `-cli` refuses. It opens
+holding the grid `-size` names, 120x40 with none, or maximized or full screen on
+`-maximized` or `-fullscreen`, and `window.Open` returns once the window manager
+has placed it, a second at most, so a run starts at the grid on screen, as a
+page's does ([Runtime §1](runtime.md#1-process-modes)); a window placed later is
+followed as any resize. It draws each frame with `glyph.Raster`, uploaded as one
+GLES 2 texture, and posts keys and the pointer as the events a terminal reports,
+each key's release too once a run asks (`terminal.HostKeys`, which the page and
+Android share): a server without XKB's detectable autorepeat reports presses
+alone, and focus leaving ends every hold. `-scale n` is the window pixels a pixel
+of the largest strike takes, for a HiDPI screen. Ctrl with `=` or `+` zooms the
+cell in, with `-` out and with `0` back to the font's own, the keypad's keys too,
+and so does Ctrl and the wheel, as the page's: chords a terminal emulator and a
+browser keep for their own zoom, so no game key is bound to them. A step is the
+page's wheel notch within Android's range (`glyph.Zoom`, `-scale` the density),
+never under the smallest strike and filtered where the cell is no whole multiple
+of its strike; the grid follows as a resize, and the run keeps the cell in
+`[presentation] cell` and opens at it. The window's libraries (`libX11.so.6`,
+`libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so the binary builds with
+`CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which the
+Makefile's release targets pass (`GUI_GCFLAGS`). It runs on Wayland through
+XWayland. purego's `fakecgo` links the binary to the system libc, so a Linux
+client binary needs glibc and runs neither on musl nor under Termux; `vif_nogui`
+and `vif_headless` binaries stay static.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
-`Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the
-page's drawing never holds it; the host embeds `glyph.Frames` and hands the page one
-frame at a time, the cells changed since the one it holds, the next once the page
-reports the last drawn, so a page that stops drawing holds a frame rather than a
-queue and shows as `Blocked`. The page (`web/terminal.js`) draws the grid with one
-WebGL quad whose fragment shader finds its cell in two data textures and mixes the
-cell's colors by a glyph mask, rasterized from a monospace font at the cell's device
-size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
-changes; a pinch, or Ctrl and the wheel, zooms the cell live within the range
-`browser.Open` hands the page, Android's, and the page reports the cell once it
-holds still, for the run to keep as Android's. `browser.Open` hands over the kept
-cell too and returns once the page has fitted its grid to it and answered
-(`fitted`, a second at most), so a run starts at the grid on screen: a joiner
-reports its size before its run takes a resize, and a dedicated host sizes a
-shared map from the first person's report. Without WebGL (a Chromium build on a
-blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
-slower on a large grid, and says so once. It reports keys, a soft keyboard's text
-and pastes (each one paste event the run types), the pointer at its cell (a touch is the left button marked as a
-finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
-hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
-hidden tab ends every hold, a pointer's press and a finger's too, whose ends would
-reach another tab or window. The page keeps for the browser what a terminal
-emulator keeps for itself, a Meta or Alt chord, a Ctrl-Shift chord (Ctrl-Shift-V
-pastes, as Shift-Insert does) and F5, F11 and F12; every other key is the game's,
-the Ctrl-letter chords and the other function keys among them. A button pressed
-while another is held, which a browser reports as a move, presses as one alone
-does. A hidden tab draws nothing and is handed the whole screen on return; the
-run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
-(`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
+`Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
+its Worker, hands the page one frame at a time, the cells changed since the one it
+holds, each with its rune (`terminal.RuneFrame`), the next once the page reports
+the last drawn: a page that stops drawing holds a frame, not a queue, and shows as
+`Blocked`. The terminal module's `page.js`, the first part of `web/terminal.js`,
+draws the grid on a WebGL canvas from a glyph mask of its own, a slot for each
+rune a frame has brought, rasterized at the cell's device size from the web font
+`OpenPage` hands it, then from its monospace stack; without WebGL it paints on a
+2D canvas, slower on a large grid, and says so once. A pinch, or Ctrl and the wheel,
+zooms the cell within the range `OpenPage` names, Android's, and the page reports
+the cell once it holds still, for the run to keep as Android's. `OpenPage` hands
+over the kept cell too and returns once the page has fitted its grid to it, a
+second at most, so a run starts at the grid on screen: a joiner reports its size
+before its run takes a resize, and a dedicated host sizes a shared map from the
+first person's report. Keys, a soft keyboard's text and pastes (each one paste
+event the run types), the pointer at its cell (a touch is the left button marked
+as a finger's, as on Android) and the page's size reach the run as terminal
+events, and blur or a hidden tab ends every hold. The page keeps for the browser
+what a terminal emulator keeps for itself, a Meta or Alt chord, a Ctrl-Shift chord
+(Ctrl-Shift-V pastes, as Shift-Insert does) and F5, F11 and F12; every other key
+is the game's, the Ctrl-letter chords and the other function keys among them
+([the page](https://github.com/lixenwraith/terminal/blob/main/web/README.md) has
+the rest). A hidden tab draws nothing and is handed the whole screen on return;
+the run is not paused ([§5](#a-hidden-tab)). vif's part of the page is
+`web/vif.js`, the rest of `terminal.js`: the start screen, the launch arguments,
+the hidden tab's leave, the kept settings and places (`terminal.PageKept`,
+`PageKeep`), and sound, the menu and Back as messages of its own
+(`terminal.PagePost`, `Page.Handle`). Its speakers are `Host.Audio`
+(`pageSpeaker`): the Worker posts each mixer buffer that sounds, and the page
 opens an `AudioContext` at the first and plays them through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
@@ -560,20 +570,23 @@ A screen turned while a solo game waits starts that game over at the new size, a
 one opened at it would be; once started, a resize crops it as on a terminal. Every
 later new game waits in the game for a tap, as a terminal's does for a key or a
 click, unless `[play] wait` is off; the start screen opens every launch either way.
-The view's grid is the cells its pixels hold at a cell 12 dp tall
-(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
-which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
-`CellMost` (4 to 40 dp, the page's range too) in `CellStep` steps, never under the
-atlas, and the run keeps it in `vif.toml`'s `[presentation] cell` as it keeps
-`[play]` (`paths.SaveCell`), so the next run opens at it. A
-Java render thread takes the newest frame at each vsync as the cells changed
-since the one it holds (`glyph.Frames`, the hand-off every host drawing in another
-runtime shares), and while the activity is paused stops asking for frames once it
-has painted the last one flushed (`GameView.away`), which `CellDrawer.OnCanvas` paints from the atlas as one texture
-(`glyph.Texture`, `game.Atlas`) at the atlas's size, as an instrumented test checks
-against `glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretched
-over the whole view, filtered, so no margin is left; a tap maps to its cell in
-proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
+The view's grid (`terminal/android`'s `View`, which `android/game` binds) is the
+cells its pixels hold at a cell 12 dp tall (`android.DefaultCell`: 16x32 pixels on
+a 420 dpi phone, aspect 0.5), which a pinch zooms when its fingers lift: from
+`parameter.CellLeast` to `CellMost` (4 to 40 dp, the page's range too) in
+`CellStep` steps, never under the smallest strike (5 dp on that phone), and the
+run keeps it in `vif.toml`'s `[presentation] cell` as it keeps `[play]`
+(`paths.SaveCell`), so the next run opens at it. A Java render thread takes the
+newest frame at each vsync as the cells changed since the one it holds
+(`terminal.Frames`), and while the activity is paused stops asking once it has
+painted the last one flushed (`GameView.away`). `CellDrawer.OnCanvas` paints a
+frame from its cell's strike as one texture (`glyph.Texture`), which an
+instrumented test checks against `glyph.Raster` pixel for pixel at each strike,
+and posts it on a hardware canvas stretched over the whole view, filtered, so no
+margin is left; a tap maps to its cell in proportion. Before each frame the thread
+asks `game.AtlasChanged`, and builds its drawer anew from the texture of a strike
+a zoom crossed to, the run's first too. `FromRaster`, Go's raster as pixels, is
+the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Nearby games
@@ -683,9 +696,9 @@ included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/st
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
 dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
-dedicated profiles, the `android` module and `pkg/window`, and runs the §3
-dependency check in addition to the normal test and vet gates. A release should
-also run:
+dedicated profiles, the `android` module and the window's
+(`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check in
+addition to the normal test and vet gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest
@@ -693,7 +706,8 @@ go build ./...
 go test ./...
 go vet ./...
 ./script/test.sh all
-node --check web/terminal.js web/worker.js web/audio-worklet.js
+make wasm    # writes web/terminal.js and worker.js; node checks one file a call
+for f in vif audio-worklet terminal worker; do node --check web/$f.js; done
 ```
 
 Compilation is not runtime certification. A hidden tab's leave and return (§5) is

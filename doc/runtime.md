@@ -49,7 +49,7 @@ Three things read a screen's size once and keep it: a run under `-size fit`, the
 map a hosting run's door locks as it opens (D-14), and the size a joiner reports at
 its seat, which a dedicated host sizes its session by. So a presentation holds its
 settled size before a run is built on it and posts no resize for it: a terminal's
-is its own, `browser.Open` waits for the page's fit, and `window.Open` for the
+is its own, `terminal.OpenPage` waits for the page's fit, and `window.Open` for the
 window manager to place the window
 ([Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
@@ -109,11 +109,12 @@ offer: a session migrates only where its host asked (`-authority migrate`, `:hos
 (`[play] takeover`, `:takeover on`, saved and off by default) or pinned `-listen
 <addr>`. The coordinator completes the declared address from the connection it
 arrived on and publishes it, unconfirmed, in the succession chain; every
-participant but a seated bot keeps a link open to the first candidate on it, so the
-instance likeliest to author already has one at a handoff. `-listen` names the port
-and the default is the host's own, either falling back to an OS-assigned one when
-it is taken; a guest that does not take over — or a bind that fails, or a session
-that does not migrate — is a leaf that plays normally and is never a candidate. `-relay <addr>` makes a joined
+participant but a seated bot or a browser, which dials no `host:port`, keeps a link
+open to the first candidate on it, so the instance likeliest to author already has
+one at a handoff. `-listen` names the port and the default is the host's own,
+either falling back to an OS-assigned one when it is taken; a guest that does not
+take over — or a bind that fails, or a session that does not migrate — is a leaf
+that plays normally and is never a candidate. `-relay <addr>` makes a joined
 participant a door for people who cannot reach the host: they `-join` that address,
 take independent slots, and play through it; a person admitted that way is a leaf
 unless it passes `-listen`, and keeps its slot when its relay leaves. `-relay
@@ -449,8 +450,9 @@ The simulation is fixed-step but frame-gated. The main loop primes one
 `frameReady` token. After a simulation update signals `updateDone`, the next
 render completes and then returns another token. The scheduler also has a
 bounded timeout while waiting, so a missed render token does not block forever.
-This limits the simulation to one outstanding update and prevents rendering a
-world that is being advanced concurrently.
+At real time and slower this limits the simulation to one outstanding update and
+prevents rendering a world that is being advanced concurrently; above 1x the
+scheduler skips the wait (§9).
 
 A tick holds the world lock a frame renders under, so one longer than a frame draws
 that frame late: the world before it stays up longer and its own for less. Later

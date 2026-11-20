@@ -5,9 +5,9 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/glyph"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
-	"github.com/lixenwraith/vif/pkg/glyph"
 )
 
 // The software rasterizer is a Surface: the reference drawer of every graphical host

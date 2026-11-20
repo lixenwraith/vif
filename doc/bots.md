@@ -764,10 +764,10 @@ before it plays: it was asked for the model.
 - [`seed`](../wad/scenario/base/cave/bot/seed.toml), `cave`'s start written by
   hand. It has two networks, `raid` and `kraken`, each its inputs through six
   hidden units. Twelve direct weights hold the nearest raider's row, back off
-  what is near and keep to the middle. Its score pays `travel` 1, `kill` 5,
-  `hit_points` 12 and `kraken` 1.
+  what is near and keep to the middle. It sends twenty actions a second, and its
+  score pays `travel` 1, `kill` 5, `hit_points` 12 and `kraken` 1.
 - [`cave`](../wad/scenario/base/cave/bot/cave.toml), the `cave` scenario's
-  own: `seed`'s two networks and `seed`'s score, with a model learned from
+  own: `seed`'s two networks, rate and score, with a model learned from
   `seed`'s weights, 194 of its 540 weights not zero. A run of five games
   learned it, and a trainer then ran on from it in cycles of fifty minutes. The
   pair it fielded after the fourth cycle ships, and fifteen more cycles fielded

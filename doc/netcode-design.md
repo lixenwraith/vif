@@ -1,10 +1,11 @@
 # Netcode design
 
 The netcode as built, the readings that judge it, and what is still to change. vif
-is not lockstep: every instance runs the whole Shared simulation at 20 ticks a
-second, a guest predicting it and the authority correcting it (multi-player §10.3),
-and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
-correction pipeline, §3 the readings, §4 phase 2's approaches, landed or decided on
+is not lockstep: every instance runs the whole Shared simulation at
+the session's tick, 20 a second by default, a guest predicting it and
+the authority correcting it (multi-player §10.3), and the wire carries
+what a receiver cannot re-derive. §1 is the wire, §2 the correction
+pipeline, §3 the readings, §4 phase 2's approaches, landed or decided on
 §3's readings, and §5 what follows. Phase 1, four iterations in 2026-10, is what
 §1–§3 describe as built, with phase 2's five: the wire codec, the authority's FSM
 transitions, answers indexed in place under a word hash, and keyframes from cached
@@ -40,7 +41,7 @@ Four streams carry what a receiver cannot re-derive:
 
 Each link is one TCP or WebSocket stream per direction, deflated at level 7
 (`NetworkStreamLevel`) against its own history, so a broadcast is deflated once per
-link and compresses 7–12× against that history. The stream is segmented: a deflate
+link and compresses about 3× against that history. The stream is segmented: a deflate
 run of frames, opened by a kind byte, its wire length and its frame count, or one
 raw frame whose body the snapshot codec deflated already
 (`Traits.Precompressed`), since a body compressed once at the level the wire
@@ -83,7 +84,7 @@ players (§3.1, which times seal, index, keyframe and tick on a slower container
 the tower's egress is the binary codec's, td's from before it):
 
 ```
-                                        Tower 239x64        td 500x250
+                                        Tower 159x46        td 500x250
 Host egress before deflate              0.23 MB/s           5.05 MB/s
   of it epochs and owner syncs          69%                 56%
   of it bodies and repairs              28%                 43%
@@ -121,7 +122,8 @@ Every approach keeps these; one that needs another is out of scope here.
   applies whole (D-23): an encoding may change, a value may not be rounded, and pages
   from two ticks never mix.
 - **Order and containment.** The clock never rewinds, membership is by fence
-  (multi-player §3.2), and a crossing is D-3's smallest outcome, never raw input.
+  (multi-player §3.2), and a crossing is D-3's smallest outcome, raw input only for
+  a key a scenario captures.
 - **Same-build determinism** over float64 (multi-player §8 item 3).
 - **Reliable ordered streams**
   ([services §7.3](services-and-networking.md#73-why-a-byte-stream-and-not-udp-or-icmp)).
@@ -192,8 +194,9 @@ tick, `Apply` keeps such a body at the head of its inbox until the reset enters
 it, and the barrier keeps the epochs and syncs for it, and ends the run itself on
 the authority's word where no reset comes (multi-player §3.2). A
 body or a repair leaves in `SnapshotCorrectionChunkBytes` chunks while the link's
-backlog, the bytes sent beyond what its latest echo reports received, drains within
-`SnapshotBulkQueue` past the round trip, so an epoch waits behind a chunk, not a
+backlog, the bytes sent beyond what its latest echo reports received, is within
+`SnapshotBulkQueueBytes` or drains within `SnapshotBulkQueue` past the round trip
+and a probe interval, so on a slow link an epoch waits behind a few chunks, not a
 world. What a link still delivering one is owed next, whether body, index answer or
 repair, waits behind it, the newest replacing the older and nothing partial
 replacing a whole world, and leaves once the link drains, released between every
@@ -266,7 +269,8 @@ playing, every participant moving one tick in three and firing one in six, 300 t
 after 120 of warm-up. Rates are per simulated second; host and guest figures time
 their own calls in one shared process, so garbage collection falls on whoever
 allocates. Absolute values move with the machine and the scenario; the shape is what
-to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
+to plan by. Tower is the tower region on a 160×50 terminal, a 159×46 map, td the
+500×250 `td` scenario.
 
 ```
 Players                                 Tower 2     Tower 16    td 2        td 16
@@ -285,10 +289,11 @@ before the codec, since the socket harness cannot seat its roster
 ([todo](todo.md#measure-a-full-roster)).
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-then seals and indexes the capture; a keyframe is about 26 / 360 kB compressed. The
-seal, the index and a keyframe reuse the bytes and hash of every row whose owned
-copy still compares equal, and navigation rebuilds its wall grid only when a wall
-moved and compares grids only when their generation moved. At 16 players, rounds
+then seals and indexes the capture; a keyframe is about 26 / 360 kB compressed
+as JSON rows and a td keyframe 17–22 kB in columns (§3.7). The seal, the index
+and a keyframe reuse the bytes and hash of every row whose owned copy still
+compares equal, and navigation rebuilds its wall grid only when a wall moved
+and compares grids only when their generation moved. At 16 players, rounds
 four ticks apart (on a slower container than the figures above), the seal costs
 1.8 ms on the tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe 7.6 and
 58 ms (mostly deflate), and a simulation tick 1.1 and 2.6 ms. From cached sections
@@ -448,7 +453,8 @@ What the readings decide:
   bytes. The link's level-7 stream took a fifth off the snapshot codec's level-1
   output, which is why a body is compressed once at level 6 and passes the link
   raw: a td keyframe is 360 kB against 398 after both passes and 501 at level 1, the
-  codec's pass 33 ms instead of 12 plus 9 a link.
+  codec's pass 33 ms instead of 12 plus 9 a link; in columns (protocol 28) a td
+  keyframe is 17–22 kB (§3.7).
 - **FNV was 7–11% and the seal and index 2–4%**, so a faster hash paid: the word
   hash of iteration 4 folds eight bytes for what a byte cost, and the profile
   above is the one taken before it.
@@ -469,8 +475,9 @@ What the readings decide:
 A terminal guest of the pod at the site, with an Android client holding a bot and
 the pod authoring, 76 s at DEBUG on 2026-10-24, read from its log and journal:
 
-- **The link**: a 107–202 ms round trip with 14–85 ms of jitter, up to 1% loss,
-  saturated twice in seven samples; 12 kB/s in and 3 kB/s out on the wire.
+- **The link**: a 107–202 ms round trip with 14–85 ms of jitter, up to 1% probe
+  loss (`network.link_loss_pct`), saturated twice in seven samples; 12 kB/s in and
+  3 kB/s out on the wire.
 - **Pacing**: the barrier delay renegotiated between 4 and 11 ticks, 38 pace steps
   and a playout lead adopted 25 times in the window; 533 of the guest's crossings
   committed late over the session, about two a second, each a misprediction the
@@ -822,9 +829,10 @@ Players  Feed B/s  Starting points B/s  Host to a guest B/s  Starting point  Cap
 A viewer costs its feeder 0.9 kB/s at two players and 1.9 at four, under a guest's
 1.8 to 2.5 and with nothing encoded for it: the feed has no correction exchange,
 and a starting point every 30 s in its place. Each starting point sent to a viewer
-already reading moved no entry of its world, and the viewer ran 9 to 13 ticks
-behind its host. §3.5's four shapes read the same in every count with the feed in
-the build and nobody watching, since an unwatched authority copies nothing.
+already reading moved no entry of its world, and the viewer, stepped with its
+host, ran 9 to 13 ticks behind it. §3.5's four shapes read the same in every count
+with the feed in the build and nobody watching, since an unwatched authority
+copies nothing.
 
 What a copy costs the hub that makes it was read once, the same day, with a
 harness not kept: a `FeedHub` publishing an 860-byte record, a four-player
@@ -1101,7 +1109,8 @@ The approaches are in three batches, and §5 orders them.
 ### Dropped
 
 - A dictionary deflate for every link in place of the per-link stream: refuted by
-  §3.3, no preset dictionary matches a per-link history that compresses 7–12×.
+  §3.3, no preset dictionary matches a per-link history that compressed the JSON and
+  TOML command stream 7–12×.
 - Relay trees chosen by the authority: the star's wire at 16 players on the tower is
   108 kB/s after deflate, which a home uplink carries, and a fleet pod runs out of
   CPU first; a relayed participant's crossings and corrections take one more hop

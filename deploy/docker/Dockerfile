@@ -1,6 +1,6 @@
-# The dedicated-session image: the static `vif_headless` binary on scratch, with no
-# shell, libc or configuration tree; a session's data is compiled in or mounted
-# read-only. Build from the repository root with BuildKit, which the caches need:
+# The session image: the static `vif_headless` binary and its licences on scratch,
+# with no shell, libc or configuration tree; a session's data is compiled in or
+# mounted read-only. Build from the repository root with BuildKit, for the caches:
 #   docker buildx build -f deploy/docker/Dockerfile -t vif:dev .    # or: make image
 # See doc/kube-docker-deploy.md.
 
@@ -10,12 +10,12 @@ ARG GO_IMAGE=docker.io/library/golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943
 
 # --- builder -------------------------------------------------------------------
 # The builder is not thin and does not need to be; nothing from it is shipped
-# except /out/vif. git is installed so the Go toolchain can stamp the commit into
-# the binary's own build info, which is what makes a running pod attributable to a
-# revision without trusting a label somebody could have written by hand.
+# except /out and LICENSE. git lets the Go toolchain stamp the commit into the
+# binary's own build info, which makes a running pod attributable to a revision
+# without trusting a label written by hand; make runs the Makefile's notices recipe.
 FROM ${GO_IMAGE} AS build
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git make
 WORKDIR /src
 COPY . .
 
@@ -39,6 +39,11 @@ RUN if [ "$(go env GOHOSTARCH)" = "${TARGETARCH}" ] && [ "$(go env GOHOSTOS)" = 
         echo "cross build: config check deferred to the init container"; \
     fi
 
+# The licences of Go and of the modules this build links, by the recipe every other
+# copy of a vif binary takes its NOTICES from; it reads both of the build's caches.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} make -s notices TAGS=vif_headless NOTICES=/out/NOTICES
+
 # --- runtime -------------------------------------------------------------------
 FROM scratch
 
@@ -54,7 +59,7 @@ LABEL org.opencontainers.image.title="vif" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
       dev.lixenwraith.vif.build-profile="headless"
 
-COPY --from=build /out/vif /vif
+COPY --from=build /out/vif /out/NOTICES /src/LICENSE /
 
 # Numeric, because there is no /etc/passwd in scratch to resolve a name against
 # and `runAsNonRoot: true` needs a UID it can compare. 65532 is the conventional

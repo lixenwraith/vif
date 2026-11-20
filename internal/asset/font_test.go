@@ -9,23 +9,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/vif/pkg/glyph"
+	"github.com/lixenwraith/terminal/atlas"
 )
 
-// TestTheFontAtlasCoversEveryGlyphTheCodeDraws: the atlas holds printable ASCII
-// and every non-ASCII rune in the packages that draw and in the shipped scenarios,
-// whose programs' frames and messages draw too, outside comments and tests: the set
-// tool/font-atlas renders. A rune drawn elsewhere extends both lists.
+// TestTheFontAtlasCoversEveryGlyphTheCodeDraws: the face a window and Android draw
+// the cell grid with, and a browser as its web font, holds printable ASCII and
+// every non-ASCII rune in the packages that draw and in the shipped scenarios,
+// whose programs' frames and messages draw too, outside comments and tests. A rune
+// drawn elsewhere extends dirs.
 func TestTheFontAtlasCoversEveryGlyphTheCodeDraws(t *testing.T) {
-	a, err := glyph.Parse(DefaultFont)
-	if err != nil {
-		t.Fatal(err)
-	}
+	font := atlas.Hack()
+	face := font.Strikes()[0] // every strike holds every rune
 	dirs := []string{"../parameter/visual", "../render/renderer", "../parameter", "../mode", "../app", "../help", ".", "../prof"}
 	var missing []rune
 	seen := map[rune]bool{}
 	want := func(r rune) {
-		if _, ok := a.Rows(r); !ok && !seen[r] {
+		if !face.Has(r) && !seen[r] {
 			missing = append(missing, r)
 		}
 		seen[r] = true
@@ -81,7 +80,7 @@ func TestTheFontAtlasCoversEveryGlyphTheCodeDraws(t *testing.T) {
 		}
 	}
 	if len(missing) > 0 {
-		t.Fatalf("the atlas (%d glyphs) lacks %q", a.Len(), string(missing))
+		t.Fatalf("the atlas (%d glyphs) lacks %q", font.Len(), string(missing))
 	}
 }
 

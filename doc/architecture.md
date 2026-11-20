@@ -91,7 +91,7 @@ Interactive play has four cooperating execution paths:
 1. The main goroutine selects presentation events, an input ticker, and a render
    ticker. It routes input and flushes frames to the presentation.
 2. The scheduler goroutine advances simulation at a nominal 50 ms fixed step,
-   gated by frame readiness.
+   gated by frame readiness at real time and slower.
 3. The event goroutine settles queued events between simulation ticks and
    remains active while the game is paused.
 4. Service-owned goroutines poll the presentation, mix audio, or, in a session,
@@ -109,13 +109,13 @@ flowchart TD
 ```
 
 Queued events are not simply processed once per frame. The scheduler performs
-bounded settling passes before the FSM update, after it, and after the systems.
-Input can request immediate settling, and a separate event loop handles
-inter-tick work. This lets pre-tick, FSM, system, input, and reset cascades
-converge before their next dependent phase. The pass after the systems closes
-the tick, so nothing its systems produced is still queued when its crossings are
-sent, its world is captured or its digest is taken. An iteration cap prevents an
-accidental event cycle from monopolizing a thread.
+bounded settling passes before the tick opens and after its systems, the second
+taking the FSM's events with the systems'. Input can request immediate settling,
+and a separate event loop handles inter-tick work. This lets pre-tick, input and
+reset cascades converge before the tick opens. The pass after the systems closes
+the tick, so nothing its FSM or systems produced is still queued when its
+crossings are sent, its world is captured or its digest is taken. An iteration
+cap prevents an accidental event cycle from monopolizing a thread.
 
 An optional replay journal copies every event of a journaled origin (anything but
 a system or this machine's own device) synchronously at queue push. It uses a
@@ -184,16 +184,17 @@ shares with a system and the snapshot detach of slice-holding components
 ([ECS and events](ecs-and-events.md#4-component-catalog)).
 
 The generated stores, capture and delta are emitted into `internal/engine`, so
-the engine imports `internal/component`: a build-time dependency, not a design
-that names game concepts. `internal/gen-manifest` hardcodes no component; it
-parses `internal/manifest/definition.go` and emits templates over whatever that
-file lists, the only name it knows being `Position`, and the world, scheduler,
-queue, convergence and snapshot code is written over the generated rows, never
-over a named component. In the headless binary the code the manifest expands into,
-the generated capture, install, delta, page and column passes and the generic
-helpers they instantiate for each component, is 1.8 MB of text and data against
-167 KB for the rest of the engine, and the terminal module the engine's vocabulary
-comes from links at 21 KB (`go tool nm -size`).
+the engine imports `internal/component`. `internal/gen-manifest` hardcodes no
+component but `Position`: it parses `internal/manifest/definition.go` and emits
+templates over whatever that file lists. The scheduler, queue and convergence
+code is written over the generated rows; hand-written world and snapshot code
+names the components it serves (the cursor roster's `Cursor`, the digest's
+`Kinetic` and `Combat`), and the engine holds game resources such as
+`KrakenShapeResource` and `CaveResource`. In the headless binary the code the
+manifest expands into, the generated capture, install, delta, page and column
+passes and the generic helpers they instantiate for each component, is 1.8 MB of
+text and data against 167 KB for the rest of the engine, and the terminal module
+the engine's vocabulary comes from links at 21 KB (`go tool nm -size`).
 
 Position is specialized rather than being an ordinary generated store:
 `engine.Position` binds the rows to `pkg/position`, the map's spatial index, a
@@ -339,14 +340,14 @@ with proportional exploitation plus a 10% uniform scout rate. This distinction
 matters when reasoning about convergence.
 
 The generic genetic library offers both classic generational and streaming
-steady-state engines. The game adapter currently evolves eye parameters,
-tracking closest approach and successful self-destruct damage as fitness. The
-adapter uses an in-memory registry: a population lasts its run, `:new` deregisters
-every declared species so the next declaration starts afresh, and no persistence
-store is attached. Multiplayer captures use the separate exact-continuation
-contract, carrying each streaming engine's PCG position, proposal/pending work and
-IDs together with the registry's scout stream and the adapter's live fitness
-accumulators.
+steady-state engines. The game adapter currently evolves which of seven eye types
+a gateway spawns, tracking closest approach and successful self-destruct damage
+as fitness. The adapter uses an in-memory registry: a population lasts its run,
+`:new` deregisters every declared species so the next declaration starts afresh,
+and no persistence store is attached. Multiplayer captures use the separate
+exact-continuation contract, carrying each streaming engine's PCG position,
+proposal/pending work and IDs together with the registry's scout stream and the
+adapter's live fitness accumulators.
 
 Gameplay motion uses cell-centered `float64` positions, velocities, and
 accelerations. Integer `Point`/`Area` values represent discrete cells, while
@@ -367,7 +368,9 @@ These boundaries belong to separately maintained modules:
 - `github.com/lixenwraith/terminal`: raw/alternate-screen lifecycle, terminal
   event decoding, color-mode detection, cells, mouse modes, syncing and flushing,
   plus the `tui` form and widget layer the configuration menu, renderers and tools
-  draw with.
+  draw with, and the graphical hosts' screens: the page (`terminal.Page`), the
+  Android view's mapping (`android`), the cell font (`glyph`, `atlas`) and, a
+  module of its own, the desktop window (`window`).
 - `github.com/lixenwraith/toml`: parsing, reflection-based decoding, encoding and
   macros, used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored
   scripts, audio specs and commands.
@@ -387,9 +390,9 @@ These boundaries belong to separately maintained modules:
 - `github.com/lixenwraith/ascimage`: the dual-mode cell images a wall pattern
   loads (`.aimg`) and the quadrant fit the logo draws with.
 - `github.com/ebitengine/purego`: loading Xlib, EGL and GLES 2 at run time for the
-  desktop window (`pkg/window`), with cgo off.
+  desktop window, with cgo off; it comes with `terminal/window`.
 
-`golang.org/x/sys` serves the window's Unix calls; `golang.org/x/term`,
+`golang.org/x/sys` serves `pkg/network`'s Windows error codes; `golang.org/x/term`,
 `golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through
 `auth`, are indirect dependencies. vif has no application CGO requirement, although external
 audio executables or an OSS device are runtime dependencies when sound is
@@ -405,15 +408,15 @@ desktop window too, which `-g` opens (`make gui` opens it by default).
 `make headless` builds the `vif_headless` profile, which removes terminal
 presentation and audio code while keeping TCP and WebSocket sessions. It is what
 the K3s fleet runs: one `-serve` container per session, which
-`tool/vif-router` creates on request and routes joins to over its TLS front door
-and the browser route, running each dial's admission exchange through itself and
+`tool/vif-router` creates on request and routes joins to over its front door
+(`vifs://` where TLS fronts it) and the browser route, running each dial's admission exchange through itself and
 handing the pod a ticket that names the player, by address or by the account the
 site's identity service vouches for ([Session fleet](kubernetes-fleet.md),
 [Auth and session design](auth-session-design.md)). A headless script or bot has
 no terminal or audio, but may attach the network service with `-host`/`-join`.
 
 A WASM build runs in a Worker behind the bundled page, which draws its cell
-frames on a WebGL canvas (`pkg/browser`), uses embedded FSM/content/keymap
+frames on a WebGL canvas (`terminal.Page`), uses embedded FSM/content/keymap
 assets without host-directory discovery, streams its sound to an AudioWorklet on
 the page, and omits logging. It cannot open a socket, so it joins a session over
 the same-origin route `wss://<site>/vif/ws/<session>`: the page's own WebSocket
@@ -489,9 +492,9 @@ in its turn, a window after the one above it. Every survivor reads the list from
 the roster and chain it holds, so no vote is needed and no two instances can claim
 one term; a survivor that reaches no candidate continues alone. In a migrate
 session a guest whose player lets it take over (`[play] takeover`, `-listen`)
-binds a port of its own, never a bot or a browser, and the chain carries the
-addresses, so migration moves the session and not only its authorship; see
-[Multiplayer](multi-player.md) §5.3.
+binds a port of its own, never a bot, a browser or a guest that joined through a
+relay without `-listen`, and the chain carries the addresses, so migration moves
+the session and not only its authorship; see [Multiplayer](multi-player.md) §5.3.
 
 Remaining limitations include plaintext on a player's own tcp and ws doors and on
 the router's tunnels to published doors, where a passphrase door authenticates the

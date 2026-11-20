@@ -8,7 +8,8 @@ mutation boundary.
 
 ## 1. World ownership
 
-`internal/engine.World` owns the complete mutable simulation:
+`internal/engine.World` owns the mutable simulation but the scenario HFSM, which
+`Scheduler` owns and advances under the world's update mutex:
 
 ```mermaid
 flowchart TD

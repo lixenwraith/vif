@@ -47,7 +47,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private final String files, wad;
     private final boolean raster;
     private final Speaker speaker;
-    private final CellDrawer drawer;
+    private volatile CellDrawer drawer; // the render thread's, which replaces it when a zoom changes the glyphs' size
     private final Stats stats = new Stats();
     private final int barReach; // BAR_REACH_DP in pixels
     private final int barSlop; // how far a finger tapping the status bar may stray, as a double tap's second tap may land
@@ -77,14 +77,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         this.wad = wad;
         this.raster = raster;
         this.speaker = speaker;
-        CellDrawer d;
-        try {
-            byte[] atlas = Game.atlas();
-            d = raster ? new CellDrawer.FromRaster(atlas) : new CellDrawer.OnCanvas(atlas);
-        } catch (Exception e) {
-            throw new IllegalStateException("font atlas", e);
-        }
-        drawer = d;
+        drawer = drawerOf(Game.atlas());
         barReach = Math.round(BAR_REACH_DP * activity.getResources().getDisplayMetrics().density);
         barSlop = ViewConfiguration.get(activity).getScaledDoubleTapSlop();
         scaler = new ScaleGestureDetector(activity, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -109,6 +102,10 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         });
         scaler.setQuickScaleEnabled(false); // a double tap is special fire, not a zoom handle
         getHolder().addCallback(this);
+    }
+
+    private CellDrawer drawerOf(byte[] atlas) {
+        return raster ? new CellDrawer.FromRaster(atlas) : new CellDrawer.OnCanvas(atlas);
     }
 
     /** Keys reach the game once the start screen is gone: under it, one would play in a game nobody sees. */
@@ -197,6 +194,11 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     @Override
     public void doFrame(long vsyncNanos) {
         long start = System.nanoTime();
+        // Asked before the frame: from this call on the run's frames name the new texture's glyphs
+        byte[] atlas = Game.atlasChanged();
+        if (atlas != null) {
+            drawer = drawerOf(atlas);
+        }
         byte[] frame = Game.frame();
         if (frame == null && away) {
             looping = false; // the run flushes nothing while its player is away; their return posts again

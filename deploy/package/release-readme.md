@@ -16,29 +16,29 @@ whose flags, files and formats may change without notice.
 
 <!-- if client -->
 - `vif`: the game, in a terminal or, with `-g`, in a desktop window
-- `LICENSE`: vif's licence, BSD-3-Clause
-- `LICENSE.purego`: the licence of purego, which the desktop window links
-- `LICENSE.font`: the licence of the font the desktop window draws its cells in
-
 <!-- end -->
 <!-- if headless -->
 - `vif`: the dedicated game server, a static binary with no terminal, window or
   sound
-- `LICENSE`: vif's licence, BSD-3-Clause
-
 <!-- end -->
 <!-- if windows -->
 - `vif.exe`: the game, in a terminal
-- `LICENSE`: vif's licence, BSD-3-Clause
-
 <!-- end -->
 <!-- if web -->
 - `index.html`, with its scripts and stylesheet: the page that runs the game
 - `vif.wasm`: the game, which the page runs in a Worker through `wasm_exec.js`
-- `LICENSE`: vif's licence, BSD-3-Clause
-- `LICENSE.font`: the licence of the font `vif.wasm` draws its cells in
-
 <!-- end -->
+- `LICENSE`: vif's licence, BSD-3-Clause
+- `NOTICES`: the licences of Go and of the modules this build links
+<!-- if client -->
+- `LICENSE.font`: the licence of Hack, the font the desktop window draws its cells
+  in: MIT, with Bitstream Vera's
+<!-- end -->
+<!-- if web -->
+- `LICENSE.font`: the licence of Hack, the font the page draws its cells in, which
+  `vif.wasm` carries: MIT, with Bitstream Vera's
+<!-- end -->
+
 <!-- if client windows web -->
 ## Play
 
@@ -153,17 +153,17 @@ Nightly builds of this binary are also the container image
 <!-- end -->
 <!-- if client windows -->
 The binary carries the main scenario and a tutorial typing corpus. The `td`,
-`recall`, `blank`, `cave`, `armada` and `magic` scenarios, the full corpus, wall images
-and editable copies of the keymaps, bot graphs and `vif.toml` are the wad,
-`vif-@LABEL@-wad.tar.gz` in the same release. It unpacks as the `vif/`
-configuration directory:
+`recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and `tutorial` scenarios,
+the full corpus, wall images and editable copies of the keymaps, bot graphs and
+`vif.toml` are the wad, `vif-@LABEL@-wad.tar.gz` in the same release. It unpacks
+as the `vif/` configuration directory:
 
 <!-- end -->
 <!-- if headless -->
 The binary carries the main scenario. The `td`, `recall`, `blank`, `cave`,
-`armada` and `magic` scenarios and their wall images are in the wad,
-`vif-@LABEL@-wad.tar.gz` in the same release, which unpacks as the `vif/`
-configuration directory:
+`armada`, `magic`, `dummy` and `tutorial` scenarios and their wall images are in
+the wad, `vif-@LABEL@-wad.tar.gz` in the same release, which unpacks as the
+`vif/` configuration directory:
 
 <!-- end -->
 <!-- if client headless -->

@@ -29,7 +29,7 @@ this repository; §2 and §12 state only what they must provide.
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
 | D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
 | D5 | **The router runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
-| D6 | **The router admits in band.** A fleet pod's doors take the router's ticket and no bare key: the router runs each dial's admission exchange through itself, over the edge's TLS and PROXY header on the front door and the site's TLS on the browser route, and mints a ticket naming the player's address and key; a stranger reaches a pod by no other way ([fleet design §4](kubernetes-fleet.md#4-security-posture), [auth design D5, D6](auth-session-design.md#0-decisions)). |
+| D6 | **The router admits in band.** A fleet pod's doors take the router's ticket and no bare key: the router runs each dial's admission exchange through itself, on the front door, under the edge's TLS and PROXY header where the edge ends TLS for 7777, and on the browser route under the site's TLS, and mints a ticket naming the player's address and key; a stranger reaches a pod by no other way ([fleet design §4](kubernetes-fleet.md#4-security-posture), [auth design D5, D6](auth-session-design.md#0-decisions)). |
 | D7 | **A session is reached only through the router.** No NodePort: a pod admits its game port from the node alone, the host forwards 7777 and nothing else, and `-sessions-max` bounds the fleet beside the quota ([fleet design §9](kubernetes-fleet.md#9-the-session-routes)). |
 
 ## 1. The shape
@@ -222,7 +222,9 @@ that just ended rather than hours of finished ones.
 ./deploy/update.sh image
 ```
 
-It builds the `vif_headless` profile once with Docker, refuses an image without the
+The image is the static `vif_headless` binary with `/LICENSE` and its build's
+`/NOTICES` ([Packaging §1](packaging.md#1-shared-guidelines)) beside it. The
+command builds it once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
 imports it into K3s pinned, records it as an installed router's
 `VIF_ROUTER_IMAGE` (§11 writes the first), removes older tags, and restores the

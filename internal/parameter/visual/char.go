@@ -86,13 +86,6 @@ const (
 	CircleQuadrantLLWhite = '◵' // U+25F5 White Circle with Lower Left Quadrant
 	CircleQuadrantLRWhite = '◶' // U+25F6 White Circle with Lower Right Quadrant
 	CircleQuadrantURWhite = '◷' // U+25F7 White Circle with Upper Right Quadrant
-
-	// Extended & Symbols (Commonly used circle glyphs)
-	CircleMediumWhite = '⚪' // U+26AA Medium White Circle
-	CircleMediumBlack = '⚫' // U+26AB Medium Black Circle
-	CircleLargeBlack  = '⬤' // U+2B24 Black Large Circle
-	CircleHeavy       = '⭕' // U+2B55 Heavy Large Circle
-	CircleShadowed    = '❍' // U+274D Shadowed White Circle
 )
 
 // Single-line box drawing characters

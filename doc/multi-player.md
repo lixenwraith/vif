@@ -46,8 +46,8 @@ Use these terms consistently:
 - The **Shared domain** contains state every participant can observe: cursors,
   shared species, gold, walls, towers, gateways, map state, shared FSM state, and
   simulation time.
-- The **Player domain** belongs to one local participant: corpus glyphs, weapons,
-  projectiles, drains, nuggets, and visual effects. It is never reconstructed on
+- The **Player domain** belongs to one local participant: corpus glyphs, weapon
+  shots, drains, nuggets, loot, and visual effects. It is never reconstructed on
   another instance.
 
 Network role, simulation domain, roster ownership, topology, and authority term
@@ -82,11 +82,11 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Playout lead | Per participant (§3.5): the worst recent age at which the authority committed its epochs, read off the committed copies, plus a relay tick; a participant behind a relay reads it off the same copies. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
 | Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join, a leaf's own copy as its age alone; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, bounded by the transfer ceiling since it has no whole world to send instead, asks the authority for a whole world it cannot author, which reaches them through it, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any, and retires one it holds no link to once it has had no news of it for the silence window (§5.4). |
-| Reachability | In a migrate session a guest whose player lets it take over (`[play] takeover`, or a pinned `-listen`) binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList` and with the start gate. Every participant holds a link to the first candidate. A guest that did not ask, a failed bind, or a host-policy session leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
+| Reachability | In a migrate session a guest whose player lets it take over (`[play] takeover`, or a pinned `-listen`) binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList` and with the start gate. Every participant but a seat or a browser holds a link to the first candidate. A guest that did not ask, one that joined through a relay without `-listen`, a failed bind, or a host-policy session leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
 | Host loss | The session's policy, its host's to choose and `host` unless it asked for `migrate`. `host`: nobody takes the session, and every survivor continues alone once its redial ends. `migrate` (`-authority migrate`, `:host <doors> migrate`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
-| Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about half a second behind, and predicts and corrects nothing (§5.8). |
-| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and the fleet's front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`); the direct combat request and either combat request's emitter are not yet among them ([todo](todo.md#refuse-a-combat-crossing-that-acts-as-another-cursor-or-emitter)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
+| Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about 0.7 s behind at the default tick, and predicts nothing; it takes each later starting point as a correction (§5.8). |
+| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and a `vifs://` front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and the tick interval, seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The tick interval, seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`); the direct combat request and either combat request's emitter are not yet among them ([todo](todo.md#refuse-a-combat-crossing-that-acts-as-another-cursor-or-emitter)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -407,9 +407,12 @@ grace, and only a participant's own raw epochs count, so its actions relayed to 
 others never mark them. A link is evicted with the bots it holds once what it sends
 over the window passes `NetworkIngressBytesPerSecond` for itself, each bot it holds
 and each person the authority has no link to (`driveIngress`). `-slow-window 0`
-turns off both. The authority sends every committed copy down each of its links, the
-producer's included, so a producer knows which of its epochs were committed; one
-with nobody behind it reads the copy's age alone, its frames left off (netcode §1).
+turns off both. An eviction only closes the link (`DropParticipant`): the
+participant departs as a lost link does, a Wraith with the bots it holds (§5.4),
+and a person's run redials into its place. The authority sends every committed
+copy down each of its links, the producer's included, so a producer knows which of
+its epochs were committed; one with nobody behind it reads the copy's age alone,
+its frames left off (netcode §1).
 On a handoff a guest resends to the successor, in its next epoch, the retained
 crossings of the epochs that never came back (`ResendUncommitted`); the successor
 commits them late and refuses by sequence any it already holds from the
@@ -499,8 +502,8 @@ guest's is refused (`speedRefused`). A joiner adopts the rate its offer's anchor
 names (`configForJoin`), a script's or bot's pace included, and every driven run
 paces at its own clock's rate, which the crossing moves on a seat as on its holder.
 The authority's per-second budgets (`driveEviction`, `driveIngress`) count a second
-of game time, and a window the rate changed in starts over, grace for eviction; its
-silence window (§5.4) is wall time over its ticks at the rate, 15 s at any, and
+of game time, and a window the rate changed in starts over, grace for lateness alone;
+its silence window (§5.4) is wall time over its ticks at the rate, 15 s at any, and
 starts over the same way. A replay presents the run at the rate its clock held,
 which the journal's opening anchor names and its records move. Nothing caps the
 rate: the host chooses it, every status bar shows it, and an authority that cannot
@@ -566,7 +569,8 @@ the map; its cursor appears with its arrival.
 The session is a tree rooted at the authority: the shipped CLI builds a star, a
 guest seating bots or relaying people (`-relay`) adds a level, as a run behind it
 does again, to `NetworkRelayHopLimit` levels, and in a migrate
-session every participant also holds a peer link to the first candidate (§5.3). So
+session every participant but a seat or a browser also holds a peer link to the
+first candidate (§5.3). So
 the authority sees links, each a run with a cursor and any mix of bots and people
 behind it, and seats each cursor alike, whatever drives it and however far it is. Every
 link is up, down or beside. A participant's **up** link is the authority if it
@@ -816,8 +820,9 @@ started the world.
    the default is the coordinator's own port, so a session is one firewall rule and
    the port a guest opens is one somebody already chose to open. A machine already
    using it — two guests on one machine — takes an OS-assigned port instead. A
-   guest that does not take over, a failed bind, or a session that does not migrate
-   leaves a participant a **leaf**: it plays normally, declares nothing and is
+   guest that does not take over, one that joined through a relay without
+   `-listen`, a failed bind, or a session that does not migrate leaves a
+   participant a **leaf**: it plays normally, declares nothing and is
    never a candidate. The switch is read as the run joins: turned on later it is
    the next session's, and turned off it passes this run's turn on the list
    (`Authority.trySucceed`).
@@ -827,9 +832,10 @@ started the world.
    holding a prefix. It completes a declared `:7777` from the join
    connection's remote address, because a participant knows which port it bound and
    not which address the world reaches it at.
-3. Every participant dials the first candidate and keeps that link warm, so the
-   instance that will have to author already has one when it does. A **successor
-   chain** rather than a full mesh: N links instead of N², and the chain is the same
+3. Every participant but a seat and a browser, which dials no `host:port`, dials
+   the first candidate and keeps that link warm, so the instance that will have to
+   author already has one when it does. A **successor chain** rather than a full
+   mesh: N links instead of N², and the chain is the same
    either way, so the shape is one dial policy and can be widened later without
    changing an artifact. A candidate the connect does not reach is dialled as a
    followed host is (`Reach.dialSuccessor`): each attempt after a longer wait, then
@@ -1001,8 +1007,9 @@ keeper keeps its places past the process (`PlaceStore`): a page's in the site's
 `localStorage`, held by the first tab on the site under a Web Lock released when it
 closes, so a reload or a new tab after a closed one comes back to them, while a tab
 beside the first is another player with places of its own in its `sessionStorage`;
-a terminal's in `places.json` under the user's state directory and Android's in the
-app's files, so a restart, a crash or a reboot comes back to them, unless
+a terminal's or a desktop window's in `places.json` under the user's state
+directory and Android's in the app's files, so a restart, a crash or a reboot comes
+back to them, unless
 `[session] resume_after_restart` is off. When the door asks (`MsgAuthResponse`, a
 nonce), before it assigns a place, a dial proves its keys over the nonce and the
 door's channel binding (`MsgAuthRequest`): a fresh one first for the place it may be
@@ -1361,15 +1368,16 @@ anything is dropped, never waited for.
 committed that applies at or before T, so a viewer's world (`World.Watch`) runs a
 tick only once its feed closed it (`TickGranted`, `FeedPort.Ready`), from all that
 tick's inputs. It drives no cursor, issues no crossing and predicts nothing, so it
-derives the host's Shared world tick for tick and needs no correction, which is
-why one stream fits every viewer. It owns no cursor, so it simulates no player
+derives the host's Shared world tick for tick and needs no correction exchange,
+which is why one stream fits every viewer; a starting point repairs one on a target
+that computes differently (below). It owns no cursor, so it simulates no player
 (D-2) and lays no glyph or nugget of its own (`GlyphSystem`, `NuggetSystem`): its
 screen is the Shared domain, with the session-wide effects every instance raises
-for it (D-6), and a player's glyphs, weapons, projectiles and loot stay on that
-player's run, as they do between players. It stands a record and its slack behind,
-9 to 13 ticks measured, pacing its tick interval by the closed ticks it has in
-hand (`paceViewer`, `FeedSlackTicks`); a hold stops it on the tick that stops the
-players.
+for it (D-6), and a player's glyphs, weapon shots and loot stay on that player's
+run, as they do between players. It stands a record and its slack behind, 13 to 14
+ticks beside a host at the game's rate, pacing its tick interval by the closed
+ticks it has in hand (`paceViewer`, `FeedSlackTicks`); a hold stops it on the tick
+that stops the players.
 
 **Starting points** (`Membership.syncAudience`) are written when a viewer waits for
 one (`FeedHub.Wanted`), when the game changed, and every `FeedSyncTicks` (600,
@@ -1526,9 +1534,9 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
 
 ### Deferred by decision
 
-1. **Confidentiality.** TLS carries the front door (`vifs://`), the browser route
-   as far as the site's edge and a player's wss doors; `vif://` and ws doors and the
-   router's tunnels to published doors stay plaintext
+1. **Confidentiality.** TLS carries a `vifs://` front door (not the deployed one),
+   the browser route as far as the site's edge and a player's wss doors; `vif://`
+   and ws doors and the router's tunnels to published doors stay plaintext
    ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
    A participant proves its key at admission, peer links are proved both ways and
    reports and handoff records are signed (§5.4); loss notices are structurally

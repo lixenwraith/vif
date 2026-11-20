@@ -27,7 +27,8 @@ const (
 	MsgJoinSeat     link.MessageType = 0x09 // Live: the dialer asks for its place now
 
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
-	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
+	// kind — a peer sends the resolved D-3 artifact, the keystroke only for a key a
+	// scenario captures.
 	MsgStateSync link.MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
 	MsgEvent     link.MessageType = 0x12 // Live: one closed barrier production epoch
 
