@@ -556,8 +556,13 @@ every run simulates the same ticks of one seed and the allocation counts compare
 exactly, and compare `SnapshotSimulation` before and after a change that must not
 move the simulation. `BenchmarkKrakenRegion` beside it measures the Kraken in the
 campaign's kraken region, one `tick` and the `frames` the kraken renderer draws of
-it; its comment shows the browser build's run under Node, where the Kraken's cost
-showed first.
+it. The Kraken's cost showed first in the browser build, which runs it under Node
+from `internal/app`:
+
+```bash
+GOOS=js GOARCH=wasm go test -c -o kraken.wasm .
+node "$(go env GOROOT)/lib/wasm/wasm_exec_node.js" kraken.wasm -test.run '^$' -test.bench BenchmarkKrakenRegion -test.benchtime 1500x
+```
 
 The soak profiles are tiered, because the widest one costs too much for an edit
 cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.

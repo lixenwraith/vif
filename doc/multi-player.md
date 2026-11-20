@@ -364,9 +364,10 @@ trip for it. A guest's lead in
 force is the worst reading of the last `NetworkBarrierRenegotiateTicks` (`leadOf`):
 it rises at once and falls only as the higher readings age out of the window, to
 the highest still in it, so a momentary trough is not climbed back a tick at a time
-and a passed spike does not step down one tick a window; the window is five
-seconds, longer than the spikes a slow link repeats, so a spike's lead holds until
-the next ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)). The age rather than a
+and a passed spike does not step down one tick a window; the window is 300 ticks,
+15 s at the default tick, longer than the gap between the spikes a slow link
+repeats, so a spike's lead holds until the next
+([netcode design §3.5](netcode-design.md#35-the-divergence-harness)). The age rather than a
 probed round trip: a probe measures both directions and a stall on the way down
 raised a lead the way up never needed. Each change is a local, journaled
 `EventPlayoutLead`, so a reproduction switches on the same tick.

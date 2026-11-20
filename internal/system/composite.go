@@ -323,6 +323,13 @@ func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.Hea
 		}
 		return ground(visual.RgbPylonCriticalBright, visual.Pylon256Critical,
 			bodyShell{float64(pylon.RadiusX), float64(pylon.RadiusY), visual.RgbPylonGlow})
+	case component.BehaviorBlock:
+		block, ok := c.Block.GetPtr(headerEntity)
+		if !ok || int(block.Kind) >= len(visual.SquareKinds) {
+			return b, false
+		}
+		colors := &visual.SquareKinds[block.Kind]
+		return ground(colors.Worn, colors.Console, bodyShell{})
 	case component.BehaviorTower:
 		tower, ok := c.Tower.GetPtr(headerEntity)
 		if !ok || int(tower.Type) >= len(visual.TowerTypes) {

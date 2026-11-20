@@ -17,10 +17,9 @@ const (
 	NetworkBarrierMaxDelayTicks = 20
 
 	// NetworkBarrierRenegotiateTicks is how long a reading holds in the window a
-	// guest's lead is the worst of: five seconds, longer than the spikes a slow link
-	// repeats, so a spike's lead holds until the next instead of costing a correction
-	// each time, as it did at a keyframe period (divergence harness, rare spikes: late
-	// commits 33 to 0).
+	// guest's lead is the worst of, 15 s at the default tick: longer than the gap
+	// between the spikes a slow link repeats, so a spike's lead holds until the next
+	// instead of costing a correction each time.
 	NetworkBarrierRenegotiateTicks = 300
 
 	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
@@ -41,9 +40,8 @@ const (
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
 	// latest of them trims and the earliest steps, so one jittered arrival never
-	// moves whole ticks. A second of them: a spike holds the margin it asked for
-	// until the next within the second, where ten forgot it before the next came
-	// (divergence harness, heavy jitter: late copies 71 to 0).
+	// moves whole ticks. The authority sends one a tick, so 60 are 3 s at the default
+	// tick, and a spike holds the margin it asked for until the next within them.
 	NetworkPaceWindow = 60
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval
@@ -289,9 +287,9 @@ const (
 
 	// SnapshotLinkCapacityTicks is how long a constrained plan stays priced on the
 	// rate its link delivered while the link held this instance's frames before that
-	// rate is doubled and the link offered more: five seconds, so the plan that fits
-	// stays instead of creeping back to nominal and queueing the link within the
-	// second, and a link that improved is read anew once it holds the frames again.
+	// rate is doubled and the link offered more: 15 s at the default tick, so the plan
+	// that fits stays instead of creeping back to nominal and queueing the link within
+	// the second, and a link that improved is read anew once it holds the frames again.
 	SnapshotLinkCapacityTicks = 300
 
 	// SnapshotKeyframeDrain is the longest a link may take to deliver a whole world
@@ -461,16 +459,18 @@ const (
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024
 
-	// AuthNonceBytes is the randomness in a door's admission nonce, past guessing for
-	// the seconds a dial's proof is good. A ticket admits one dial for TicketLifetime,
-	// spent at its door, which remembers SpentTicketsKept ids that long. PassLifetime
-	// caps a session pass, renewed by a redial past half of it and capped sooner by a
-	// shorter session. AuthClockLeeway is the skew a token's window allows either way.
+	// AuthNonceBytes is the randomness in a door's admission nonce: past guessing for
+	// the seconds a dial's proof is good. TicketLifetime is one dial's worth, spent at
+	// its door, and SpentTicketsKept bounds the ids a door remembers for that long.
 	AuthNonceBytes   = 16
 	TicketLifetime   = time.Minute
 	SpentTicketsKept = 4096
-	PassLifetime     = 24 * time.Hour
-	AuthClockLeeway  = 30 * time.Second
+
+	// PassLifetime caps a session pass, which a redial renews past half of; a session
+	// shorter than it caps it sooner. AuthClockLeeway is the skew a token's window
+	// allows either way, so a phone's clock a half-minute off is still admitted.
+	PassLifetime    = 24 * time.Hour
+	AuthClockLeeway = 30 * time.Second
 
 	// KeepOutKept bounds the keys and accounts a session keeps out, the oldest drop
 	// giving way: a list every offer and handoff record carries whole.

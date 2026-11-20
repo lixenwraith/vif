@@ -553,6 +553,8 @@ const (
 	EventWallDespawned
 	// EventWallDespawnAll [shared] signals silent destruction of all wall entities
 	EventWallDespawnAll
+	// EventWallFadeInRequest (component.WallFadeIn) [local] fades in the walls a maze just laid
+	EventWallFadeInRequest
 
 	// --- Fadeout ---
 
@@ -612,6 +614,17 @@ const (
 	EventGatewayDespawnRequest
 	// EventGatewayDespawned (GatewayDespawnedPayload) [shared] signals that a gateway entity has been cleaned up
 	EventGatewayDespawned
+	// EventGatewayHoldRequest (GatewayHoldRequestPayload) [shared] holds every gateway's spawns for a while
+	EventGatewayHoldRequest
+
+	// --- Square ---
+
+	// EventSquareSpawnRequest (SquareSpawnRequestPayload) [shared] lays a magic square of blocks centred on a cell
+	EventSquareSpawnRequest
+	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind that fired its effect
+	EventSquareAligned
+	// EventSquareBlockFallen (SquareBlockFallenPayload) [shared] announces a block that lost its last cell
+	EventSquareBlockFallen
 
 	// --- Genetic ---
 
