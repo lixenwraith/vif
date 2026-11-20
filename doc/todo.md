@@ -249,12 +249,10 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
   `-s` alone; the menu's Bots page names populations only through its Bot
   files row; and `clear` in a run learning the population is undone by that
   run's next save.
-- **Training on from `main`'s model.** The embedded scenario's bot is
-  `default`'s graph with a walk six minutes of four games fielded from
-  nothing, 396 rounds. A round pays by its Krakens, 50,000 each, so its score
-  moves in steps: the model fields 711,496 over 100 held-out rounds, fourteen
-  Krakens down in 88, and a fifteenth can be had inside the half hour, met
-  in four of them ([Bots](bots.md#examples)).
+- **No trainer for `main` or `armada`** (Lixen, 2026-11-20). The embedded
+  scenario's typing bot cannot lose, and a round's score moves only by how
+  fast it gets on, so the walk six minutes fielded there is left as it is
+  ([Bots](bots.md#examples)). `armada` waits for its design to settle.
 - **Training on from `cave`'s model.** Every run adds its rounds to the one
   population, a few seconds' too, and a run can field less than it began
   with: of eight read on the model before this one, two field 284,269 and
@@ -294,6 +292,18 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     the kill pays, and `raid` on its first cave alone. That `raid` beside
     `cave`'s own `kraken` fielded 315,649 on seed 1, four rounds lost early,
     none crushed and 96 at the limit, and the 107,101 on seed 2, twenty lost.
+  - **A trainer found one model and no more.** Nineteen cycles of fifty
+    minutes scored 105,519 `raid` rounds and 60,241 `kraken` rounds: the
+    fourth's pair ships, a later `kraken` title read level with it, -0.07 se
+    over 800 rounds a side, and the trainer is stopped, its populations kept
+    on `claude/cave-training-state`. Each title and its rival have 7,425 and
+    3,084 rounds apiece, a seventh and a tenth of all played, and no other
+    proved member can pass the rival: a `raid` at eight rounds would need a
+    mean of 71,268, over what a full round scores. None should. The twelve
+    whose means over 8 to 37 rounds stand above their titles, held 100
+    rounds each beside the shipped other network, read under the shipped
+    pair in eleven, by 3,168 to 85,159, and the twelfth level, -0.11 se over
+    400.
   - **What ranks, and who is tested**, after the archive that ranks by what
     rounds prove ([Bots](bots.md#learning)). Two arms were read on the starts
     and seeds of [the population file](bots.md#the-population-file), each
@@ -359,9 +369,10 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
     it; the embedded scenario's model takes none from text and walks less
     than the unlearned, 13 to 14 ticks in 100 for 16 to 18. A start written
     by hand that asks for it as a threat nears is the one use left to try;
-  - a bot of its own for each scenario, the embedded one first, carrying what
-    `default` learns there as `cave` carries its model: what one scenario
-    teaches loses in another, so `default` writes none;
+  - a bot of its own for `td` and, once its design settles, `armada`,
+    carrying what `default` learns there as the embedded scenario and `cave`
+    carry theirs: what one scenario teaches loses in another, so `default`
+    writes none;
   - the gun for a bot whose auto-fire is off: the special attack is every
     shipped network's to ask for, and no output asks for the gun, which
     auto-fire `main` fires for each of them;
