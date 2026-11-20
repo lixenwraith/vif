@@ -10,18 +10,30 @@ responsibility map is in [Package map](package-map.md).
 The application has no CGO requirement, but it is not standard-library-only.
 The modules it requires:
 
-| Module | Responsibility used here |
-|---|---|
-| `github.com/lixenwraith/terminal` | Raw terminal, input events, cell flush, color-mode detection. |
-| `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
-| `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing. |
-| `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
-| `github.com/lixenwraith/audio` | Synthesis, mixing, the sequencer, MIDI, the rip and the shipped banks. |
-| `github.com/lixenwraith/genetic` | The streaming engines and the registry that evolve species parameters. |
-| `github.com/lixenwraith/ascimage` | Dual-mode cell images: a wall pattern's `.aimg`, the logo's quadrant fit, and `bin/ascimage` from `make tools`. |
-| `github.com/lixenwraith/auth` | Argon2id-SCRAM for a passphrase door and an account sign-in: the credential a player derives, the exchange both ends run. Its JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)). |
-| `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
-| `golang.org/x/sys`; `x/term`, `x/crypto`, `golang-jwt/jwt/v5` (indirect) | The desktop window's Unix calls; terminal support for the terminal module; Argon2 and the JWT half `auth` carries. |
+- `github.com/lixenwraith/terminal`: raw terminal, input events, cell flush,
+  color-mode detection and the `tui` widgets; the page host and its scripts, the
+  Android view's mapping (`android`) and the cell font (`glyph`, `atlas`).
+- `github.com/lixenwraith/terminal/window`: the desktop window, a module nested in
+  terminal's repository, required at terminal's version.
+- `github.com/lixenwraith/color`: RGB/palette values and blend functions.
+- `github.com/lixenwraith/toml`: scenario, FSM, content, keymap, audio, bot-graph,
+  `vif.toml`, script and journal-payload parsing.
+- `github.com/lixenwraith/log`: asynchronous structured file logger behind
+  `internal/vlog`.
+- `github.com/lixenwraith/audio`: synthesis, mixing, the sequencer, MIDI, the rip
+  and the shipped banks.
+- `github.com/lixenwraith/genetic`: the streaming engines and the registry that
+  evolve species parameters.
+- `github.com/lixenwraith/ascimage`: dual-mode cell images: a wall pattern's
+  `.aimg`, the logo's quadrant fit, and `bin/ascimage` from `make tools`.
+- `github.com/lixenwraith/auth`: Argon2id-SCRAM for a passphrase door and an
+  account sign-in: the credential a player derives, the exchange both ends run. Its
+  JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)).
+- `golang.org/x/sys`: `pkg/network`'s Windows error codes.
+- Indirect: `github.com/ebitengine/purego`, through which the window loads Xlib,
+  EGL and GLES 2 at run time with cgo off; `x/term`, which the terminal module
+  uses; and `x/crypto` and `golang-jwt/jwt/v5`, Argon2 and the JWT half `auth`
+  carries.
 
 Audio sends PCM to optional host commands; see the audio library's
 [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover) for runtime
@@ -42,36 +54,73 @@ make dev       # generated code + race-enabled debug build
 
 `make` with no target prints `help`, which lists every target below but `generate`:
 
-| Target | Effect |
-|---|---|
-| `generate` | Run the manifest/event/input code generator. |
-| `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
-| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Where purego, which the window links, does not build (Termux), `release`, `nolog` and `gui` stop before compiling and name `make cli` and `TAGS=vif_nogui`. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
-| `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
-| `gui` | Build `bin/vif-gui`, the release binary opening the desktop window by default (`vif_gui`); `-g=false` is its terminal. |
-| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`), for Termux or a machine without X. |
-| `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
-| `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
-| `run` | Build the dev binary and execute it. |
-| `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5). |
-| `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
-| `tools` | Build every `tool/*` command, and `bin/ascimage` from the `lixenwraith/ascimage` version `go.mod` requires. |
-| `router` | Build the website-to-K3s session router as `bin/vif-router`. |
-| `serve` | Build WASM and the small HTTP server, then serve `web/`. |
-| `install-config` | Copy `wad/`, bot graphs, keymaps and `vif.toml` into the user config root, an `input/keymap.toml` or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `script/install.sh <goal> -purge`, for this goal or `install`, first removes what an earlier install put in the root, a player's bot files, keymap and settings with it. |
-| `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
-| `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
-| `notices` | Write `bin/NOTICES` (`NOTICES`): the licences of Go and of every module the build links, the host's release or the one `GOOS`, `GOARCH` and `TAGS` name, from the module cache or `vendor/`; `NOTICES_OF=android` is the Android library's. `release` runs it, `wasm` writes the page's beside `vif.wasm`, and `install` stops without the file. |
-| `install` | Install the binary, manual, desktop entry, icons, shell completion, licences and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
-| `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
-| `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
-| `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
-| `android` | Build the debug APKs, one per ABI, as `bin/vif-debug-arm64.apk` and `bin/vif-debug-x86_64.apk`, first naming any JDK or Android SDK piece missing. |
-| `android-install` | Install the debug APK of the ABI of the device `adb` sees. |
-| `android-toolchain` | Install what `android` needs, asking first ([android/README.md](../android/README.md#build)). |
-| `clean` | Remove `bin/` and the Android build directories. |
+- `generate`: run the manifest/event/input code generator.
+- `dev`: generate and build `cmd/vif` with the race detector/debug symbols.
+- `release`: build a stripped `-trimpath` native binary without CGO: the terminal
+  and, on Linux and FreeBSD, the desktop window `-g` opens. Where purego, which the
+  window links, does not build (Termux), `release`, `nolog` and `gui` stop before
+  compiling and name `make cli` and `TAGS=vif_nogui`. It writes `bin/NOTICES`
+  (`notices`) and copies the cell font's licence, the terminal module's
+  `atlas/LICENSE`, to `bin/LICENSE.font`. Only `dev`, `test` and `verify`
+  regenerate: the binary targets build the committed generated files, as a
+  packager does.
+- `headless`: build `bin/vif-headless` without terminal presentation, renderers, or
+  audio.
+- `gui`: build `bin/vif-gui`, the release binary opening the desktop window by
+  default (`vif_gui`); `-g=false` is its terminal.
+- `cli`: build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`),
+  for Termux or a machine without X.
+- `nolog`: release-style build with the `novlog` tag.
+- `wasm`: build log-free `web/vif.wasm` for the browser page in `web/`, with its
+  toolchain's `web/wasm_exec.js`, the page's scripts (`page`) and its `NOTICES`.
+- `page`: write the page's two scripts, which no commit holds, into `PAGE_DIR`
+  (`web/`): `terminal.js`, the terminal module's `web/page.js` followed by
+  `web/vif.js`, and the module's `worker.js`, of the version the build links.
+- `windows`: experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0`
+  cross-build.
+- `run`: build the dev binary and execute it.
+- `test`: generate and run `go test -race ./...`.
+- `verify`: generate, test, vet, and compile the full (also with cgo off), `novlog`,
+  audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM
+  ones also with `GOEXPERIMENT=simd`, vet and test the `android` module, and test
+  the window module (§5).
+- `arch-check`: report `pkg/*` packages that import `internal/*`; diagnostic and
+  separate from `verify`.
+- `tools`: build every `tool/*` command, and `bin/ascimage` from the
+  `lixenwraith/ascimage` version `go.mod` requires.
+- `router`: build the website-to-K3s session router as `bin/vif-router`.
+- `serve`: build WASM and the small HTTP server, then serve `web/`.
+- `install-config`: copy `wad/`, bot graphs, keymaps and `vif.toml` into the user
+  config root, an `input/keymap.toml` or `vif.toml` already there brought up to
+  date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation));
+  `script/install.sh <goal> -purge`, for this goal or `install`, first removes what
+  an earlier install put in the root, a player's bot files, keymap and settings
+  with it.
+- `wad-archive`: pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`),
+  unpacking as `vif/` into the directory that holds a config root; the release
+  publishes it.
+- `release-readme`: print the README of one release archive (`RELEASE_TARGET`,
+  `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`.
+- `notices`: write `bin/NOTICES` (`NOTICES`): the licences of Go and of every module
+  the build links, the host's release or the one `GOOS`, `GOARCH` and `TAGS` name,
+  from the module cache or `vendor/`; `NOTICES_OF=android` is the Android
+  library's. `release` runs it, `wasm` writes the page's beside `vif.wasm`, and
+  `install` stops without the file.
+- `install`: install the binary, manual, desktop entry, icons, shell completion,
+  licences and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who
+  cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles
+  nothing: `make release install` builds first.
+- `uninstall`: remove what `install` put under `PREFIX`, keeping the config root.
+- `image`: build the dedicated-session container image from
+  `deploy/docker/Dockerfile`.
+- `image-check`: run the built image's own `-check` as its numeric user, read-only
+  and with no network.
+- `android`: build the debug APKs, one per ABI, as `bin/vif-debug-arm64.apk` and
+  `bin/vif-debug-x86_64.apk`, first naming any JDK or Android SDK piece missing.
+- `android-install`: install the debug APK of the ABI of the device `adb` sees.
+- `android-toolchain`: install what `android` needs, asking first
+  ([android/README.md](../android/README.md#build)).
+- `clean`: remove `bin/` and the Android build directories.
 
 `TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
 server port. `SIMD` (default `auto`) builds the presentation targets (`dev`,
@@ -639,14 +688,22 @@ terminal/audio smoke tests.
 
 ## 7. Platform matrix
 
-| Target | Status | Key behavior |
-|---|---|---|
-| Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
-| FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | `terminal.Page` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
-| Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
-| Android | Native target, a debug-signed APK | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer and `AudioTrack`; the wad as its system root ([android/README.md](../android/README.md)). |
-| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; 32-bit targets are not supported ([Build profiles §4](multi-platform.md#4-platform-matrix)). |
+- **Linux**, the primary native target: Unix signals/crash reset; process audio
+  backends; optional stderr fd capture.
+- **FreeBSD**, a native target: Unix handling plus optional `/dev/dsp` OSS backend.
+- **`js/wasm`**, a supported constrained build: the `terminal.Page` host, a WebGL
+  canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded
+  scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport.
+- **Windows amd64**, experimental: `CGO_ENABLED=0`, `novlog`, `vif_noaudio`;
+  published as a zip that plays in a terminal, with the known issues in [Build
+  profiles §4](multi-platform.md#4-platform-matrix).
+- **Android**, a native target, a debug-signed APK: `android/`, its own module:
+  `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer over
+  `terminal/android`'s view and `AudioTrack`; the wad as its system root
+  ([android/README.md](../android/README.md)).
+- **Other native OSes**, not a documented support contract: they may compile
+  through generic files but are not covered by Makefile verification; 32-bit
+  targets are not supported ([Build profiles §4](multi-platform.md#4-platform-matrix)).
 
 ### WASM host
 
@@ -677,7 +734,7 @@ opens on the start screen, and the Worker holds the compiled program until its t
 click or key press ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 Before launch it maps `window.VIF_ARGS` and repeated `arg` query parameters into the
 program's argv; a site that renames the files says so with `data-wasm`,
-`data-worker` and `data-exec` on the script element
+`data-worker`, `data-exec` and `data-audio` on the script element
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
 builds `web/vif.wasm` and serves this directory.
 
