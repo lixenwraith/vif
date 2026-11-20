@@ -27,6 +27,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "pulse_glow", Renderer: renderer.NewPulseGlowRenderer(ctx), Priority: render.PriorityPulseGlow},
 		{Name: "pylon", Renderer: renderer.NewPylonRenderer(ctx), Priority: render.PriorityPylon},
 		{Name: "tower", Renderer: renderer.NewTowerRenderer(ctx), Priority: render.PriorityTower},
+		{Name: "square", Renderer: renderer.NewSquareRenderer(ctx), Priority: render.PrioritySquare},
 		{Name: "eye", Renderer: renderer.NewEyeRenderer(ctx), Priority: render.PriorityEye},
 		{Name: "snake", Renderer: renderer.NewSnakeRenderer(ctx), Priority: render.PrioritySnake},
 		{Name: "drain", Renderer: renderer.NewDrainRenderer(ctx), Priority: render.PriorityDrain},

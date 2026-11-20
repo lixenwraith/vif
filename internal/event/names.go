@@ -100,6 +100,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.LootType](lootNames()...).
 		Enum[component.EyeType](component.EyeTypeNames[:]...).
 		Enum[component.TowerType](component.TowerTypeNames[:]...).
+		Enum[component.SquareKind](namesOf(component.SquareKinds[:], func(s component.SquareKindSpec) string { return s.Name })...).
 		Enum[component.TargetType](component.TargetTypeNames[:]...).
 		Enum[component.ParticleBehavior](component.ParticleBehaviorNames[:]...).
 		Enum[component.DeathEffect](component.DeathEffectNames[:]...).

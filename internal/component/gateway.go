@@ -20,7 +20,7 @@ type GatewayComponent struct {
 	// Spawn timing
 	BaseInterval time.Duration // Base time between spawns
 	Accumulated  time.Duration // Time accumulated toward next spawn
-	Active       bool          // False pauses accumulation without despawn
+	Held         time.Duration // Left of a hold, which pauses accumulation and acceleration without despawn
 
 	// Rate acceleration
 	RateMultiplier    float64       // Multiplier applied to interval (1.0 = no change)
