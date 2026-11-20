@@ -204,6 +204,18 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 		}
 	}
 
+	// A bot plays this run and its view, whose camera bounds the bot's pointer: its
+	// operator inspects the run and runs its clock, game and session, and sets
+	// nothing the bot plays under
+	if ctx.World.DrivenByBot() && (cmd == "edge" || !inspects(cmd)) {
+		switch cmd {
+		case "p", "pause", "sp", "speed", "st", "step", "n", "new", "n!", "new!", "journal", "bot", "player", "session",
+			"host", "join", "spectate", "leave", "lan", "relay", "takeover", "register", "login", "logout":
+		default:
+			return "Unavailable while a bot plays"
+		}
+	}
+
 	// A live operator may inspect the instance and author its own player state,
 	// but may not mutate shared scheduling, systems or FSM configuration locally.
 	if ctx.World.LiveSession() {
