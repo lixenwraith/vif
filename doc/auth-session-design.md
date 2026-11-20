@@ -24,11 +24,11 @@ own design is in [its repository](https://github.com/lixenwraith/identity).
   identifiable at once: the roster carries its public half, every redial proves it,
   and nothing links it to another session or to a person. Its pass (D13) and its
   private half are kept past the process by default, a page's in the site's storage
-  under a lock one tab holds, a terminal's in a 0600 file under the user's state
-  directory, Android's in the app's private files, so a crash, a restart or a reboot
-  brings the player back to its Wraith's place, at the same host or a successor's,
-  with one signature and no prompt. `[session] resume_after_restart = false` keeps
-  nothing past the process.
+  under a lock one tab holds, a terminal's or a desktop window's in a 0600 file
+  under the user's state directory, Android's in the app's private files, so a
+  crash, a restart or a reboot brings the player back to its Wraith's place, at the
+  same host or a successor's, with one signature and no prompt.
+  `[session] resume_after_restart = false` keeps nothing past the process.
 - **D2. Keys and passes replace claims.** One mechanism: the claim token, its
   digest, `MsgJoinClaims` and `ClaimKeeper`'s tokens went; the keeper holds keys and
   passes where it held tokens, and the per-address budgets stay for anonymous dials.
@@ -38,8 +38,9 @@ own design is in [its repository](https://github.com/lixenwraith/identity).
   fleet's size is `-sessions-max` beside the quota, and the pod's game port is
   reachable from the node alone. A fleet pod budgets by the ticket's subject, the
   player the router named, since every dial reaches it from the node's address.
-- **D4. TLS on the front door.** The native fleet link is `vifs://<site>:7777/<id>`.
-  On this deployment TLS ends at the site's edge, which hands the router each
+- **D4. TLS on the front door.** The native fleet link is
+  `vifs://<site>:7777/<id>` where TLS fronts the door, `vif://` where none does
+  (§2). Where TLS ends at the site's edge, the edge hands the router each
   connection under PROXY protocol so the dialer's address still keys its budgets;
   the router ends it itself for a deployment with no such edge (`-route-cert` and
   `-route-key`, or `-route-selfsign` with the door's fingerprint in the sessions
@@ -151,9 +152,10 @@ What each surface checks, and what it trusts:
   TLS ends at the site's edge; the stream is then placed as the front door places
   one, the admission exchange run through the router, the page's `vif_sign_in`
   cookie on the upgrade naming its account.
-- **The front door**, TCP 7777 over TLS (`vifs://`), ended at the site's edge, which
-  writes a PROXY header the router reads first (`-route-proxy-protocol`), or by the
-  router itself (`-route-cert`, `-route-selfsign`). The first frame,
+- **The front door**, TCP 7777: plaintext `vif://`, `vifs://` where TLS fronts it,
+  ended at the site's edge (`-route-secure`), which writes a PROXY header the router
+  reads first (`-route-proxy-protocol`), or by the router itself (`-route-cert`,
+  `-route-selfsign`); `vif-router.env` sets none of them. The first frame,
   `MsgSessionRoute`, places the connection by the session name; `-client-joins` a
   minute per address at the route frame, moved to the account the exchange names;
   `-route-max` connections a session. A pod admits its game port from the node
@@ -181,9 +183,9 @@ What each surface checks, and what it trusts:
   proves it over the door's nonce, through its relay if it has one, which carries
   the proofs to the authority with the challenge it asked for them. A page keeps its
   places in the site's `localStorage`, held by one tab at a time under a Web Lock, a
-  terminal in `places.json` under the user's state directory, Android in the app's
-  files, each as `[session] resume_after_restart` says. A key keeps a place from
-  another player for `WraithTimeout` (2 min of game time)
+  terminal or a desktop window in `places.json` under the user's state directory,
+  Android in the app's files, each as `[session] resume_after_restart` says. A key
+  keeps a place from another player for `WraithTimeout` (2 min of game time)
   ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
   challenge both ways, each end proving the roster's key for itself over the
@@ -198,10 +200,11 @@ What each surface checks, and what it trusts:
 - `MsgAuthRequest` (0x30) and `MsgAuthResponse` (0x31) carry the exchange: the
   methods `key`, `pass`, `ticket` and `scram`.
 
-Confidentiality exists on TLS: the front door, the browser route as far as the
-site's edge, and a player's wss doors. On `vif://` and ws doors and on the router's
-tunnels to published doors, a frame can be read and replayed by anyone on the path:
-a pass read there is useless alone (§3.4), a passphrase exchange authenticates the
+Confidentiality exists on TLS: the browser route as far as the site's edge, a
+player's wss doors, and the front door where TLS fronts it. On `vif://` and ws
+doors, the deployment's front door among them, and on the router's tunnels to
+published doors, a frame can be read and replayed by anyone on the path: a pass
+read there is useless alone (§3.4), a passphrase exchange authenticates the
 handshake and not the channel (§3.5), and a sign-in never crosses there (D5).
 
 ## 3. The mechanisms
@@ -239,9 +242,10 @@ proves its key and is seated in the place that key holds, whatever gate the door
 keeps; a relay asks the authority for the challenge its door asks (`RelayNonce`) and
 carries the proofs on, so it can take nobody's place. The keeper's store is every
 host's: a page's `localStorage`, held by the first tab on the site, a tab beside it
-keeping its own in `sessionStorage`, a terminal's `places.json` under the user's
-state directory (`paths.PlacesFile`, a file for the user alone), Android's in the
-app's files, each behind `[session] resume_after_restart`, on by default.
+keeping its own in `sessionStorage`, a terminal's or a desktop window's
+`places.json` under the user's state directory (`paths.PlacesFile`, a file for the
+user alone), Android's in the app's files, each behind
+`[session] resume_after_restart`, on by default.
 
 Cost: 32 bytes a roster entry, two round trips a peer link, and a signature of tens
 of microseconds a link, a dial and a succession message, nothing a tick. No new
@@ -296,8 +300,9 @@ the site.
   start). It names the session, the first term's authority key, so a later session
   under the same name refuses it, the participant's key, the kind, the account and
   name when a ticket named one, the term and an expiry (`PassBody`, `PassLifetime`).
-  A redial showing a pass still under half its life takes none in its offer
-  (`Renewable`); any other seat takes a fresh one.
+  A redial showing a pass of the current term for the place it takes, still under
+  half its life, takes none in its offer (`Renewable`); any other seat takes a fresh
+  one.
 - **Shown** by the dial the door asks: the door's question names the session's
   first authority key (`AuthResponse.Authority`), not its name, which the router
   rewrites along a published route, and the dial shows the pass it keeps for that
@@ -371,9 +376,9 @@ What a participant is trusted with, the verifier among it, is
 A machine in the middle that answers for the door receives a proof it can test
 passphrases against offline, at Argon2's cost a guess: a generated code is past
 guessing, a chosen phrase must be long. A door published through the router is
-reached over the router's TLS to the site's edge and plaintext on the tunnel, so its
-exchange runs unbound there (§4). The KDF's cost on a page and a phone is a reading
-still to take (§9).
+reached over the front door, under TLS to the site's edge only where TLS fronts it
+(`vifs://`), and plaintext on the tunnel, so its exchange runs unbound there (§4).
+The KDF's cost on a page and a phone is a reading still to take (§9).
 
 ### 3.6 Admission tickets and accounts
 

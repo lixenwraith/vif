@@ -178,8 +178,10 @@ or more **doors**, comma-separated (`network.Doors`), each tcp, plain `ws://host
 or `wss://host:port`, one protocol per listener and one session behind them all, so
 `:7777,wss://:7778` takes terminals and pages at once; a `wss://` door serves the
 certificate `-cert` and `-key` name, or one `-selfsign` makes for the run. `-listen`
-is tcp, which participants link to each other over; any other scheme is refused
-(§7.3).
+and a bound `-relay` are tcp, which participants link to each other over;
+`-relay vif://<router>` publishes its door at the router instead ([Multiplayer
+§5.6](multi-player.md#56-relay-doors-and-the-router)), and any other scheme is
+refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -562,8 +564,8 @@ encoder could not have written: an event outside the registry, a domain or flag
 outside the enum, a count or length past the bytes, a payload with bytes its codec
 does not read. Representative complete-frame budgets are pinned by
 `TestWireEncodingBudget`. Raw participant input has no code: 0x10 stays
-reserved, since a peer sends the
-resolved D-3 artifact, never the keystroke that produced it.
+reserved, since a peer sends the resolved D-3 artifact, which is the keystroke only
+for a key a scenario captures (`EventInputPressed`).
 
 `MsgLinkProbe` (0x14) and `MsgLinkEcho` (0x15) are the only round trip this
 protocol times. Everything else says only what this instance sent and how far
@@ -675,14 +677,14 @@ A shard set is the repair the second kind provokes, so a repair is one round tri
 from its root.
 
 A manifest and a request are one frame each. A shard set is chunked and paced as a
-correction body is (`SnapshotCorrectionChunkBytes`), so an epoch behind it waits one
-chunk, and it is bounded by the keyframe it stands in for: the one the authority has
-measured, or at a relay, which measures none, the whole worlds it installed. A repair wider
-than that is not a repair: the host answers it with a keyframe, which is
-self-sufficient. All three use a capture's 10-byte envelope. A shard set is deflated
-in it and passes the link raw; a manifest and a request carry the plain codec,
-because they repeat their predecessors and compress against them on the link's
-stream.
+correction body is (`SnapshotCorrectionChunkBytes`), so on a slow link an epoch
+behind it waits a few chunks, and it is bounded by the keyframe it stands in for:
+the one the authority has measured, or at a relay, which measures none, the whole
+worlds it installed. A repair wider than that is not a repair: the host answers it
+with a keyframe, which is self-sufficient. All three use a capture's 10-byte
+envelope. A shard set is deflated in it and passes the link raw; a manifest and a
+request carry the plain codec, because they repeat their predecessors and compress
+against them on the link's stream.
 
 A manifest travels outward one link at a time. A participant with more than one
 link forwards the newest one it answered to the participants behind it — but only

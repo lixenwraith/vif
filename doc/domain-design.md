@@ -28,7 +28,7 @@ Every `World` has two domains:
   shared species, cursors, gold, walls, towers, gateways, map state, simulation
   time, and the shared FSM.
 - **Player** belongs to the local participant. It contains corpus glyphs, drains,
-  nuggets, weapons, projectiles, loot, and presentation effects. It is never
+  nuggets, weapon shots, loot, and presentation effects. It is never
   reconstructed on another instance.
 
 `core.Entity` is `[domain:8][id:56]`. Each domain has its own allocator counter;
@@ -557,9 +557,16 @@ at its own tick as the jump it is (multi-player.md §3.3, §4.1).
 
 Each direct peer receives a cadence and keyframe interval selected from measured
 round-trip time, jitter, delivered bytes, saturation, and relative correction
-demand. Degradation is immediate; recovery is stepped. Keyframes stretch before
-cadence slows because whole worlds are more expensive than manifests and ordinary
-repairs.
+demand. A peer sits at `SnapshotCorrectionTicks` (4); at `SnapshotCadenceMinTicks`
+(2) while its correction magnitude rises `SnapshotUrgentDriftPercent` above its
+recent level or its count of moved entities within `SnapshotRelevanceRadius` of its
+cursor stands `SnapshotUrgentRelevancePercent` above the peers' mean; at
+`SnapshotCadenceQuietTicks` (8) while nothing moves near it and its last installed
+correction changed no entity. A saturated link's plan fits `SnapshotLinkUtilisation`
+of its measured throughput, and every cadence is raised to a power of two, at most
+`SnapshotCadenceMaxTicks` (60). Degradation is immediate; recovery is stepped.
+Keyframes stretch before cadence slows because whole worlds are more expensive than
+manifests and ordinary repairs.
 
 Every participant receives a whole world, or proves with a hash-only answer that
 it holds the authority's, within every `SnapshotFloorKeyframeTicks`; a keyframe is
@@ -716,7 +723,7 @@ modes and the telemetry save remain available without stopping simulation.
 ### 4.5 Join and stream framing
 
 Before state is accepted the handshake compares the build — protocol, simulation
-fingerprint, capture and journal schemas, tick interval — and then the session:
+fingerprint, capture and journal schemas — and then the session: tick interval,
 seed, session and scenario digest, which a joiner adopts from the anchor. The
 corpus is the player's and is not compared. The handshake also carries the map
 latch, authority term, participant ID, and roster slot. A slot of
@@ -807,7 +814,7 @@ departing cursor Wraith, and reconnect must take a current world.
 | Trust | Transport is plaintext but at a TLS door, and a door without a passphrase or a ticket gate admits any key. A participant proves its key at admission, peer links are proved both ways and reports and handoff records are signed, so a stranger takes no member's place or term; a member is trusted within its session. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
-| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the first candidate on the published succession chain, so the shape is a star with a successor chain over it. |
+| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant but a seat or a browser then dials the first candidate on the published succession chain, so the shape is a star with a successor chain over it. |
 | Partition | Survivors walk the **succession list** without a vote: each candidate takes a term of its own in its turn, so losing the first candidate with the authority passes the session to the next, and survivors that reach different candidates play on as different games, each host keeping the others' places as Wraiths. A survivor that reaches no candidate forks. Merging an explicit local fork or a divided game does not work. A fork with no link left departs the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |

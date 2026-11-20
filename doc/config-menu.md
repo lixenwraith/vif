@@ -163,9 +163,10 @@ its `-relay` door. A browser cannot relay, and the row says so. See
 
 **Take over as host** runs `:takeover on|off` and is saved in `[play]`: on, a
 session whose host chose `migrate` may move to this run when that host leaves, so
-the run listens on a port in each session it joins from then and the session
-shares its address with the other players; off, the default, it also passes its
-turn in the session it is in. A browser cannot, and the row says so. See
+the run listens on a port in each session it joins from then, except one it joins
+through a relay without `-listen`, and the session shares its address with the
+other players; off, the default, it also passes its turn in the session it is in.
+A browser cannot, and the row says so. See
 [Multiplayer §5.3](multi-player.md#53-reachability-under--authority-migrate).
 
 **Visible on this network** runs `:lan on|off` and is saved in `[play]`: on, the
