@@ -1225,6 +1225,15 @@ func (m *Membership) yieldLocked() bool {
 	return true
 }
 
+// MayYield reports whether a full session's door still seats a dial, on the place of
+// a participant away and not coming back, as a reloaded page dials back to it: what
+// the readiness probe reads beside the room left (previewSeat).
+func (m *Membership) MayYield() bool {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return m.mayYieldLocked()
+}
+
 // mayYieldLocked reports whether yieldLocked would find a place on its way, asking
 // nothing. Caller holds sessionMu.
 func (m *Membership) mayYieldLocked() bool {
