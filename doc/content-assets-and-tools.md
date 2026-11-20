@@ -148,14 +148,17 @@ Rules differ from plain text:
 - each `[[blocks]]` supplies an optional author-facing `id` and `lines`;
 - lines are literal with respect to comment/block grouping—`#` and `//` are not
   discarded;
-- safety sanitization still strips ANSI, unsupported runes, indentation, and
-  empty results;
+- safety sanitization still strips ANSI, unsupported runes, trailing spaces and
+  empty results, but a line keeps its indentation, a leading tab as four columns,
+  which a block laid whole leaves as a gap before the line;
 - there is no two-line minimum;
 - blocks longer than five usable lines are split into consecutive blocks rather
   than rejected.
 
 The current runtime does not expose the authored block ID on `core.CodeBlock`;
-it is parsed as document metadata but block delivery is line-only.
+it is parsed as document metadata. A scenario whose `[content] blocks = true`
+lays a block whole, its lines on consecutive rows from one column; others, and a
+block no slot holds, lay line by line.
 
 ## 6. Block selection
 
