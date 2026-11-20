@@ -137,6 +137,11 @@ func TestTheVimKeymapPlaysTheKeysTheTutorialTaught(t *testing.T) {
 			t.Errorf("%q: the tutorial binds %+v, the vim keymap %+v", r, entry, vim.NormalRunes[r])
 		}
 	}
+	for r, entry := range sc.Keys.OperatorMotions {
+		if vim.OperatorMotions[r] != entry {
+			t.Errorf("%q after an operator: the tutorial binds %+v, the vim keymap %+v", r, entry, vim.OperatorMotions[r])
+		}
+	}
 	for k, entry := range sc.Keys.SpecialKeys {
 		if vim.SpecialKeys[k] != entry {
 			t.Errorf("%s: the tutorial binds %+v, the vim keymap %+v", input.SpecialKeyName(k), entry, vim.SpecialKeys[k])
@@ -311,6 +316,35 @@ func TestTutorialsFreePracticeKeepsItsCode(t *testing.T) {
 	tutorialKeys(t, a, "  ")
 	if _, after := read(); after < before {
 		t.Fatalf("Space in Free took %d of %d dark glyphs, want none", before-after, before)
+	}
+}
+
+// The tutorial gives the backtick to vi with m: `a returns to the marked cell
+// itself, which ends the marks lesson, and opens no console over it.
+func TestTutorialsBacktickReturnsToTheMarkedCell(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	state := func() (s string) {
+		a.World().RunSafe(func() { s = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
+		return s
+	}
+	a.Tick(10)
+	for range 30 {
+		if state() == "Marks" {
+			break
+		}
+		tutorialKeys(t, a, "s")
+	}
+	tutorialKeys(t, a, "maG`a")
+	if got := state(); got != "Map" || !a.Context().IsNormalMode() {
+		t.Fatalf("ma, G and `a left the tutorial in %s, Normal %v; want Map, in Normal", got, a.Context().IsNormalMode())
 	}
 }
 

@@ -36,7 +36,7 @@ entered again.
 tutorial` plays it, `vif -s tutorial -check` validates it with its corpus. In order:
 `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x dd`, `dw D`, `i` and typing,
 `A I a`, `o O`, `c cc`, `r ~`, `.` with its Insert text, `y p P`, `u` and
-Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v` and its `d`, then what a game
+Ctrl-R, `%`, `/ n`, `* #`, ``m ' ` ``, `gg G M`, `v` and its `d`, then what a game
 makes of the keys the tutorial gave back to vi. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
@@ -59,10 +59,12 @@ makes of the keys the tutorial gave back to vi. What it stands on:
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutorial captures `s` and
   `S` in Normal and Visual with nothing pending, so `fs` and `qs` still take
   their letter and Insert types it.
-- The entry's `[keymap.normal]` and `[keymap.normal_keys]` bind, over the player's
-  keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
-  `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
-  `redo_change`, and `m` to `mark_set`
+- The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
+  bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
+  `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to
+  `undo_change` and `redo_change`, `m` to `mark_set`, and the backtick, the
+  console's key, to `mark_jump`, after an operator too, so `` `a `` returns to the
+  marked cell and `:console` opens the console
   ([Input §10](input-and-modes.md#10-keymap-override-files)). The vim keymap
   binds each the same, so `-k vim` plays any game on the keys taught here, and
   the last lesson says so.

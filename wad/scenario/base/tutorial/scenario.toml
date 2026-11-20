@@ -25,7 +25,7 @@ blocks = true
 only_systems = ["cursor", "typing", "timer", "death", "glyph", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
 # With no gun to cycle, no clock to stop and no fight to find a column in, the keys
-# a game reads its own way are vi's here
+# a game reads its own way are vi's here; :console opens the console
 [keymap.normal]
 a = "mode_append"
 p = "put_after"
@@ -34,9 +34,13 @@ o = "mode_open_below"
 O = "mode_open_above"
 u = "undo_change"
 m = "mark_set"
+"`" = "mark_jump"
 
 [keymap.normal_keys]
 ctrl_r = "redo_change"
+
+[keymap.operator]
+"`" = "mark_jump"
 
 [regions.tutorial]
 initial = "Wait"
@@ -666,11 +670,11 @@ on_exit = [{ macro = "Clear" }]
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_height", name = "bottom" } },
     { action = "DecrementVar", payload = { name = "bottom" } },
-    { macro = "Heading", text = "m '" },
+    { macro = "Heading", text = "m ' `" },
     { macro = "Note", text = "m and a letter mark the cursor's cell; ' and the letter return to its row.", row = 8 },
-    { macro = "Note", text = "The jump lands on the row's first glyph, and d'a deletes every row to it.", row = 9 },
-    { macro = "Note", text = "In a game m is the middle column: this tutorial gives it back to vi.", row = 10 },
-    { macro = "Note", text = "Press ma here, G for the bottom row, then 'a to come back.", row = 11 },
+    { macro = "Note", text = "' lands on the row's first glyph, ` on the cell itself; d'a deletes rows.", row = 9 },
+    { macro = "Note", text = "In a game m is the middle column and ` the console: here both are vi's.", row = 10 },
+    { macro = "Note", text = "Press ma here, G for the bottom row, then 'a or `a to come back.", row = 11 },
     { macro = "Line", text = "mark this line with ma", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 19 of 22: ma, then G to the bottom row" },
@@ -684,7 +688,7 @@ transitions = [
 [states.MarksBack]
 parent = "Marks"
 on_enter = [
-    { macro = "Say", message = "Now 'a returns to the marked row" },
+    { macro = "Say", message = "Now 'a returns to the marked row, or `a to its cell" },
 ]
 transitions = [
     { macro = "Reached", target = "Map", x = 4, y = 14 },
