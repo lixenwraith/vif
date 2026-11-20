@@ -1065,8 +1065,11 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 ## Not built yet
 
-- [Have a scenario describe the bots that play it](todo.md#have-a-scenario-describe-the-bots-that-play-it)
-- [Train a network bot live in `cave`](todo.md#train-a-network-bot-live-in-cave):
-  what the learner still lacks
+- [Settle what the learner leaves open](todo.md#settle-what-the-learner-leaves-open):
+  a network's score, the wheel, firing, lean inputs, a start from nothing,
+  bots for `td` and `armada`
+- [Finish the bot verbs' edges](todo.md#finish-the-bot-verbs-edges)
+- [Close what learning leaves open outside a solo run](todo.md#close-what-learning-leaves-open-outside-a-solo-run)
+- [Let a scenario expose values of its own to a bot](todo.md#let-a-scenario-expose-values-of-its-own-to-a-bot)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
 - [Teach a bot its player's style, for an auto-pilot](todo.md#teach-a-bot-its-players-style-for-an-auto-pilot)
