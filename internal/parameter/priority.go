@@ -34,6 +34,7 @@ const (
 	PriorityBehavior    // After Kraken
 	PriorityPylon       // After Kraken
 	PriorityTower       // Before Eye
+	PrioritySquare      // After Swarm, whose bodies its blocks meet where they stand
 
 	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
 	PriorityEye     // After Gateway

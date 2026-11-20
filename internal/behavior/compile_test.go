@@ -238,8 +238,11 @@ func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
 	}
 	plain, tuned := set.Prototypes()[0], set.Prototypes()[1]
 	for atk := range component.CombatAttackTypeCount {
+		var want component.AttackRow // a family no swarm takes leaves its row empty
 		base := profile.Defending(atk, component.CombatEntitySwarm)
-		want := component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+		if base != nil {
+			want = component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+		}
 		if plain.Attacks[atk] != want {
 			t.Errorf("%s: no attacks key takes %+v, want the swarm row's %+v", component.CombatAttackNames[atk], plain.Attacks[atk], want)
 		}

@@ -1062,10 +1062,12 @@ type QuasarSpawnRequestPayload struct {
 
 // --- Swarm ---
 
-// SwarmSpawnRequestPayload contains coordinates for creation
+// SwarmSpawnRequestPayload contains coordinates for creation and the target group
+// the swarm homes on, the cursors' at zero
 type SwarmSpawnRequestPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
+	X             int   `toml:"x"`
+	Y             int   `toml:"y"`
+	TargetGroupID uint8 `toml:"target_group_id"`
 }
 
 // KrakenSpawnRequestPayload defaults (0, 0) to the map center, and hit points of 0
@@ -1782,6 +1784,12 @@ type GatewaySpawnRequestPayload struct {
 	UseRouteGraph       bool                  `toml:"use_route_graph"` // If true, request route graph computation for this gateway
 }
 
+// GatewayHoldRequestPayload holds every gateway's spawns and the acceleration of
+// its rate for DurationMs, or for what is left of a longer hold
+type GatewayHoldRequestPayload struct {
+	DurationMs int `toml:"duration_ms"`
+}
+
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity
 type GatewayDespawnRequestPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
@@ -1791,6 +1799,36 @@ type GatewayDespawnRequestPayload struct {
 type GatewayDespawnedPayload struct {
 	GatewayEntity core.Entity `toml:"gateway_entity"`
 	AnchorEntity  core.Entity `toml:"anchor_entity"`
+}
+
+// --- Square ---
+
+// SquareSpawnRequestPayload lays a magic square centred on a cell: Layout names the
+// digit of each place row by row, Groups the digits of each kind in SquareKind
+// order. A zero block size or hit points takes the default.
+type SquareSpawnRequestPayload struct {
+	X             int      `toml:"x"`
+	Y             int      `toml:"y"`
+	Layout        string   `toml:"layout"`
+	Groups        []string `toml:"groups"`
+	HP            int      `toml:"hp"`
+	BlockWidth    int      `toml:"block_width"`
+	BlockHeight   int      `toml:"block_height"`
+	TargetGroupID uint8    `toml:"target_group_id"` // the group its standing blocks anchor
+}
+
+// SquareAlignedPayload names the kind that fired and its line: 0 to 2 the rows top
+// down, 3 to 5 the columns left to right
+type SquareAlignedPayload struct {
+	Kind component.SquareKind `toml:"kind"`
+	Line int                  `toml:"line"`
+}
+
+// SquareBlockFallenPayload names a fallen block by its digit, with the count of
+// blocks still standing
+type SquareBlockFallenPayload struct {
+	Digit     int `toml:"digit"`
+	Remaining int `toml:"remaining"`
 }
 
 // --- Genetic ---

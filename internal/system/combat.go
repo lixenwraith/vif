@@ -720,7 +720,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 
 	// Apply stun effect
 	if attack.EffectMask&component.CombatEffectStun != 0 && !targetDead {
-		if s.applyStunEffect(targetEntity, targetCombatComp) {
+		if s.applyStunEffect(targetEntity, targetCombatComp, attack.Duration) {
 			s.statStun.Add(1)
 			s.statEffectStun.Add(1)
 			resolved = true
@@ -978,9 +978,9 @@ func (s *CombatSystem) recordChain(depth uint8, count int) {
 	storeMax(s.statChainDepthMax, int64(depth))
 }
 
-// applyStunEffect applies stun to target entity
-// Returns false if target is immune to stun
-func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent) bool {
+// applyStunEffect stuns the target for d, parameter.PulseStunDuration when zero;
+// false when the target is immune
+func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent, d time.Duration) bool {
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
@@ -1022,7 +1022,10 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		return false
 	}
 
-	targetCombatComp.Status[component.StatusStun] = component.Status{Remaining: parameter.PulseStunDuration}
+	if d <= 0 {
+		d = parameter.PulseStunDuration
+	}
+	targetCombatComp.Status[component.StatusStun] = component.Status{Remaining: d}
 
 	// Clear enrage state
 	targetCombatComp.IsEnraged = false

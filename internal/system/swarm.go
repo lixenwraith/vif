@@ -211,7 +211,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	x, y, spawn := s.spawnAt(ev)
+	x, y, group, spawn := s.spawnAt(ev)
 	if !s.enabled {
 		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
@@ -219,7 +219,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 	if spawn {
-		s.spawnSwarm(x, y)
+		s.spawnSwarm(x, y, group)
 		return
 	}
 
@@ -338,21 +338,22 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
-// spawnAt reads a request for a swarm at a cell: its own spawn request, or a land
-// request naming it, which its carrier sent as it ended
-func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+// spawnAt reads a request for a swarm at a cell and the target group it homes on:
+// its own spawn request, or a land request naming it, which its carrier sent as it
+// ended and which homes on the cursors
+func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, uint8, bool) {
 	switch p := ev.Payload.(type) {
 	case *event.SwarmSpawnRequestPayload:
-		return p.X, p.Y, true
+		return p.X, p.Y, p.TargetGroupID, true
 	case *event.SpeciesLandRequestPayload:
-		return p.X, p.Y, p.Species == component.SpeciesSwarm
+		return p.X, p.Y, 0, p.Species == component.SpeciesSwarm
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
 // spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
 // the map, or on the nearest footprint free of walls a spawn is kept from
-func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
+func (s *SwarmSystem) spawnSwarm(targetX, targetY int, group uint8) {
 	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: targetX, Y: targetY}, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
@@ -366,7 +367,10 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 
 	// createSwarmComposite publishes EventSpeciesCreated only after every
 	// component and member is installed.
-	s.createSwarmComposite(headerX, headerY)
+	header := s.createSwarmComposite(headerX, headerY)
+	if group != 0 {
+		s.world.Components.Target.SetComponent(header, component.TargetComponent{GroupID: group})
+	}
 	s.lifecycle.spawned.Add(1)
 }
 

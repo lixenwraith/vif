@@ -134,13 +134,13 @@ func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	c, _ := w.Components.Combat.GetPtr(header)
-	if !combat.applyStunEffect(header, c) {
+	if !combat.applyStunEffect(header, c, 0) {
 		t.Fatal("the first stun was refused")
 	}
 	c.Status[component.StatusStun].Remaining -= parameter.GameUpdateInterval
 	held := c.Status[component.StatusStun].Remaining
 
-	if combat.applyStunEffect(header, c) {
+	if combat.applyStunEffect(header, c, 0) {
 		t.Fatal("a second stun was applied while one was running")
 	}
 	if c.Status[component.StatusStun].Remaining != held {

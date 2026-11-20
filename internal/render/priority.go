@@ -33,6 +33,7 @@ const (
 	// Foreground species with depth, rendered last
 	PriorityPylon
 	PriorityTower
+	PrioritySquare
 	PriorityStorm
 	PriorityKraken
 	PriorityEye
