@@ -233,8 +233,9 @@ A browser joins a game over WebSocket only. The lobby at
 https://lixen.com/vif/lobby/ opens its games in the copy of this page at
 https://lixen.com/vif/wasm/. Served over plain http, this page joins a native
 `vif -host ws://:7777` with `?arg=-join=ws://<host-address>:7777`; a page served
-over https, that copy included, opens only `wss://`, which a native host does not
-serve yet. Launch arguments are such `arg` query parameters, one per flag, or
+over https, that copy included, opens only `wss://`, which a native host serves
+with `-host wss://:7778` and `-cert` or `-selfsign`, once the browser trusts that
+certificate. Launch arguments are such `arg` query parameters, one per flag, or
 `window.VIF_ARGS`, set by a script loaded before `terminal.js`.
 
 <!-- end -->

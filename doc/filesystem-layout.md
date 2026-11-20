@@ -265,7 +265,7 @@ It keeps `audio/`, a player's other keymaps, their own scenarios,
 `scenario/downloads/` and anything else in the root. `-n` beside it prints what
 would run and removes nothing.
 
-`install` adds the binary, licence, manual, desktop entry
+`install` adds the binary, licences, manual, desktop entry
 and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
 `PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs
@@ -310,7 +310,9 @@ the audio module's `bank` package, and its root package carries no specs or
 patterns of its own: in an audio-capable build the audio service parses them with
 `bank.Sounds` and `bank.Patterns` and hands them to the engine as
 `AudioConfig.BaseSounds`, `BaseVoices` and `BasePatterns`. Audio-free builds omit
-those loaders and the audio engine.
+those loaders and the audio engine. The cell font a graphical host draws with is
+the terminal module's `atlas`
+([Content §7](content-assets-and-tools.md#7-embedded-assets)).
 
 A `js/wasm` build performs no host-directory discovery, so it remains playable
 from the embedded scenario, content, and keymap, and as a guest it is served the

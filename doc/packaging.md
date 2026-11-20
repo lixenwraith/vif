@@ -121,7 +121,8 @@ extracts, still needs its trust, origin and cache policy decided.
 ## 3. Gaps to close before a first submission
 
 `make install` stages everything a package review expects: the binary, the system
-config root, the licence, `man6/vif.6`, a `Terminal=true` desktop entry whose
+config root, the licences (`LICENSE`, `NOTICES`, `LICENSE.font`), `man6/vif.6`, a
+`Terminal=true` desktop entry whose
 second action plays in the window (`vif -g`), scalable and symbolic icons, and
 bash, zsh and fish completion. What remains is
 [the first stable release](todo.md#promote-a-nightly-build-to-the-first-stable-release).
@@ -180,7 +181,9 @@ Lowest priority: Go game packages move slowly through NEW.
    route; commit a `vendor/` only on the packaging branch.
 3. `debian/copyright` in DEP-5 form enumerates the corpus files in
    `wad/content/` separately: they are Go standard-library source under the Go
-   Authors' BSD licence.
+   Authors' BSD licence. So is the vendored cell font,
+   `vendor/github.com/lixenwraith/terminal/atlas/hack.*`, under Hack's MIT and
+   Bitstream Vera licences (its `atlas/LICENSE`).
 4. Lintian may flag the size of the config tree in `/etc/vif`; the override
    goes in `debian/vif.lintian-overrides`.
 
