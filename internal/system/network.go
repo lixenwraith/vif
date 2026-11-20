@@ -3301,24 +3301,27 @@ func (s *NetworkSystem) dispatch(tick uint64, holds bool) (local, peer int) {
 	return local, peer
 }
 
-// A peer's artifact is one a producer could have sent (event.Crosses), never a
-// Shared or Local event made to look applied. Of those, only the authority, which
-// sent the frame or under which it applies, authors a roster change, a reset, a
-// hold, a rate or a machine transition; only a participant that plays asks for a
-// transition (plays), and nobody acts as another's cursor (crossingActors).
+// A peer's artifact is of a type a producer sends (crossingRules) in the shape it
+// sends it (event.Crosses), never a Shared or Local event made to look applied, and
+// from one who may author it: the authority, which sent the frame or under which it
+// applies, a participant that plays (plays), or any, as no cursor but its own
+// (actsAsOwn). What it claims of the world inside that needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, domain core.Domain, payload any, source uint32, authored bool) bool {
-	if !event.Crosses(et, domain, payload) {
+	rule, sent := crossingRules[et]
+	if !sent || !event.Crosses(et, domain, payload) {
 		return false
 	}
-	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
-		event.EventGameResetRequest, event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
+	switch rule.by {
+	case byAuthority:
 		return authored || source == s.authorityParticipant()
-	case event.EventFSMTransitionRequest:
+	case byPlayer:
 		return s.plays(source)
 	}
-	actor, ok := crossingActors[et]
-	return !ok || s.actsAsOwn(source, actor(s.world, payload))
+	if rule.actor == nil {
+		return true
+	}
+	actor, sound := rule.actor(s.world, payload)
+	return sound && s.actsAsOwn(source, actor)
 }
 
 // plays reports whether source holds a cursor, as a dedicated host and a viewer do
@@ -3341,38 +3344,93 @@ func (s *NetworkSystem) actsAsOwn(source uint32, e core.Entity) bool {
 	return !ok || c.PeerID == 0 || c.PeerID == source
 }
 
-// crossingActors reads the cursor a crossing acts as, for each type whose payload
-// names one: by entity, or by roster slot for a captured key's input.
-var crossingActors = map[event.EventType]func(*engine.World, any) core.Entity{
-	event.EventCursorMoveRequest:               actorEntity(func(p *event.CursorMoveRequestPayload) core.Entity { return p.Entity }),
-	event.EventGoldJumpRequest:                 actorEntity(func(p *event.GoldJumpRequestPayload) core.Entity { return p.Entity }),
-	event.EventCursorDefeatState:               actorEntity(func(p *event.CursorDefeatStatePayload) core.Entity { return p.Entity }),
-	event.EventEmberSpent:                      actorEntity(func(p *event.HeatBurstPayload) core.Entity { return p.Entity }),
-	event.EventExplosionRequest:                actorEntity(func(p *event.ExplosionRequestPayload) core.Entity { return p.Entity }),
-	event.EventExplosionBatchRequest:           actorEntity(func(p *event.ExplosionBatchRequestPayload) core.Entity { return p.Entity }),
-	event.EventCombatAttackAreaCrossingRequest: actorEntity(func(p *event.CombatAttackAreaRequestPayload) core.Entity { return p.OwnerEntity }),
-	event.EventCompositeMemberDestroyed:        actorEntity(func(p *event.CompositeMemberDestroyedPayload) core.Entity { return p.Entity }),
-	event.EventDrainDefeated:                   actorEntity(func(p *event.DrainDefeatedPayload) core.Entity { return p.Entity }),
-	event.EventInputPressed:                    actorSlot(func(p *event.InputPayload) uint8 { return p.Slot }),
-	event.EventInputReleased:                   actorSlot(func(p *event.InputPayload) uint8 { return p.Slot }),
-	event.EventInputReport:                     actorSlot(func(p *event.InputReportPayload) uint8 { return p.Slot }),
+// crossingAuthor is who may author a type that crosses.
+type crossingAuthor uint8
+
+const (
+	byParticipant crossingAuthor = iota // any participant
+	byPlayer                            // one that holds a cursor
+	byAuthority                         // the session's authority alone
+)
+
+// crossingRule is a crossing type's author and, where its payload names the cursor
+// it acts as, by entity or by roster slot, the reader of that cursor, which also
+// says whether the payload is one its producer could have made.
+type crossingRule struct {
+	by    crossingAuthor
+	actor func(*engine.World, any) (core.Entity, bool)
 }
 
-func actorEntity[T any](field func(*T) core.Entity) func(*engine.World, any) core.Entity {
-	return func(_ *engine.World, p any) core.Entity {
+// crossingRules holds every type a producer sends. One with no row is refused from
+// any peer: no participant's simulation crosses it, as the species events every
+// instance derives, which move a scenario's machine. The authority's rows are the
+// roster's, the clock's, the machine's and the spawns only its script crosses.
+var crossingRules = map[event.EventType]crossingRule{
+	event.EventParticipantJoined:    {by: byAuthority},
+	event.EventParticipantDeparted:  {by: byAuthority},
+	event.EventWraithWaitRestart:    {by: byAuthority},
+	event.EventGameResetRequest:     {by: byAuthority},
+	event.EventGameHold:             {by: byAuthority},
+	event.EventGameSpeed:            {by: byAuthority},
+	event.EventFSMTransition:        {by: byAuthority},
+	event.EventSwarmSpawnRequest:    {by: byAuthority},
+	event.EventQuasarSpawnRequest:   {by: byAuthority},
+	event.EventBehaviorSpawnRequest: {by: byAuthority},
+
+	event.EventFSMTransitionRequest: {by: byPlayer},
+
+	event.EventCursorMoveRequest:     {actor: actorEntity(func(p *event.CursorMoveRequestPayload) core.Entity { return p.Entity })},
+	event.EventGoldJumpRequest:       {actor: actorEntity(func(p *event.GoldJumpRequestPayload) core.Entity { return p.Entity })},
+	event.EventCursorDefeatState:     {actor: actorEntity(func(p *event.CursorDefeatStatePayload) core.Entity { return p.Entity })},
+	event.EventEmberSpent:            {actor: actorEntity(func(p *event.HeatBurstPayload) core.Entity { return p.Entity })},
+	event.EventExplosionRequest:      {actor: actorEntity(func(p *event.ExplosionRequestPayload) core.Entity { return p.Entity })},
+	event.EventExplosionBatchRequest: {actor: actorEntity(func(p *event.ExplosionBatchRequestPayload) core.Entity { return p.Entity })},
+	event.EventCombatAttackAreaCrossingRequest: {actor: actorAttacker(func(p *event.CombatAttackAreaRequestPayload) (owner, emitter core.Entity) {
+		return p.OwnerEntity, p.OriginEntity
+	})},
+	event.EventCombatAttackDirectRequest: {actor: actorAttacker(func(p *event.CombatAttackDirectRequestPayload) (owner, emitter core.Entity) {
+		return p.OwnerEntity, p.OriginEntity
+	})},
+	event.EventCompositeMemberDestroyed: {actor: actorEntity(func(p *event.CompositeMemberDestroyedPayload) core.Entity { return p.Entity })},
+	event.EventDrainDefeated:            {actor: actorEntity(func(p *event.DrainDefeatedPayload) core.Entity { return p.Entity })},
+	event.EventInputPressed:             {actor: actorSlot(func(p *event.InputPayload) uint8 { return p.Slot })},
+	event.EventInputReleased:            {actor: actorSlot(func(p *event.InputPayload) uint8 { return p.Slot })},
+	event.EventInputReport:              {actor: actorSlot(func(p *event.InputReportPayload) uint8 { return p.Slot })},
+
+	event.EventDeathBatch:         {},
+	event.EventSpeciesLandRequest: {},
+	event.EventCombatHealRequest:  {},
+}
+
+func actorEntity[T any](field func(*T) core.Entity) func(*engine.World, any) (core.Entity, bool) {
+	return func(_ *engine.World, p any) (core.Entity, bool) {
 		if v, ok := p.(*T); ok {
-			return field(v)
+			return field(v), true
 		}
-		return 0
+		return 0, true
 	}
 }
 
-func actorSlot[T any](field func(*T) uint8) func(*engine.World, any) core.Entity {
-	return func(w *engine.World, p any) core.Entity {
+func actorSlot[T any](field func(*T) uint8) func(*engine.World, any) (core.Entity, bool) {
+	return func(w *engine.World, p any) (core.Entity, bool) {
 		if v, ok := p.(*T); ok {
-			return w.Resources.Player.Slot(field(v))
+			return w.Resources.Player.Slot(field(v)), true
 		}
-		return 0
+		return 0, true
+	}
+}
+
+// actorAttacker reads a combat crossing's owner, which is a cursor, and holds its
+// emitter to that cursor or none: a hit's profile is resolved from its emitter, and
+// every producer names its own cursor as both, a Shared emitter's hit never crossing.
+func actorAttacker[T any](fields func(*T) (owner, emitter core.Entity)) func(*engine.World, any) (core.Entity, bool) {
+	return func(w *engine.World, p any) (core.Entity, bool) {
+		v, ok := p.(*T)
+		if !ok {
+			return 0, false
+		}
+		owner, emitter := fields(v)
+		return owner, w.Components.Cursor.HasEntity(owner) && (emitter == 0 || emitter == owner)
 	}
 }
 

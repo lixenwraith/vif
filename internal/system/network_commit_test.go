@@ -1077,11 +1077,12 @@ func TestAnInstallLeavesWhatNoCaptureHoldsToApply(t *testing.T) {
 	}
 }
 
-// forgedByAGuest crosses ev to the authority as participant 2's, applies its tick and
-// reports whether it was dispatched and the claims the authority counted
-func forgedByAGuest(t *testing.T, ev event.GameEvent) (applied bool, claims int64) {
+// forgedByAGuest crosses what forge makes to the authority as participant 2's, applies
+// its tick and reports whether it was dispatched and the claims the authority counted
+func forgedByAGuest(t *testing.T, forge func(*engine.World) event.GameEvent) (applied bool, claims int64) {
 	t.Helper()
 	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	ev := forge(s.world)
 	f, msg := event.NewWireFrame(ev)
 	if msg != "" {
 		t.Fatalf("encode %s: %s", event.GetEventName(ev.Type), msg)
@@ -1100,27 +1101,35 @@ func forgedByAGuest(t *testing.T, ev event.GameEvent) (applied bool, claims int6
 	return applied, s.statForged.Load()
 }
 
-// TestATransitionARestartOrAResetFromAGuestIsRefused: a Shared FSM moves on what the
-// authority's machine took, a Wraith's wait is the authority's to start over and a
-// game the authority's to end, so any crossed by another participant applies nowhere.
-func TestATransitionARestartOrAResetFromAGuestIsRefused(t *testing.T) {
+// as is a forge of ev itself
+func as(ev event.GameEvent) func(*engine.World) event.GameEvent {
+	return func(*engine.World) event.GameEvent { return ev }
+}
+
+// TestWhatTheAuthorityAloneCrossesIsRefusedFromAGuest: a Shared FSM moves on what the
+// authority's machine took, a Wraith's wait is the authority's to start over, a game
+// the authority's to end and a species its script's to spawn, so any crossed by
+// another participant applies nowhere.
+func TestWhatTheAuthorityAloneCrossesIsRefusedFromAGuest(t *testing.T) {
 	t.Parallel()
 	for _, forged := range []event.GameEvent{
 		{Type: event.EventFSMTransition, Payload: &event.FSMTransitionPayload{Region: "storm", Owner: 3}},
 		{Type: event.EventWraithWaitRestart},
 		{Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}},
+		{Type: event.EventSwarmSpawnRequest, Payload: &event.SwarmSpawnRequestPayload{X: 4, Y: 4}},
 	} {
 		forged.Domain = core.DomainPlayer
-		if applied, claims := forgedByAGuest(t, forged); applied || claims != 1 {
+		if applied, claims := forgedByAGuest(t, as(forged)); applied || claims != 1 {
 			t.Fatalf("a guest's %s: applied %t, %d claims counted; want it refused as one", event.GetEventName(forged.Type), applied, claims)
 		}
 	}
 }
 
-// TestAPeersArtifactIsOneAProducerCouldSend: only a Bus artifact tagged Player or a
-// Stamped one tagged Shared is ever sent (event.OnWire), so a peer's frame of a Shared
-// or Local type, of either under the other tag, or of a payload its receiver derives
-// is an event made to look applied, and is refused; a real crossing applies.
+// TestAPeersArtifactIsOneAProducerCouldSend: a type crosses only where a producer
+// sends it (crossingRules), a Bus artifact tagged Player or a Stamped one tagged
+// Shared (event.OnWire). A peer's frame of a Shared or Local type, of one every
+// instance derives, of either tag swapped or of a payload its receiver derives is
+// an event made to look applied, and is refused; a real crossing applies.
 func TestAPeersArtifactIsOneAProducerCouldSend(t *testing.T) {
 	t.Parallel()
 	for name, forged := range map[string]event.GameEvent{
@@ -1128,15 +1137,50 @@ func TestAPeersArtifactIsOneAProducerCouldSend(t *testing.T) {
 		"a Shared outcome":         {Type: event.EventGoldCompleted, Domain: core.DomainPlayer},
 		"a Local edit":             {Type: event.EventDeleteRequest, Domain: core.DomainPlayer},
 		"a Bus type tagged Shared": {Type: event.EventGoldJumpRequest},
-		"a Stamped one tagged Player": {Type: event.EventSpeciesKilled, Domain: core.DomainPlayer,
-			Payload: &event.SpeciesKilledPayload{}},
+		"a Stamped one tagged Player": {Type: event.EventCombatAttackDirectRequest, Domain: core.DomainPlayer,
+			Payload: &event.CombatAttackDirectRequestPayload{}},
+		"a species' death, which every instance derives": {Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{}},
 		"a derived hit": {Type: event.EventCombatAttackDirectRequest, Payload: &event.CombatAttackDirectRequestPayload{ChainDepth: 1}},
 	} {
-		if applied, claims := forgedByAGuest(t, forged); applied || claims != 1 {
+		if applied, claims := forgedByAGuest(t, as(forged)); applied || claims != 1 {
 			t.Errorf("%s from a guest: applied %t, %d claims counted; want it refused as one", name, applied, claims)
 		}
 	}
-	if applied, claims := forgedByAGuest(t, event.GameEvent{Type: event.EventGoldJumpRequest, Domain: core.DomainPlayer}); !applied || claims != 0 {
+	if applied, claims := forgedByAGuest(t, as(event.GameEvent{Type: event.EventGoldJumpRequest, Domain: core.DomainPlayer})); !applied || claims != 0 {
 		t.Fatalf("a guest's own crossing: applied %t, %d claims counted; want it applied", applied, claims)
+	}
+}
+
+// TestACombatCrossingNamesItsSendersCursorAsOwnerAndEmitter: a hit's allowance, kill
+// and profile are its owner's and its emitter's, which every producer names as its
+// own cursor, so one naming another's cursor, no cursor, or another emitter is refused.
+func TestACombatCrossingNamesItsSendersCursorAsOwnerAndEmitter(t *testing.T) {
+	t.Parallel()
+	cursor := func(w *engine.World, peer uint32) core.Entity {
+		e := w.CreateEntity(core.DomainShared)
+		w.Components.Cursor.SetComponent(e, component.CursorComponent{PeerID: peer})
+		return e
+	}
+	hit := func(owner, emitter func(own, other, none core.Entity) core.Entity) func(*engine.World) event.GameEvent {
+		return func(w *engine.World) event.GameEvent {
+			own, other, none := cursor(w, 2), cursor(w, 1), w.CreateEntity(core.DomainShared)
+			return event.GameEvent{Type: event.EventCombatAttackDirectRequest, Payload: &event.CombatAttackDirectRequestPayload{
+				OwnerEntity: owner(own, other, none), OriginEntity: emitter(own, other, none)}}
+		}
+	}
+	own := func(own, _, _ core.Entity) core.Entity { return own }
+	other := func(_, other, _ core.Entity) core.Entity { return other }
+	none := func(_, _, none core.Entity) core.Entity { return none }
+	for name, forge := range map[string]func(*engine.World) event.GameEvent{
+		"another's cursor as its owner":  hit(other, other),
+		"no cursor as its owner":         hit(none, none),
+		"another emitter than its owner": hit(own, none),
+	} {
+		if applied, claims := forgedByAGuest(t, forge); applied || claims != 1 {
+			t.Errorf("a hit naming %s: applied %t, %d claims counted; want it refused as one", name, applied, claims)
+		}
+	}
+	if applied, claims := forgedByAGuest(t, hit(own, own)); !applied || claims != 0 {
+		t.Fatalf("a hit naming its sender's cursor as both: applied %t, %d claims counted; want it applied", applied, claims)
 	}
 }
