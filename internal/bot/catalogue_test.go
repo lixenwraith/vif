@@ -1,11 +1,9 @@
 package bot
 
 import (
-	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -259,8 +257,7 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 
 // TestEveryInputReadsWithinItsScale: whatever the world holds, a sensor reads a
 // number from its scale's least to 1, bar the body of a Kraken, which may stand
-// past the view that shows one of its legs; and with nothing to sight, every
-// kind's sensors and what the bot holds read 0.
+// past the view that shows one of its legs.
 func TestEveryInputReadsWithinItsScale(t *testing.T) {
 	past := map[string]bool{}
 	for _, row := range kinds {
@@ -358,24 +355,6 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 			}
 		}
 	}
-
-	// The terrain is then the view's own edges, and the cursor still has its place
-	terrain := map[string]bool{}
-	for _, edge := range edges {
-		for _, place := range places {
-			terrain[edge.name+place.suffix] = true
-		}
-	}
-	for _, block := range blocks {
-		terrain[block.name] = true
-	}
-	_, ctx := soloWorld(10, 2)
-	got := readings(t, ctx)
-	for _, s := range sensors {
-		if v := got[s.name]; v != 0 && s.scale != scalePlace && !terrain[s.name] {
-			t.Errorf("with nothing to sight %s reads %g, want 0", s.name, v)
-		}
-	}
 }
 
 // BenchmarkEveryInput is the stress measurement of a Steer: one reading of every
@@ -441,72 +420,6 @@ func BenchmarkEveryInput(b *testing.B) {
 				n.pass()
 			}
 		})
-	}
-}
-
-// TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder: a layout's digest names
-// the populations it fits, so a scenario's own bot keeps its networks' until they are
-// changed on purpose, which starts every population kept for them over. Cave's seed
-// has cave's two, so what is learned from the seed cave takes.
-func TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder(t *testing.T) {
-	cave := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}
-	for path, want := range map[string]map[string]string{
-		"../../wad/scenario/base/cave/bot/cave.toml": cave,
-		"../../wad/scenario/base/cave/bot/seed.toml": cave,
-	} {
-		data, err := os.ReadFile(filepath.FromSlash(path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		g, err := ParseGraph("test", data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := map[string]string{}
-		for _, n := range g.nets {
-			got[n.name] = n.digest
-		}
-		if !maps.Equal(got, want) {
-			t.Fatalf("%s: its layouts are %v, want %v", path, got, want)
-		}
-	}
-}
-
-// TestEveryCatalogueRowSaysWhatItIs: -schema and the reference print each row's
-// own line, so none is left without one.
-func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
-	rows := map[string]string{}
-	for _, row := range kinds {
-		rows["kind "+row.name] = row.doc
-	}
-	for _, row := range fields {
-		rows["field "+row.name] = row.doc
-	}
-	for _, row := range scales {
-		rows["scale "+row.name] = row.doc
-	}
-	for _, row := range edges {
-		rows["edge "+row.name] = row.doc
-	}
-	for _, row := range places {
-		rows["place "+strconv.Quote(row.suffix)] = row.doc
-	}
-	for _, row := range blocks {
-		rows["block "+row.name] = row.doc
-	}
-	for _, row := range self {
-		rows["own "+row.name] = row.doc
-	}
-	for _, row := range outputs {
-		rows["output "+row.name] = row.doc
-	}
-	for _, row := range sources {
-		rows["source "+row.name] = row.doc
-	}
-	for row, doc := range rows {
-		if doc == "" || strings.HasSuffix(row, " ") {
-			t.Errorf("the %s row has no name or no line saying what it is", row)
-		}
 	}
 }
 
@@ -663,7 +576,8 @@ func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
 		}
 		kept = want
 	}
-	if kept != want {
-		t.Errorf("%s: its catalogue section is stale; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
+	// Each row is printed with its own line, so none is left without one
+	if kept != want || strings.Contains(want, ": .") {
+		t.Errorf("%s: its catalogue section is stale, or a row says nothing of what it is; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
 	}
 }

@@ -1021,6 +1021,10 @@ Libraries · Branches.
 - An output added to the catalogue is asked (`outputRow.asked`): given to every
   network that lists none, `cave`'s two would grow a unit, their layouts change
   and every population of theirs start over.
+- A test changes a shipped graph's rate or round limit on `Graph.Settings`
+  after `ParseGraph`, which `NewDriver` reads; one that hands `RunBot` a path
+  replaces the key whatever its figure. No test pins a shipped layout's digest:
+  a changed layout fails nothing and starts its populations over.
 - A scenario's bots are files of the scenario, and only `default` is embedded.
   A test reads one through `resource.LoadScenario` and `Scenario.Bot`. A copy
   of the name in a root's `bot/` plays in its place. A harness built earlier

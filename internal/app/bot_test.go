@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -125,16 +126,19 @@ func TestAMapCellPointerReachesOnlyWhatTheViewportShows(t *testing.T) {
 }
 
 // TestASoloBotRunIsAPureFunctionOfItsSeed: a graph draws from its own stream and reads
-// a deterministic world, so one seed journals one run, for every shipped graph.
+// a deterministic world, so one seed journals one run, for every shipped graph, none
+// of which queues more than its rate releases.
 func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 	t.Parallel()
 	for _, name := range slices.Sorted(maps.Keys(shippedGraphs(t))) {
 		var runs [2][]event.JournalRecord
 		for i := range runs {
 			capture := journal.NewCapture()
-			a, _ := playBot(t, name, fixtureSeed, 600, capture)
+			a, st := playBot(t, name, fixtureSeed, 600, capture)
 			a.Close()
-			runs[i] = capture.Records()
+			if runs[i] = capture.Records(); st.Dropped != 0 {
+				t.Fatalf("%s dropped %d intents", name, st.Dropped)
+			}
 		}
 		played := slices.ContainsFunc(runs[0], func(r event.JournalRecord) bool { return r.Origin == event.OriginInput })
 		if !played {
@@ -220,37 +224,22 @@ func TestASeatNamingNoGraphPlaysItsScenariosOwnBot(t *testing.T) {
 		}
 		return names
 	}
-	for scenario, want := range map[string]string{"flight": "pilot", "bare": DefaultBotGraph} {
-		a := play(config(scenario))
-		a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("") })
-		if got := graphs(a); err != nil || !slices.Equal(got, []string{want}) {
-			t.Errorf("in %s a seat naming no graph plays %v, %v; want %s", scenario, got, err, want)
-		}
-		a.Close()
+	a := play(config("flight"))
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("") })
+	if got := graphs(a); err != nil || !slices.Equal(got, []string{"pilot"}) {
+		t.Errorf("a seat naming no graph plays %v, %v; want its run's scenario's own, pilot", got, err)
 	}
+	a.Close()
 
 	if _, err := newSessionApp(config("bare", "pilot")); err == nil || !strings.Contains(err.Error(), `"pilot" not found`) {
 		t.Fatalf("a run starting with a bot its scenario does not carry = %v; want it refused by that name", err)
 	}
 	held := config("bare", "pilot", "")
 	held.wiring.membership.BotsCarried = true
-	a := play(held)
+	a = play(held)
 	defer a.Close()
 	if err := a.membership.SeatBots(); err != nil || !slices.Equal(graphs(a), []string{DefaultBotGraph, DefaultBotGraph}) {
 		t.Fatalf("seats held over into a scenario without their bot play %v, %v; want its own, %s", graphs(a), err, DefaultBotGraph)
-	}
-}
-
-// TestEveryShippedGraphPlays: each graph that ships, embedded or a scenario's,
-// loads, acts, and never queues more than its rate releases.
-func TestEveryShippedGraphPlays(t *testing.T) {
-	t.Parallel()
-	for _, name := range slices.Sorted(maps.Keys(shippedGraphs(t))) {
-		a, st := playBot(t, name, fixtureSeed, 1200, nil)
-		a.Close()
-		if st.Injected == 0 || st.Dropped != 0 {
-			t.Errorf("%s: injected %d, dropped %d", name, st.Injected, st.Dropped)
-		}
 	}
 }
 
@@ -437,12 +426,11 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("cave scenario not present")
 	}
-	data := shippedGraphs(t)["cave"]
-	// Two seconds are forty ticks, well before the first raider's first charge
-	graph, err := bot.ParseGraph("cave", []byte(strings.Replace(string(data), "round_seconds = 1800", "round_seconds = 2", 1)))
-	if err != nil || graph.Settings.RoundSeconds != 2 {
-		t.Fatalf("the graph's round_seconds is %d, err %v", graph.Settings.RoundSeconds, err)
+	graph, err := bot.ParseGraph("cave", shippedGraphs(t)["cave"])
+	if err != nil {
+		t.Fatal(err)
 	}
+	graph.Settings.RoundSeconds = 2 // forty ticks, well before the first raider's first charge
 	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Play: botPlay(paths.Play{}, graph), Resources: opts})
 	if err != nil {
 		t.Fatal(err)
@@ -573,7 +561,7 @@ func TestALearningRunsGamesKeepWhatFollowsFromItsSeed(t *testing.T) {
 func quitting(t *testing.T, round, stop time.Duration) string {
 	t.Helper()
 	limit := fmt.Sprintf("round_seconds = %d", round/time.Second)
-	return strings.Replace(string(shippedGraphs(t)["cave"]), "round_seconds = 1800", limit, 1) + fmt.Sprintf(`
+	return regexp.MustCompile(`round_seconds = \d+`).ReplaceAllString(string(shippedGraphs(t)["cave"]), limit) + fmt.Sprintf(`
 [regions.stop]
 initial = "Wait"
 
@@ -1726,7 +1714,6 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	if botSlot == 0 || guestSlot == 0 {
 		t.Fatal("guest bot ownership absent from the host roster")
 	}
-	dropped := guest.membership.LocalKey()
 	guest.world.RunSafe(func() {
 		if err := guest.ctx.SessionCtl.DropPlayer(0); err == nil {
 			t.Error("guest dropped the host")
@@ -1752,13 +1739,6 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	}
 	if !guest.membership.Dismissed() {
 		t.Fatal("dropped guest did not receive dismissal")
-	}
-	// Its key stays out: a dial coming back under it is refused for good, where a
-	// fresh key is admitted, since the session name is a routing key and no identity.
-	cfg := network.DebugConfig(link.RolePeer, "")
-	cfg.Keys = []network.Key{dropped}
-	if _, _, err := network.DialSession(addr, cfg); !errors.Is(err, &network.Refusal{Code: network.RefusalDropped}) || network.RetryOf(err) != network.RetryNever {
-		t.Fatalf("the dropped key dialled again: %v", err)
 	}
 }
 

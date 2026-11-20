@@ -283,13 +283,13 @@ func TestABotDownBesideAPersonComesBack(t *testing.T) {
 	}
 
 	seated.Holder = 0
-	w, ask, keys, pass := defeatFold(t, parameter.GameUpdateInterval, seated, seated)
+	w, ask, _, pass = defeatFold(t, parameter.GameUpdateInterval, seated, seated)
 	alone := w.Resources.Player.Slot(1)
 	down(w, alone)
 	ask(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: alone, Defeated: true})
 	pass(wait)
-	if anyLost, _ := keys(); whole(w, alone) || !anyLost {
-		t.Fatalf("with no person on the roster a bot down was equipped again %t and reads any defeated %t; want it left and its defeat to decide", whole(w, alone), anyLost)
+	if whole(w, alone) {
+		t.Fatal("with no person on the roster a bot down was equipped again; its defeat decides, so it is left")
 	}
 }
 

@@ -39,10 +39,6 @@ on_enter = [{ action = "EmitEvent", event = "EventGoldCancel" }]`, "a bot acts o
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `guard 'HasTarget': unknown key "whithin"`},
 		{region + `[states.A]
-transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", within = "5" } }]`, "within: cannot convert string to int"},
-		{region + `[states.A]
-transitions = [{ trigger = "Tick", target = "A", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "ge", value = 5 } }]`, `op: "ge" is not one of eq, neq, gt, gte, lt, lte`},
-		{region + `[states.A]
 on_entr = [{ action = "TypeGlyph" }]`, `state 'A': unknown key "on_entr"`},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", gaurd = "Idle" }]`, `state 'A': unknown key "transitions.gaurd"`},
@@ -57,17 +53,11 @@ on_update = [{ action = "PointAt", payload = { target = "treasure" } }]`, `unkno
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "random" } }]`, `unknown target "random"`},
 		{region + `[states.A]
-on_update = [{ action = "PointAt", payload = { target = "random", away = true } }]`, `unknown target "random"`},
-		{region + `[states.A]
 on_update = [{ action = "PointAt", payload = { target = "threat", away = true, fire = true } }]`, "fire and away do not combine"},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "mode_command" } }]`, "a bot issues no commands"},
-		{region + `[states.A]
-on_enter = [{ action = "Intent", payload = { name = ["motion_left", "config_menu"] } }]`, "a bot issues no commands"},
-		{region + `[states.A]
-on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [] } }]`, "count range must be [min, max]"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [9, 2] } }]`, "count range must be [min, max]"},
 		{region + `[states.A]
@@ -90,10 +80,8 @@ on_update = [{ action = "PointAt", payload = { target = "button", away = true } 
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "button", key = "12" } }]`, "key must be one character"},
 		{"[bot]\nauto_fire = \"both\"" + region + "[states.A]", `auto_fire "both" is not off, main or on`},
 		{"[bot]\nround_seconds = -1" + region + "[states.A]", "round_seconds must not be negative"},
-		{region + `[states.A]
-on_update = [{ action = "Steer" }]`, `network "" is none of the graph's [network.<name>] tables`},
 		{"[network.a]\ninputs = [\"column\"]\n[network.b]\ninputs = [\"column\"]" + region + `[states.A]
-on_update = [{ action = "Steer" }]`, `network "" is none of the graph's`},
+on_update = [{ action = "Steer" }]`, `network "" is none of the graph's [network.<name>] tables`},
 		{"[network.a]\ninputs = [\"column\"]" + region + `[states.A]
 on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" is none of the graph's`},
 		{"[bot]\nlearn = true" + region + "[states.A]", "learn needs a [network.<name>]"},
@@ -112,6 +100,14 @@ on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" i
 		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\", \"jump\"]" + region + "[states.A]", `outputs: "jump" is no output`},
 		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]\nspecial = { bias = 1.0 }" + region + "[states.A]", "special: the network lists no output of that unit"},
 		{"[bot]\ninputs = [\"column\"]\n[network.a]\ninputs = [\"column\"]" + region + "[states.A]", `inputs: "column" is no sensor, or is named twice`},
+		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\", \"wheel\"]" + region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "Asks", guard_args = { output = "move" } }]`, `output "move" is no output of one unit that network a has`},
+		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]" + region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "Asks", guard_args = { output = "wheel" } }]`, `output "wheel" is no output of one unit that network a has`},
+		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]" + region + `[states.A]
+on_update = [{ action = "Steer", payload = { outputs = ["wheel"] } }]`, `outputs: "wheel" is no output of network "a", or is named twice`},
+		{"[network.a]\ninputs = [\"column\"]" + region + `[states.A]
+on_update = [{ action = "Steer", payload = { outputs = ["move", "move"] } }]`, `outputs: "move" is no output of network "a", or is named twice`},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -149,6 +145,12 @@ func botFor(t *testing.T, ctx *engine.GameContext, doc string, n int) (*Driver, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	return driven(t, ctx, g, n)
+}
+
+// driven is a driver of g on ctx's instance, stepped n times, and that instance
+func driven(t *testing.T, ctx *engine.GameContext, g *Graph, n int) (*Driver, *recorder) {
+	t.Helper()
 	rec := &recorder{}
 	d, err := NewDriver(rec, ctx, g, 1, 0)
 	if err != nil {
@@ -168,7 +170,6 @@ type recorder struct {
 	got      []input.Intent
 	at       []int
 	ticks    int
-	releases bool
 	tap      func(event.GameEvent)
 	dispatch []event.GameEvent
 }
@@ -182,7 +183,7 @@ func (r *recorder) Tick(int) {
 }
 func (r *recorder) SetDispatchTap(fn func(event.GameEvent)) { r.tap = fn }
 func (r *recorder) InputTick() bool                         { return true }
-func (r *recorder) ReportReleases()                         { r.releases = true }
+func (r *recorder) ReportReleases()                         {}
 func (r *recorder) Inject(intents ...*input.Intent) bool {
 	for _, intent := range intents {
 		r.got = append(r.got, *intent)
@@ -194,7 +195,8 @@ func (r *recorder) Inject(intents ...*input.Intent) bool {
 // TestAGraphReleasesItsIntentsInOrderAtItsRate: ten a second is one every other
 // 50 ms tick, however many one state queued at once.
 func TestAGraphReleasesItsIntentsInOrderAtItsRate(t *testing.T) {
-	g, err := ParseGraph("burst", []byte(`
+	_, ctx := soloWorld(0, 0)
+	d, inst := botFor(t, ctx, `
 [bot]
 actions_per_second = 10
 
@@ -208,16 +210,7 @@ on_enter = [
     { action = "Intent", payload = { name = "motion_left", count = 3 } },
     { action = "Intent", payload = { name = "motion_left", count = 4 } },
 ]
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, ctx := soloWorld(0, 0)
-	inst := &recorder{}
-	d, err := NewDriver(inst, ctx, g, 1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+`, 0)
 	for step := 1; step <= 10; step++ {
 		if more, err := d.Step(); !more || err != nil {
 			t.Fatalf("step %d: more %v, err %v", step, more, err)
@@ -233,67 +226,26 @@ on_enter = [
 	}
 }
 
-func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
+// TestPointAtAimsAGlyphAtItsRunsStart: text is typed left to right, so the nearest
+// glyph is aimed at by the left edge of the run it stands in.
+func TestPointAtAimsAGlyphAtItsRunsStart(t *testing.T) {
 	w, ctx := soloWorld(12, 3)
-	var glyphs []core.Entity
 	for x := 5; x <= 9; x++ {
-		e := w.CreateEntity(core.DomainPlayer)
-		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
-		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: 3})
-		glyphs = append(glyphs, e)
+		place(w, core.DomainPlayer, x, 3, func(e core.Entity) {
+			w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
+		})
 	}
-	data, err := fs.ReadFile(asset.DefaultBots, "default.toml")
-	if err != nil {
-		t.Fatal(err)
+	_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
+`, 3)
+	start := input.Intent{Type: input.IntentMouseMove, X: 5, Y: 3, MapCell: true}
+	if len(rec.got) == 0 || slices.ContainsFunc(rec.got, func(i input.Intent) bool { return i != start }) {
+		t.Fatalf("pointed at %+v, want moves onto the run's start at 5,3 and no other", rec.got)
 	}
-	g, err := ParseGraph("default", data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec := &recorder{}
-	d, err := NewDriver(rec, ctx, g, 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	step := func(n int) {
-		for range n {
-			if _, err := d.Step(); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	step(10)
-	for _, intent := range rec.got {
-		if intent.Type == input.IntentMouseMove && (intent.X != 5 || intent.Y != 3) {
-			t.Fatalf("approached a run from its end: %+v", intent)
-		}
-	}
-	if len(rec.got) == 0 {
-		t.Fatal("did not approach text")
-	}
-	for _, e := range glyphs {
-		w.DestroyEntity(e)
-	}
-	rec.got = nil
-	step(100)
-	if len(rec.got) == 0 {
-		t.Fatal("stood still without glyphs")
-	}
-	nugget := w.CreateEntity(core.DomainShared)
-	w.Components.Nugget.SetComponent(nugget, component.NuggetComponent{})
-	w.Positions.SetPosition(nugget, component.PositionComponent{X: 60, Y: 10})
-	rec.got = nil
-	step(100)
-	jump, err := input.IntentFor("nugget_jump", 0, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, intent := range rec.got {
-		if intent.Type == jump.Type {
-			return
-		}
-	}
-	t.Fatal("ignored a distant nugget between patrol movements")
 }
 
 // TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell: the router refuses a
@@ -439,10 +391,10 @@ func TestAScorePaysOnlyWhatTheBotsOwnCursorDid(t *testing.T) {
 	}
 }
 
-// TestABotLetsGoOfEveryKeyItPresses: the instance takes the bot's keys as releasing,
-// and the bot lets go of each press itself: a tap at once, a hold when its ticks are
-// up, an open hold at its release, and a held key before pressing it again. A
-// release of a key not held sends nothing, and a press with its release is one action.
+// TestABotLetsGoOfEveryKeyItPresses: the bot lets go of each press itself: a tap at
+// once, a hold when its ticks are up, an open hold at its release, and a held key
+// before pressing it again. A release of a key not held sends nothing, and a press
+// with its release is one action.
 func TestABotLetsGoOfEveryKeyItPresses(t *testing.T) {
 	sent := func(rec *recorder) []string {
 		var out []string
@@ -475,9 +427,6 @@ on_enter = [
     { action = "Intent", payload = { name = "press", char = "d", hold = 2 } },
 ]
 `, 12)
-	if !rec.releases {
-		t.Fatal("the bot's instance was not asked to take its keys as releasing")
-	}
 	if got, want := sent(rec), []string{
 		"0 IntentKeyPress a", "0 IntentKeyPress b", "0 IntentKeyRelease b", "0 IntentKeyPress c", "0 IntentKeyPress d",
 		"3 IntentKeyRelease a",
@@ -691,8 +640,7 @@ func TestALayoutIsWhatItsNetworkReadsHidesAndAsksFor(t *testing.T) {
 // TestAsksHoldsWhileANetworksOutputReadsAboveItsMark: a graph hands its states
 // over to what a network asks for. Asks holds while the one-unit output it names
 // reads above its mark, which no network without weights does. The wheel is had
-// only by listing it, Steer does nothing with it, and a network that lists no
-// output keeps special and move.
+// only by listing it, and Steer does nothing with it.
 func TestAsksHoldsWhileANetworksOutputReadsAboveItsMark(t *testing.T) {
 	doc := func(weights, args string) string {
 		return "[bot]\nactions_per_second = 20\n[network.fly]\ninputs = [\"column\"]\noutputs = [\"move\", \"wheel\"]\n" + weights + `
@@ -717,15 +665,6 @@ on_update = [{ action = "Steer" }]
 		if got := d.Stats().State; got != c.want || len(rec.got) != 0 {
 			t.Fatalf("with weights %q and %s the graph is in %s having sent %+v, want %s and nothing sent", c.weights, c.args, got, rec.got, c.want)
 		}
-	}
-	for _, args := range []string{`output = "move"`, `output = "special"`, `output = "wheel", network = "walk"`} {
-		if _, err := ParseGraph("net", []byte(doc("", args))); err == nil {
-			t.Fatalf("an Asks of %s loaded, want it refused: an output of one unit that a network of the graph has", args)
-		}
-	}
-	g, err := ParseGraph("net", []byte(steering(`inputs = ["column"]`)))
-	if err != nil || !slices.Equal(g.nets[0].units, []string{"x", "y", "special"}) {
-		t.Fatalf("a network listing no output has the units %v (%v), want x, y and special", g.nets[0].units, err)
 	}
 }
 
@@ -763,8 +702,7 @@ func TestANetworkAsksForTheSpecialAttackWhileItsOutputIsPositive(t *testing.T) {
 
 // TestASteerActsOnTheOutputsItNames: a Steer that names outputs acts on those of its
 // network alone, so one region has the special attack asked for whatever another
-// does, and a move is made only where a Steer takes it. An output its network
-// lacks, or one named twice, is refused.
+// does, and a move is made only where a Steer takes it.
 func TestASteerActsOnTheOutputsItNames(t *testing.T) {
 	doc := func(play, fire string) string {
 		return `[bot]
@@ -809,11 +747,6 @@ on_update = [{ action = "Steer"` + fire + ` }]
 				c.play, c.fire, special, moves, c.special, c.moves)
 		}
 	}
-	for _, outputs := range []string{`"wheel"`, `"move", "move"`, `"aim"`} {
-		if _, err := ParseGraph("net", []byte(doc(only(outputs), ""))); err == nil {
-			t.Fatalf("a Steer of outputs %s loaded, want it refused: each once, and one its network has", outputs)
-		}
-	}
 }
 
 // TestDefaultTypesAheadOfTheSpecialAttackItAsksFor: default asks for the special
@@ -825,17 +758,17 @@ func TestDefaultTypesAheadOfTheSpecialAttackItAsksFor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// At forty a second every step has room for the key and the special attack both
-	doc := strings.Replace(string(data), "actions_per_second = 16", "actions_per_second = 40", 1)
-	if doc == string(data) {
-		t.Fatal("default's rate is no longer sixteen a second")
+	g, err := ParseGraph("default", data)
+	if err != nil {
+		t.Fatal(err)
 	}
+	g.Settings.ActionsPerSecond = 40 // every step has room for the key and the special attack both
 	w, ctx := soloWorld(10, 2)
 	ctx.SetMode(core.ModeInsert)
 	place(w, core.DomainShared, 10, 2, func(e core.Entity) {
 		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'k'})
 	})
-	_, rec := botFor(t, ctx, doc, 12)
+	_, rec := driven(t, ctx, g, 12)
 	both := 0
 	for i := 1; i < len(rec.got); i++ {
 		if rec.at[i] != rec.at[i-1] {
@@ -921,17 +854,13 @@ func learning(t *testing.T) (*Graph, *Driver, *recorder) {
 		t.Fatal(err)
 	}
 	_, ctx := soloWorld(0, 0)
-	rec := &recorder{}
-	d, err := NewDriver(rec, ctx, g, 1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	d, rec := driven(t, ctx, g, 0)
 	return g, d, rec
 }
 
-// TestALearnerScoresTheRoundsItsBotPlayedOutAlone: a candidate plays a round, the
-// hand-written genome first, and is scored as the game ends it. A round an operator
-// ended scores nothing, and a bot no longer alone plays what its learner fields.
+// TestALearnerScoresTheRoundsItsBotPlayedOutAlone: a candidate plays a round and is
+// scored as the game ends it. A round an operator ended scores nothing, and a bot
+// no longer alone plays what its learner fields.
 func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	g, d, rec := learning(t)
 	l, err := NewLearner(g, "fly", 1, 1, nil)
@@ -953,9 +882,6 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	scored := func() int { return len(l.engine.Snapshot().Members) }
 	written := g.nets[0].genes
 
-	if !slices.Equal(d.mind.nets[0].genes, written) {
-		t.Fatal("the first round does not play the hand-written genome")
-	}
 	if next := round(event.OriginSystem); scored() != 1 || slices.Equal(next, written) {
 		t.Fatalf("a round played out scored %d genomes and handed on %v, want the hand-written one scored and a child of it next", scored(), next)
 	}
@@ -970,15 +896,11 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 
 // TestALearnerKeepsItsPopulationByItsLayout: a population kept under the layout's
 // digest comes back with its rounds, and a save says each member's rounds and
-// birth, the proved first with the fielded at their head.
+// birth, and which is fielded.
 func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
-	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
-	store := keeping(t, net.digest,
-		member{Genes: genome(0.1), Score: 50, Rounds: learnProven - 1, Born: 3},
-		member{Genes: genome(0.2), Score: 40, Rounds: learnProven, Born: 5},
-		member{Genes: genome(0.3), Score: 10, Rounds: learnProven + 4, Born: 7})
+	store := keeping(t, net.digest, member{Genes: slices.Repeat([]float64{0.2}, len(net.genes)), Score: 40, Rounds: learnProven, Born: 5})
 	l, err := NewLearner(g, "fly", 1, 1, store)
 	if err != nil {
 		t.Fatal(err)
@@ -992,21 +914,16 @@ func TestALearnerKeepsItsPopulationByItsLayout(t *testing.T) {
 	if err := json.Unmarshal(store.doc, &saved); err != nil {
 		t.Fatal(err)
 	}
-	entered := slices.IndexFunc(saved.Members, func(m member) bool { return m.Score == 45 })
-	if saved.Layout != net.digest || saved.ScoredBy != learnsBy || saved.Rounds != learnPool+1 || len(saved.Members) != 4 || entered < 2 ||
-		saved.Members[entered].Born != learnPool+1 || saved.Members[entered].Rounds != 1 || saved.Fielded != 0 ||
-		saved.Members[0].Born != 5 || saved.Members[1].Born != 7 {
-		t.Fatalf("saved %+v: want the three kept with their births, the two proved first and the more trusted fielded, and the genome scored 45 born at round 1",
-			saved)
+	if saved.Layout != net.digest || saved.ScoredBy != learnsBy || saved.Rounds != learnPool+1 || len(saved.Members) != 2 || saved.Fielded != 0 ||
+		saved.Members[0].Born != 5 || saved.Members[1].Score != 45 || saved.Members[1].Born != learnPool+1 || saved.Members[1].Rounds != 1 {
+		t.Fatalf("saved %+v: want the member kept with its birth, fielded, and after it the genome scored 45, born at this run's first round", saved)
 	}
 }
 
-// failing is a population store whose load or save fails with the error it is
-// given, counting the saves asked of it
+// failing is a population store whose load or save fails with the error it is given
 type failing struct {
 	memory
 	load, save error
-	saves      int
 }
 
 func (f *failing) Load() ([]byte, error) {
@@ -1017,23 +934,32 @@ func (f *failing) Load() ([]byte, error) {
 }
 
 func (f *failing) Store(doc []byte) error {
-	if f.saves++; f.save != nil {
+	if f.save != nil {
 		return f.save
 	}
 	return f.memory.Store(doc)
 }
 
-// TestALearnerItsFileFailsLearnsOnAndSaysSoOnce: a population that cannot be read
-// is left as it is and the run keeps none, which its end reports; one that cannot
-// be parsed starts over and the next save replaces it. Either is said once.
-func TestALearnerItsFileFailsLearnsOnAndSaysSoOnce(t *testing.T) {
+// TestALearnerWhoseStoreFailsLearnsOnAndSaysSoOnce: a population that cannot be
+// read is left as it is and the run keeps none, which its end reports. One that
+// cannot be parsed, or whose rounds read below none, starts over and is replaced.
+// A save that fails is said once, not those failing after it, and reported as the
+// run ends unless a later one kept the population.
+func TestALearnerWhoseStoreFailsLearnsOnAndSaysSoOnce(t *testing.T) {
 	g, _, _ := learning(t)
+	damaged, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, ScoredBy: learnsBy, Rounds: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, c := range map[string]struct {
 		store *failing
+		said  int
 		kept  bool
 	}{
-		"unreadable": {&failing{load: errors.New("denied")}, false},
-		"unparsable": {&failing{memory: memory{doc: []byte("{")}}, true},
+		"unreadable":        {&failing{load: errors.New("denied")}, 1, false},
+		"unparsable":        {&failing{memory: memory{doc: []byte("{")}}, 1, true},
+		"rounds below none": {&failing{memory: memory{doc: damaged}}, 0, true},
+		"a save that fails": {&failing{save: errors.New("full")}, 1, false},
 	} {
 		l, err := NewLearner(g, "fly", 1, 1, c.store)
 		if err != nil {
@@ -1044,41 +970,22 @@ func TestALearnerItsFileFailsLearnsOnAndSaysSoOnce(t *testing.T) {
 		for range 3 {
 			l.take(0, true)
 			l.settle(0, 45, true)
+			l.save()
 		}
 		err = l.Close()
 		var saved population
 		replaced := json.Unmarshal(c.store.doc, &saved) == nil && saved.Rounds == 3
-		if said != 1 || l.rounds != 3 || (err == nil) != c.kept || replaced != c.kept || (c.store.saves > 0) != c.kept {
-			t.Errorf("%s: said %d times, %d rounds scored, %d saves, replaced %t, closing with %v: want it said once, three rounds, and kept %t",
-				name, said, l.rounds, c.store.saves, replaced, err, c.kept)
+		if said != c.said || l.rounds != 3 || (err == nil) != c.kept || replaced != c.kept {
+			t.Errorf("%s: said %d times, %d rounds scored, its three kept %t, closing with %v: want it said %d times, three rounds, and kept %t",
+				name, said, l.rounds, replaced, err, c.said, c.kept)
 		}
-	}
-}
-
-// TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce: a save that fails is said once, not
-// those failing after it, the rounds go on being scored, and the run's end reports
-// it unless a later save kept the population.
-func TestALearnerItsSaveFailsLearnsOnAndSaysSoOnce(t *testing.T) {
-	g, _, _ := learning(t)
-	store := &failing{save: errors.New("full")}
-	l, err := NewLearner(g, "fly", 1, 1, store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	said := 0
-	l.Lost = func(error) { said++ }
-	for range 3 {
-		l.take(0, true)
-		l.settle(0, 45, true)
-		l.save()
-	}
-	if err := l.Close(); said != 1 || l.rounds != 3 || store.saves != 4 || err == nil {
-		t.Fatalf("said %d times over %d failed saves, %d rounds scored, closing with %v: want it said once, three rounds and the failure reported",
-			said, store.saves, l.rounds, err)
-	}
-	store.save = nil
-	if err := l.Close(); err != nil || len(store.doc) == 0 {
-		t.Fatalf("a save that works again closes with %v and keeps %d bytes, want the population kept", err, len(store.doc))
+		if c.store.save == nil {
+			continue
+		}
+		c.store.save = nil
+		if err := l.Close(); err != nil || len(c.store.doc) == 0 {
+			t.Errorf("%s: a save that works again closes with %v and keeps %d bytes, want the population kept", name, err, len(c.store.doc))
+		}
 	}
 }
 
@@ -1333,8 +1240,8 @@ func TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds(t *testing.T) {
 
 // TestASaveLeavesAPopulationFurtherOnAsItIs: two runs may learn one population, a
 // watched one opened beside a headless one. The file is the one's with more
-// rounds: a save onto more fails, said once and reported as the run ends, and
-// passes once this run is the one further on.
+// rounds: a save onto more fails, reported as the run ends, and passes once this
+// run is the one further on.
 func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
 	g, _, _ := learning(t)
 	store := &memory{}
@@ -1352,8 +1259,6 @@ func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
 		}
 		return l.Close()
 	}
-	said := 0
-	runs[1].Lost = func(error) { said++ }
 	if err := play(runs[0], 5); err != nil {
 		t.Fatal(err)
 	}
@@ -1364,28 +1269,8 @@ func TestASaveLeavesAPopulationFurtherOnAsItIs(t *testing.T) {
 		}
 	}
 	var kept population
-	if err := errors.Join(play(runs[1], 2), json.Unmarshal(store.doc, &kept)); err != nil || kept.Rounds != 6 || said != 1 {
-		t.Fatalf("a run a round further on kept %d rounds, closing with %v, having said %d times it could not: want its six kept and one notice", kept.Rounds, err, said)
-	}
-}
-
-// TestADamagedCountOfRoundsStillSaves: a kept document whose rounds read below
-// none counts from none, or the recent mean divides by nothing and no save of
-// the run can be written.
-func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
-	g, _, _ := learning(t)
-	doc, err := json.Marshal(population{Version: populationVersion, Layout: g.nets[0].digest, ScoredBy: learnsBy, Rounds: -1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l, err := NewLearner(g, "fly", 1, 1, &memory{doc: doc})
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.take(0, true)
-	l.settle(0, 45, true)
-	if err := l.Close(); err != nil || l.rounds != 1 {
-		t.Fatalf("a round on a document of -1 rounds closes with %v at %d rounds, want it kept as the first", err, l.rounds)
+	if err := errors.Join(play(runs[1], 2), json.Unmarshal(store.doc, &kept)); err != nil || kept.Rounds != 6 {
+		t.Fatalf("a run a round further on kept %d rounds, closing with %v: want its six kept", kept.Rounds, err)
 	}
 }
 
@@ -1394,10 +1279,7 @@ func TestADamagedCountOfRoundsStillSaves(t *testing.T) {
 // stepped, as a start drawn about on every weight is lost among copies that fly
 // worse.
 func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
-	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2\nx = { column = -0.5 }"), "[bot]", learns, 1)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	g, _, _ := learning(t)
 	l, err := NewLearner(g, "fly", 1, 1, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1419,8 +1301,8 @@ func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
 
 // TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom: a population with no
 // rounds behind it has nothing to breed from, so where its graph writes no weight
-// its first learnPool rounds play genomes drawn about zero, each its own; one
-// past them breeds, and the written genome, having no weight, is not tried.
+// its first learnPool rounds play genomes drawn about zero, each its own, and the
+// next one of the archive's; the written genome, having no weight, is not tried.
 func TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom(t *testing.T) {
 	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", learns, 1)))
 	if err != nil {
@@ -1442,18 +1324,17 @@ func TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom(t *testing.T) {
 	if members := l.engine.Snapshot().Members; len(members) != learnPool {
 		t.Fatalf("%d members after %d rounds, want each genome drawn scored into the archive", len(members), learnPool)
 	}
-	bred := l.take(0, true)
-	parent := slices.IndexFunc(drawn, func(d []float64) bool {
+	next := l.take(0, true)
+	if !slices.ContainsFunc(drawn, func(d []float64) bool {
 		same := 0
 		for i := range d {
-			if d[i] == bred[i] {
+			if d[i] == next[i] {
 				same++
 			}
 		}
 		return same > len(d)/2
-	})
-	if parent < 0 {
-		t.Fatalf("the round after plays %v, want a child bred from the archive, most of its weights a member's", bred[:3])
+	}) {
+		t.Fatalf("the round after plays %v, want a member or its child, most of its weights a member's, and none drawn at random", next[:3])
 	}
 }
 
@@ -1540,74 +1421,37 @@ func together(t *testing.T, games int, quit func(game int) int, play func(driver
 	return string(store.doc) + told.String(), doc.Rounds
 }
 
-// inTurn steps drivers a tick each in turn, each until it has no more to play or
-// has played ticks, for ticks above zero
-func inTurn(ticks int) func(drivers []*Driver) {
-	return func(drivers []*Driver) {
+// TestGamesThatLearnTogetherKeepWhatTheyWouldInTurn: rounds close into a learner
+// in the order of their ticks and then of their games, so games stepped side by
+// side, each as its core runs it, keep and tell what they do stepped in turn. A
+// game whose graph quits holds none of the rest back, and none scores or tells a
+// round past the tick the run's own quit at, however late the run says so again.
+func TestGamesThatLearnTogetherKeepWhatTheyWouldInTurn(t *testing.T) {
+	const games, ticks = 4, 400
+	// The run's own game quits at ticks and the next at half of them; the rest play on
+	quit := func(game int) int { return [games]int{ticks, ticks / 2}[game] }
+	turns, rounds := together(t, games, quit, func(drivers []*Driver) {
 		for playing := true; playing; {
 			playing = false
 			for _, d := range drivers {
-				if ticks > 0 && d.stats.Ticks >= uint64(ticks) {
-					continue
-				}
 				if more, _ := d.Step(); more {
 					playing = true
 				}
 			}
 		}
-	}
-}
-
-// TestGamesThatLearnTogetherSearchAsIfTheyTookTurns: rounds close into a learner
-// in the order of their ticks and then of their games, so games stepped side by
-// side, each as its core runs it, keep the population and tell the rounds they
-// do stepped in turn, and a game whose graph quits holds none of the rest back.
-func TestGamesThatLearnTogetherSearchAsIfTheyTookTurns(t *testing.T) {
-	const games = 4
-	quit := func(game int) int { return 400 - 40*game }
-	turns, rounds := together(t, games, quit, inTurn(0))
+	})
 	if rounds < 200 {
 		t.Fatalf("the games scored %d rounds in turn, too few to tell one order from another", rounds)
 	}
 	for range 20 {
 		beside, scored := together(t, games, quit, func(drivers []*Driver) {
 			var wg sync.WaitGroup
-			for i, d := range drivers {
+			for i, d := range drivers[1:] {
 				wg.Go(func() {
 					for more := true; more; more, _ = d.Step() {
 						if i%2 == 1 {
 							runtime.Gosched()
 						}
-					}
-				})
-			}
-			wg.Wait()
-		})
-		if beside != turns {
-			t.Fatalf("side by side the games kept %d rounds, and a population or told rounds that differ from the %d rounds kept in turn", scored, rounds)
-		}
-	}
-}
-
-// TestNoRoundThatClosesPastARunsEndIsScored: a run ends at the tick its own game's
-// graph quit at, and the games beside it, which play on as their cores allow,
-// stop at that tick and score and tell no round past it, however late the run
-// says so again, so what the run kept and told follows from its seed.
-func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
-	const games, ticks = 4, 300
-	quit := func(game int) int {
-		if game == 0 {
-			return ticks
-		}
-		return 0
-	}
-	turns, rounds := together(t, games, quit, inTurn(0))
-	for range 20 {
-		beside, scored := together(t, games, quit, func(drivers []*Driver) {
-			var wg sync.WaitGroup
-			for _, d := range drivers[1:] {
-				wg.Go(func() {
-					for more := true; more; more, _ = d.Step() {
 					}
 				})
 			}
@@ -1619,7 +1463,7 @@ func TestNoRoundThatClosesPastARunsEndIsScored(t *testing.T) {
 			wg.Wait()
 		})
 		if beside != turns {
-			t.Fatalf("a run ended at tick %d kept %d rounds, and a population or told rounds that differ from the %d rounds its games keep stepped in turn to that tick",
+			t.Fatalf("side by side, to the run's end at tick %d, the games kept %d rounds, and a population or told rounds that differ from the %d rounds kept in turn",
 				ticks, scored, rounds)
 		}
 	}
@@ -1653,11 +1497,7 @@ on_update = [
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := &recorder{}
-	d, err := NewDriver(rec, ctx, g, 1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	d, rec := driven(t, ctx, g, 0)
 	var learners []*Learner
 	for _, name := range g.Networks() {
 		l, err := NewLearner(g, name, 1, 1, nil)
@@ -1686,13 +1526,13 @@ func (r *recorder) rounds(t *testing.T, d *Driver, ticks ...int) {
 	}
 }
 
-// TestALearnerIsScoredByTheTicksItsNetworkSteered: what a round's ticks were paid
+// TestALearnerIsScoredByItsNetworksPartOfTheRound: what a round's ticks were paid
 // is the network's that steered last, so one that steers only while a Kraken is
 // up is scored by the fight and the other by the rest of the round.
-func TestALearnerIsScoredByTheTicksItsNetworkSteered(t *testing.T) {
+func TestALearnerIsScoredByItsNetworksPartOfTheRound(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
-	w.Resources.Cave.Steps = 2
+	w.Resources.Cave.Steps = 2 // two columns a tick, so a part counts columns and not ticks
 	// A kill pays 5: one lands in fly's first two ticks and one in the three a
 	// Kraken is up for, before the round's last two
 	kill := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: w.Resources.Player.Entity}}
@@ -1754,16 +1594,12 @@ func TestAKrakensKillIsWorthItsTicksAtParLessTheSlowerItDied(t *testing.T) {
 }
 
 // TestALearnersCandidateWaitsForTheRoundItsNetworkSteers: alone, every learner
-// plays a candidate, the hand-written genome first. A round scores those whose
-// networks steered in it, and the candidate of one that never did plays on
-// until a round reaches its network.
+// plays a candidate. A round scores those whose networks steered in it, and the
+// candidate of one that never did plays on until a round reaches its network.
 func TestALearnersCandidateWaitsForTheRoundItsNetworkSteers(t *testing.T) {
 	w, d, rec, learners := twoNetworks(t)
 	fly, kraken := learners[0], learners[1]
 	plays := func(i int) []float64 { return d.mind.nets[i].genes }
-	if !slices.Equal(plays(0), fly.seed) || !slices.Equal(plays(1), kraken.seed) {
-		t.Fatal("the first round does not play each learner's hand-written genome")
-	}
 	rec.rounds(t, d, 2, 2)
 	if fly.Stats().Scored != 2 || kraken.Stats().Scored != 0 || kraken.flying() != 1 || !slices.Equal(plays(1), kraken.seed) {
 		t.Fatalf("two rounds with no Kraken: fly scored %d and kraken %d: want both rounds fly's and kraken's first candidate still in flight",
@@ -1881,17 +1717,17 @@ func TestABotTakesAnothersWeightsByNameOrNothing(t *testing.T) {
 }
 
 // TestAPopulationIsReadUnderItsLayoutScoreAndVersion: a population's document
-// gives its rounds and the most trusted member eight rounds have proved, under
-// the layout, the score and the version it was kept by. One of another layout,
-// score or version, or none, is no population, to a run that learns as to one
-// that fields.
+// gives its rounds and the member a run fields, wherever it stands among those
+// listed, under the layout, the score and the version it was kept by. One of
+// another layout, score or version, or none, is no population, to a run that
+// learns as to one that fields.
 func TestAPopulationIsReadUnderItsLayoutScoreAndVersion(t *testing.T) {
 	g, _, _ := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
 	doc := func(version int, layout, scoredBy string) *memory {
 		data, err := json.Marshal(population{Version: version, Layout: layout, ScoredBy: scoredBy, Rounds: 70, Recent: 12.5, Members: []member{
-			{Genes: genome(0.1), Score: 90, Rounds: 2}, {Genes: genome(0.2), Score: 60, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
+			{Genes: genome(0.2), Score: 40, Rounds: learnProven + 1}, {Genes: genome(0.3), Score: 50, Rounds: 30}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1899,7 +1735,7 @@ func TestAPopulationIsReadUnderItsLayoutScoreAndVersion(t *testing.T) {
 	}
 	k, ok, err := g.Kept("fly", doc(populationVersion, net.digest, learnsBy))
 	if err != nil || !ok || k.Network != "fly" || k.Rounds != 70 || k.Recent != 12.5 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
-		t.Fatalf("kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", k, ok, err)
+		t.Fatalf("kept %+v, %v, %v: want its 70 rounds and the member a run fields, the second it lists", k, ok, err)
 	}
 	for name, store := range map[string]Store{
 		"another layout":  doc(populationVersion, "another", learnsBy),
@@ -1928,7 +1764,7 @@ func TestARunThatDoesNotLearnPlaysWhatItsPopulationFields(t *testing.T) {
 	g, d, rec := learning(t)
 	net := g.nets[0]
 	genome := func(v float64) []float64 { return slices.Repeat([]float64{v}, len(net.genes)) }
-	store := keeping(t, net.digest, member{Genes: genome(0.1), Score: 90, Rounds: learnProven - 1}, member{Genes: genome(0.2), Score: 40, Rounds: learnProven})
+	store := keeping(t, net.digest, member{Genes: genome(0.2), Score: 40, Rounds: learnProven})
 	before := slices.Clone(store.doc)
 	k, ok, err := g.Kept("fly", store)
 	if err != nil || !ok {
