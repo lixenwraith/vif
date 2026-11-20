@@ -1253,11 +1253,15 @@ func (m *Membership) PlaceWaits() bool {
 	return m.awayPlaceLocked()
 }
 
+// yieldsPlaces reports whether a full session gives a newcomer the place of a
+// participant away: never a session's one place, which waits for its own player's
+// key, so no stranger or bot takes a solo game from a player reloading.
+func (m *Membership) yieldsPlaces() bool { return m.playerCapacity() > 1 }
+
 // mayYieldLocked reports whether yieldLocked would find a place on its way, asking
-// nothing: never a session's one place, which waits for its own player's key, so
-// no stranger or bot takes a solo game from a player reloading. Caller holds sessionMu.
+// nothing (yieldsPlaces). Caller holds sessionMu.
 func (m *Membership) mayYieldLocked() bool {
-	return m.playerCapacity() > 1 && m.awayPlaceLocked()
+	return m.yieldsPlaces() && m.awayPlaceLocked()
 }
 
 // awayPlaceLocked reports whether a participant away and not coming back holds a
