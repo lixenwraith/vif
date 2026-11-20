@@ -33,8 +33,10 @@ in the same PR.
 ## Data
 
 - Embedded files live in `internal/asset/`, except the shipped audio banks, which
-  live in the audio module's `bank` package (`lixenwraith/audio/bank`). External
-  files live in `wad/`, laid out exactly as they install. Distribution files
+  live in the audio module's `bank` package (`lixenwraith/audio/bank`), and the
+  cell font a graphical host draws with, which the terminal module's `atlas`
+  package embeds (`lixenwraith/terminal/atlas`). External files live in `wad/`,
+  laid out exactly as they install. Distribution files
   installed outside a config root (desktop entry, icons, shell completion) live
   in `deploy/package/`; the manual is `doc/vif.6`. Nowhere else, and never beside
   the code that reads them.
