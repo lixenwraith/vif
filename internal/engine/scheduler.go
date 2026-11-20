@@ -221,18 +221,23 @@ func NewScheduler(
 
 // EventTypes returns the event types the scheduler handles directly
 func (s *Scheduler) EventTypes() []event.EventType {
-	return []event.EventType{event.EventFSMRegionRequest, event.EventFSMTransition}
+	return []event.EventType{event.EventFSMRegionRequest, event.EventFSMTransition, event.EventFSMTransitionRequest}
 }
 
-// HandleEvent applies a region operation, or a transition the authority
-// committed, to the scheduler-owned FSM. Runs inside dispatchOnePass with the
-// world lock held; anything it emits settles on a later pass.
+// HandleEvent applies a region operation, a transition the authority committed, or
+// on the authority one a player's instance asked for, to the scheduler-owned FSM.
+// Runs inside dispatchOnePass with the world lock held; anything it emits settles
+// on a later pass.
 func (s *Scheduler) HandleEvent(ev event.GameEvent) {
-	if t, ok := ev.Payload.(*event.FSMTransitionPayload); ok {
+	switch t := ev.Payload.(type) {
+	case *event.FSMTransitionPayload:
 		if err := s.fsm.Apply(s.world, t); err != nil {
 			s.world.Log().Warn("fsm", "msg", "committed transition refused",
 				"region", t.Region, "owner", t.Owner, "index", t.Index, "error", err.Error())
 		}
+		return
+	case *event.FSMTransitionRequestPayload:
+		s.grantTransition(t)
 		return
 	}
 	p, ok := ev.Payload.(*event.FSMRegionPayload)
@@ -297,7 +302,29 @@ func (s *Scheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 // with everyone else at the committed tick, and a guest follows; alone, the
 // machine takes its transitions in place.
 func (s *Scheduler) steerFSM() {
-	s.fsm.Steer(s.world.FollowsTransitions(), s.world.ProposesTransitions())
+	s.fsm.Steer(s.world.FollowsTransitions(), s.world.ProposesTransitions(), s.world.AsksTransitions())
+}
+
+// askTransition crosses a guest's ask for a transition a local event of its own
+// triggered, as its player's input crosses: the event stays here, and the
+// authority alone decides whether the machine moves (grantTransition).
+func (s *Scheduler) askTransition(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar) {
+	s.world.PushEventFull(event.EventFSMTransitionRequest, &event.FSMTransitionRequestPayload{
+		Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars,
+	}, event.OriginSystem, core.DomainPlayer)
+}
+
+// grantTransition is the authority's answer to an ask: it takes the transition as
+// its own crossing where Machine.Grant allows, and every other instance, a
+// reproduction of the authority among them, reads the ask and does nothing.
+func (s *Scheduler) grantTransition(p *event.FSMTransitionRequestPayload) {
+	if !s.world.ProposesTransitions() {
+		return
+	}
+	if err := s.fsm.Grant(s.world, p); err != nil {
+		s.world.Log().Debug("fsm", "msg", "asked transition refused",
+			"region", p.Region, "owner", p.Owner, "index", p.Index, "error", err.Error())
+	}
 }
 
 // proposeTransition crosses one transition of the authority's FSM, in the player
@@ -474,6 +501,7 @@ func (s *Scheduler) initLoadedScenario() error {
 	// Before Init: the initial region entries must reach the observer
 	s.bindFSMTelemetry()
 	s.fsm.Propose = s.proposeTransition
+	s.fsm.Ask, s.fsm.AskUpdates = s.askTransition, 2*parameter.NetworkApplyHorizonTicks
 	s.publishInputHorizon()
 
 	if err := s.fsm.Init(s.world); err != nil {
@@ -1333,7 +1361,7 @@ func (s *Scheduler) executeReset() {
 	//    artifact every instance applies at one tick, so what its settle makes the
 	//    machine take is agreed already: in place, with no crossing to wait for.
 	s.publishInputHorizon()
-	s.fsm.Steer(false, false)
+	s.fsm.Steer(false, false, false)
 	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}

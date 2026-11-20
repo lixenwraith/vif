@@ -26,14 +26,17 @@ type RegionState struct {
 
 	triggers triggerMask // union over ActivePath; rebuilt on every commit
 	// exiting marks a running exit phase; terminated, a TerminateRegion it issued;
-	// proposed, a transition handed to Propose and not yet applied; ticking, an
-	// internal Tick one, which holds the region's Tick transitions and no event
-	exiting, terminated, proposed, ticking bool
-	// target is the proposed transition's state, and parked the events that reached
-	// the region while proposed and that state's path reacts to, each with a copy
-	// of its payload, replayed there once the transition lands
+	// proposed, a transition handed to Propose and not yet applied; asked, one handed
+	// to Ask and not yet landed; ticking, an internal Tick one, which holds the
+	// region's Tick transitions and no event
+	exiting, terminated, proposed, asked, ticking bool
+	// target is the proposed or asked transition's state, and parked the events that
+	// reached the region meanwhile and that state's path reacts to, each with a copy
+	// of its payload, replayed there once a transition lands; waited counts the
+	// updates an ask has stood
 	target StateID
 	parked []event.GameEvent
+	waited int
 }
 
 // Machine is the generic Hierarchical Finite State Machine runtime with parallel region support
@@ -102,10 +105,18 @@ type Machine[T any] struct {
 	// it at the tick every instance agreed on.
 	Propose func(region string, owner StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop)
 
+	// Ask takes a transition a local event triggered on a machine that follows and
+	// asks: its guard passed here, where the event is, and the authority is asked to
+	// take it (Grant). AskUpdates is how many updates a region waits on one before
+	// it judges events again, zero for as long as it takes.
+	Ask        func(region string, owner StateID, index int, trigger event.EventType, vars []event.FSMVar)
+	AskUpdates int
+
 	// following keeps the machine from evaluating any transition: it moves by
 	// Apply alone, on what the authority committed (D-20); proposing hands each
-	// transition it evaluates to Propose.
-	following, proposing bool
+	// transition it evaluates to Propose; asking, beside following, judges the
+	// transitions a local event triggers and hands each to Ask.
+	following, proposing, asking bool
 }
 
 // Node represents a state in the hierarchy

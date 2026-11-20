@@ -663,6 +663,14 @@ func (w *World) ProposesTransitions() bool {
 	return s.Live && s.Coordinator() && !w.Reproduces()
 }
 
+// AsksTransitions reports a live guest that plays: its machine follows, and for a
+// transition an event only this instance holds triggers, asks the authority (D-20).
+// A viewer plays nothing, and a run taking its place back crosses nothing yet.
+func (w *World) AsksTransitions() bool {
+	s := w.Session()
+	return s.Live && !s.Coordinator() && !s.Superseding && !w.Reproduces() && !w.Watches()
+}
+
 // LiveSession reports whether this world is currently sharing ticks with peers.
 // A local multi-cursor setup has no transport and remains operator-controlled.
 func (w *World) LiveSession() bool {

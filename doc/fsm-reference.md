@@ -171,12 +171,13 @@ A region is shared state: in a live session the authority's machine takes its
 transitions and every instance applies each at one tick, a playout lead after the
 authority took it; the unguarded `Tick` hops after a transition's target ride the
 same crossing, so a chain of them costs one lead. A `[local]` event (its
-class in `internal/event/type.go`) cannot steer a region, since only the
-authority's player could move it (D-20), so a scenario one triggers a transition
-on plays alone: validation (`-check`, a start, `:n`) refuses it a `max_players`
-above 1, naming the transition (`resource.CheckLocalTriggers`). A guest of a
-server holding such a scenario never moves it by a local event; `:leave` plays on
-alone, where it does.
+class in `internal/event/type.go`) reaches no other instance, so a scenario one
+triggers a transition on seats one player: validation (`-check`, a start, `:n`)
+refuses it a `max_players` above 1, naming the transition
+(`resource.CheckLocalTriggers`). That player's instance judges the transition's
+guard, which reads that instance's state, and where it is a guest asks the
+authority to take it (D-20): the transition then lands a lead after the ask
+applies, as one the authority judged does.
 
 ### Variable Capture from Payloads
 
