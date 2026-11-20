@@ -249,7 +249,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 |---|---|
 | `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never. `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
 | `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs`, the `while` that has it steer and, if any, weights written by hand. |
-| `[regions.<name>]` | `initial` only. |
+| `[regions.<name>]` | `initial` only. Regions update in name order, so what one queues in a step goes ahead of a later one's. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
 
@@ -389,7 +389,7 @@ right, backs off a threat on it and collects nuggets between patrols:
 | `Flee` | points away from the nearest threat | to `Seek` once none is within 5 |
 | `Leap` | clicks a random shown cell | to `Walk` after 0.4 s |
 | `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
-| `Fire`, a region of its own | has `walk` ask for the special attack, whatever the states above do | never |
+| `Fire`, in the region `special` | has `walk` ask for the special attack, whatever the states above do and after them in a step: asked ahead of a key, its blast takes the key's glyph | never |
 
 `walk` is `default`'s one network. It reads seventeen inputs: where the two
 nearest species and the Kraken are, an offset and a nearness each, the Kraken's
@@ -407,21 +407,26 @@ and learned from nothing on three seeds:
 
 ```
 scenario   no text   unlearned   learned                      learning          rounds held out
-embedded     18%       617,557   698,626  702,767  675,464    4,800,000 ticks   24 of half an hour
-armada       92%            90     6,226   11,212   25,234    2,400,000         100
-cave         90%           210       248      361      307      600,000         100
-td          0.1%         9,739   not read                                        12
+embedded     18%       620,489   683,519  708,624  694,133    4,800,000 ticks   24 of half an hour
+armada       92%            85     7,437    5,729    9,091    2,400,000         100
+cave         90%           220    15,049    8,341      668      600,000         100
+td          0.1%        17,088   not read                                        12
 ```
 
 - The ticks are four games', one in `cave`: two minutes on four cores in the
-  embedded scenario, 132 rounds, and 25 seconds in `armada`, some 650. A
+  embedded scenario, 132 rounds, and 25 seconds in `armada`, some 780. A
   round of `td` runs from 83 to 48,360, so twelve say little: their median is
-  5,746.
+  8,504. In `cave` a few long rounds carry a mean: the three medians are 832,
+  910 and 610.
 - The special attack is `walk`'s to ask for, an action of its rate each time,
-  and the one weight written asks always. Fired by auto-fire it cost no action
-  and `default` unlearned fielded 624,495, 193, 216 and 12,952, the median of
-  `td`'s twelve 9,341; never fired, the embedded scenario pays 402,940. The
-  notes below were read with auto-fire's.
+  and the one weight written asks always: of sixteen actions a second, four.
+  The keys go first. Asked ahead of a key in one step, its blast took the
+  key's glyph, 47 errors in 1,200 ticks at sixteen a second, and at twelve
+  with the keys first too few asks were left: `main` fielded 675,352.
+- Fired by auto-fire the special attack cost no action and `default`
+  unlearned fielded 624,495, 193, 216 and 12,952, the median of `td`'s twelve
+  9,341; never fired, the embedded scenario pays 402,940. The notes below
+  were read with auto-fire's.
 - Backing off a threat is `default`'s own, a state and no weight. Without it a
   round of `td` scores 3,923, its median 3,936, and lasts 6,537 ticks, where
   with it the median is 6,494 over 12,387; the other three play as they did,
@@ -439,7 +444,7 @@ td          0.1%         9,739   not read                                       
   walk written to hold a corner of the view loses 6 to 12 in 100 and one that
   holds its middle 17.
 - In `armada`, with no text at all, the walk is the play: a learned round lasts
-  12,700 to 21,000 ticks for 364. The table's row is the scrolling `armada`'s,
+  10,000 to 18,000 ticks for 363. The table's row is the scrolling `armada`'s,
   whose stars no bot sees; every other figure of it here is the fixed shooter's
   it was before.
 - What is learned is its scenario's. The embedded scenario's walk written into
@@ -449,11 +454,12 @@ td          0.1%         9,739   not read                                       
   with it as they did without, which fielded 674,730 to 704,339 and 2,165 to
   11,957, and in `td`, where it is the network's one say, 142 rounds fielded
   3,767 beside 3,923 unlearned, before the reflex.
-- In `cave` a special asked for always spends the heat a ship lives on, and
-  600,000 ticks unlearn that in one seed of three. A copy whose `walk` began
-  asking for none fielded 35,341, 1,734 and 3,001 after the same ticks,
-  their medians 2,446, 910 and 1,067.
-- Fewer inputs learn faster. The 161 that read anything in the embedded
+- In `cave` a special asked for always spends the heat a ship lives on, which
+  600,000 ticks begin to unlearn. A copy whose `walk` began asking for none
+  fielded 35,341, 1,734 and 3,001 after the same ticks, their medians 2,446,
+  910 and 1,067.
+- Fewer inputs learn faster, read at twelve actions a second with the special
+  attack asked ahead of the keys. The 161 that read anything in the embedded
   scenario, `cave` and `td` fielded 646,614, 698,932 and 659,256 there,
   11,335, 4,566 and 10,707 in `armada` and 911, 252 and 237 in `cave`: their
   candidates' recent mean was 624,000 and 3,020 where the seventeen's is
@@ -469,12 +475,12 @@ td          0.1%         9,739   not read                                       
 The embedded scenario's own bot,
 [`main`](../internal/asset/scenario/bot/main.toml), is `default`'s graph with
 a walk learned there from nothing in six minutes, 396 rounds: 29 weights. Over
-100 fresh rounds of half an hour, seeds 201 to 204, it fields 711,496 and a
-median of 715,484 where `default` unlearned fields 616,485 and 615,512: it
-meets fourteen Krakens in 95 rounds and shoots all down in 88, where the
-unlearned walk meets twelve in 75, and in four rounds it met a fifteenth. It
-walks 13 to 14 ticks in 100 where the unlearned walks 16 to 18, the share
-with no text: it takes no wheel from text, and is back on text sooner. A solo
+100 fresh rounds of half an hour, seeds 201 to 204, it fields 718,430 and a
+median of 721,430 where `default` unlearned fields 622,467 and 620,447: it
+meets fourteen Krakens in 92 rounds and shoots all down in 88, where the
+unlearned walk meets twelve in 84, and in six rounds it met a fifteenth. It
+walks 12 ticks in 100 where the unlearned walks 18, the share with no text:
+it takes no wheel from text, and is back on text sooner. A solo
 run learns on from it in a population of its own, `main.main.walk.json`. What
 `default` learned there stays `default`'s, which `-bot default` plays; its
 file under `main`'s name is `main`'s, the layout being one.

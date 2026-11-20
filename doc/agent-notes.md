@@ -1178,6 +1178,12 @@ Libraries · Branches.
   six seconds of a core, pays by its Krakens in steps of 50,000 and spreads
   19,000 to 20,000, unlearned or learned, so 100 rounds a side tell 90,000
   apart at over thirty standard errors.
+- A bot that falls where it typed well has `typing.errors` to read, beside its
+  heat and energy every few hundred ticks and what it sent each tick before
+  an error. `default` fell faster the more actions it had because its graph's
+  region `fire` updated ahead of `play`, regions going in name order, so a
+  special attack went out before the key of its step and blew up the key's
+  glyph. The remedy was the graph's, a region's name: the game was right.
 - A proved member's mean over a few rounds says nothing of it held out. Twelve
   of `cave`'s whose means over 8 to 37 rounds stood 2 to 26 in 100 above their
   titles read level or lower beside the shipped other network, one 85,159
