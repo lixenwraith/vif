@@ -142,6 +142,8 @@ const (
 	EventFSMRegionRequest
 	// EventFSMTransition (FSMTransitionPayload) [bus] is one transition the authority's FSM took, applied at one tick everywhere
 	EventFSMTransition
+	// EventFSMTransitionRequest (FSMTransitionRequestPayload) [bus] asks the authority to take a transition a local event triggered on its player's instance
+	EventFSMTransitionRequest
 
 	// --- Nugget ---
 

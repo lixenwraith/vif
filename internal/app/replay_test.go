@@ -794,7 +794,7 @@ func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
 // holds and the surface want holds on each tick no between-tick group or written
 // world landed on: a step stands past those, which the live run read before. A
 // record in a tick's body, as a crossing is, leaves its tick comparable.
-func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string) {
+func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string, edit ...func(*Config)) {
 	t.Helper()
 	busy := map[event.Stamp]bool{}
 	for _, r := range rec.Records() {
@@ -808,6 +808,9 @@ func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]st
 	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
 	if err != nil {
 		t.Fatalf("config from anchor: %v", err)
+	}
+	for _, e := range edit {
+		e(&cfg)
 	}
 	rep, err := NewHeadless(cfg)
 	if err != nil {

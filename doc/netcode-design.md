@@ -970,6 +970,17 @@ The approaches are in three batches, and §5 orders them.
   takes one hop an update, as before. `TestTheTowersSetupChainCrossesOnce` reads
   both instances reaching `TowerActive` at one tick with no attach state standing
   at a tick boundary.
+- In, later (protocol 48, journal schema 90): a transition a local event triggers
+  is asked for, never judged twice and never by sending the event. The one
+  player's instance judges its guard and, as a guest, crosses the ask
+  (`EventFSMTransitionRequest`: the region, the owning state, its index, its
+  trigger and the variables it captured); the authority grants it as a transition
+  crossing of its own or refuses it (D-20, `Machine.Grant`), and the asking region
+  parks what the state asked for reacts to until a transition lands. On a mesh at
+  a lead of 3 an asked transition lands 6 ticks after its event, as a captured
+  key's does. A waiting region's trigger mask now holds its target's triggers
+  too (`Machine.refreshRegionMask`): an event only that state reacts to was
+  rejected before it could be parked, for a proposal as for an ask.
 - Left: nothing.
 - Needs: nothing further; the site's storm-spawn keyframes (§3.4) are the reading
   that judges it.

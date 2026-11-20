@@ -43,6 +43,7 @@ var allowedMapRanges = map[string]string{
 	"NavigationSystem.SaveShared:groups":        "collects group IDs, sorted before export",
 	"Machine.Export:variables":                  "collects variable names, sorted before export",
 	"Machine.LocalTriggers:nodes":               "collects transitions, sorted before return",
+	"Machine.Grant:CaptureVars":                 "tests whether a variable is one captured, whatever the order",
 	"World.clearSharedEntities:componentMask":   "collects shared entities, sorted before removal",
 	"World.ReconcileSharedWorld:componentMask":  "collects shared entities the correction drops, sorted before removal",
 	"WorldReconcile.Finish:componentMask":       "collects shared entities the staging world no longer holds, sorted before removal",

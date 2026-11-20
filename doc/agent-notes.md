@@ -421,6 +421,16 @@ Docs · Libraries · Branches.
   1 is a join through the host, and one whose ends are both in already is a link
   beside (`meshOf`): a second link to the host is `{3, 1}`, after the pair that
   brings 3 in.
+- A solo run takes a transition a local event triggers in place, so only a session
+  shows its ask (D-20): `tutorialSession` is a cursorless host and its guest on a
+  mesh, the guest's keys typed with `tutorialPress` and both ticked a lead or two.
+- A journal's digests stand too far apart to catch a transition taken a lead
+  early: a replay made to grant a recorded ask in place reproduced every one.
+  Compare the surface tick for tick (`replayMatches`, whose `edit` names the root
+  of a scenario that is not embedded).
+- A Bus request applies on every instance, its sender's included, so what only
+  the authority does with one is gated where the handler runs
+  (`Scheduler.grantTransition`), never by who receives it.
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks
   past that reads the reset. Wait for the condition, bounded.

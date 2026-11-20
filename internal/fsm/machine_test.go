@@ -177,7 +177,7 @@ func TestAProposedTransitionWaitsForItsApply(t *testing.T) {
 	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
 		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
 	}
-	m.Steer(false, true)
+	m.Steer(false, true, false)
 	if err := m.Init(trace); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestAnInternalTickTransitionHoldsTheRegionsTicksUntilItLands(t *testing.T) 
 	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
 		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
 	}
-	m.Steer(false, true)
+	m.Steer(false, true, false)
 	if err := m.Init(trace); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestAFollowingMachineMovesByApplyAlone(t *testing.T) {
 	if err := m.Init(trace); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	m.Steer(true, false)
+	m.Steer(true, false, false)
 	made := event.GameEvent{Type: event.EventSpeciesCreated, Payload: &event.SpeciesCreatedPayload{Species: 4}}
 	m.Update(trace, 20*time.Millisecond)
 	if m.HandleEvent(trace, made) || m.GetRegionState("r") != "A" {
@@ -303,7 +303,7 @@ func TestAFollowingMachineMovesByApplyAlone(t *testing.T) {
 	if err := m.Apply(trace, &event.FSMTransitionPayload{Region: "r", Owner: int(a), Index: 2}); err != nil || m.GetRegionState("r") != "C" {
 		t.Fatalf("apply: err %v, state %q, want C", err, m.GetRegionState("r"))
 	}
-	m.Steer(false, false)
+	m.Steer(false, false, false)
 	m.Update(trace, 20*time.Millisecond)
 	if m.GetRegionState("r") != "C" {
 		t.Fatalf("state %q after following ended, want C: C has no transition", m.GetRegionState("r"))
@@ -341,7 +341,7 @@ func TestAProposedTransitionFoldsTheUnguardedHopsAfterIt(t *testing.T) {
 	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
 		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
 	}
-	m.Steer(false, true)
+	m.Steer(false, true, false)
 	if err := m.Init(trace); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestAProposedTransitionFoldsTheUnguardedHopsAfterIt(t *testing.T) {
 	if err := follower.Init(trace2); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	follower.Steer(true, false)
+	follower.Steer(true, false, false)
 	if err := follower.Apply(trace2, p); err != nil || follower.GetRegionState("r") != "D" || !slices.Equal(*trace2, *trace) {
 		t.Fatalf("a follower applying the chain: err %v, state %q, ran %v; want D by the same path", err, follower.GetRegionState("r"), *trace2)
 	}
@@ -385,8 +385,154 @@ func TestAProposedTransitionFoldsTheUnguardedHopsAfterIt(t *testing.T) {
 	bad := &event.FSMTransitionPayload{Region: "r", Owner: p.Owner, Index: p.Index, Then: []event.FSMHop{{Owner: int(b), Index: 0}, {Owner: int(d), Index: 0}}}
 	fresh, trace3, _ := loadMachine(t, foldedDoc)
 	_ = fresh.Init(trace3)
-	fresh.Steer(true, false)
+	fresh.Steer(true, false, false)
 	if err := fresh.Apply(trace3, bad); err == nil {
 		t.Fatal("a hop naming a guarded transition was applied")
+	}
+}
+
+const askedDoc = `
+[regions.r]
+initial = "A"
+[states.A]
+transitions = [
+    { trigger = "EventCharacterTyped", target = "B", guard = "PayloadIntCompare", guard_args = { field = "char", op = "eq", value = 120 }, capture_vars = { x = "col" } },
+    { trigger = "EventEnergyGlyphConsumed", internal = true, actions = [{ action = "IncrementVar", payload = { name = "eaten" } }] },
+    { trigger = "EventSpeciesCreated", target = "C" },
+]
+[states.B]
+on_enter = [{ action = "EmitEvent", event = "EventStrobeRequest" }]
+transitions = [
+    { trigger = "EventModeChanged", target = "C" },
+    { trigger = "EventSpeciesKilled", target = "C" },
+]
+[states.C]
+`
+
+// TestAFollowerAsksForWhatALocalEventTriggers: a guest's machine judges the guard of
+// a transition a local event triggers, where the event is, and asks for it with what
+// it captured, moving only by Apply; a shared event's is the authority's to judge.
+// It waits as a proposing one does, and gives an unanswered ask up.
+func TestAFollowerAsksForWhatALocalEventTriggers(t *testing.T) {
+	m, trace, err := loadMachine(t, askedDoc)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	var asked []*event.FSMTransitionRequestPayload
+	m.Ask = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar) {
+		asked = append(asked, &event.FSMTransitionRequestPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars})
+	}
+	m.AskUpdates = 3
+	if err := m.Init(trace); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	m.Steer(true, false, true)
+	typed := func(char rune) event.GameEvent {
+		return event.GameEvent{Type: event.EventCharacterTyped, Payload: &event.CharacterTypedPayload{Char: char, X: 7}}
+	}
+	mode := event.GameEvent{Type: event.EventModeChanged, Payload: &event.ModeChangedPayload{}}
+	a, _ := m.GetStateID("A")
+	b, _ := m.GetStateID("B")
+
+	if m.HandleEvent(trace, event.GameEvent{Type: event.EventSpeciesCreated, Payload: &event.SpeciesCreatedPayload{}}) ||
+		m.HandleEvent(trace, typed('y')) || len(asked) != 0 {
+		t.Fatalf("a shared event and a local one its guard refuses asked %d transition(s), want none", len(asked))
+	}
+	if !m.HandleEvent(trace, event.GameEvent{Type: event.EventEnergyGlyphConsumed, Payload: &event.EnergyGlyphConsumedPayload{}}) ||
+		!m.HandleEvent(trace, typed('x')) || len(asked) != 2 || m.GetRegionState("r") != "A" || m.GetVar("eaten") != 0 {
+		t.Fatalf("after an internal and a passing local event: %d asks, state %q, eaten %d; want both asked and nothing taken",
+			len(asked), m.GetRegionState("r"), m.GetVar("eaten"))
+	}
+	if p := asked[1]; p.Owner != int(a) || p.Index != 0 || p.Trigger != event.EventCharacterTyped || len(p.Vars) != 1 || p.Vars[0] != (event.FSMVar{Name: "col", Value: 7}) {
+		t.Fatalf("the ask is %+v, want A's first transition on EventCharacterTyped capturing col=7", *p)
+	}
+	if !m.HandleEvent(trace, mode) || m.HandleEvent(trace, typed('x')) || len(asked) != 2 {
+		t.Fatalf("while asked: %d asks; want the mode change B reacts to parked and a second typed glyph dropped", len(asked))
+	}
+	landed := asked[1]
+	if err := m.Apply(trace, &event.FSMTransitionPayload{Region: "r", Owner: landed.Owner, Index: landed.Index, Trigger: landed.Trigger, Vars: landed.Vars}); err != nil ||
+		m.GetRegionState("r") != "B" || m.GetVar("col") != 7 || len(*trace) != 1 {
+		t.Fatalf("apply: err %v, state %q, col %d, events %v; want B entered with col=7", err, m.GetRegionState("r"), m.GetVar("col"), *trace)
+	}
+	if len(asked) != 3 || asked[2].Owner != int(b) || asked[2].Index != 0 {
+		t.Fatalf("%d asks after B was entered; want the parked mode change judged there and asked", len(asked))
+	}
+	for range m.AskUpdates {
+		if m.HandleEvent(trace, mode); len(asked) != 3 {
+			t.Fatalf("%d asks while the second waits, want it alone", len(asked))
+		}
+		m.Update(trace, time.Millisecond)
+	}
+	if !m.HandleEvent(trace, mode) || len(asked) != 4 || m.GetRegionState("r") != "B" {
+		t.Fatalf("after %d updates unanswered: %d asks, state %q; want the region judging again in B", m.AskUpdates, len(asked), m.GetRegionState("r"))
+	}
+}
+
+// TestAnAuthorityGrantsOnlyALocalEventsTransitionWhereItsRegionStands: an ask is
+// taken as the machine's own proposal when it names a transition a local event
+// triggers, of a state its running region stands in with none in flight, and only
+// variables that transition captures; any other is refused and changes nothing.
+func TestAnAuthorityGrantsOnlyALocalEventsTransitionWhereItsRegionStands(t *testing.T) {
+	m, trace, err := loadMachine(t, askedDoc)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	var proposed []*event.FSMTransitionPayload
+	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
+		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
+	}
+	m.Steer(false, true, false)
+	if err := m.Init(trace); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	a, _ := m.GetStateID("A")
+	b, _ := m.GetStateID("B")
+	ask := func(owner fsm.StateID, index int, trigger event.EventType, vars ...event.FSMVar) *event.FSMTransitionRequestPayload {
+		return &event.FSMTransitionRequestPayload{Region: "r", Owner: int(owner), Index: index, Trigger: trigger, Vars: vars}
+	}
+	typed := ask(a, 0, event.EventCharacterTyped, event.FSMVar{Name: "col", Value: 7})
+	if err := m.Grant(trace, typed); err != nil || len(proposed) != 1 || m.GetRegionState("r") != "A" {
+		t.Fatalf("grant: err %v, %d proposals, state %q; want A's transition proposed and A standing until it applies", err, len(proposed), m.GetRegionState("r"))
+	}
+	if p := proposed[0]; p.Owner != int(a) || p.Index != 0 || len(p.Vars) != 1 || p.Vars[0].Value != 7 {
+		t.Fatalf("the proposal is %+v, want the transition asked for with col=7", *p)
+	}
+	if err := m.Grant(trace, typed); err == nil {
+		t.Fatal("an ask was granted with a transition of its region in flight")
+	}
+	if err := m.Apply(trace, proposed[0]); err != nil || m.GetRegionState("r") != "B" {
+		t.Fatalf("apply: err %v, state %q, want B", err, m.GetRegionState("r"))
+	}
+
+	unknown := ask(b, 0, event.EventModeChanged)
+	unknown.Region = "none"
+	for name, p := range map[string]*event.FSMTransitionRequestPayload{
+		"a state the region left":        typed,
+		"an index past the state's":      ask(b, 2, event.EventModeChanged),
+		"a negative index":               ask(b, -1, event.EventModeChanged),
+		"a state the graph lacks":        ask(-4, 0, event.EventModeChanged),
+		"a region that is not running":   unknown,
+		"a shared event's transition":    ask(b, 1, event.EventSpeciesKilled),
+		"another trigger than its own":   ask(b, 0, event.EventCharacterTyped),
+		"a variable it does not capture": ask(b, 0, event.EventModeChanged, event.FSMVar{Name: "eaten", Value: 9}),
+	} {
+		if err := m.Grant(trace, p); err == nil || len(proposed) != 1 || m.GetRegionState("r") != "B" || m.GetVar("eaten") != 0 {
+			t.Errorf("%s: err %v, %d proposals, state %q, eaten %d; want it refused with nothing changed",
+				name, err, len(proposed), m.GetRegionState("r"), m.GetVar("eaten"))
+		}
+	}
+	m.PauseRegion("r")
+	if err := m.Grant(trace, ask(b, 0, event.EventModeChanged)); err == nil {
+		t.Error("an ask was granted in a paused region")
+	}
+	m.ResumeRegion("r")
+	if err := m.Grant(trace, ask(b, 0, event.EventModeChanged)); err != nil || len(proposed) != 2 {
+		t.Fatalf("B's local transition: err %v, %d proposals; want it granted", err, len(proposed))
+	}
+	for _, following := range []bool{true, false} {
+		m.Steer(following, false, false)
+		if err := m.Grant(trace, ask(b, 0, event.EventModeChanged)); err == nil {
+			t.Fatalf("a machine that proposes nothing (following %t) granted an ask", following)
+		}
 	}
 }

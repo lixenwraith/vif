@@ -48,6 +48,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGameSpeed:                       func() any { return new(GameSpeedPayload) },
 	EventFSMRegionRequest:                func() any { return new(FSMRegionPayload) },
 	EventFSMTransition:                   func() any { return new(FSMTransitionPayload) },
+	EventFSMTransitionRequest:            func() any { return new(FSMTransitionRequestPayload) },
 	EventNuggetCollected:                 func() any { return new(NuggetCollectedPayload) },
 	EventNuggetDestroyed:                 func() any { return new(NuggetDestroyedPayload) },
 	EventNuggetJumpRequest:               func() any { return new(NuggetJumpRequestPayload) },
@@ -230,6 +231,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGameSpeed:                       &codecGameSpeedPayload,
 	EventFSMRegionRequest:                &codecFSMRegionPayload,
 	EventFSMTransition:                   &codecFSMTransitionPayload,
+	EventFSMTransitionRequest:            &codecFSMTransitionRequestPayload,
 	EventNuggetCollected:                 &codecNuggetCollectedPayload,
 	EventNuggetDestroyed:                 &codecNuggetDestroyedPayload,
 	EventNuggetJumpRequest:               &codecNuggetJumpRequestPayload,
@@ -696,6 +698,18 @@ var codecFSMTransitionPayload = structCodec{size: unsafe.Sizeof(FSMTransitionPay
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Index), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Trigger), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Then), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecFSMHop}, stride: unsafe.Sizeof(FSMHop{}), make: func(p unsafe.Pointer, n int) { *(*[]FSMHop)(p) = make([]FSMHop, n) }},
+}}
+
+func (p *FSMTransitionRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFSMTransitionRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFSMTransitionRequestPayload = structCodec{size: unsafe.Sizeof(FSMTransitionRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FSMTransitionRequestPayload{}.Vars), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecFSMVar}, stride: unsafe.Sizeof(FSMVar{}), make: func(p unsafe.Pointer, n int) { *(*[]FSMVar)(p) = make([]FSMVar, n) }},
+	{off: unsafe.Offsetof(FSMTransitionRequestPayload{}.Region), kind: kindString},
+	{off: unsafe.Offsetof(FSMTransitionRequestPayload{}.Owner), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FSMTransitionRequestPayload{}.Index), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FSMTransitionRequestPayload{}.Trigger), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
 }}
 
 func (p *NuggetCollectedPayload) codec() (*structCodec, unsafe.Pointer) {
