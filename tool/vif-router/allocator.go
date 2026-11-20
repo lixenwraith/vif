@@ -380,8 +380,8 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 	default:
 		workload.Players = req.Players
 	}
-	// Bots are roster guests and a session is ready only while a seat is free, so
-	// they leave at least one for the person who asked.
+	// Bots are roster guests, and a new session, which nobody is away from yet, is
+	// ready only while a seat is free, so they leave one for the person who asked.
 	if most := min(a.cfg.BotsMax, workload.Players-1); req.Bots < 0 || req.Bots > most {
 		return workloadConfig{}, a.botsRefused(most, workload, limits.MaxPlayers[workload.Scenario])
 	}

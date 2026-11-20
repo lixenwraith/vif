@@ -820,7 +820,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 		return network.SessionOffer{}, errNotReturning
 	}
 	if len(m.sessionRoster) >= limit {
-		if m.yieldLocked() {
+		if m.mayYieldLocked() && m.yieldLocked() {
 			return network.SessionOffer{}, &network.Refusal{Code: network.RefusalYielding,
 				Reason: "session is full, and a player who left is giving up a place"}
 		}
@@ -1023,14 +1023,25 @@ func (m *Membership) refusedLocked(seats seating) error {
 	return nil
 }
 
-// fullLocked is the refusal of a dial a full session has no place for. Caller holds
-// sessionMu.
+// fullLocked is the refusal of a dial a full session has no place for, for good where
+// its one seat is the host's. Caller holds sessionMu.
 func (m *Membership) fullLocked() error {
+	if m.SessionCapacity() == 0 {
+		return &network.Refusal{Code: network.RefusalNoSeat, Reason: m.oneSeat() + ", so others can only spectate"}
+	}
 	reason := fmt.Sprintf("session is full at %d participant(s)", m.playerCapacity())
 	if m.scenario.MaxPlayers <= 1 {
-		reason = fmt.Sprintf("scenario %s seats one player", m.scenario.Shown())
+		reason = m.oneSeat()
 	}
 	return &network.Refusal{Code: network.RefusalFull, Reason: reason}
+}
+
+// oneSeat names what seats a single player: the scenario, or this session's -players
+func (m *Membership) oneSeat() string {
+	if m.scenario.MaxPlayers <= 1 {
+		return "scenario " + m.scenario.Shown() + " seats one player"
+	}
+	return "this session seats one player"
 }
 
 // holdsPlaceLocked reports whether one of the keys a dial proved holds a place in
@@ -1232,18 +1243,26 @@ func (m *Membership) yieldLocked() bool {
 	return true
 }
 
-// MayYield reports whether a full session's door still seats a dial, on the place of
-// a participant away and not coming back, as a reloaded page dials back to it: what
-// the readiness probe reads beside the room left (previewSeat).
+// MayYield reports whether a full session's door still seats a dial on the place of
+// a participant away and not coming back: its own player's, as a reloaded page dials
+// back to it, and past a session's one place a newcomer's, which that place is given
+// up to. What the readiness probe reads beside the room left (previewSeat).
 func (m *Membership) MayYield() bool {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	return m.mayYieldLocked()
+	return m.awayPlaceLocked()
 }
 
 // mayYieldLocked reports whether yieldLocked would find a place on its way, asking
-// nothing. Caller holds sessionMu.
+// nothing: never a session's one place, which waits for its own player's key, so
+// no stranger or bot takes a solo game from a player reloading. Caller holds sessionMu.
 func (m *Membership) mayYieldLocked() bool {
+	return m.playerCapacity() > 1 && m.awayPlaceLocked()
+}
+
+// awayPlaceLocked reports whether a participant away and not coming back holds a
+// place, or one is on its way. Caller holds sessionMu.
+func (m *Membership) awayPlaceLocked() bool {
 	_, ok := m.awayLocked(m.yielding)
 	return ok || m.yieldableLocked() != 0
 }

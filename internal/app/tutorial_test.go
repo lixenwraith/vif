@@ -634,9 +634,9 @@ func tutorialServer(t *testing.T) (*App, string) {
 	return a, addr
 }
 
-// A bot's own run that dials a server of the tutorial is refused at the door, as a
-// seat is where it is added, and leaves the place to the person who dials next; a
-// dial past that person is told the scenario seats one player.
+// A bot's own run that dials a server of the tutorial is refused at the door for
+// good, as a seat is where it is added, and leaves the place to the person who dials
+// next; a dial past that person is told the scenario seats one player.
 func TestTutorialsDoorTakesNoBotsOwnRun(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	a, addr := tutorialServer(t)
@@ -644,8 +644,9 @@ func TestTutorialsDoorTakesNoBotsOwnRun(t *testing.T) {
 	if err := dial.Complete(nil, network.JoinerReport{Identity: offered.Identity, Bot: true}); err != nil {
 		t.Fatalf("a bot's own run's reply: %v", err)
 	}
-	if _, err := dial.WaitStart(); err == nil || !strings.Contains(err.Error(), "seats one player, so no bot joins it") {
-		t.Fatalf("a bot's own run joining the tutorial's server reached its start gate with %v", err)
+	if _, err := dial.WaitStart(); !errors.Is(err, &network.Refusal{Code: network.RefusalNoSeat}) ||
+		network.RetryOf(err) != network.RetryNever || !strings.Contains(err.Error(), "seats one player, so no bot joins it") {
+		t.Fatalf("a bot's own run joining the tutorial's server reached its start gate with %v; want no seat, for good", err)
 	}
 	waitUntil(t, func() bool { return a.membership.GuestCount() == 0 }, "the refused bot's place released")
 	seatedDial(t, addr)

@@ -326,12 +326,12 @@ func (c Control) RequestSession(site string, players, bots int, scenario string)
 }
 
 // hostingNotice is what opening the doors at bound says: where, and that only
-// spectators come in where the scenario's one seat is the host's own
+// spectators come in where the one seat is the host's own
 func (m *Membership) hostingNotice(bound string) string {
 	if m.SessionCapacity() > 0 {
 		return "Hosting on " + bound
 	}
-	return "Hosting on " + bound + "; scenario " + m.scenario.Shown() + " seats one player, so others can only spectate"
+	return "Hosting on " + bound + "; " + m.oneSeat() + ", so others can only spectate"
 }
 
 // BotError is why AddBot refuses whatever it is asked: a join being dialled, a run
