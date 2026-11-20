@@ -621,10 +621,9 @@ var CharacterTypedPayloadPool = sync.Pool{
 
 // KeyCapturePayload names the keys to capture, empty to release them. Entity scopes it
 // to the instance driving that cursor, every instance when zero; Modes to the play
-// modes it holds in, every one when unset. Idle leaves a key to an operator, prefix or
-// label already pending, so a find or a macro still takes it, dropping a lone count,
-// and Releases asks a console keyboard for releases too, switching it raw while the
-// capture holds.
+// modes it holds in, every one when unset. Idle leaves a key to an operator, prefix
+// or label pending, as a find's or a macro's, and drops a lone count; Releases asks
+// a console keyboard for releases too, switching it raw while the capture holds.
 type KeyCapturePayload struct {
 	Keys     string        `toml:"keys"`
 	Entity   core.Entity   `toml:"entity"`
