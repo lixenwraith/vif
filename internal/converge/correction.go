@@ -570,8 +570,8 @@ func (c *Corrections) recordPublicationLocked(
 }
 
 // bulkHeld reports whether id's link holds more undelivered bytes than it drains
-// within SnapshotBulkQueue past its round trip, floored by SnapshotBulkQueueBytes.
-// Bulk queued behind them delays every epoch after it.
+// within SnapshotBulkQueue past its least round trip and a probe interval, floored
+// by SnapshotBulkQueueBytes. Bulk queued behind them delays every epoch after it.
 func bulkHeld(port engine.NetworkPort, id uint32) bool {
 	meter, ok := port.(engine.LinkMeasuringPort)
 	if !ok {
