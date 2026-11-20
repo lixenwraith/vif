@@ -536,7 +536,7 @@ func fixedMapScenario(t *testing.T) string {
 // the channel returned.
 func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 	t.Helper()
-	cfg.Mode, cfg.Seed, cfg.Membership.Bots = ModeServer, 0x6E05, []string{"roam"}
+	cfg.Mode, cfg.Seed, cfg.Membership.Bots = ModeServer, 0x6E05, []string{"default"}
 	a, _, gate := lobbyHost(t, cfg)
 	return a, gate
 }
@@ -637,7 +637,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	person.handleResize(170, 50)
 	seated := mustHeadless(t, fixtureSeed, 160, 45)
 	t.Cleanup(seated.Close)
-	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, resource.Scenario{}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, resource.Scenario{}, "default")
 	if err != nil {
 		t.Fatal(err)
 	}

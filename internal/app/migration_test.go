@@ -271,7 +271,7 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "default", nil)
 	waitForCursors(t, host, 2)
 	id := guest.membership.LocalParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
@@ -304,8 +304,8 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "default", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "default", nil)
 	waitForCursors(t, host, 3)
 	// The first candidate is whichever guest's port the host confirmed first.
 	var chain network.SuccessionChain
@@ -350,7 +350,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
 	}
-	player, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "patrol", nil)
+	player, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "default", nil)
 	if got := authorityOf(player); got.Authority != id || got.Term != network.FirstTerm+1 {
 		t.Fatalf("a player that joined the successor holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
@@ -372,7 +372,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if line, want := successor.SessionSummary(), "Session hosting "+at+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor after :host reads %q; want it to open %q", line, want)
 	}
-	late, _ := driveBot(t, Config{Membership: Membership{JoinAddress: at}}, "patrol", nil)
+	late, _ := driveBot(t, Config{Membership: Membership{JoinAddress: at}}, "default", nil)
 	if got := authorityOf(late); got.Authority != id || got.Term != network.FirstTerm+1 || late.authority.Fixed() {
 		t.Fatalf("a player that joined at the door :host opened holds %+v, pinned %t; want participant %d's term, %d, migrating",
 			got, late.authority.Fixed(), id, network.FirstTerm+1)
@@ -412,7 +412,7 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "default", nil)
 	waitForCursors(t, successor, 2)
 	id := link.PeerID(successor.membership.LocalParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -454,7 +454,7 @@ func TestAGuestThatRedialsItsLostHostTakesItsTurn(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "default", nil)
 	waitForCursors(t, successor, 2)
 	id := link.PeerID(successor.membership.LocalParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -485,7 +485,7 @@ func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
 	hostMigrating(t, host)
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "default", nil)
 	waitForCursors(t, host, 2)
 
 	cfg := runConfig{Config: Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
@@ -498,7 +498,7 @@ func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.wiring.dialled = d
-	guest, _ := driveRun(t, "bot", cfg, "patrol", nil)
+	guest, _ := driveRun(t, "bot", cfg, "default", nil)
 	port, candidate := portOf(t, guest), first.membership.LocalParticipant()
 	waitUntil(t, func() bool { return port.Connected(candidate) }, "the guest's link to the first candidate")
 }
@@ -621,7 +621,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// was reached through a relay, so nothing is redialled first.
 	other := hosting(fixtureSeed)
 	t.Cleanup(tickInBackground(other))
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}, Play: takingOver()}, "default", nil)
 	joined := func() bool {
 		return guest.authority.Holder() == engine.CoordinatorParticipant && guest.authority.Local() != 0
 	}

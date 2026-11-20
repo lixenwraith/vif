@@ -136,7 +136,7 @@ func TestALatePressDialsAgainIntoTheSameGame(t *testing.T) {
 func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	host := hostingRun(t, 0x3034, 0)
-	guest, screen := waitingJoiner(t, host.HostAddr(), "roam")
+	guest, screen := waitingJoiner(t, host.HostAddr(), "default")
 	// The session's next game, crossing at the playout lead while this run waits.
 	was := host.JoinAnchor().Anchor.Session
 	host.World().RunSafe(func() { mode.ExecuteCommand(host.Context(), "n") })
@@ -144,7 +144,7 @@ func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 
 	screen.events <- press
 	next, err := guest.awaitJoinPress(nil)
-	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"roam"}) {
+	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"default"}) {
 		t.Fatalf("a press into a replaced game was answered %+v, %v; want a rejoin, pressed, with its bot", next, err)
 	}
 	if guest.membership.HoldsPlace() {
@@ -178,7 +178,7 @@ func TestANewGameLandingInAGateJoinsTheNewOne(t *testing.T) {
 		t.Fatalf("the first joiner's reply: %v", err)
 	}
 	waitUntil(t, func() bool { return portOf(t, host).Connected(uint32(offered.Assigned)) }, "the first joiner in its gate")
-	guest, err := newSessionApp(joinerConfig(host.HostAddr(), false, "roam"))
+	guest, err := newSessionApp(joinerConfig(host.HostAddr(), false, "default"))
 	if err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestANewGameLandingInAGateJoinsTheNewOne(t *testing.T) {
 
 	t.Cleanup(tickInBackground(host))
 	next, err := guest.Loop()
-	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"roam"}) {
+	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"default"}) {
 		t.Fatalf("a gate handing over another game ended its run with %+v, %v; want a rejoin, unpressed, with its bot", next, err)
 	}
 	leave()
@@ -231,9 +231,9 @@ func TestANewGameLandingInAGateJoinsTheNewOne(t *testing.T) {
 func TestARelayRefusesAGateItsSessionsNewGameOutran(t *testing.T) {
 	// Not parallel: this drives real sockets against wall-clock deadlines.
 	addr, relayAddr := freeAddress(t), freeAddress(t)
-	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"default"}}}, "default", nil)
 	waitForCursors(t, host, 2)
-	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "default", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
 	pending, offered := dialSession(t, relayAddr)

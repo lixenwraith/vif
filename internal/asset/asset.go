@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed scenario/*.toml scenario/bot/*.toml content/*.toml input/*.toml vif.toml bot/*.toml
+//go:embed scenario/*.toml content/*.toml input/*.toml vif.toml bot/*.toml
 var assetFS embed.FS
 
 var (

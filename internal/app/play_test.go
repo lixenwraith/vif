@@ -210,7 +210,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	if a.Position().Run <= before || strings.Contains(a.ctx.GetStatusMessage(), "replay") {
 		t.Fatalf("new game failed: %s, position %+v", a.ctx.GetStatusMessage(), a.Position())
 	}
-	command("bot add 1:patrol")
+	command("bot add 1:default")
 	if a.membership.SessionTransport() == nil {
 		t.Fatalf("bot add opened no session: %s", a.ctx.GetStatusMessage())
 	}

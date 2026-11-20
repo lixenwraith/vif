@@ -1,5 +1,5 @@
 # Type runs left to right, backing off a threat that comes within three cells;
-# when text is absent, collect nuggets between patrols, which the network walk
+# when text is absent, collect nuggets between walks, which the network walk
 # steers as far as a run alone has learned to.
 [bot]
 # Twelve for the keys and four for the special attack walk asks for

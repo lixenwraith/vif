@@ -92,11 +92,11 @@ func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
 func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"default"}}}, "default", nil)
 	waitForCursors(t, host, 2)
 	router, hub := routerStandIn(t)
 	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
-		RelayAddress: "vif://" + router}}, "patrol", nil)
+		RelayAddress: "vif://" + router}}, "default", nil)
 	waitForCursors(t, host, 3)
 	relayID := link.PeerID(relay.membership.LocalParticipant())
 	var door string
@@ -109,7 +109,7 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	if err != nil || e.Addr != router || !hub.Has(e.Name) {
 		t.Fatalf("the relay's door is %q (%v); want a link at the router naming a door it carries", door, err)
 	}
-	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: e.Addr, SessionName: e.Name}}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: e.Addr, SessionName: e.Name}}, "default", nil)
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
@@ -175,7 +175,7 @@ func TestADoorTakesThePassphraseSetForIt(t *testing.T) {
 		tickUntilCursor(t, a)
 		stop := tickInBackground(a)
 		t.Cleanup(func() { stop(); a.Close() })
-		a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
+		a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("default") })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,11 +319,11 @@ func TestADoorReopenedWithoutItsPhraseKeepsItsGate(t *testing.T) {
 func TestBotsAreSeatedInAGatedSession(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"},
-		Passphrase: doorPhrase}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"default"},
+		Passphrase: doorPhrase}}, "default", nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, Bots: []string{"roam"},
-		Passphrase: doorPhrase}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, Bots: []string{"default"},
+		Passphrase: doorPhrase}}, "default", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 }

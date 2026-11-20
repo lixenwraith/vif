@@ -218,9 +218,8 @@ A graph resolves as a path, then as `bot/<name>.toml` under `-config-dir`, the u
 root, the checkout's `wad/` beside a `bin/` binary, `/usr/local/etc/vif` and
 `/etc/vif`, a player's own; then as the bot of that name the run's scenario
 carries; then as the embedded `default`, the generic bot, bound to no scenario.
-`make install-config` installs `default` into the user root. `roam` and `patrol`
-load `default` unless a root holds a file of that name. `-d` does not pin bot
-graphs.
+`make install-config` installs `default` into the user root. `-d` does not pin
+bot graphs.
 
 A scenario carries the graphs made for its map among its own files, its bots,
 which its entry lists, as `cave`'s does:
@@ -235,8 +234,7 @@ bots = ["bot/cave.toml", "bot/seed.toml"]
 - The first is the scenario's own bot: what a seat that names no graph plays, from
   `-bot`, `-bot 2`, `:bot` and `:bot 2` alike. A scenario that lists none has
   `default` play.
-- The embedded scenario carries `main`, `default`'s graph with a walk learned
-  there ([Examples](#examples)).
+- The embedded scenario lists none: `default` is what `-bot` seats there.
 - A player's graph of the same name plays in the scenario's place, so a copy is
   how one is changed, which `create <name> import <graph>` writes
   ([A player's bot files](#a-players-bot-files)); what any of them learns is
@@ -382,7 +380,7 @@ transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", g
 ```
 
 The shipped [`default`](../internal/asset/bot/default.toml) types text left to
-right, backs off a threat on it and collects nuggets between patrols:
+right, backs off a threat on it and collects nuggets between walks:
 
 | State | Does | Moves on |
 |---|---|---|
@@ -729,16 +727,12 @@ A run that ends without keeping what it learned ends with that error.
     other.
   - A run of `default` alone learns `walk`, in a population for each scenario.
     What that population fields is what `default` plays in that scenario from
-    then on, as a seat too.
+    then on, as a seat too. In the embedded scenario, which carries no bot, it
+    is `default.main.walk.json`.
   - It sends sixteen actions a second, twelve for the keys and four for the
     special attack. The region `special` updates after `play`, so a key goes
     out ahead of a special attack asked for in the same step: the other way
     round, the blast took the glyph the key was for.
-- [`main`](../internal/asset/scenario/bot/main.toml), the embedded scenario's
-  own: `default`'s graph with a `walk` learned there from nothing in six
-  minutes, 29 weights. A solo run learns on from them in `main.main.walk.json`.
-  The two graphs have one layout, so a population of `default`'s copied to that
-  name is `main`'s.
 - [`seed`](../wad/scenario/base/cave/bot/seed.toml), `cave`'s start written by
   hand. It has two networks, `raid` and `kraken`, each its inputs through six
   hidden units. Twelve direct weights hold the nearest raider's row, back off
@@ -768,10 +762,13 @@ the limit allows, and a bot document's `round_seconds` is its own to raise.
 In the embedded scenario: 100 rounds of half an hour, seeds 201 to 204.
 
 ```
-bot                    mean     median   Krakens met in most rounds
-default, unlearned  622,467    620,447   twelve, in 84 rounds
-main                718,430    721,430   fourteen, in 92 rounds
+bot                            mean     median   Krakens met in most rounds
+default, as shipped         622,467    620,447   twelve, in 84 rounds
+default, a walk learned     718,430    721,430   fourteen, in 92 rounds
 ```
+
+No model ships for this scenario. The second row is a `walk` a run learned
+there from nothing in six minutes, 29 weights; a player's runs learn their own.
 
 Nearly all of that is Kraken bounty, 50,000 each: 97 in 100 of what `default`
 earns. A `default` that never fires the special attack scores 402,940.
@@ -1064,7 +1061,6 @@ unattended.
 | `bot graph "x" not found as a path, in a configuration root, in scenario <name> or embedded` | Check the name and `-config-dir`, or give a path; a scenario's bot is found only in a run of that scenario. |
 | `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place: remove or rename it. |
 | `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
-| A `roam` or `patrol` bot plays an old graph | An installed file of that name shadows `default`: use `-bot default` or update the file. |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
 | `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
 | `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
