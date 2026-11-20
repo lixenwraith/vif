@@ -287,7 +287,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 | `0 ^ $` | Line start, first non-whitespace, line end. |
 | `[ O` / `] o` | Nearest glyph above / below in the same column. |
 | `M m G` | Map middle row, middle column, bottom row. |
-| `{ }` | Previous / next paragraph. |
+| `{ }` | Previous / next paragraph: the empty row past the next block, across a run of empty rows. |
 | `%` | Matching bracket. |
 | `f F t T` + character | Find/till forward or backward. |
 | `; ,` | Repeat the last find in the same or opposite direction. |

@@ -686,3 +686,31 @@ func TestARepeatedFindTakesItsCountAndPassesATillsTarget(t *testing.T) {
 		}
 	}
 }
+
+// { and } cross a run of empty rows to the empty row past the next block, as vim's
+// cross a run of blank lines, and stop at the map's edge row where no block follows.
+func TestParagraphMotionsCrossARunOfEmptyRows(t *testing.T) {
+	for _, c := range []struct {
+		keys string
+		row  int // -1: the map's last
+	}{
+		{"}", 1},
+		{"j}", 5},
+		{"j2}", 7},
+		{"j3}", -1},
+		{"6j{", 5},
+		{"6j2{", 3},
+		{"3j{", 0},
+		{"jj}{", 3},
+	} {
+		ctx, keys := lineWorld(t, "a\n\n\n\nb\n\nc", 0)
+		want := c.row
+		if want < 0 {
+			want = ctx.World.Resources.Config.MapHeight - 1
+		}
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); pos.Y != want {
+			t.Errorf("%q over a, three empty rows, b, one and c left the cursor on row %d, want %d", c.keys, pos.Y, want)
+		}
+	}
+}

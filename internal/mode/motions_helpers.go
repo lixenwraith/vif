@@ -63,52 +63,33 @@ func validatePosition(ctx *engine.GameContext, x, y int) (int, int) {
 
 // --- Paragraph Helpers ---
 
-// findPrevEmptyLine finds the previous line with no typeable glyph
-// Optimized for high entity counts using spatial grid traversal
-func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
-	var buf [parameter.MaxEntitiesPerCell]core.Entity
-
-	for y := cursorY - 1; y >= 0; y-- {
-		rowEmpty := true
-		// Scan row; stop early if any typeable glyph is found
-		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
-			for i := range count {
-				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
-					rowEmpty = false
-					break
-				}
-			}
-		}
-		if rowEmpty {
+// emptyRowPast is the first row with no typeable glyph past the next rows holding
+// some, stepping dy from y, as vim's { and } cross a run of blank lines; the map's
+// edge row when none follows
+func emptyRowPast(ctx *engine.GameContext, y, dy int) int {
+	height := ctx.World.Resources.Config.MapHeight
+	held := rowHoldsGlyph(ctx, y)
+	for y += dy; y >= 0 && y < height; y += dy {
+		if rowHoldsGlyph(ctx, y) {
+			held = true
+		} else if held {
 			return y
 		}
 	}
-	return 0
+	return y - dy
 }
 
-// findNextEmptyLine finds the next line with no typeable glyph
-// Optimized for high entity counts using spatial grid traversal
-func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
+// rowHoldsGlyph reports whether row y holds a typeable glyph
+func rowHoldsGlyph(ctx *engine.GameContext, y int) bool {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
-
-	for y := cursorY + 1; y < ctx.World.Resources.Config.MapHeight; y++ {
-		rowEmpty := true
-		// Scan row; stop early if any typeable glyph is found
-		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
-			for i := range count {
-				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
-					rowEmpty = false
-					break
-				}
+	for x := range ctx.World.Resources.Config.MapWidth {
+		for _, e := range buf[:copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))] {
+			if e != 0 && ctx.World.Positions.IsTypeable(e) {
+				return true
 			}
 		}
-		if rowEmpty {
-			return y
-		}
 	}
-	return ctx.World.Resources.Config.MapHeight - 1
+	return false
 }
 
 // --- Bracket Helpers ---
