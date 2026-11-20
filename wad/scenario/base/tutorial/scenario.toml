@@ -827,7 +827,7 @@ transitions = [
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "glyph", enabled = true } },
-    { macro = "Say", message = "That is the tutorial: the code around you is yours to move through, type and edit; :n starts over" },
+    { macro = "Say", message = "That is the tutorial: the code around you is yours to move through, type and edit" },
 ]
 
 # --- Player: one cursor at the practice line; with no weapon or particle system, Enter and Space do nothing ---
