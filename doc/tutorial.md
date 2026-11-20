@@ -37,7 +37,7 @@ entered again.
 tutorial` plays it, `vif -s tutorial -check` validates it with its corpus. In order:
 `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x dd`, `dw D`, `i` and typing,
 `A I a`, `o O`, `c cc`, `r ~`, `.` with its Insert text, `y p P`, `u` and
-Ctrl-R, `%`, `/ n`, `* #`, ``m ' ` ``, `gg G M`, `v` and its `d`, then what a game
+Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v` and its `d`, then what a game
 makes of the keys the tutorial gave back to vi. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
@@ -70,12 +70,10 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   says a key starts lesson 1, and a command's answer gives the goal back as it ends.
   Each fits the line's 62 columns of an 80 column screen: a longer one would hold
   the items' row for its whole lesson.
-- The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
-  bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
-  `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to
-  `undo_change` and `redo_change`, `m` to `mark_set`, and the backtick, the
-  console's key, to `mark_jump`, after an operator too, so `` `a `` returns to the
-  marked cell and `:console` opens the console
+- The entry's `[keymap.normal]` and `[keymap.normal_keys]` bind, over the
+  player's keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
+  `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
+  `redo_change`, and `m` to `mark_set`
   ([Input §10](input-and-modes.md#10-keymap-override-files)). The vim keymap
   binds each the same, so `-k vim` plays any game on the keys taught here, and
   the last lesson says so.
@@ -109,11 +107,11 @@ and `e` reach as they reach a word.
 The tutorial seats one player (`max_players = 1`) and takes no bot beside that
 player: a seat is refused before a session opens and a bot's own run at the
 door, for good, though a bot may play it alone (`-watch -bot 1`). Its lessons
-end on a player's edits, typed glyphs and mode changes, local events that move
-the machine only where that player's instance holds it (D-20). A guest of a
-server holding it, as a browser's page is, moves on by the cursor, `s` and `S`
-alone ([todo](todo.md#end-the-tutorials-lessons-for-a-guest-of-a-server));
-`:leave` plays on alone, where every lesson ends. A server's probe reads ready
+end on a player's edits, typed glyphs and mode changes, local events only that
+player's instance holds and can judge (D-20). A guest of a server holding it,
+as a browser's page is, asks the server for each transition such an event
+triggers (`EventFSMTransitionRequest`), so a lesson ends there as it does
+alone, two leads after the edit. A server's probe reads ready
 while its one place waits for a player away, so a reloaded page takes that
 place back, which no other dial is given; a second person is refused as the
 session full, a host of it lets others spectate only, and a scripted host
@@ -156,3 +154,6 @@ refuses a lobby that would wait for a guest forever.
 - A click or tap on a lesson's goal ends it as the motion would:
   `CursorMovedPayload` carries no pointer bit, and a tap is how a phone moves the
   cursor.
+- The backtick stays the console's: the Marks lesson teaches `'` and says that
+  vim's backtick returns to the marked cell itself, which the vim keymap alone
+  binds (`mark_jump`).

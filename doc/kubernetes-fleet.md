@@ -109,8 +109,9 @@ What bounds a stranger:
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
   peer can make the host reserve memory by asking;
 - `admissibleFromSource`, which refuses roster-creating crossings from anyone but
-  the coordinator, and any participant's crossing or cursor sync that acts as
-  another participant's cursor;
+  the coordinator, any participant's crossing or cursor sync that acts as
+  another participant's cursor, and a machine transition asked for by one that
+  holds no cursor, which `Machine.Grant` then takes only as D-20 allows;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
 - fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer

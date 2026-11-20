@@ -96,6 +96,7 @@ never enters the replay suffix (D-9).
 | Cursor entering or leaving combined defeat state | cursor and state |
 | Ember burning its cursor's heat out | cursor |
 | Scenario-captured key pressed or its button released | cursor, key, and key or pointer source |
+| A transition a local event triggers, asked of the authority (D-20) | region, owning state, transition index, trigger and captured variables |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a
 crossing do not cross again (D-5).
@@ -480,15 +481,39 @@ Every FSM region is Shared state, and in a live session the authority's machine
 alone evaluates its guards: a transition it takes is a crossing
 (`EventFSMTransition`) applied at one tick on every instance, the authority's
 included, where its actions and the target's on_enter run; a guest's machine
-evaluates nothing and follows, so a guard may read what the authority alone holds
-(`kills.*`, `TimeInState`), which is the authority's by construction. The unguarded
-`Tick` hops after a transition's target are the authority's too, folded into the
-same crossing (`FSMTransitionPayload.Then`), so a chain of them costs one lead and
-lasts no tick in a session; alone, a run takes them one an update. A `Local`
-event still cannot steer a region: it would move it for the authority's player
-alone, so a scenario that steers one by a local event seats one player
-(`max_players = 1`), which validation holds it to. Per-instance effects are emitted by the local owning system or by a
-cursor-scoped action without moving the region differently.
+follows, evaluating nothing but what a local event triggers (below), so any other
+guard may read what the authority alone holds (`kills.*`, `TimeInState`), which is
+the authority's by construction. The unguarded `Tick` hops after a transition's
+target are the authority's too, folded into the same crossing
+(`FSMTransitionPayload.Then`), so a chain of them costs one lead and lasts no tick
+in a session; alone, a run takes them one an update. Per-instance effects are
+emitted by the local owning system or by a cursor-scoped action without moving
+the region differently.
+
+A `Local` event is never replicated (D-10), so only the instance that made it can
+judge a transition it triggers. A scenario that triggers one seats one player
+(`max_players = 1`), which validation holds it to, and that player's instance
+judges the transition's guard, where the event is. Alone or as the authority it
+takes the transition as any other. As a guest it asks for it
+(`EventFSMTransitionRequest`, a Bus request naming the region, the state that owns
+the transition, its index, its trigger and the variables it captured): the event
+itself never crosses, and the region still moves by the authority's transitions
+alone. The authority grants an ask only where all of these hold, and a refused one
+changes nothing:
+
+- its sender plays, holding a cursor (`NetworkSystem.plays`), which every instance
+  checks alike at the tick the ask applies;
+- it names a transition a local event triggers, by that trigger: any other is the
+  authority's own to judge;
+- the state owning it is one its region stands in, the region running with no
+  transition in flight;
+- it sets no variable but those the transition captures (`Machine.Grant`).
+
+A granted ask is the authority's own transition crossing, with what follows from
+one. The asking region waits as the authority's does on a crossing of its own: it
+parks the local events the state asked for reacts to and judges them there once a
+transition lands, and gives an unanswered ask up after twice the apply horizon
+(`Machine.AskUpdates`).
 
 ### D-21 — Simulation time is tick-derived
 
