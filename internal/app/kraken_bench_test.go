@@ -14,11 +14,7 @@ import (
 // BenchmarkKrakenRegion measures the Kraken in the embedded scenario's kraken region,
 // chasing a cursor held at full heat from corner to corner: "tick" is one simulation
 // tick, "frames" the frames of a tick the Kraken renderer draws. The browser build is
-// where its cost showed, so compare a change there too, from internal/app:
-//
-//	GOOS=js GOARCH=wasm go test -c -o kraken.wasm .
-//	node "$(go env GOROOT)/lib/wasm/wasm_exec_node.js" kraken.wasm \
-//		-test.run '^$' -test.bench BenchmarkKrakenRegion -test.benchtime 1500x
+// where its cost showed, so compare a change there too (doc/development.md §5).
 func BenchmarkKrakenRegion(b *testing.B) {
 	for _, frames := range []bool{false, true} {
 		name := "tick"

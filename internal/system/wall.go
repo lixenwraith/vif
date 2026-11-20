@@ -29,12 +29,10 @@ import (
 type WallSystem struct {
 	world *engine.World
 
-	// Push-out tracking - positions needing entity check this tick
 	pendingPushChecks []vmath.Point
 	cursors           []cursorCell // the roster's cursors as a push check found them
 
-	// Configuration
-	pushCheckEveryTick bool // When true, runs full push check in Update()
+	pushCheckEveryTick bool
 
 	// Maze layouts and cave seeds draw from a PCG outside RandResource, whose
 	// position needs a D-19 snapshot
@@ -61,7 +59,6 @@ type WallSystem struct {
 	bodyCells []vmath.Point
 	body      []core.Entity
 
-	// Metrics
 	statEnabled    *atomic.Bool
 	statWallCount  *atomic.Int64
 	statPushEvents *atomic.Int64
@@ -98,7 +95,6 @@ type caveState struct {
 	Art    string                     `json:"art,omitempty"` // the stone art preset its rock draws in place of Visual, if any
 }
 
-// NewWallSystem creates a new wall system
 func NewWallSystem(world *engine.World) engine.System {
 	s := &WallSystem{
 		world: world,
@@ -260,7 +256,6 @@ func (s *WallSystem) Update() {
 	s.statWallCount.Store(int64(s.world.Components.Wall.CountEntities()))
 }
 
-// handleSpawnSingle creates a single wall entity
 func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 	config := s.world.Resources.Config
 	if payload.X < 0 || payload.X >= config.MapWidth ||
@@ -305,7 +300,6 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		RenderBg:  payload.RenderBg,
 	})
 
-	// Compute box char if box-drawing enabled
 	if payload.BoxStyle != component.BoxDrawNone {
 		wallComp := component.WallComponent{
 			BlockMask: payload.BlockMask,
@@ -330,7 +324,6 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 	})
 }
 
-// batchSpawnResult holds outcome of executeBatchSpawn
 type batchSpawnResult struct {
 	count        int
 	headerEntity core.Entity
@@ -339,9 +332,7 @@ type batchSpawnResult struct {
 	maxX, maxY   int
 }
 
-// executeBatchSpawn is the unified wall creation path for all batch operations
-// Handles collision modes, composite structure, position batching, box chars, and push checks
-// Emits EventWallSpawned on success
+// executeBatchSpawn is the one path every batch of walls is laid by
 func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPayload) batchSpawnResult {
 	result := batchSpawnResult{}
 
@@ -351,7 +342,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 	config := s.world.Resources.Config
 
-	// 1. Resolve absolute positions, filter OOB
 	type resolvedCell struct {
 		x, y int
 		idx  int // Index into payload.Cells
@@ -371,7 +361,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		return result
 	}
 
-	// 2. Collision handling based on mode
 	switch payload.CollisionMode {
 	case event.WallBatchSkipBlocked:
 		filtered := resolved[:0]
@@ -411,7 +400,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		return result
 	}
 
-	// 3. Create header if composite
 	var headerEntity core.Entity
 	if payload.Composite {
 		headerEntity = s.world.CreateEntity(core.DomainShared)
@@ -423,7 +411,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		})
 	}
 
-	// 4. Create entities, set components, batch positions
 	var members []component.MemberEntry
 	if payload.Composite {
 		members = make([]component.MemberEntry, 0, len(resolved))
@@ -492,10 +479,8 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		result.count++
 	}
 
-	// 5. Single-lock position commit
 	posBatch.CommitForce()
 
-	// 6. Finalize composite header or cleanup
 	if payload.Composite {
 		if result.count > 0 {
 			s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
@@ -508,7 +493,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		}
 	}
 
-	// 7. Box char computation
 	if payload.BoxStyle != component.BoxDrawNone && result.count > 0 {
 		s.computeBoxCharsInArea(
 			result.minX, result.minY,
@@ -517,7 +501,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		)
 	}
 
-	// 8. Emit notification
 	if result.count > 0 {
 		s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
 			X: result.minX, Y: result.minY,
@@ -530,8 +513,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	return result
 }
 
-// handleSpawnComposite creates a multi-cell wall using Header/Member pattern
-// Delegates to executeBatchSpawn with composite mode
 func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnRequestPayload) {
 	if len(payload.Cells) == 0 {
 		return
@@ -576,7 +557,6 @@ func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPa
 	})
 }
 
-// handleDespawn removes walls in specified area
 func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	if payload.All {
 		s.despawnAllWalls()
@@ -666,7 +646,8 @@ func (s *WallSystem) despawnAllWalls() {
 	}
 }
 
-// classifyWallForDespawn routes wall entity to appropriate effect category
+// classifyWallForDespawn sends a glyph alone to the flash, a wall with ground to the
+// fadeout, and one that draws nothing to a silent end
 func (s *WallSystem) classifyWallForDespawn(
 	entity core.Entity,
 	wall component.WallComponent,
@@ -678,18 +659,14 @@ func (s *WallSystem) classifyWallForDespawn(
 	hasBg := wall.RenderBg
 
 	if hasFg && !hasBg {
-		// Fg-only: flash effect via death system
 		*flashTargets = append(*flashTargets, entity)
 	} else if hasBg {
-		// Bg or Fg+Bg: fadeout effect via death system
 		*fadeoutTargets = append(*fadeoutTargets, entity)
 	} else {
-		// No visual: silent destruction
 		*silentTargets = append(*silentTargets, entity)
 	}
 }
 
-// handleMaskChange modifies blocking behavior of existing walls
 func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayload) {
 	width := max(1, payload.Width)
 	height := max(1, payload.Height)
@@ -742,7 +719,6 @@ func (s *WallSystem) processPendingPushChecks() {
 	s.pendingPushChecks = s.pendingPushChecks[:0]
 }
 
-// runFullPushCheck iterates all blocking walls and pushes out any entities
 func (s *WallSystem) runFullPushCheck() {
 	var pushCount int64
 	cursors := s.readCursors()
@@ -799,7 +775,6 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 		}
 	}
 
-	// Check other entities
 	// Both domains: a new wall claims its cell and displaces whoever holds it (D-12)
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	count := copy(entities[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))
@@ -952,7 +927,6 @@ func (s *WallSystem) passesWalls(e core.Entity) bool {
 	return prot.Mask&component.ProtectFromWall != 0
 }
 
-// getMaskForEntity returns appropriate wall block mask for entity type
 func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMask {
 	if s.world.Components.Kraken.HasEntity(entity) {
 		return component.WallBlockNone
@@ -975,12 +949,10 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 	return component.WallBlockSpawn
 }
 
-// SetPushCheckEveryTick enables or disables per-tick full push check
 func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 	s.pushCheckEveryTick = enabled
 }
 
-// handleMazeSpawn generates maze and spawns wall blocks via batch
 func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	if payload.CellWidth <= 0 || payload.CellHeight <= 0 {
 		return
@@ -997,7 +969,6 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 
 	vis := orStone(payload.Visual)
 
-	// Convert event rooms to maze.RoomSpec (best-effort placement by generator)
 	var rooms []maze.RoomSpec
 	for _, r := range payload.Rooms {
 		mCX := r.CenterX / payload.CellWidth
@@ -1025,7 +996,6 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		})
 	}
 
-	// Generate maze
 	cfg := maze.Config{
 		Width:             mazeWidth,
 		Height:            mazeHeight,
@@ -1123,8 +1093,8 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	}
 }
 
-// computeBoxCharsInArea recomputes box-drawing characters for walls in rectangular area
-// Called after bulk wall spawns to resolve neighbor topology
+// computeBoxCharsInArea draws a batch's box characters once all its walls stand, since
+// each reads its neighbours
 func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style component.BoxDrawStyle) {
 	if style == component.BoxDrawNone {
 		return
@@ -1132,7 +1102,6 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 
 	config := s.world.Resources.Config
 
-	// Clamp to map bounds
 	endX := x + width
 	endY := y + height
 	if x < 0 {
@@ -1148,7 +1117,6 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 		endY = config.MapHeight
 	}
 
-	// Iterate cells in area
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
@@ -1585,29 +1553,24 @@ func (s *WallSystem) computeBoxChar(x, y int, style component.BoxDrawStyle) rune
 		return 0
 	}
 
-	// Identify cardinal voids and walls
 	// Unrolled for performance
 	var voidBits, wallBits uint8
 
-	// North (0, -1)
 	if s.hasWallWithStyle(x, y-1, style) {
 		wallBits |= boxNeighborN
 	} else {
 		voidBits |= boxNeighborN
 	}
-	// East (1, 0)
 	if s.hasWallWithStyle(x+1, y, style) {
 		wallBits |= boxNeighborE
 	} else {
 		voidBits |= boxNeighborE
 	}
-	// South (0, 1)
 	if s.hasWallWithStyle(x, y+1, style) {
 		wallBits |= boxNeighborS
 	} else {
 		voidBits |= boxNeighborS
 	}
-	// West (-1, 0)
 	if s.hasWallWithStyle(x-1, y, style) {
 		wallBits |= boxNeighborW
 	} else {
@@ -1638,24 +1601,19 @@ func (s *WallSystem) computeBoxChar(x, y int, style component.BoxDrawStyle) rune
 		return visual.BoxDrawSingleLUT[mask]
 	}
 
-	// Inner corner: all cardinals are walls, check diagonals for voids
-	// To preserve wall continuity, we must connect the two cardinal neighbors
-	// that border the diagonal void.
+	// Inner corner, every cardinal a wall: a diagonal void joins the two cardinals
+	// beside it, which keeps the wall's line unbroken
 	var mask uint8
 
-	// NE Void (1, -1) -> Neighbors N and E are adjacent -> Connect N|E
 	if !s.hasWallWithStyle(x+1, y-1, style) {
 		mask |= boxNeighborN | boxNeighborE
 	}
-	// SE Void (1, 1) -> Neighbors S and E are adjacent -> Connect S|E
 	if !s.hasWallWithStyle(x+1, y+1, style) {
 		mask |= boxNeighborS | boxNeighborE
 	}
-	// SW Void (-1, 1) -> Neighbors S and W are adjacent -> Connect S|W
 	if !s.hasWallWithStyle(x-1, y+1, style) {
 		mask |= boxNeighborS | boxNeighborW
 	}
-	// NW Void (-1, -1) -> Neighbors N and W are adjacent -> Connect N|W
 	if !s.hasWallWithStyle(x-1, y-1, style) {
 		mask |= boxNeighborN | boxNeighborW
 	}
@@ -1670,7 +1628,6 @@ func (s *WallSystem) computeBoxChar(x, y int, style component.BoxDrawStyle) rune
 	return visual.BoxDrawSingleLUT[mask]
 }
 
-// popCount8 returns number of set bits in uint8
 func popCount8(b uint8) int {
 	b = b - ((b >> 1) & 0x55)
 	b = (b & 0x33) + ((b >> 2) & 0x33)
@@ -1684,7 +1641,6 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 	return kind != 0 && s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, kind)
 }
 
-// invalidateBoxNeighbors recomputes box chars for adjacent walls
 func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 	config := s.world.Resources.Config
 	offsets := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}

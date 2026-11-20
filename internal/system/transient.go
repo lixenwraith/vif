@@ -144,14 +144,10 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// scopedHere reports whether a scoped local effect belongs to this instance.
-//
-// The grayout is a screen effect, so "this instance" is the cursor a player is
-// looking through: Resources.Player.Entity. An effect naming no cursor is
-// session-wide and applies everywhere, which is what a region belonging to nobody
-// — a storm, a reset — emits. An effect naming another participant's cursor is
-// that participant's to see, and darkening this screen for it was the defect this
-// check removes.
+// scopedHere reports whether a scoped screen effect is this instance's: one naming
+// the cursor its player looks through (Resources.Player.Entity), or none, which is
+// session-wide, as a region belonging to nobody emits. Another participant's is
+// that participant's to see.
 func (s *TransientSystem) scopedHere(ev event.GameEvent) bool {
 	p, ok := ev.Payload.(*event.CursorScopePayload)
 	if !ok {

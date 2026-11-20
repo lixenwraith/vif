@@ -65,7 +65,6 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			pos.X -= carry
 		}
 
-		// Transform map coords to screen coords with visibility check
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
 			return true

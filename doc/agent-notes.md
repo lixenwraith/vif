@@ -863,12 +863,13 @@ Libraries · Branches.
 
 ## Measuring
 
-- A browser-build bench runs under Node (`BenchmarkKrakenRegion`'s comment), which
-  refuses a run whose arguments and environment pass about 8 KB ("total length of
-  command line and environment variables exceeds limit"), as a cloud container's
-  environment does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test
-  file calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go`
-  does, or that package's wasm test binary stops building.
+- A browser-build bench runs under Node
+  ([Development §5](development.md#5-validation-and-tests)), which refuses a run
+  whose arguments and environment pass about 8 KB ("total length of command line
+  and environment variables exceeds limit"), as a cloud container's environment
+  does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test file
+  calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go` does,
+  or that package's wasm test binary stops building.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs. A bench file the

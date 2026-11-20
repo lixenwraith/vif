@@ -61,12 +61,10 @@ type ExplosionCenter struct {
 	Type      event.ExplosionType // Explosion variant for palette selection
 }
 
-// NewTransientResource creates initialized resource
 func NewTransientResource() *TransientResource {
 	return &TransientResource{}
 }
 
-// NewViewResource creates initialized view state
 func NewViewResource() *ViewResource {
 	return &ViewResource{}
 }
