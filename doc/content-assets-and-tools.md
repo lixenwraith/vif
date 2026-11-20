@@ -157,8 +157,10 @@ Rules differ from plain text:
 
 The current runtime does not expose the authored block ID on `core.CodeBlock`;
 it is parsed as document metadata. A scenario whose `[content] blocks = true`
-lays a block whole, its lines on consecutive rows from one column; others, and a
-block no slot holds, lay line by line.
+lays a block whole, its lines on consecutive rows from one column, on rows of its
+own, and passes over a block no slot holds; others lay line by line. An authored
+block longer than five lines is split, so one written for `blocks` stays within
+five.
 
 ## 6. Block selection
 

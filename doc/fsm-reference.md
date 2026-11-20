@@ -74,7 +74,7 @@ bots = ["bot/pilot.toml"]           # The bots made for this map, relative to th
 
 [content]                           # The scenario's own corpus, carried in its container: the run types it, not its content root
 files = ["lessons.toml"]            # Corpus files, relative to this file
-blocks = true                       # Lay each block whole, its lines on consecutive rows; line by line when unset
+blocks = true                       # Lay each block whole on rows of its own, or pass it over; line by line when unset
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init

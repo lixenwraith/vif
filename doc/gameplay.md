@@ -129,8 +129,10 @@ player's and unprotected (`Position.EditableGlyphAt`).
 
 `GlyphSystem` pulls blocks from the immutable content corpus and places their
 lines in free map space, each on its own, or, where the scenario's `[content]
-blocks = true` asks, a block whole on consecutive rows from one column, so `%`
-finds a bracket's pair across rows. It spawns only blue and green: each block takes the
+blocks = true` asks, a block whole on consecutive rows from one column, rows no
+other glyph holds with an empty one each side, so `%` finds a bracket's pair in
+its block; a block no slot holds is passed over, and drifting glyphs enter line by
+line. It spawns only blue and green: each block takes the
 type and level (dark, normal, bright) least represented on the map, ties drawn at
 random. Red comes from decay, and gold marks gold members. A glyph's energy
 depends on its colour and the typist's heat; its level sets its brightness, its

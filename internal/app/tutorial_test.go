@@ -348,6 +348,67 @@ func TestTutorialsBacktickReturnsToTheMarkedCell(t *testing.T) {
 	}
 }
 
+// Free lays each corpus block on rows of its own, an empty row each side, so %
+// pairs a bracket inside its block: every run of rows holding glyphs is one block,
+// five rows at most, its brackets balanced.
+func TestTutorialsFreeLaysEachBlockAlone(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	state := func() (s string) {
+		w.RunSafe(func() { s = w.Resources.Status.Strings.Get("fsm.state").Load() })
+		return s
+	}
+	a.Tick(10)
+	for range 30 {
+		if state() == "Free" {
+			break
+		}
+		tutorialKeys(t, a, "s")
+	}
+	a.Tick(3000)
+	var height int
+	rows := map[int][]rune{}
+	w.RunSafe(func() {
+		height = w.Resources.Config.MapHeight
+		w.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+			pos, _ := w.Positions.GetPosition(e)
+			rows[pos.Y] = append(rows[pos.Y], g.Rune)
+			return true
+		})
+	})
+	runs := 0
+	for y := 0; y < height; y++ {
+		if len(rows[y]) == 0 || len(rows[y-1]) != 0 {
+			continue
+		}
+		var text string
+		end := y
+		for ; len(rows[end]) != 0; end++ {
+			text += string(rows[end])
+		}
+		runs++
+		if end-y > 5 {
+			t.Errorf("rows %d to %d hold glyphs, more than one block's five", y, end-1)
+		}
+		for _, pair := range []string{"{}", "()", "[]"} {
+			if open, shut := strings.Count(text, pair[:1]), strings.Count(text, pair[1:]); open != shut {
+				t.Errorf("rows %d to %d hold %d %c and %d %c, want a block's pairs", y, end-1, open, pair[0], shut, pair[1])
+			}
+		}
+	}
+	if state() != "Free" || runs < 2 {
+		t.Fatalf("the tutorial stands in %s with %d blocks laid, want Free with its corpus", state(), runs)
+	}
+}
+
 // tutorialRow reads the glyphs on row y from column 4, a gap as a space.
 func tutorialRow(a *App, y int) string {
 	w := a.World()

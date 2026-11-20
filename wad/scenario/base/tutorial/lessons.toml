@@ -49,8 +49,6 @@ lines = [
   "switch key {",
   "case 'h', 'j', 'k', 'l':",
   "    move(key)",
-  "default:",
-  "    beep()",
   "}",
 ]
 

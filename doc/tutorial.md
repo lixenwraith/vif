@@ -53,9 +53,11 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   files, in its container under its digest, which the run types in place of its
   roots'. The tutorial's is code in blocks of two to five lines.
 - `[content] blocks = true` lays a corpus block whole, its lines on consecutive
-  rows from one column, so `%` finds a bracket's pair across rows and `{` `}` hop
-  between blocks; where no slot holds it, and in every scenario that leaves the
-  key unset, line by line, spread as before.
+  rows from one column, rows nothing else holds with an empty one each side, so
+  `%` finds a bracket's pair in its block and `{` `}` hop between blocks; a block
+  no slot holds is passed over, and every scenario that leaves the key unset
+  spreads lines as before. A block is five lines at most, the corpus's limit, so
+  no longer one is split.
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutorial captures `s` and
   `S` in Normal and Visual with nothing pending, so `fs` and `qs` still take
   their letter and Insert types it.
