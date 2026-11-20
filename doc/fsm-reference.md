@@ -755,9 +755,10 @@ where the slot's keyboard reports one, as a bot's does, at once with `lost = tru
 where it taps. `releases = true` on the capture asks a console keyboard for
 releases too, and `EventInputReport { slot, releases }` says which a slot does
 while keys are captured. `modes` names the play modes the capture holds in, every
-one when unset, and `idle = true` leaves a key to a count, operator or prefix
-already pending, so `fs` and `qs` still take an `s` the scenario captures; the
-tutorial's lessons do both, for the `s` and `S` that skip one and go back.
+one when unset, and `idle = true` leaves a key to an operator, prefix or label
+already pending, so `fs` and `qs` still take an `s` the scenario captures, and drops
+a count before it, so `2s` is `s`; the tutorial's lessons do both, for the `s` and
+`S` that skip one and go back.
 
 A button lights and sounds on every press of its key by itself, held lit until the
 release, so a machine judges a press and never plays its tone.

@@ -129,7 +129,8 @@ func TestControlKeysReachAnOverlay(t *testing.T) {
 }
 
 // A capture scoped to Normal and Visual leaves its key to Insert, and an idle one
-// to a sequence already pending, so a find still takes the letter it captures.
+// to a sequence already pending, so a find and q's label still take the letter it
+// captures; a count alone it drops.
 func TestAScopedCaptureYieldsToInsertAndToPendingGrammar(t *testing.T) {
 	var capture KeyCapture
 	capture.Set("a", core.ModeMaskNormal|core.ModeMaskVisual, true, false)
@@ -149,6 +150,20 @@ func TestAScopedCaptureYieldsToInsertAndToPendingGrammar(t *testing.T) {
 	m.SetMode(ModeInsert)
 	if in := key('a'); in == nil || in.Type != IntentTextChar {
 		t.Fatalf("Insert: a = %+v, want the typed character", in)
+	}
+	m.SetMode(ModeNormal)
+	m.SetState(StateMacroRecordAwait) // q, as the router answers it
+	if in := key('a'); in == nil || in.Type != IntentMacroRecordStart || in.Char != 'a' {
+		t.Fatalf("after q: a = %+v, want the macro's label", in)
+	}
+	key('2')
+	if in := key('a'); in == nil || in.Type != IntentKeyPress || in.Count != 1 {
+		t.Fatalf("after a count: a = %+v, want IntentKeyPress, the count dropped", in)
+	}
+	key('d')
+	key('2')
+	if in := key('a'); in != nil && in.Type == IntentKeyPress {
+		t.Fatalf("after d2: a = %+v, want it left to the operator", in)
 	}
 }
 

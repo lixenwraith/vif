@@ -59,8 +59,8 @@ makes of the keys the tutorial gave back to vi. What it stands on:
   spreads lines as before. A block is five lines at most, the corpus's limit, so
   no longer one is split.
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutorial captures `s` and
-  `S` in Normal and Visual with nothing pending, so `fs` and `qs` still take
-  their letter and Insert types it.
+  `S` in Normal and Visual with no operator, prefix or label pending, so `fs` and
+  `qs` still take their letter, Insert types it and `2s` skips once.
 - The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
   bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
   `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to

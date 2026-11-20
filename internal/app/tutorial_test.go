@@ -522,6 +522,28 @@ func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {
 	}
 }
 
+// A count before s or S is dropped, so 2S goes back one lesson and empties no
+// practice line as vi's S would, and the s after q names a macro, skipping nothing.
+func TestTutorialsSkipKeysDropACountAndLeaveQItsLabel(t *testing.T) {
+	a := newTutorial(t, 100, 30)
+	glyphs := func() (n int) {
+		a.World().RunSafe(func() { n = a.World().Components.Glyph.CountEntities() })
+		return n
+	}
+	if tutorialKeys(t, a, "qs"); tutorialState(a) != "Move" || !a.Context().MacroRecording.Load() {
+		t.Fatalf("qs left the tutorial in %s, recording %v, want Move recording the macro s",
+			tutorialState(a), a.Context().MacroRecording.Load())
+	}
+	if tutorialKeys(t, a, "q2s"); tutorialState(a) != "Words" {
+		t.Fatalf("2s left the tutorial in %s, want Words", tutorialState(a))
+	}
+	laid := glyphs()
+	if tutorialKeys(t, a, "2s2S"); tutorialState(a) != "Words" || glyphs() != laid || !a.Context().IsNormalMode() {
+		t.Fatalf("2s then 2S left the tutorial in %s with %d glyphs, Normal %v, want Words with its %d laid, in Normal",
+			tutorialState(a), glyphs(), a.Context().IsNormalMode(), laid)
+	}
+}
+
 // The tutorial seats one player, so a bot asked for is refused before any session
 // opens for it, saying why, and the run plays on alone.
 func TestTutorialSeatsNoBot(t *testing.T) {
