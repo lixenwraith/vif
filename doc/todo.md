@@ -2694,15 +2694,28 @@ The framebuffer console shows a bright background under SGR 5, which vgacon blin
 
 ### Paint a whole frame faster on Android
 
-- Priority: P3
+- Priority: P2
 - Affected files: `android/app/src/main/java/com/lixen/vif/CellDrawer.java`
 
 A zoom, a rotation and a resume repaint every cell, a rectangle and a glyph each
-through a software canvas: 37 to 56 ms on a Pixel 8 Pro for a zoom within a
-strike (2026-11-20), where an idle frame's mean is 8 to 14 ms. Go's share is the
-encoding, 0.3 ms for 112x124 cells on amd64. Profile one on a device before
-choosing: a whole frame composed straight into the picture's pixels, or a GLES
-drawer taking the same frames.
+through a software canvas, and the frame's time follows the cells: on a Pixel 8
+Pro (2026-11-20) 67 to 70 ms for 7,800 cells at 9.5 dp, 77 to 90 ms for about
+13,000 at 7 dp and 146 to 164 ms for 29,000 at the 5 dp floor, 5 to 9 µs a cell,
+where an idle frame's mean is 9 to 14 ms. Go's share is the encoding, 0.3 ms for
+112x124 cells on amd64. Profile one on a device before choosing: a whole frame
+composed straight into the picture's pixels, or a GLES drawer taking the same
+frames.
+
+### Post nothing to Android's render thread once it has quit
+
+- Priority: P3
+- Affected files: `android/app/src/main/java/com/lixen/vif/GameView.java`
+
+`surfaceDestroyed` quits the render thread and keeps its `Handler`, so a resume
+before the next surface (`away`) and a keyboard that moves then
+(`keyboardCovers`) post to it: Android logs "sending message to a Handler on a
+dead thread" and drops the post, which `surfaceChanged` makes up for. Clearing
+`handler` there, which the UI thread alone reads, closes it.
 
 ## Audio
 
