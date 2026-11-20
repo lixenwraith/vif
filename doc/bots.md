@@ -133,9 +133,12 @@ keeps bot files acts, prints and exits, for the scenario `-s` names.
 A watched bot takes `:`, the menu keys and the help key. While you hold its command
 line, the menu or help, its graph supplies no input: a run in a session keeps
 ticking, a solo run waits.
-`:n`, `:pause`, `:bot`, `:bot drop` and `:player` work there, and what its viewer
-changes of `[play]` or the zoom is saved as a player's is: a preference is the
-operator's, whatever the run presents.
+`:n`, `:pause`, `:speed`, `:bot`, `:bot drop` and `:player` work there, and what
+its viewer changes of `[play]` or the zoom is saved as a player's is: a preference
+is the operator's, whatever the run presents. What the bot plays under is its own
+and reads `Unavailable while a bot plays`: `:auto`, `:mouse`, `:free`, `:wait` and
+`:edge`, the grants such as `:god` and `:energy`, and `:emit`, `:system` and
+`:region` ([Input §9](input-and-modes.md#9-command-mode)).
 
 ### A player's bot files
 

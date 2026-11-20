@@ -1027,7 +1027,9 @@ Docs · Libraries · Branches.
 - Whether a bot plays a run reaches its replay only by the session latch's note
   (`SessionState.Bot`). `drive` with kind "bot" marks its run a bot's;
   `playBot` and a bare `NewHeadless` with a driver do not, and a harness built
-  so holds a person's cursor, whose defeat ends its game.
+  so holds a person's cursor, whose defeat ends its game, and takes every command
+  its viewer types (`World.DrivenByBot`): a test of what a watched bot's viewer
+  may do builds its run with `drive`, as `play_test.go`'s `mustHeadless` ones do not.
 - A seat fields what its player's population holds: `PlaySeat` builds the
   learners a run in a session does. Read what a seated bot plays on a run of two
   bots with and without the population in the user root, at `-speed 8`, as a

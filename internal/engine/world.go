@@ -633,6 +633,10 @@ func (w *World) Watches() bool { return w.watches.Load() }
 // and its replay reads it there. Call before the session is first latched.
 func (w *World) DriveByBot() { w.botDriven.Store(true) }
 
+// DrivenByBot reports a bot's run as it stands, for an operator's path; simulation
+// reads the latch's SessionState.Bot.
+func (w *World) DrivenByBot() bool { return w.botDriven.Load() }
+
 // TickGranted reports whether the next tick may run: any may, but a viewer's, which
 // waits for its feed to close it. Caller MUST hold updateMutex.
 func (w *World) TickGranted() bool {
