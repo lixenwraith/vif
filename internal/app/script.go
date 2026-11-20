@@ -281,15 +281,15 @@ func (s *sideGames) close(st *bot.Stats) error {
 	return s.err
 }
 
-// botPlay is the [play] g's run starts on: the shipped pointer and the auto-fire
-// g's [bot] names, else the shipped one, so what a graph scores is its own and not
-// its player's settings'
+// botPlay is the [play] g's run starts on: the shipped pointer and camera edge, which
+// bounds where it points, and the auto-fire g's [bot] names, else the shipped one, so
+// what a graph scores is its own and not its player's settings'
 func botPlay(play paths.Play, g *bot.Graph) paths.Play {
 	shipped := paths.DefaultPlay()
 	if play.AutoFire == "" {
 		play = shipped
 	}
-	play.AutoFire, play.Mouse, play.FollowMouse = shipped.AutoFire, shipped.Mouse, shipped.FollowMouse
+	play.AutoFire, play.Mouse, play.FollowMouse, play.CameraEdge = shipped.AutoFire, shipped.Mouse, shipped.FollowMouse, shipped.CameraEdge
 	if g.Settings.AutoFire != "" {
 		play.AutoFire = g.Settings.AutoFire
 	}

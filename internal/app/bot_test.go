@@ -255,21 +255,22 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 }
 
 // TestABotsRunStartsOnTheAutoFireItsGraphNames: a graph's run starts on the shipped
-// pointer whatever its player's settings say, and on the auto-fire its [bot] names,
-// the shipped one where it names none.
+// pointer and camera edge whatever its player's settings say, and on the auto-fire
+// its [bot] names, the shipped one where it names none.
 func TestABotsRunStartsOnTheAutoFireItsGraphNames(t *testing.T) {
 	shipped := paths.DefaultPlay()
 	own := shipped
-	own.AutoFire, own.Mouse, own.FollowMouse = "off", !shipped.Mouse, !shipped.FollowMouse
+	own.AutoFire, own.Mouse, own.FollowMouse, own.CameraEdge = "off", !shipped.Mouse, !shipped.FollowMouse, shipped.CameraEdge+1
 	for table, want := range map[string]string{"": shipped.AutoFire, "[bot]\nauto_fire = \"main\"\n": "main"} {
 		graph, err := bot.ParseGraph("g", []byte(table+"[regions.play]\ninitial = \"A\"\n[states.A]\n"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, play := range []paths.Play{own, {}} {
-			if got := botPlay(play, graph); got.AutoFire != want || got.Mouse != shipped.Mouse || got.FollowMouse != shipped.FollowMouse {
-				t.Errorf("graph %q on %+v starts on auto-fire %q, mouse %v and follow %v, want %q and the shipped pointer",
-					table, play, got.AutoFire, got.Mouse, got.FollowMouse, want)
+			if got := botPlay(play, graph); got.AutoFire != want || got.Mouse != shipped.Mouse || got.FollowMouse != shipped.FollowMouse ||
+				got.CameraEdge != shipped.CameraEdge {
+				t.Errorf("graph %q on %+v starts on auto-fire %q, mouse %v, follow %v and edge %d, want %q and the shipped pointer and edge",
+					table, play, got.AutoFire, got.Mouse, got.FollowMouse, got.CameraEdge, want)
 			}
 		}
 	}
