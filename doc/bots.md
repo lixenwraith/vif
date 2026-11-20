@@ -871,7 +871,8 @@ seed 2  raid     1 proved, the 32nd over 16            8 proved, the 1st over 72
   of few rounds and a higher mean waits unplayed: after fifteen million ticks
   five such `raid` members on each seed, the stalest 277 and 753 rounds. A
   lighter trust weight and a rival picked by its plain mean each play them,
-  and a run fields no more for either
+  a title held only on 24 rounds keeps it from passing on fewer, and a run
+  fields no more for any of the three
   ([todo](todo.md#have-a-scenario-describe-the-bots-that-play-it)).
 
 The step was a schedule's before it was fixed, `AdaptiveStrength` of the
