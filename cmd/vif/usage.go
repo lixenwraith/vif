@@ -317,8 +317,9 @@ scenario use server defaults. Current session status heads the page. A session
 ends when its host leaves, each player going on alone, unless the host chose
 migrate: \-authority migrate, the Authority field, or :host <address> migrate.
 A migrate session moves to a guest that turned Take over as host on, as
-:takeover on does; such a guest listens on a port in each session it joins, and
-the session shares its address with the other players. Hosts drop
+:takeover on does; such a guest listens on a port in each session it joins,
+except one it joins through a relay without \-listen, and the session shares its
+address with the other players. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
 :player drop <slot> removes one and keeps it out. Bots adds local bots by count and graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop

@@ -1521,9 +1521,9 @@ that leaves:
   reading only checks itself against. A digest would check the same in a few
   bytes, the whole world kept for a newcomer alone; read what that does to the
   tail a newcomer catches up through (netcode design §3.8, `VIF_FEED=1`).
-- **A shorter record.** `FeedRecordTicks` (10) puts a viewer 9 to 13 ticks behind.
-  Fewer ticks a record bring it closer for more records and less to deflate
-  against: read both at 5 before choosing.
+- **A shorter record.** `FeedRecordTicks` (10) and `FeedSlackTicks` (4) put a
+  viewer 13 to 14 ticks behind. Fewer ticks a record bring it closer for more
+  records and less to deflate against: read both at 5 before choosing.
 - **An audience on the node.** The copy's cost was read on loopback in a container
   (netcode design §3.8). Read 256 spectators of a four-player session through the
   edge: the router's CPU and egress beside the pod's, and what the edge's own
@@ -1559,9 +1559,9 @@ correction brings the cursor, which wants a test.
   [Netcode design §3.8](netcode-design.md#38-the-feed)
 
 The choice made: one feed, written once and copied to every viewer down a socket
-each holds open, by the host's hub or the router's. A viewer stands half a second
-behind, and each costs its feeder the feed's bytes again, 0.9 to 1.9 kB/s, and
-about 10 µs of CPU a record.
+each holds open, by the host's hub or the router's. A viewer stands about 0.7 s
+behind at the default tick, and each costs its feeder the feed's bytes again, 0.9
+to 1.9 kB/s, and about 10 µs of CPU a record.
 
 What the other form does: the router also cuts the feed into segments, a few
 seconds each, and serves them over HTTP beside a short list of the newest, as
@@ -1576,7 +1576,7 @@ starting point fetched apart, since a segment carrying one would be mostly world
 a route at the router serving them with cache headers and expiring them; a
 `FeedPort` that reads fetched segments, `net/http` natively and `fetch` in a page;
 and a viewer three to six seconds behind, a segment's length and its fetch,
-against half a second. It can sit on the feed as built: the router's subscription
+against 0.7 s. It can sit on the feed as built: the router's subscription
 is the source of both.
 
 Why it was not chosen: its cost is flat only where a cache fronts the site, which
@@ -1599,7 +1599,7 @@ which the site has; the repository cannot say.
 
 The choice made: a viewer is nobody in its session. It reads the one feed every
 viewer is sent, runs a tick only once the feed closed it, and so needs no
-correction and sends nothing.
+correction exchange and sends nothing.
 
 What the other form does: a spectator joins as a participant with no cursor, a
 second kind of cursorless roster entry beside a dedicated host's coordinator. It
