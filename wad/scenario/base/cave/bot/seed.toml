@@ -11,6 +11,9 @@ learn = true
 # A round the game does not end is closed after half an hour of game time, so a
 # candidate nothing beats is scored and the next one plays
 round_seconds = 1800
+# A round is paid for each column scrolled, a raider by its hit points, the
+# Kraken by how fast it fell, and a kill those two do not measure
+score = { travel = 1, kill = 5, hit_points = 12, kraken = 1 }
 
 # raid reads the rock, every raider, as three fly at most, and every cell one is
 # about to land on with how soon: what it leaves out it cannot learn from

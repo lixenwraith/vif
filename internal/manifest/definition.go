@@ -120,7 +120,7 @@ var Systems = []SystemDef{
 
 	// --- Core / Frame Setup ---
 	{Name: "cursor", Constructor: "NewCursorSystem", Domain: "shared"},                               // creates the shared cursor; replicated creation order (D-11); the roster is the dependency root
-	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns per-instance overlays, explosion presentation and a Kraken's burn (D-6)
+	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns per-instance overlays, explosion presentation, a Kraken's burn and a maze's fade-in (D-6)
 	{Name: "camera", Constructor: "NewCameraSystem", Domain: "player", Requires: []string{"cursor"}}, // per-instance view follows the local cursor
 
 	// --- Player State: owner-authored cursor components (D-13) ---

@@ -131,8 +131,9 @@ Docs · Libraries · Branches.
   commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
 - Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
   a variable, a heredoc that only edits the Makefile's install recipe included:
-  edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
-  `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
+  edit that recipe with the Edit tool, and read what a purge would remove with
+  `./script/install.sh install-config -purge -n VIF_CONFIG_DIR=<any path>`, which
+  prints the recipe and runs nothing; run one only on a root made for it.
 - A probe of a dependency's API against the checkout's files runs from a module of
   its own outside the tree: its `go.mod` takes this module's `go` line, a lower
   one asking for a toolchain nothing serves, and its `go.sum` a copy of this
@@ -171,6 +172,11 @@ Docs · Libraries · Branches.
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant. A comment or doc giving ticks in
   seconds says "at the default tick", 20 a second: 300 ticks once read five seconds.
+- A staging world's `Config` is written out field by field (`App.newStagingApp`),
+  and a field left out takes its default. It names what decides the simulation and
+  an install does not write, as the run's tick: `World.tick` stays as built, and the
+  header's `TickInterval` moves only the clock. Without it a projection plays ticks
+  the live world does not (`TestAStagingWorldPlaysItsRunsTick`).
 - `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
   world reads and the journal records; Command and Overlay are the operator's, held
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
@@ -279,9 +285,10 @@ Docs · Libraries · Branches.
   (`returnPlace.via`), or a person with bots waiting reads as a bot holding bots.
 - What a player brings back to its Wraith (`event.CursorRecord`) is judged where it
   is written, `CursorSystem.restore` on every instance, never at the door: by the
-  game it names (`Run` against the queue's run, which a reset advances) and by
-  `heldInRange`, which the owner sync's check shares. A field added to the record
-  that play bounds joins `heldInRange`.
+  game it names (`Run` against the queue's run, which a reset advances), by
+  `heldInRange`, which the owner sync's check shares, and by reading no defeat,
+  no energy and no heat. A field added to the record that play bounds joins
+  `heldInRange`.
 
 ## Runs and their wiring
 
@@ -481,6 +488,9 @@ Docs · Libraries · Branches.
   runs each, failed a quarter of the processes where a quiet run never did. A flake
   that appears after a merge can be older: one quiet process at `-test.count=40`
   read 2 failures on the commit before and 7 after, a merge that only moved timing.
+  `TestAJoinerLandsInAGameWaitingForItsHostsStart` is one: `shared snapshot
+  diverged` at its last parity, the two a tick apart, in 3 of 192 processes run
+  eight at once on four cores and in none of 20 run alone.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
@@ -817,6 +827,12 @@ Docs · Libraries · Branches.
   frame is dimmed by half (`DimFactor`): for true colors resume and capture every
   50 ms, which lands one capture a tick. A drain's end raises `EventSpeciesKilled`
   too, so `:system drain disable` first.
+- A campaign encounter is entered from a running game by `:emit
+  EventFSMRegionRequest { op = "pause", region = "main" }`, then `{ op = "spawn",
+  region = "kraken", state = "KrakenSetup" }`. A fresh cursor stands where the
+  Kraken rises, so `:energy 900000000` first, or its strike starts a new game. A
+  capture of a 256-color run writes entries 0-15 as `30`-`37`, `90`-`97` and their
+  backgrounds, not `38;5;n`: a parser reading only that form reads them as unset.
 - `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive
   (`:energy 900000000`) and the formation ended (`:emit EventBehaviorCancelRequest
   {}`), which brings the squadron wave on. A headless probe reads the route a
@@ -877,12 +893,13 @@ Docs · Libraries · Branches.
 
 ## Measuring
 
-- A browser-build bench runs under Node (`BenchmarkKrakenRegion`'s comment), which
-  refuses a run whose arguments and environment pass about 8 KB ("total length of
-  command line and environment variables exceeds limit"), as a cloud container's
-  environment does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test
-  file calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go`
-  does, or that package's wasm test binary stops building.
+- A browser-build bench runs under Node
+  ([Development §5](development.md#5-validation-and-tests)), which refuses a run
+  whose arguments and environment pass about 8 KB ("total length of command line
+  and environment variables exceeds limit"), as a cloud container's environment
+  does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test file
+  calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go` does,
+  or that package's wasm test binary stops building.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs. A bench file the
@@ -908,19 +925,34 @@ Docs · Libraries · Branches.
   own, then `Driver.End` at its tick and `sideGames.close`. The binary learns
   as the harness does, a seed's rounds the same in both. A graph parsed under
   another name (`bot.ParseGraph`) keeps its populations apart.
-- What a model fields is read held out, with no learner: a driver on the graph
-  whose weights are the model's, `App.Reset(false)` closing each round at the
-  graph's limit, `Driver.Round` giving its score. An `Instance` wrapping the
-  App, whose `SetDispatchTap` calls the test's tap ahead of the driver's,
-  counts what ended a round: `EventKrakenSpawnRequest` for a Kraken met, its
+- A model or a population is read held out by `vif -headless -field`, a line a
+  round, under an `XDG_CONFIG_HOME` holding the population files, or an empty
+  one for the document's weights. What ended a round still takes a scratch
+  test: a driver given `App.field` and `bot.Learn` with no learner, which
+  closes its rounds at the graph's limit, `Driver.Round` giving each score. An
+  `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap
+  ahead of the driver's, counts `EventKrakenSpawnRequest` for a Kraken met, its
   `EventSpeciesKilled` for one shot down, `EventFireSpecialRequest` for a
-  special asked for and `EventHeatSpendRequest` for one spent. 100 rounds of
-  four seeds take a minute on four cores.
-- What a population fields is played the same way by learners attached not
-  alone (`bot.Learn`, `alone` false), which field and never save, each on its
-  file's path (`paths.PlaceFile`). The package's TestMain points
-  `XDG_CONFIG_HOME` at an empty directory, and a relative one is no root: a
-  learning run under it keeps no population and says nothing.
+  special asked for and `EventHeatSpendRequest` for one spent.
+- What a population fields is played with no learner: `App.field` reads each
+  network's file (`Graph.Kept`) and `Driver.Field` has the driver play its
+  member. The package's TestMain points `XDG_CONFIG_HOME` at an empty
+  directory, and a relative one is no root: a run under it reads and keeps no
+  population and says nothing.
+- A world's transport is never taken away once attached
+  (`Membership.attachResourceLocked`; `:leave` opens a session of the run's
+  own), so `alone` only ever turns false, and a run in a session as it starts
+  builds no learner.
+- Only a learner's save writes a population this build reads: a test outside
+  `internal/bot` gets one by playing a round, as
+  `TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot` does.
+- `-field` over rounds too short to reach a Kraken reads `raid` alone: at
+  `round_seconds = 15`, `cave`'s shipped weights and a trainer's populations
+  print the same lines. Read a `kraken` member at the graph's half-hour limit.
+- What a watched run's bar says for a moment, as `Round N scored S`, is read
+  from the terminal's bytes: `script -qfec '<vif ... -watch>' <file>` under
+  `timeout`, the CSI sequences stripped. A watched run stays up after its graph
+  quits.
 - Held-out rows are a function of the genomes played: two runs fielding one
   pair give the same rows, so a queue keeps them by the genomes. The i-th round
   of a seed draws one game's streams for every member
@@ -928,9 +960,9 @@ Docs · Libraries · Branches.
   so rounds are not paired. Cap a held-out round at the graph's limit, as a run
   would, and give a learning run ticks, not rounds: a learner that masters a
   phase makes its rounds long.
-- One member is held alone from a population of it only, kept in a `bot.Store`
-  in memory with its rounds raised to eight, which the learner then fields
-  (`LearnStats.Fielded`, `FieldedRounds`). A member is held beside another
+- One member is held alone from a population of it only, its rounds raised to
+  eight, which `Graph.Kept` then fields: a file in the run's user root, or a
+  `bot.Store` in memory for a scratch test. A member is held beside another
   network's by populations of a member each. Hold a member this way before
   calling it promising: its own mean over a few rounds does not say.
 - A learner's rule or setting is read as an arm: a `tar` copy of the tree
@@ -953,20 +985,24 @@ Docs · Libraries · Branches.
   branch's. Two binaries read it with no harness: each plays `-headless -speed
   max -seed N -games G` on `-config-dir <checkout>/wad` under its own
   `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a `stop`
-  region that quits at a game time, as `botfitness` appends one. The line's
+  region that quits at a game time, as `botscore` appends one. The line's
   `actions` and ticks of several games move by one between runs: compare the
-  files.
+  files, and across a change of `version` or `scored_by` with those keys cut
+  (`jq -S 'del(.version, .scored_by)'`).
 - A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
   script that puts each fix's lines back and runs the one test of its rule,
   which must fail. A mutation that deadlocks the games' order hangs where it
   should fail: run it under `timeout`, whose 124 is the test holding, and give
-  a scratch run past ten minutes `-test.timeout 0`.
+  a scratch run past ten minutes `-test.timeout 0`. One file's mutation needs
+  no copy: `go test -overlay <json>` compiles a scratch file in its place
+  (`{"Replace":{"<the file's absolute path>":"<the scratch file>"}}`).
 - A merge under a measurement is checked before a baseline is kept: main's
   binary after it and before it play one seed from nothing, and the same
   population bytes say the runs read so far are main's still. A gameplay change
   is held the same way against `cave`'s own bot learning alone.
-- A population kept under an older `version` is fielded by a newer binary from
-  a copy with its `version` raised, by a JSON round trip and not by `sed`,
+- A population kept under an older `version` or another `scored_by` is fielded
+  by a newer binary from a copy with its `version` raised and its `scored_by`
+  the document's, by a JSON round trip that keeps every key and not by `sed`,
   whose spacing is its writer's. A model is landed in a bot document by `-bot
   export`, and moves to a graph that reads its inputs and more by `-bot
   import` ([Bots](bots.md#a-players-bot-files)). `toml.Document.Delete` takes a
@@ -1004,18 +1040,19 @@ Docs · Libraries · Branches.
   the tick when the step injected input. What a system leaves for a tick, as
   `Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens,
   and a driver closes its round before it counts such a tick.
-- `genetic`'s table of evaluations in flight evicts by a window of eight slots
-  from an id's home, whatever its capacity, and completing an evicted id does
-  nothing: a host whose evaluations outlive a lap of ids keeps the genome and
-  completes under an evaluation begun as the round closes (`Learner.settle`).
-  Its `Inject` keeps the gene slices it is handed, so a test builds each
+- `genetic`'s `Inject` keeps the gene slices it is handed, so a test builds each
   learner its own population.
-- A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
-  given no region: one that reads its region registers by `RegisterStateGuard`
-  and is refused there at load.
+- A learner's search is read without a game by a scratch test in
+  `internal/bot`: it deals and settles scripted rounds into a learner on a
+  store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
+  A changed repeat order moves every hash.
 - An output added to the catalogue is asked (`outputRow.asked`): given to every
   network that lists none, `cave`'s two would grow a unit, their layouts change
   and every population of theirs start over.
+- A test changes a shipped graph's rate or round limit on `Graph.Settings`
+  after `ParseGraph`, which `NewDriver` reads; one that hands `RunBot` a path
+  replaces the key whatever its figure. No test pins a shipped layout's digest:
+  a changed layout fails nothing and starts its populations over.
 - A scenario's bots are files of the scenario, and only `default` is embedded.
   A test reads one through `resource.LoadScenario` and `Scenario.Bot`. A copy
   of the name in a root's `bot/` plays in its place. A harness built earlier
@@ -1028,9 +1065,11 @@ Docs · Libraries · Branches.
 - Whether a bot plays a run reaches its replay only by the session latch's note
   (`SessionState.Bot`). `drive` with kind "bot" marks its run a bot's;
   `playBot` and a bare `NewHeadless` with a driver do not, and a harness built
-  so holds a person's cursor, whose defeat ends its game.
-- A seat fields what its player's population holds: `PlaySeat` builds the
-  learners a run in a session does. Read what a seated bot plays on a run of two
+  so holds a person's cursor, whose defeat ends its game, and takes every command
+  its viewer types (`World.DrivenByBot`): a test of what a watched bot's viewer
+  may do builds its run with `drive`, as `play_test.go`'s `mustHeadless` ones do not.
+- A seat fields what its player's population holds, read once as the seat is
+  taken (`PlaySeat`, `App.field`). Read what a seated bot plays on a run of two
   bots with and without the population in the user root, at `-speed 8`, as a
   session cannot run flat out.
 - Compare graphs at one round length: the embedded game pays about twice as
@@ -1283,8 +1322,9 @@ Docs · Libraries · Branches.
   transformer, which vif does not require; `make tools` builds ascimage's command
   from the version `go.mod` requires.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
-  engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
-  `snapshot.Schema` beside `StreamingStateVersion`.
+  engine's checkpoint, so a change to `genetic.StreamingState`'s layout, or to
+  how a state is continued, bumps `snapshot.Schema` beside
+  `StreamingStateVersion`.
 
 ## Branches
 

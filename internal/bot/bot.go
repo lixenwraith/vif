@@ -16,20 +16,18 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/toml/macro"
-	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
-	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 const (
-	// DefaultActionsPerSecond is a graph's intent rate when its [bot] table names none
-	DefaultActionsPerSecond = 12
+	// defaultActionsPerSecond is a graph's intent rate when its [bot] table names none
+	defaultActionsPerSecond = 12
 
 	// queueMax bounds the intents waiting on the rate; one that finds it full is dropped
 	queueMax = 256
@@ -38,8 +36,8 @@ const (
 // Settings is a graph's [bot] table. AutoFire is the auto-fire its run starts each
 // game on, off, main or on as [play] spells them, the shipped one when empty.
 // Learn has a solo run evolve the weights of the graph's networks as its rounds
-// end, and any run field the best its stores hold; RoundSeconds is the game time
-// after which such a run ends a round the game has not, none when zero.
+// end; RoundSeconds is the game time after which such a run ends a round the
+// game has not, none when zero. What a population kept is fielded either way.
 type Settings struct {
 	ActionsPerSecond int    `toml:"actions_per_second"`
 	AutoFire         string `toml:"auto_fire"`
@@ -47,6 +45,9 @@ type Settings struct {
 	RoundSeconds     int    `toml:"round_seconds"`
 	// Inputs are the sensors every network of the graph reads ahead of its own
 	Inputs []string `toml:"inputs"`
+	// Score is what pays the bot: a source of the catalogue's and what one of it
+	// pays. A graph with none scores nothing and may not learn.
+	Score map[string]float64 `toml:"score"`
 }
 
 // Graph is one parsed bot document: its settings, the networks it declares, in
@@ -57,20 +58,10 @@ type Graph struct {
 	Settings Settings
 	nets     []*network
 	text     []byte // the document as written, which Document writes weights into
-	asks     []InState
 	doc      map[string]any
+	pays     []paying // what its score pays, and scoredBy how the score is spelt
+	scoredBy string
 }
-
-// InState is one use of the InState guard: the scenario's region it asks of and
-// the states it names there
-type InState struct {
-	Region string
-	States []string
-}
-
-// InStates are the graph's uses of InState, each of which holds only in a
-// scenario that has its region and states
-func (g *Graph) InStates() []InState { return g.asks }
 
 // Networks names the graph's networks, in the order a list of them takes
 func (g *Graph) Networks() []string {
@@ -92,11 +83,11 @@ func ParseGraph(name string, data []byte) (*Graph, error) {
 	if doc, err = macro.ExpandDocument(doc); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, text: data, doc: doc}
+	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: defaultActionsPerSecond}, text: data, doc: doc}
 	if err := g.validate(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	if _, err := g.compile(&g.asks); err != nil {
+	if _, err := g.machine(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
 	return g, nil
@@ -127,6 +118,12 @@ func (g *Graph) validate() error {
 	if g.Settings.Learn && len(g.nets) == 0 {
 		return errors.New("learn needs a [network.<name>] whose weights to learn")
 	}
+	if g.pays, g.scoredBy, err = scoring(g.Settings.Score); err != nil {
+		return fmt.Errorf("[bot] score: %w", err)
+	}
+	if g.Settings.Learn && len(g.pays) == 0 {
+		return errors.New("learn needs a [bot] score: what a round pays its networks for")
+	}
 	regions, _ := g.doc["regions"].(map[string]any)
 	for name, raw := range regions {
 		region, _ := raw.(map[string]any)
@@ -141,25 +138,11 @@ func (g *Graph) validate() error {
 	return nil
 }
 
-// machine compiles a fresh machine over the graph, the vocabulary registered first
-// so the loader resolves every name against it, and each network's while built
-// of that machine's guards, for a Steer that names the network to ask.
-func (g *Graph) machine() (*fsm.Machine[*mind], error) { return g.compile(nil) }
-
-// compile is machine, noting in asks, where given, each InState it resolves
-func (g *Graph) compile(asks *[]InState) (*fsm.Machine[*mind], error) {
+// machine compiles a fresh machine over the graph, the vocabulary registered
+// first so the loader resolves every name against it
+func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 	m := fsm.NewMachine[*mind]()
-	whiles := make([]fsm.GuardFunc[*mind], len(g.nets))
-	register(m, g.nets, whiles, asks)
-	for i, n := range g.nets {
-		if n.while == nil {
-			continue
-		}
-		var err error
-		if whiles[i], err = m.Guard(n.while.Name, n.while.Args); err != nil {
-			return nil, fmt.Errorf("[network]: %s: while: %w", n.name, err)
-		}
-	}
+	register(m, g.nets)
 	if err := m.LoadScenarioFromMap(g.doc); err != nil {
 		return nil, err
 	}
@@ -169,7 +152,7 @@ func (g *Graph) compile(asks *[]InState) (*fsm.Machine[*mind], error) {
 // Vocabulary lists the actions and guards a graph resolves, for -schema
 func Vocabulary() []dialect.Entry {
 	m := fsm.NewMachine[*mind]()
-	register(m, nil, nil, nil)
+	register(m, nil)
 	return m.Vocabulary()
 }
 
@@ -207,47 +190,15 @@ type Stats struct {
 	Ticks    uint64
 	Injected uint64
 	Dropped  uint64
-	Fitness  int64
 	Rounds   uint64
-	Score    float64 // the rounds' scores summed: how far they travelled and what they earned
+	Score    float64 // what the graph's score has paid, the round in play included
 	State    string  // each region's active state, region:state, space separated
 
-	// Learn is how far each of the graph's learners is, in its networks' order;
-	// none for a driver that plays the graph's own weights
+	// Learn is how far each of the graph's learners is, in its networks' order, or
+	// for a driver that only fields, what each population it read holds; none for
+	// one that plays the graph's own weights
 	Learn []LearnStats
 }
-
-// fitness is indexed by row: an event the bot's own step dispatched, the payload
-// field that must name its cursor (empty for any), a bool payload field that must
-// hold (empty for none), the weight and how it weighs. A correct character is the
-// boost it earns and an error the boost it ends; a predicted death counts once
-// confirmed.
-var fitness = [...]struct {
-	event  event.EventType
-	owner  string
-	when   string
-	weight int64
-	weigh  weigh
-}{
-	{event.EventBoostReward, "entity", "", 1, weighPlain},
-	{event.EventBoostDeactivate, "entity", "", -1, weighPlain},
-	{event.EventSpeciesKilled, "killer_entity", "", 5, weighKill},
-	{event.EventSpeciesKillConfirmed, "killer_entity", "", 5, weighKill},
-	{event.EventGoldCompleted, "entity", "", 25, weighPlain},
-	{event.EventCursorDefeatState, "entity", "defeated", -100, weighEnd},
-	{event.EventCursorCrushed, "entity", "", -100, weighEnd},
-}
-
-// weigh is how a fitness row weighs: as its weight says; as a kill, a data species'
-// worth its program's hit points instead; or as a defeat, which ends a round and
-// is so no part of the round's own score
-type weigh uint8
-
-const (
-	weighPlain weigh = iota
-	weighKill
-	weighEnd
-)
 
 // Driver plays one graph on one instance, a tick at a time.
 type Driver struct {
@@ -264,54 +215,50 @@ type Driver struct {
 	stats   Stats
 
 	// seen is what the instance dispatched during the last step that the graph
-	// reacts to, in order, and fitness what all it dispatched was worth; both are
-	// written inside dispatch and read under the world lock. observing is set only
-	// while the driver itself plays.
+	// reacts to, in order, written inside dispatch. score is what the graph's score
+	// (pays) has paid, written there and as a tick is counted. Both are read under
+	// the world lock. observing is set only while the driver itself plays.
 	seen      []event.GameEvent
-	fitness   int64
+	pays      []paying
+	score     float64
 	observing atomic.Bool
-	// owed is what each death the bot's world predicted weighs once it is proved
-	owed map[core.Entity]int64
+	// owed is what each death the bot's world predicted pays once it is proved
+	owed map[core.Entity]float64
 
-	// earned is fitness without its defeats, and travelled the columns the cave has
-	// scrolled under the bot. The round in play began at roundTick with roundEarned
-	// and roundTravelled, and downed says its end has been weighed; ended is how a
-	// new game was asked for since, which any dispatch may write.
-	earned         int64
-	travelled      uint64
-	roundTick      uint64
-	roundEarned    int64
-	roundTravelled uint64
-	downed         bool
-	ended          atomic.Uint32
+	// The round in play began at roundTick with roundScore paid; ended is how a new
+	// game was asked for since, which any dispatch may write.
+	roundTick  uint64
+	roundScore float64
+	ended      atomic.Uint32
 
 	// Each network's learner, nil for none, has a genome play a round: a candidate
 	// while the bot plays alone, scored by its network's part of the round
-	// (parts), paid being what of earned the parts have taken. A round that
-	// outlasts limit is one the driver asked the game to end (asked).
+	// (parts), shared being what of score the parts have taken. alone is set on a
+	// run's games (Learn): a round of theirs that outlasts limit is one the driver
+	// asked the game to end (asked).
 	learners []*Learner
+	kept     []LearnStats // what Field had it play, as its populations stand
 	parts    []part
-	paid     int64
-	learns   bool
+	shared   float64
 	alone    func() bool
 	limit    time.Duration
 	asked    bool
 
-	// game is the driver's place among those that learn together, and games the
-	// order their rounds close in, nil for a driver that learns by itself
+	// game is the driver's place among a run's games, and games the order their
+	// rounds close in, nil for a driver that plays by itself
 	game  int
 	games *games
 
-	// Round, when set, is told each round as it closes: its number and its score
+	// Round, when set, is told each round as it closes, its number and its score:
+	// in its turn among a run's games, and none that closes past the run's end
 	Round func(n uint64, score float64)
 }
 
 // part is a network's of the round in play: whether it steered in it, whether
-// the ticks are now its own, as the last to steer, and what those that were
-// travelled and earned
+// the ticks are now its own, as the last to steer, and what those that were paid
 type part struct {
 	steered, holds bool
-	score          int64
+	score          float64
 }
 
 // How the round in play was asked to end: by the game itself, as a defeat does, or
@@ -330,7 +277,7 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 		return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 	}
 	d := &Driver{inst: inst, ctx: ctx, machine: m, regions: m.DeclaredRegions(), rate: int64(g.Settings.ActionsPerSecond),
-		learners: make([]*Learner, len(g.nets)), parts: make([]part, len(g.nets)),
+		learners: make([]*Learner, len(g.nets)), parts: make([]part, len(g.nets)), pays: g.pays,
 		limit: time.Duration(g.Settings.RoundSeconds) * time.Second}
 	d.mind = mind{ctx: ctx, queue: &d.queue, steered: make([]bool, len(g.nets)),
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
@@ -342,9 +289,9 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 	return d, nil
 }
 
-// observe weighs an event and keeps a copy of one the graph reacts to, as dispatch
-// recycles a pooled payload; what an operator drives while the graph is suspended
-// is not the bot's.
+// observe pays for an event and keeps a copy of one the graph reacts to, as
+// dispatch recycles a pooled payload; what an operator drives while the graph is
+// suspended is not the bot's.
 func (d *Driver) observe(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		how := roundOver
@@ -356,98 +303,57 @@ func (d *Driver) observe(ev event.GameEvent) {
 	if !d.observing.Load() {
 		return
 	}
-	for _, row := range fitness {
-		if row.event != ev.Type || row.owner != "" && !d.mind.owns(ev.Payload, row.owner) ||
-			row.when != "" && !payloadTrue(ev.Payload, row.when) {
-			continue
-		}
-		weight := row.weight
-		if row.weigh == weighKill {
-			weight = d.killWeight(ev, weight)
-		}
-		if ev.Phase == event.PhasePredicted {
-			continue
-		}
-		// A round ends once, however often its last hits lift and drop the defeat
-		// before the new game, and a crush is a defeat too
-		if row.weigh == weighEnd {
-			if d.downed {
-				continue
-			}
-			d.downed = true
-		}
-		d.fitness += weight
-		if row.weigh != weighEnd {
-			d.earned += weight
-		}
-	}
+	d.pay(ev)
 	if d.machine.Reacts(ev.Type) {
 		ev.Payload = event.ClonePayload(ev.Payload)
 		d.seen = append(d.seen, ev)
 	}
 }
 
-func payloadTrue(payload any, field string) bool {
-	v, ok := std.ExtractBoolField(payload, field)
-	return ok && v
-}
-
-// krakenPar is the hit points a second a gun kept on a Kraken takes, bountyFloor
-// the least of its bounty a slow kill keeps, and killPay what a data species'
-// kill pays for each hit point its program gives it
-const (
-	krakenPar   = 4.0
-	bountyFloor = 0.25
-	killPay     = 12
-)
-
-// killWeight is what a kill's event weighs. A death the bot's world only predicted
-// is weighed as it is seen, while its entity stands to be read, and that held for
-// the event that proves it, which comes once the entity is gone.
-func (d *Driver) killWeight(ev event.GameEvent, weight int64) int64 {
-	p, ok := ev.Payload.(*event.SpeciesKilledPayload)
-	if !ok {
-		return weight
+// pay adds what the score pays for an event of the bot's own cursor. A death its
+// world only predicted is weighed as it is seen, while its entity stands to be
+// read, and that held for the event that proves it, which comes once the entity
+// is gone.
+func (d *Driver) pay(ev event.GameEvent) {
+	kind := ev.Type
+	if kind == event.EventSpeciesKillConfirmed {
+		kind = event.EventSpeciesKilled
 	}
-	if held, ok := d.owed[p.Entity]; ok && ev.Type == event.EventSpeciesKillConfirmed {
-		delete(d.owed, p.Entity)
-		return held
-	}
-	weight = d.mind.killWorth(p, weight)
-	if ev.Phase == event.PhasePredicted {
-		if d.owed == nil {
-			d.owed = make(map[core.Entity]int64)
+	sum, own := 0.0, false
+	for _, p := range d.pays {
+		if p.row.each != nil || p.row.event != kind || !d.mind.owns(ev.Payload, p.row.owner) {
+			continue
 		}
-		d.owed[p.Entity] = weight
+		worth := 1.0
+		if p.row.worth != nil {
+			worth = p.row.worth(&d.mind, ev.Payload)
+		}
+		sum, own = sum+p.weight*worth, true
 	}
-	return weight
-}
-
-// killWorth is what a kill weighs. A data species' is killPay times the hit points
-// its program gives it, what it took to shoot down. A Kraken's is the ticks its
-// hit points take at krakenPar, so a fight at that pace earns its own time, and the
-// share of them that pace is of the one it died at, bountyFloor at least. Any
-// other's is weight.
-func (m *mind) killWorth(payload any, weight int64) int64 {
-	p, ok := payload.(*event.SpeciesKilledPayload)
-	if !ok {
-		return weight
+	if !own {
+		return
 	}
-	if i := int(p.Species - component.SpeciesDataFirst); p.Species >= component.SpeciesDataFirst && i < len(m.ctx.World.Resources.Behaviors) {
-		return killPay * int64(m.ctx.World.Resources.Behaviors[i].HitPoints)
+	if kill, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
+		if held, ok := d.owed[kill.Entity]; ok && ev.Type == event.EventSpeciesKillConfirmed {
+			delete(d.owed, kill.Entity)
+			sum = held
+		} else if ev.Phase == event.PhasePredicted {
+			if d.owed == nil {
+				d.owed = make(map[core.Entity]float64)
+			}
+			d.owed[kill.Entity] = sum
+		}
 	}
-	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken && k.Time > 0 {
-		par := float64(k.MaxHitPoints) / krakenPar
-		return int64(par / m.ctx.World.TickInterval().Seconds() * min(max(par/k.Time, bountyFloor), 1))
+	if ev.Phase != event.PhasePredicted {
+		d.score += sum
 	}
-	return weight
 }
 
 // Step updates the graph at the completed tick, after the events the last step
 // dispatched, then lets go of the keys whose holds are up, sends what the rate
 // allows, advances input-driven work and ticks once. False means an intent quit
-// the game, or the games it learns with have ended. Credit left idle is capped
-// at one second's worth, so a quiet bot bursts no further.
+// the game, or the run's games have ended. Credit left idle is capped at one
+// second's worth, so a quiet bot bursts no further.
 func (d *Driver) Step() (more bool, err error) {
 	if g := d.games; g != nil {
 		if d.stats.Ticks >= g.end.Load() {
@@ -508,8 +414,8 @@ func (d *Driver) Step() (more bool, err error) {
 	if how := d.ended.Swap(roundOn); how != roundOn {
 		d.closeRound(how == roundOver || d.asked)
 		d.asked = false
-	} else if over := time.Duration(d.stats.Ticks-d.roundTick) * tick; d.limit > 0 && over >= d.limit && !d.asked && d.learns && d.alone() {
-		// A learning round the game will not end is closed as far as it came, by a new game
+	} else if over := time.Duration(d.stats.Ticks-d.roundTick) * tick; d.limit > 0 && over >= d.limit && !d.asked && d.alone != nil && d.alone() {
+		// A round of a run's games the game will not end is closed as far as it came, by a new game
 		d.asked = true
 		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 	}
@@ -522,14 +428,17 @@ func (d *Driver) Step() (more bool, err error) {
 	return true, nil
 }
 
-// count takes the tick's columns and what the step earned into the round in play,
-// and into the part of each network whose ticks these are
+// count pays for what the score counts a tick, and takes that and what the step's
+// events paid into the part of each network whose ticks these are
 func (d *Driver) count() {
 	d.ctx.World.RunSafe(func() {
-		steps := uint64(max(d.ctx.World.Resources.Cave.Steps, 0))
-		d.travelled += steps
-		gain := int64(steps) + d.earned - d.paid
-		d.paid = d.earned
+		for _, p := range d.pays {
+			if p.row.each != nil {
+				d.score += p.weight * p.row.each(&d.mind)
+			}
+		}
+		gain := d.score - d.shared
+		d.shared = d.score
 		for i := range d.parts {
 			if d.parts[i].holds {
 				d.parts[i].score += gain
@@ -538,11 +447,26 @@ func (d *Driver) count() {
 	})
 }
 
-// Learn has each driver play the learners' genomes on its networks, a round each,
-// as one of the games that learn from them together, the first the run's own,
-// whose end is theirs. While alone reports the bots play by themselves every
-// learner plays a candidate, scored by the ticks of the round that are its
-// network's. Otherwise, as in a session, each plays what it fields.
+// Field has the network k names play the member its population fields, where one
+// is proved, and reports k as that network's progress. It is how a run that does
+// not learn plays what its graph was taught, with no learner, and is called
+// before the driver's first step.
+func (d *Driver) Field(k Kept) {
+	i := slices.IndexFunc(d.mind.nets, func(n *network) bool { return n.name == k.Network })
+	if i < 0 {
+		return
+	}
+	if n := d.mind.nets[i]; len(k.Fielded) == n.geneCount() {
+		n.wear(k.Fielded)
+	}
+	d.kept = append(d.kept, LearnStats{Network: k.Network, Rounds: k.Rounds, Recent: k.Recent, Fielded: k.Score, FieldedRounds: k.Proved})
+}
+
+// Learn has drivers play as a run's games, the first the run's own, whose end is
+// theirs: their rounds close in one order and, while alone reports the bots play
+// by themselves, at the graph's limit. Each learner, of none or more, then plays
+// a candidate a round on its network, scored by the ticks that are its network's;
+// once the run has opened a session, each plays what it fields.
 func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
 	var order *games
 	if len(drivers) > 1 {
@@ -555,13 +479,12 @@ func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
 				d.learners[i] = l
 			}
 		}
-		d.learns = slices.ContainsFunc(d.learners, func(l *Learner) bool { return l != nil })
 		d.deal()
 	}
 }
 
-// End closes the learning d takes part in at tick: no round a game closes past it
-// reaches the learners, and none of the games steps further than it
+// End ends the run d is a game of at tick: no round a game closes past it
+// reaches the learners or is told, and none of the games steps further than it
 func (d *Driver) End(tick uint64) {
 	if d.games != nil {
 		d.games.end.Store(tick)
@@ -580,37 +503,38 @@ func (d *Driver) deal() {
 	}
 }
 
-// closeRound ends the round a new game closed. Its score is how far its cave
-// scrolled, which time alone does not move, and what its events earned, a defeat
-// aside since one ends every round. A learner whose network steered is scored by
-// its part, when the game or the run's limit ended the round; one whose network
-// never did keeps its candidate for the round that reaches it.
+// closeRound ends the round a new game closed. Its score is what the graph's
+// score paid in it. A learner whose network steered is scored by its part, when
+// the game or the run's limit ended the round; one whose network never did keeps
+// its candidate for the round that reaches it.
 func (d *Driver) closeRound(played bool) {
-	var earned int64
+	var total float64
 	d.ctx.World.RunSafe(func() {
-		earned, d.downed = d.earned, false
+		total = d.score
 		clear(d.owed) // a prediction is dropped with the game it was made in
 	})
-	score := float64(d.travelled-d.roundTravelled) + float64(earned-d.roundEarned)
-	d.roundTick, d.roundEarned, d.roundTravelled = d.stats.Ticks, earned, d.travelled
+	score := total - d.roundScore
+	d.roundTick, d.roundScore = d.stats.Ticks, total
 	d.stats.Rounds++
-	d.stats.Score += score
-	if d.learns && (d.games == nil || d.games.enter(d.game, d.stats.Ticks)) {
-		scored := played && d.alone()
-		for i, l := range d.learners {
-			if l != nil && d.parts[i].steered {
-				l.settle(d.game, float64(d.parts[i].score), scored)
+	// A run's games close their rounds in turn, and one closed past the run's end is nobody's
+	if d.games == nil || d.games.enter(d.game, d.stats.Ticks) {
+		if d.alone != nil {
+			scored := played && d.alone()
+			for i, l := range d.learners {
+				if l != nil && d.parts[i].steered {
+					l.settle(d.game, d.parts[i].score, scored)
+				}
 			}
+			d.deal()
 		}
-		d.deal()
+		if d.Round != nil {
+			d.Round(d.stats.Rounds, score)
+		}
 		if d.games != nil {
 			d.games.exit()
 		}
 	}
 	clear(d.parts)
-	if d.Round != nil {
-		d.Round(d.stats.Rounds, score)
-	}
 }
 
 // inject sends queued intents in order, as many as the rate has earned.
@@ -695,6 +619,7 @@ func (d *Driver) unhold(i int) bool {
 func (d *Driver) Stats() Stats {
 	st := d.stats
 	st.Dropped = d.queue.dropped
+	st.Learn = slices.Clone(d.kept)
 	for _, l := range d.learners {
 		if l != nil {
 			st.Learn = append(st.Learn, l.Stats())
@@ -702,7 +627,7 @@ func (d *Driver) Stats() Stats {
 	}
 	states := make([]string, 0, len(d.regions))
 	d.ctx.World.RunSafe(func() {
-		st.Fitness = d.fitness
+		st.Score = d.score
 		for _, name := range d.regions {
 			if r := d.machine.RegionTelemetry(name); r.Active {
 				states = append(states, name+":"+r.State)

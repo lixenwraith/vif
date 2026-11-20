@@ -449,8 +449,9 @@ between map, viewport, and screen coordinates.
 `EventMazeSpawnRequest` divides the map into maze cells of `cell_width` by
 `cell_height`, carves a maze with open borders, optional braiding and random or
 placed rooms, and fills the remaining cells with walls; a placed room is cleared
-with a margin of one maze cell. Pattern assets can also become wall layouts. The
-maze generator is in [AI, physics, and
+with a margin of one maze cell. With `fade_in_ms` the walls block at once and
+fade in from the ground over that time, as the Kraken's and the tower's do. Pattern
+assets can also become wall layouts. The maze generator is in [AI, physics, and
 evolution](ai-physics-and-evolution.md#7-maze-generation) §7. Navigation then
 uses either flow fields toward a target or precomputed multi-route graphs
 ([Navigation](navigation-design.md)).
@@ -584,9 +585,9 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 2. The quasar holds that owner's grayout and drains. Three quasar kills lead to a
    storm; earlier kills return to `main`.
 3. Each storm kill doubles the cycle damage multiplier on shield drains (§5);
-   the notice reads `Species Damage Up`. Three storm kills create
-   a full-map maze without rooms and spawn one Kraken (§8) at its center, which
-   demolishes the maze as it moves.
+   the notice reads `Species Damage Up`. Three storm kills fade in a full-map
+   maze without rooms over a second, and half a second later one Kraken (§8)
+   rises at its center, which demolishes the maze as it moves.
 4. A Kraken kill fades the maze out, and the field rests half a second past the
    fade. The first then returns to `main` with the text the Kraken left in place; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
@@ -597,11 +598,12 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    and `main` resumes with that text. Losing the tower fails the run.
    Encounter transitions preserve uncollected loot.
 6. Any person reaching zero heat **and** zero energy ends the run. A bot doing so,
-   or crushed, ends it only where every cursor in play is a bot's; beside a person
-   it is equipped again a second later, at its starting cell with a new game's
-   heat, energy and loadout. The shared monitor consumes
-   owner-authored defeat state and starts a new game, as `:n` does: the world, the
-   kill tallies and every other statistic start over and the roster is rearmed.
+   or crushed, ends it only where no person holds a place; beside a person, one
+   who is away included, it is equipped again a second of game time later, at its
+   starting cell with a new game's heat, energy and loadout. The shared monitor
+   consumes owner-authored defeat state and starts a new game, as `:n` does: the
+   world, the kill tallies and every other statistic start over and the roster is
+   rearmed.
    Every shipped scenario uses this defeat rule; tower defense also retains its
    objective-failure and victory conditions.
 

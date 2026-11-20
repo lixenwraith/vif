@@ -60,7 +60,7 @@ make dev       # generated code + race-enabled debug build
 | `tools` | Build every `tool/*` command, and `bin/ascimage` from the `lixenwraith/ascimage` version `go.mod` requires. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
-| `install-config` | Copy `wad/`, bot graphs, keymaps and `vif.toml` into the user config root, an `input/keymap.toml` or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `CLEAN=1` (here and for `install`) removes the previous install first. |
+| `install-config` | Copy `wad/`, bot graphs, keymaps and `vif.toml` into the user config root, an `input/keymap.toml` or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `script/install.sh <goal> -purge`, for this goal or `install`, first removes what an earlier install put in the root, a player's bot files, keymap and settings with it. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
 | `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
 | `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
@@ -220,6 +220,7 @@ and the audio buffer; a flag on the command line wins
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
 | `-headless` | With bots, run without a human or terminal; solo runs are unpaced. With `-replay`, verify the journal's digests unattended. |
 | `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, one more than the cores unless given ([Bots](bots.md#learning)). |
+| `-field` | With `-watch` or `-headless`, a bot alone whose graph learns plays what its populations field and teaches them nothing; headless it prints each round's score ([Bots](bots.md#learning)). |
 | `-watch` | Present a script or the first bot, with no human player. |
 | `-r`, `-replay <path>` | Present a recorded journal instead of starting interactive play. |
 | `-check` | Resolve and validate `vif.toml`, the scenario and its behavior programs, keymap, audio, content and bot graphs; print the result and exit. |
@@ -503,7 +504,7 @@ binary on a real terminal, `make` or the deploy scripts: the release wad archive
 (`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
 it (`scenario`, `follow`), the session template against the router (`fleet`) and
 what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
-or FAIL; `botfitness` and `load` measure and stay out of it.
+or FAIL; `botscore` and `load` measure and stay out of it.
 
 ```sh
 ./script/test.sh list
@@ -555,8 +556,13 @@ every run simulates the same ticks of one seed and the allocation counts compare
 exactly, and compare `SnapshotSimulation` before and after a change that must not
 move the simulation. `BenchmarkKrakenRegion` beside it measures the Kraken in the
 campaign's kraken region, one `tick` and the `frames` the kraken renderer draws of
-it; its comment shows the browser build's run under Node, where the Kraken's cost
-showed first.
+it. The Kraken's cost showed first in the browser build, which runs it under Node
+from `internal/app`:
+
+```bash
+GOOS=js GOARCH=wasm go test -c -o kraken.wasm .
+node "$(go env GOROOT)/lib/wasm/wasm_exec_node.js" kraken.wasm -test.run '^$' -test.bench BenchmarkKrakenRegion -test.benchtime 1500x
+```
 
 The soak profiles are tiered, because the widest one costs too much for an edit
 cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.

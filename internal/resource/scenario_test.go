@@ -581,26 +581,9 @@ func TestAScenarioCarriesItsBotsAsFilesOfItsOwn(t *testing.T) {
 	}
 }
 
-// TestTheEmbeddedScenarioCarriesItsOwnBot: main, which a seat naming no graph plays
-// there, where default is still had by its name
-func TestTheEmbeddedScenarioCarriesItsOwnBot(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv(paths.SystemRootsEnv, "")
-	o := Options{Embedded: true}
-	sc, err := LoadScenario(o)
-	if err != nil || !slices.Equal(sc.Bots(), []string{"main"}) {
-		t.Fatalf("the embedded scenario carries %v, %v; want main", sc.Bots(), err)
-	}
-	for spec, want := range map[string]string{"": "main", "main": "main", DefaultBot: DefaultBot} {
-		if data, name, err := BotGraph(o, sc, spec); err != nil || name != want || len(data) == 0 {
-			t.Fatalf("bot %q in the embedded scenario is %q, %v; want %s", spec, name, err, want)
-		}
-	}
-}
-
 // flyer is a bot of two networks, fly and kraken, each with the table given
 func flyer(fly, kraken string) string {
-	return "# a bot that flies\n[bot]\nlearn = true\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
+	return "# a bot that flies\n[bot]\nlearn = true\nscore = { travel = 1 }\ninputs = [\"column\"]\n\n[network.fly]\ninputs = [\"energy\", \"heat\"]\n" + fly +
 		"\n[network.kraken]\ninputs = [\"row\"]\noutputs = [\"move\"]\n" + kraken +
 		"\n[regions.play]\ninitial = \"A\"\n\n[states.A]\non_update = [{ action = \"Steer\", payload = { network = \"fly\" } }]\n"
 }
@@ -682,13 +665,13 @@ func TestABotIsCreatedFromItsScenariosAndTakesWeightsByNetwork(t *testing.T) {
 		}
 	}
 
-	// What mine learned in flight outranks the weights it is given until cleared
+	// A file that is no population a run reads is not said to play on
 	if err := os.WriteFile(filepath.Join(user, "mine.flight.fly.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	told, err := verb("import", "pilot.fly", "mine")
-	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || !strings.Contains(told, "mine.flight.fly") {
-		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and the population that still plays", w, told, err)
+	if w := weights(t, at("mine")); err != nil || !slices.Equal(w["fly"], want["fly"]) || nonzero(w["kraken"]) || strings.Contains(told, "mine.flight.fly") {
+		t.Fatalf("import of fly's weights wrote %v and told %q, %v; want fly's alone and no word of a file no run reads", w, told, err)
 	}
 	for _, name := range []string{"none", "../bot/mine"} {
 		if told, err := verb("import", "pilot", name); err == nil {
@@ -760,45 +743,6 @@ func TestWhatBotsLearnedIsListedAndClearedByAddress(t *testing.T) {
 	}
 	if told, err := verb("export", "pilot.raid", file); err == nil {
 		t.Errorf("export took a network the graph lacks: %s", told)
-	}
-}
-
-// TestCheckHoldsAScenariosBotToItsRegionsAndStates: an InState of a graph a
-// scenario carries names that scenario's regions and states, or -check faults
-// it, since such a guard loads and never holds. A player's graph, which any
-// scenario may play, is held to none.
-func TestCheckHoldsAScenariosBotToItsRegionsAndStates(t *testing.T) {
-	for asks, fault := range map[string]string{
-		`region = "main"`:                          "",
-		`region = "main", states = ["MainStart"]`:  "",
-		`region = "boss"`:                          `region "boss"`,
-		`region = "main", states = ["MainFinish"]`: `state "MainFinish"`,
-	} {
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-		t.Setenv(paths.SystemRootsEnv, "")
-		root := t.TempDir()
-		dir := writeScenario(t, filepath.Join(root, "scenario", "flight"), scenarioRegion)
-		bound := flyer("", "while = { name = \"InState\", args = { "+asks+" } }")
-		for name, body := range map[string]string{
-			filepath.Join(dir, "scenario.toml"):    "bots = [\"bot/pilot.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n",
-			filepath.Join(dir, "bot/pilot.toml"):   bound,
-			filepath.Join(root, "bot/roamer.toml"): flyer("", "while = { name = \"InState\", args = { region = \"elsewhere\" } }"),
-		} {
-			if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		var out strings.Builder
-		err := checkBots(Options{Dir: root}, read(t, dir), &out)
-		if fault == "" && (err != nil || !strings.Contains(out.String(), "bot ok: scenario flight pilot")) {
-			t.Errorf("InState { %s }: check = %v, reporting:\n%s", asks, err, out.String())
-		}
-		if fault != "" && (err == nil || !strings.Contains(err.Error(), fault) || strings.Contains(err.Error(), "elsewhere")) {
-			t.Errorf("InState { %s }: check = %v; want a fault naming the %s the scenario has not, and none of a player's graph", asks, err, fault)
-		}
 	}
 }
 

@@ -67,6 +67,7 @@ var (
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal, or verify a -replay")
 	flagGames    = flag.Int("games", 0, "With -headless, how many games a bot alone whose graph learns plays at once; 0 is one more than the cores")
+	flagField    = flag.Bool("field", false, "With -watch or -headless, a bot alone plays what its populations field and learns nothing")
 	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
 	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
 	flagVer      = flag.Bool("version", false, "Print the build version and exit")
@@ -182,6 +183,9 @@ func main() {
 	if sessionErr == nil && (*flagGames < 0 || *flagGames != 0 && !(*flagHeadless && bots > 0)) {
 		sessionErr = errors.New("-games is how many games a -headless -bot run learns from at once, 1 or more")
 	}
+	if sessionErr == nil && *flagField && !((*flagWatch || *flagHeadless) && bots > 0) {
+		sessionErr = errors.New("-field is how a -watch or -headless -bot run plays what its bot learned, teaching it nothing")
+	}
 	if sessionErr == nil && flagSession.cert != "" {
 		sessionTLS, sessionErr = link.LoadTLS(flagSession.cert, flagSession.key)
 	}
@@ -259,6 +263,9 @@ func main() {
 		} else {
 			sayNotice()
 			botNotice(cfg, graph)
+			if *flagField {
+				cfg.Round = func(n uint64, score float64) { fmt.Printf("Round %d scored %.0f\n", n, score) }
+			}
 		}
 		var st bot.Stats
 		if st, err = app.RunBot(cfg, platformHost, graph); err == nil && !*flagWatch {
@@ -266,7 +273,7 @@ func main() {
 			if st.Games > 1 {
 				games = fmt.Sprintf("%d games, ", st.Games)
 			}
-			fmt.Printf("Bot stopped: %s%d ticks, %d actions, fitness %d\n", games, st.Ticks, st.Injected, st.Fitness)
+			fmt.Printf("Bot stopped: %s%d ticks, %d actions, %d rounds, score %.0f\n", games, st.Ticks, st.Injected, st.Rounds, st.Score)
 			for _, l := range st.Learn {
 				if l.Scored > 0 {
 					fmt.Printf("Bot learned %s: rounds %d of %d, recent %.0f, fielding %.0f over %d\n",
@@ -523,6 +530,7 @@ func buildConfig() app.Config {
 		TickInterval:  *flagTick,
 		Seed:          *flagSeed,
 		Games:         *flagGames,
+		Field:         *flagField,
 		Journal:       flagJournal.set,
 		Membership: app.Membership{
 			SessionName:  flagSession.name,

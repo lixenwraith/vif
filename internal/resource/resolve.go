@@ -282,10 +282,6 @@ func BotGraph(o Options, sc Scenario, spec string) ([]byte, string, error) {
 	if data, ok := sc.Bot(spec); ok {
 		return data, spec, nil
 	}
-	// Preserve named overrides while old built-in names share the current policy.
-	if spec == "roam" || spec == "patrol" {
-		file, spec = "default.toml", DefaultBot
-	}
 	data, err := fs.ReadFile(asset.DefaultBots, file)
 	switch {
 	case err == nil:

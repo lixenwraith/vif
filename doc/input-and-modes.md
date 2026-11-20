@@ -546,9 +546,14 @@ player's cursor follows that player, and every other play key is dropped
 are those that inspect the run, change its own settings or what it looks from, or
 leave: the rest answer "Unavailable while spectating".
 
-A watched bot is live play: `:n` and `:bot` use the normal command path. While
-its operator types a command, graph input waits and a live session keeps ticking.
-These permissions do not apply to a recorded replay.
+A watched bot's run is the bot's to play (`World.DrivenByBot`). Its operator's
+commands inspect the run, change the operator's own settings, or run the run's
+clock, game and session: `:pause`, `:speed`, `:step`, `:n`, `:bot`, `:player`,
+`:journal` and the session's. What the bot plays under answers "Unavailable while
+a bot plays", on the command line and in the menu: its auto-fire, mouse, follow
+mouse and wait, its camera edge, which bounds where it points, its cursor's grants,
+and the world's events, systems and regions. While its operator types a command,
+graph input waits and a live session keeps ticking. A recorded replay keeps less.
 
 `:host` and `:bot add` can bind a listener, and they and `:join` start goroutines,
 **inside the router's critical section**: the whole intent path runs under the world

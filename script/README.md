@@ -1,4 +1,4 @@
-# End-to-end checks
+# Scripts
 
 `test.sh` holds the checks no Go test makes, because they need a built binary on a
 real terminal, `make` or the deploy scripts. Build first: `make dev`.
@@ -34,7 +34,7 @@ These print what they measured and are not part of `all`.
 
 | Check | What it measures |
 |---|---|
-| `botfitness [graph] [seeds] [secs]` | default's fitness summed per scenario (embedded, td) over seeds 1..N, flat out; given a graph file, it fails unless that graph beats default on every scenario |
+| `botscore [graph] [seeds] [secs]` | default's score summed per scenario (embedded, td) over seeds 1..N, flat out under a user root of its own; given a graph file, it fails unless that graph beats default on every scenario, each graph by the score it declares |
 | `load [sessions] [bots] [secs]` | Linux only, since it reads `/proc`: per session a `-serve` host seating its own bots at 120x40 under the pod's `GOMEMLIMIT`, and a headless bot joining it (`GUEST_BOTS` of its own; `SCENARIO` serves a wad scenario); prints each host's memory, CPU, tick, guests, peers, evictions and digest mismatches, and fails on a slipping clock, an eviction, a short roster or a peak past `LIMIT_MB` (default the pod's limit for its bots) |
 
 ## The sparring pair
@@ -43,3 +43,11 @@ These print what they measured and are not part of `all`.
 that play a fixed host or guest against a person, or against each other headless;
 [Development](../doc/development.md#a-scripted-participant) has the commands.
 `go test ./internal/journal` compiles every `script/*.toml`.
+
+## install.sh
+
+`install.sh` is `make` with the one flag make cannot take: `-purge`, anywhere on
+the line, has an install goal first remove what an earlier install put in its
+config root, a player's bot files, keymap and settings with it
+([Filesystem §4](../doc/filesystem-layout.md#4-installation)). `-n` beside it
+prints what would run.

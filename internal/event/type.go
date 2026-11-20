@@ -555,6 +555,8 @@ const (
 	EventWallDespawned
 	// EventWallDespawnAll [shared] signals silent destruction of all wall entities
 	EventWallDespawnAll
+	// EventWallFadeInRequest (component.WallFadeIn) [local] fades in the walls a maze just laid
+	EventWallFadeInRequest
 
 	// --- Fadeout ---
 

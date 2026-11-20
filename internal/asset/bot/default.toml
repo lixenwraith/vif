@@ -1,5 +1,5 @@
 # Type runs left to right, backing off a threat that comes within three cells;
-# when text is absent, collect nuggets between patrols, which the network walk
+# when text is absent, collect nuggets between walks, which the network walk
 # steers as far as a run alone has learned to.
 [bot]
 # Twelve for the keys and four for the special attack walk asks for
@@ -9,6 +9,9 @@ auto_fire = "main"
 learn = true
 # The embedded game ends no round by itself, so one is closed each half hour
 round_seconds = 1800
+# default plays any scenario, so its score pays for every source there is. A
+# kill is paid by one of kill, hit_points and kraken, whichever measures it.
+score = { typed = 1, mistyped = -1, gold = 25, kill = 5, hit_points = 12, kraken = 1, travel = 1 }
 
 # walk reads where the two nearest species and the Kraken are and the bot's own
 # place, energy and heat: more inputs learn slower. What it learns is its

@@ -313,10 +313,11 @@ type (
 	textPayload struct {
 		Text string `toml:"text"`
 	}
-	// steerPayload's network is one network's name or a list of them, and its
-	// outputs those of the network's this Steer acts on, every one when none is named
+	// steerPayload's network is the network it runs, the graph's one where it names
+	// none, and its outputs those of the network's this Steer acts on, every one
+	// when none is named
 	steerPayload struct {
-		Network any      `toml:"network"`
+		Network string   `toml:"network"`
 		Outputs []string `toml:"outputs"`
 	}
 	hasTargetArgs struct {
@@ -337,10 +338,6 @@ type (
 	ownArgs struct {
 		Field string `toml:"field"`
 	}
-	inStateArgs struct {
-		Region string   `toml:"region"`
-		States []string `toml:"states"`
-	}
 	asksArgs struct {
 		Network string  `toml:"network"`
 		Output  string  `toml:"output"`
@@ -350,9 +347,8 @@ type (
 
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
-// bot's own view, and the bot's actions and guards; Steer resolves among nets,
-// each bound by its guard of whiles, and asks, where given, takes each InState.
-func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mind], asks *[]InState) {
+// bot's own view, and the bot's actions and guards; Steer resolves among nets
+func register(m *fsm.Machine[*mind], nets []*network) {
 	std.Register(m, std.Host[*mind]{
 		Refuse:        "writes the world; a bot acts only through intents",
 		CursorDecides: func(m *mind, entity int64) bool { return m.ctx.World.DefeatDecides(core.Entity(entity)) },
@@ -402,7 +398,7 @@ func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mi
 		m.push(input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
 	})
 	m.RegisterAction("PointAt", compilePointAt, (*mind).pointAt)
-	m.RegisterAction("Steer", compileSteer(nets, whiles), (*mind).steer)
+	m.RegisterAction("Steer", compileSteer(nets), (*mind).steer)
 
 	m.RegisterGuard("HasTarget", func(a *hasTargetArgs) (fsm.GuardFunc[*mind], error) {
 		t, key, err := guardTarget(a.Target, a.Key)
@@ -427,28 +423,13 @@ func register(m *fsm.Machine[*mind], nets []*network, whiles []fsm.GuardFunc[*mi
 			return m.ctx.GetMode() == core.GameMode(mode)
 		}, nil
 	})
-	// InState reads the scenario's own machine, where the generic guards read the graph's
-	m.RegisterGuard("InState", func(a *inStateArgs) (fsm.GuardFunc[*mind], error) {
-		if a.Region == "" {
-			return nil, errors.New("requires 'region'")
-		}
-		if asks != nil {
-			*asks = append(*asks, InState{Region: a.Region, States: a.States})
-		}
-		return func(m *mind, _ *fsm.RegionState, _ any) bool {
-			return m.ctx.World.Resources.Scenario.In(a.Region, a.States)
-		}, nil
-	})
 	// Asks holds while a network's one-unit output reads above a.Above: how a graph
 	// has its states hand over to what the network asks for, the wheel among them. A
 	// network with no weight asks nothing
 	m.RegisterGuard("Asks", func(a *asksArgs) (fsm.GuardFunc[*mind], error) {
-		i := slices.IndexFunc(nets, func(n *network) bool { return n.name == a.Network })
-		if a.Network == "" && len(nets) == 1 {
-			i = 0
-		}
-		if i < 0 {
-			return nil, fmt.Errorf("network %q is none of the graph's [network.<name>] tables", a.Network)
+		i, err := pick(nets, a.Network)
+		if err != nil {
+			return nil, err
 		}
 		o := slices.IndexFunc(outputs[:], func(row outputRow) bool { return row.name == a.Output })
 		if o < 0 || len(outputs[o].units) != 1 || !slices.Contains(nets[i].units, outputs[o].units[0]) {
