@@ -321,7 +321,7 @@ the session shares its address with the other players. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
 :player drop <slot> removes one and keeps it out. Bots adds local bots by count and graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
-<slot> removes your bot, or any bot when hosting. Its Bot files row takes a verb
+<slot> removes your bot, or any player's when hosting. Its Bot files row takes a verb
 of :bot that keeps bot files. Slots accept decimal 10,
 hexadecimal A or 0xA for the cursor marked A. Host before adding bots to solo
 play if remote players should join; otherwise bots open a session only they can
