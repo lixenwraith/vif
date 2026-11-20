@@ -138,6 +138,16 @@ Libraries · Branches.
   one asking for a toolchain nothing serves, and its `go.sum` a copy of this
   one's, and `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module
   cache with no network.
+- `make notices NOTICES_OF=android` lists `./game` from `android/`, so under a
+  `GOWORK` that leaves `android/` out it stops ("main module ... does not contain
+  package .../android/game"): run it with `GOWORK=off`. A scratch copy of the tree
+  under a directory that holds a `go.work` is in that workspace too.
+- A binary names the modules it links: `go version -m <binary>` for ELF and PE,
+  and `grep -a -o` of its `dep` lines for `vif.wasm`; the headers of the `NOTICES`
+  beside it are the same list.
+- The About window draws one row an entry, cuts a value at its column (20 columns
+  at 80 wide) and does not scroll: at 80x24 it stops after `source`, so a row
+  added to it is seen from 80x30 up.
 
 ## Events and ticks
 

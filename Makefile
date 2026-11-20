@@ -24,6 +24,7 @@ CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
+NOTICES ?= $(BIN_DIR)/NOTICES
 RELEASE_TARGET ?= linux-amd64
 RELEASE_LABEL ?= nightly
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
@@ -82,7 +83,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -114,6 +115,8 @@ help:
 	@echo "           CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
+	@echo "  notices  Write the licences of Go and of every module the build links as $(NOTICES), as release does"
+	@echo "           for install (GOOS, GOARCH, TAGS: another build's; NOTICES_OF=android: the Android library's)"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -170,7 +173,7 @@ serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
-release: check-go $(BIN_DIR)
+release: check-go $(BIN_DIR) notices
 	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
@@ -218,6 +221,7 @@ nolog: check-go $(BIN_DIR)
 wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
+	@GOOS=js GOARCH=wasm $(MAKE) -s notices NOTICES=$(WEB_DIR)/NOTICES
 
 # windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
@@ -323,13 +327,45 @@ release-readme:
 	awk -v tags=" $$tags " -v label='$(RELEASE_LABEL)' -v target='$(RELEASE_TARGET)' -v name="$$name" \
 		'$(RELEASE_README_AWK)' $(PKG_DIR)/release-readme.md
 
+# What a build links, a line a package: its module's path, version and directory,
+# which a vendored tree leaves empty. The build is the one GOOS, GOARCH and TAGS
+# name, the host's release unless set; NOTICES_OF=android is the Android library,
+# both ABIs, into which gomobile links x/mobile.
+NOTICE_MODS = if [ '$(NOTICES_OF)' = android ]; then \
+		for arch in arm64 amd64; do GOOS=android GOARCH=$$arch $(GO) -C android list -deps -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' ./game || exit 1; done; \
+		$(GO) -C android mod download golang.org/x/mobile && \
+		$(GO) -C android list -m -f '{{.Path}}|{{.Version}}|{{.Dir}}' golang.org/x/mobile; \
+	else CGO_ENABLED=0 $(GO) list -deps -tags "$(TAGS)" -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' $(SRC); fi
+
+# notices writes the licences a binary copy carries: Go's, then each linked module's
+# licence, copying and notice files from the module cache or vendor/, so a new
+# dependency brings its own and one with none at its root stops the target. A
+# distribution's Go keeps its LICENSE outside GOROOT; the corpus carries the same
+# one (doc/packaging.md §1).
+notices: check-go
+	@set -eu; self=$$(sed -n 's/^module //p' go.mod); rule=$$(printf '%72s' '' | tr ' ' '='); \
+	mods=$$($(NOTICE_MODS)); \
+	goroot=$$($(GO) env GOROOT); [ -f "$$goroot/LICENSE" ] || goroot=$(WAD_DIR)/content; \
+	mkdir -p "$$(dirname '$(NOTICES)')"; \
+	{ printf 'Go|%s|%s\n' "$$($(GO) env GOVERSION | sed 's/^go//')" "$$goroot"; \
+	  printf '%s\n' "$$mods" | grep -v "^$$self[/|]" | LC_ALL=C sort -u; } | \
+	while IFS='|' read -r mod ver dir; do \
+		[ -n "$$dir" ] || dir=vendor/$$mod; \
+		files=$$(ls "$$dir" | grep -iE '^(licen[cs]e|copying|notice)' || true); \
+		[ -n "$$files" ] || { echo "notices: $$mod $$ver has no licence file at its root, $$dir" >&2; exit 1; }; \
+		printf '%s\n%s %s\n%s\n\n' "$$rule" "$$mod" "$$ver" "$$rule"; \
+		for f in $$files; do cat "$$dir/$$f" || exit 1; echo; done; \
+	done >'$(NOTICES)' || { rm -f '$(NOTICES)'; exit 1; }; \
+	echo "wrote $(NOTICES)"
+
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
-# licence, the manual, the desktop entry and icons, shell completion and the
+# licences, the manual, the desktop entry and icons, shell completion and the
 # documentation under PREFIX, once it can write all three places. Nothing it
 # installs is compiled here, so a packager controls the build flags.
 install:
 	@set -eu; \
 	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built: make release first, as in make release install" >&2; exit 1; }; \
+	[ -f '$(NOTICES)' ] || { echo "$(NOTICES) is not made: make notices first, as make release does" >&2; exit 1; }; \
 	for d in '$(PREFIX)/bin' '$(PREFIX)/share' '$(SYSCONFDIR)/vif'; do d='$(DESTDIR)'"$$d"; \
 		while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; \
 		[ -w "$$d" ] || { echo "no write access to $$d: sudo make install, or set PREFIX and SYSCONFDIR" >&2; exit 1; }; \
@@ -340,7 +376,7 @@ install:
 	dest='$(DESTDIR)$(PREFIX)'; \
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
-	put 0644 $(PKG_DIR)/LICENSE.purego "$$dest/share/licenses/vif/LICENSE.purego"; \
+	put 0644 '$(NOTICES)' "$$dest/share/licenses/vif/NOTICES"; \
 	put 0644 internal/asset/font/LICENSE "$$dest/share/licenses/vif/LICENSE.font"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
 	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \

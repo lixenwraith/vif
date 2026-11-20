@@ -3,7 +3,8 @@ plugins {
 }
 
 // The Go side is bound by gomobile from the module beside this project, which the
-// repository root holds; wad/ is packaged as the APK's assets under wad/.
+// repository root holds; wad/ is packaged as the APK's assets under wad/, and the
+// licences an APK carries beside it.
 val goModule: File = rootDir
 val repoRoot: File = rootDir.parentFile
 val goBin = layout.buildDirectory.dir("gobin")
@@ -66,6 +67,7 @@ android {
     }
 
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/wad").get().asFile)
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/licence").get().asFile)
 }
 
 val gomobileTools = tasks.register<Exec>("gomobileTools") {
@@ -104,7 +106,23 @@ val wadAssets = tasks.register<Sync>("wadAssets") {
     from(repoRoot.resolve("wad"))
     into(layout.buildDirectory.dir("generated/wad/wad"))
 }
-tasks.named("preBuild") { dependsOn(wadAssets) }
+
+// make writes NOTICES from what the library links, on every build: the listing is quick
+val noticesFile = layout.buildDirectory.file("notices/NOTICES")
+val notices = tasks.register<Exec>("notices") {
+    workingDir = repoRoot
+    outputs.file(noticesFile)
+    outputs.upToDateWhen { false }
+    commandLine("make", "-s", "notices", "NOTICES_OF=android", "NOTICES=" + noticesFile.get().asFile.path)
+}
+
+val licenceAssets = tasks.register<Sync>("licenceAssets") {
+    from(repoRoot.resolve("LICENSE"))
+    from(repoRoot.resolve("internal/asset/font/LICENSE")) { rename { "LICENSE.font" } }
+    from(notices)
+    into(layout.buildDirectory.dir("generated/licence"))
+}
+tasks.named("preBuild") { dependsOn(wadAssets, licenceAssets) }
 
 dependencies {
     implementation(files(boundAar).builtBy(bindGo))

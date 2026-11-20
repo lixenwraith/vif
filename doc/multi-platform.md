@@ -142,6 +142,11 @@ with fonts that lack the half blocks, so the small splash face, which packs two
 pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
 twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
 
+The About overlay's `notices` row names `NOTICES`, which travels with every
+build: beside the binary in an archive, under `share/licenses/vif/` once
+installed, beside the page, and on Android as an asset in the APK, which the app
+shows no way to open.
+
 The zip plays in Windows Terminal, Windows 11's default terminal, whose console
 host forwards the game's request for mouse reports and, from 1.22, passes its
 output through as written. Windows 10's own console host, the ConPTY Alacritty

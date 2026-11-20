@@ -856,25 +856,18 @@ since it spells them. What it costs, and what it does not reach:
   removes only sensitive data that rotating a credential cannot make safe, so it
   will not purge them. PR titles and bodies are edited on GitHub by hand.
 
-### Ship the third-party notices with every binary
+### Carry the notices in the session image
 
-- Priority: P1
-- Affected files: `Makefile`, `.github/workflows/release.yml`,
-  `android/app/build.gradle.kts`, `internal/system/meta.go`
+- Priority: P2
+- Affected files: `deploy/docker/Dockerfile`, `internal/render/renderer/overlay.go`
 
-A binary carries the licences of what it links, and they ask that their notices
-travel with every binary copy: Go's standard library, `golang.org/x/sys`,
-`x/term`, `x/crypto` and, on Android, `x/mobile` (BSD-3-Clause),
-`golang-jwt/jwt/v5` (MIT), `ebitengine/purego` (Apache-2.0) and the lixenwraith
-modules (BSD-3-Clause). The archives and `make install` carry vif's `LICENSE`,
-purego's (`LICENSE.purego`, with the desktop window) and the glyph atlas's font's
-(`LICENSE.font`), and the browser bundle its page fonts' (`web/fonts/LICENSE`),
-but none carries the Go modules' notices; the APK carries no licence at all,
-vif's own included, and the Play build must before it lists. One notices file
-made from `go.sum`'s modules (each module's licence from the module cache, by a
-make target, so a dependency added later comes with its own) goes into the
-archives beside the binary and into the APK's assets with the licence files,
-and the About overlay points to it or lists the names.
+The release archives, `make install`, the page and the APK carry `NOTICES`
+([Packaging §1](packaging.md#1-shared-guidelines)); the session image is the
+binary alone on `scratch`. Its builder, which has no `make`, would run `make
+notices TAGS=vif_headless NOTICES=/out/NOTICES` and the runtime stage copy that
+and `LICENSE`. The About window neither wraps a value nor scrolls, so at 80x24
+it stops above its `licence` and `notices` rows; once it does both it can name
+what the build links, from its build info.
 
 ### Sign the Android build with a release key
 

@@ -45,16 +45,22 @@ These hold regardless of which repository is targeted first.
 - **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
   vendored or redistributed content (typing corpus, images, sound specs) must
   be licence-checked before it enters `wad/` or a release archive, and its
-  notice travels with it: the corpus in `wad/content/` is Go standard-library
-  source under the Go Authors' BSD licence, `wad/content/LICENSE`, so the wad
-  archive and every install carry it (the content loader reads only `.txt` and
-  `.toml`); and a Linux or FreeBSD binary links purego (Apache-2.0) for its
-  desktop window, so `deploy/package/LICENSE.purego` travels in those archives and
-  `make install` puts it beside `LICENSE`; a `vif_nogui` build links none. The
-  desktop window and `vif.wasm` draw cells with an embedded font atlas,
-  `internal/asset/font/mono.toml`, rendered from a font under the Bitstream-Vera
-  licence, so `internal/asset/font/LICENSE` travels as `LICENSE.font` in the
-  client and browser archives and `make install` puts it beside `LICENSE` too.
+  notice travels with it. The corpus in `wad/content/` is Go standard-library
+  source under the Go Authors' BSD licence, `wad/content/LICENSE`, which the wad
+  archive and every install carry (the content loader reads only `.txt` and
+  `.toml`). What a binary links travels as `NOTICES`: `make notices` writes the
+  licences of Go and of every module one build links, the host's release or the
+  one `GOOS`, `GOARCH` and `TAGS` name, from the module cache or `vendor/` and
+  with no network, so a new dependency brings its own and one with no licence
+  file stops the target; purego's (Apache-2.0, for the desktop window) is in it
+  wherever the build links purego. `make release` writes it and `make install`
+  stops without it; the release workflow writes each archive's for that
+  archive's build, and Gradle the Android library's (`NOTICES_OF=android`, which
+  fetches `golang.org/x/mobile` where the cache lacks it). The font atlas the
+  window and `vif.wasm` draw cells with, `internal/asset/font/mono.toml`, is
+  rendered from a font under the Bitstream-Vera licence and comes from no module,
+  so `internal/asset/font/LICENSE` travels beside `NOTICES` as `LICENSE.font`.
+  The About overlay points to `NOTICES`.
 
 ## 2. Release surface
 
@@ -64,11 +70,11 @@ Windows amd64 zip, the browser bundle, the wad, the Android APK, and
 `SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
-neither scatters files nor hands them to the builder's uid; a client archive
-carries `LICENSE.purego` for the desktop window its binary links, and it and the
-browser bundle carry `LICENSE.font` for the font atlas they embed. Each archive's
-`README.md` is written for its platform: `make release-readme` renders
-`deploy/package/release-readme.md`, one source whose blocks are tagged by target.
+neither scatters files nor hands them to the builder's uid; each carries `LICENSE`
+and its build's `NOTICES` (§1), a client archive and the browser bundle
+`LICENSE.font` as well. Each archive's `README.md` is written for its platform:
+`make release-readme` renders `deploy/package/release-readme.md`, one source
+whose blocks are tagged by target.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
   of the `nightly` prerelease, titled and described as a development build,
@@ -87,8 +93,9 @@ browser bundle carry `LICENSE.font` for the font atlas they embed. Each archive'
   with the repository's debug key, `android/debug.keystore`, which `make android`
   shares, unless the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets hold a release key
-  ([todo](todo.md#sign-the-android-build-with-a-release-key)). A store listing is
-  not on this path.
+  ([todo](todo.md#sign-the-android-build-with-a-release-key)). Each holds
+  `LICENSE`, `LICENSE.font` and `NOTICES` as assets. A store listing is not on
+  this path.
 
 A tag adds `vif-X.Y.Z.tar.gz`, a `git archive` of the tag and the byte-stable
 source archive a distribution hashes. It pushes no image, moves nothing, and
@@ -130,7 +137,8 @@ Target `vif` (release) with `vif-git` optional.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
    `make release` sets `-s -w`, which Arch's debug packaging wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.
-   Confirm the licence lands in `/usr/share/licenses/vif/`.
+   Confirm the licences land in `/usr/share/licenses/vif/`; a `build()` that
+   runs `go build` itself also runs `make notices`, which `install` stops without.
 4. `check()` runs `go test ./...`. `script/test.sh` binds ports and must not
    run in a build chroot.
 5. Namcap the result. Expect a warning about the size of `/etc/vif`;

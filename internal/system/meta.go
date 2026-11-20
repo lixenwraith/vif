@@ -29,8 +29,6 @@ type MetaSystem struct {
 	statMapH    *atomic.Int64
 	statCameraX *atomic.Int64
 	statCameraY *atomic.Int64
-	// statPlayerX *atomic.Int64
-	// statPlayerY *atomic.Int64
 	statPlayerX *status.PlayerInt
 	statPlayerY *status.PlayerInt
 
@@ -718,7 +716,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	s.ctx.SetOverlayContent(content)
 }
 
-// === About (placeholder) ===
+// === About ===
 
 // handleAboutRequest shows the about overlay: the game as lixen.com describes it, and
 // this build as -version and a refusal name it, with the Go that compiled it
@@ -738,7 +736,9 @@ func (s *MetaSystem) handleAboutRequest() {
 			{Key: "source", Value: "github.com/lixenwraith/vif"},
 			{Key: "website", Value: "lixen.com/vif"},
 			{Key: "author", Value: "Lixen Wraith"},
-			{Key: "license", Value: "BSD-3-Clause"},
+			{Key: "licence", Value: "BSD-3-Clause"},
+			// The file's name first: the window cuts a value at its column
+			{Key: "notices", Value: "NOTICES, with this build"},
 		},
 	})
 

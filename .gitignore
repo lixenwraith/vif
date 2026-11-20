@@ -9,6 +9,7 @@ build.sh
 catalog.txt
 combined.txt
 web/*.wasm
+web/NOTICES
 *.apk
 cmd/vif/vif
 /vif

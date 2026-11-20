@@ -60,35 +60,41 @@ jobs:
           for target in $targets; do mkdir -p "stage/$p-$target"; done
           mkdir -p dist
 
+          # Each binary has the licences of what it links beside it: make notices lists
+          # the build its GOOS, GOARCH and TAGS name, so each call repeats its build's.
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-amd64/vif" ./cmd/vif
+          GOOS=linux GOARCH=amd64 make -s notices NOTICES="stage/$p-linux-amd64/NOTICES"
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
             go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-arm64/vif" ./cmd/vif
+          GOOS=linux GOARCH=arm64 make -s notices NOTICES="stage/$p-linux-arm64/NOTICES"
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -tags=vif_headless -ldflags='-s -w' \
             -o "stage/$p-linux-amd64-headless/vif" ./cmd/vif
+          GOOS=linux GOARCH=amd64 make -s notices TAGS=vif_headless \
+            NOTICES="stage/$p-linux-amd64-headless/NOTICES"
           # purego's fakecgo builds as std on FreeBSD to link without cgo (make GUI_GCFLAGS).
           CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
             go build -trimpath -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std \
             -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
+          GOOS=freebsd GOARCH=amd64 make -s notices NOTICES="stage/$p-freebsd-amd64/NOTICES"
           # Experimental, with make windows's tags; doc/multi-platform.md §4 has its known issues.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
             -o "stage/$p-windows-amd64/vif.exe" ./cmd/vif
+          GOOS=windows GOARCH=amd64 make -s notices TAGS='novlog vif_noaudio' \
+            NOTICES="stage/$p-windows-amd64/NOTICES"
           GOOS=js GOARCH=wasm \
             go build -trimpath -ldflags='-s -w' \
             -o "stage/$p-web/vif.wasm" ./cmd/vif
+          GOOS=js GOARCH=wasm make -s notices NOTICES="stage/$p-web/NOTICES"
 
           # Each archive's README is written for its platform, not the repository's.
           for target in $targets; do
             make -s release-readme RELEASE_TARGET="$target" RELEASE_LABEL="$label" >"stage/$p-$target/README.md"
             cp LICENSE "stage/$p-$target/"
           done
-          # The client binaries link purego for the desktop window.
-          for target in linux-amd64 linux-arm64 freebsd-amd64; do
-            cp deploy/package/LICENSE.purego "stage/$p-$target/"
-          done
-          # They and vif.wasm embed the font atlas the cells are drawn with.
+          # The client binaries and vif.wasm embed the font atlas the cells are drawn with.
           for target in linux-amd64 linux-arm64 freebsd-amd64 web; do
             cp internal/asset/font/LICENSE "stage/$p-$target/LICENSE.font"
           done

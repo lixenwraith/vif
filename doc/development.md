@@ -63,7 +63,8 @@ make dev       # generated code + race-enabled debug build
 | `install-config` | Copy `wad/`, bot graphs, keymaps and `vif.toml` into the user config root, an `input/keymap.toml` or `vif.toml` already there brought up to date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)); `CLEAN=1` (here and for `install`) removes the previous install first. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
 | `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
-| `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
+| `notices` | Write `bin/NOTICES` (`NOTICES`): the licences of Go and of every module the build links, the host's release or the one `GOOS`, `GOARCH` and `TAGS` name, from the module cache or `vendor/`; `NOTICES_OF=android` is the Android library's. `release` runs it, `wasm` writes the page's beside `vif.wasm`, and `install` stops without the file. |
+| `install` | Install the binary, manual, desktop entry, icons, shell completion, licences and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
