@@ -22,9 +22,9 @@ A lesson ends when its state's guard sees the result: the cursor at a cell
 (`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), an edit asked for
 (`EventDeleteRequest` by its range, `EventGlyphReplaceRequest` by its text,
 `EventGlyphPutRequest`), a glyph typed (`EventCharacterTyped` by its `char` and
-cell: a line's last, never a count of glyphs, which one deleted another way
-would leave short for good), a mode entered (`EventModeChanged`), or a captured
-key pressed (`EventInputPressed`)
+cell: a line's last, never a count of glyphs, and a delete of any shape taking
+it, `PayloadCovers`, moves on too), a mode entered (`EventModeChanged`), or a
+captured key pressed (`EventInputPressed`)
 ([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map's bottom
 row is read from `map_height` each tick (`on_update`: `ConfigToVar`, then the
 arithmetic actions), so a resize mid-lesson moves the goal with the map; a
@@ -83,20 +83,21 @@ glyph and the heading, under a white flash; the parent's exit runs only when the
 last lesson leaves) and whose entry lays its text; `s` goes to the next and `S`
 to the one before, and a lesson in steps nests each further step as a child,
 which keeps the text laid. A lesson that ends on a typed glyph ends in a step
-that waits for esc, which drills it; `.`, which ends its replay in Normal, passes
-it at once. One that ends on a delete waits for no esc, which a `d` in place of a
-`c` never needs. `Stand` asks for Normal (`EventModeRequest`), so every lesson
-opens there whatever mode the key that ended the last left, `cc`'s Insert or the
-Visual an `s` skipped from, and places the cursor a tick after the entry, behind
-the step right that typing a lesson's last glyph still owes. The map floor is 79 by
-20, the view an 80 by 24 terminal shows, so no lesson there scrolls and `G`
-leaves the next heading in sight: the heading at row 1, the notes at rows 8 to
-12 and the practice lines at rows 14 to 17, all from column 4 and ending by
-column 78. The Visual lesson practises on five rows and turns the shield system
-on for itself alone, so the ping bounds have a reach to show, and Free turns the
-glyph spawner on: each through a region it spawns (`reach`, `practice`), whose
-systems a join's or a reload's install re-derives, as it would not an action's
-toggle.
+that waits for esc, which drills it; `.`, which ends its replay in Normal,
+passes it at once, and a delete that takes the glyph goes on past it, since an
+`x` in Normal leaves no esc to wait for. One that ends on a delete waits for no
+esc, which a `d` in place of a `c` never needs. `Stand` asks for Normal
+(`EventModeRequest`), so every lesson opens there whatever mode the key that
+ended the last left, `cc`'s Insert or the Visual an `s` skipped from, and places
+the cursor a tick after the entry, behind the step right that typing a lesson's
+last glyph still owes. The map floor is 79 by 20, the view an 80 by 24 terminal
+shows, so no lesson there scrolls and `G` leaves the next heading in sight: the
+heading at row 1, the notes at rows 8 to 12 and the practice lines at rows 13 to
+17, Open's note between its two, all from column 4 and ending by column 78. The
+Visual lesson practises on five rows and turns the shield system on for itself
+alone, so the ping bounds have a reach to show, and Free turns the glyph spawner
+on: each through a region it spawns (`reach`, `practice`), whose systems a
+join's or a reload's install re-derives, as it would not an action's toggle.
 
 The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
 join or a reload that installs a later lesson lays that lesson's text in place of

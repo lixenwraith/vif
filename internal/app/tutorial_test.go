@@ -284,12 +284,16 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 	}
 }
 
-// Insert and Repeat end on their last glyph, not on a count of glyphs typed, so a
-// glyph gone some other way never strands them: a typo's Space deletes the glyph
-// it missed, and a delete repeated with . clears no as a repeated I no does.
+// A lesson waiting on a typed glyph, its line's last, also moves on when a delete of
+// any shape takes it, so a glyph gone another way never strands it: a typo's Space,
+// an x or a dd, and a delete repeated with ., which clears no as I no does.
 func TestTutorialsTypingLessonsEndHoweverTheirGlyphsGo(t *testing.T) {
 	for _, c := range []struct{ lesson, keys, want string }{
 		{"Insert", "itypo me\x1bj^ithen me\x1b", "Append"},
+		{"Insert", "itype me\x1bj^ithen mx ", "Append"},
+		{"Insert", "j$x", "Append"},
+		{"Append", "Ax ", "AppendFirst"},
+		{"Open", "jdd", "OpenAbove"},
 		{"Repeat", "dwj.j.", "Yank"},
 		{"Repeat", "2xj.j.", "Yank"},
 	} {
