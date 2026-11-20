@@ -921,7 +921,9 @@ instance with no link (§5.2), and the authority's own two, which it crosses onc
   longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits. A session with no door
-  yields all the same: its bots dial through no door.
+  yields all the same: its bots dial through no door. A session of one place yields
+  nothing (`Membership.mayYieldLocked`): its place waits for its own player's key,
+  as a reloaded page dials back with, and any other dial is refused full.
 
 The door `:host` opens on a session with none starts every wait over where somebody
 is away (`Membership.restartWaitsLocked`): the authority crosses

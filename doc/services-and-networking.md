@@ -486,8 +486,9 @@ door's. 0x06, which carried claims, is retired.
 The coordinator then previews the session (`MsgJoinPreview`, 0x07): the offer a seat
 would carry, naming nobody, after the checks a seat makes that allocate nothing
 (`Coordinator.Preview`); a full session previews only for a dialer one of whose
-keys holds a place there, or while a player who left holds one, and whether that
-place is taken back or given up is the seat's to settle. On the preview the dialer
+keys holds a place there, or while a player who left holds one past a session's one
+place, which waits for its own player, and whether that place is taken back or given
+up is the seat's to settle. On the preview the dialer
 checks the build identity, asks for the scenario it lacks, builds and checks its
 world, and says it is ready (`MsgJoinPrepared`, 0x08), which opens its **ready
 period**, `NetworkJoinPressWindow`, and tells the coordinator's player who is about
@@ -501,8 +502,9 @@ dialer measures the period from its own readiness, and a press after it dials ag
 and seats at once ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
-authority, closing its lobby, ending, full, full while a Wraith gives up its place
-for this dial, a kept place still linked or already coming back, or a seat
+authority, closing its lobby, ending, full, its one seat the host's own
+(`RefusalNoSeat`, for good), full while a Wraith gives up its place for this dial,
+a kept place still linked or already coming back, or a seat
 asked for past its ready period — is answered
 with a `MsgJoinReply` carrying its kind and reason (`network.Refusal`) rather than
 by closing the stream. The dialer acts on

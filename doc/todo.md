@@ -2306,6 +2306,19 @@ the entity's owner applies as a cursor's owner writes its own shield (D-2), and 
 contact rule: `CursorContactAt` reads cursors' shields alone and only a cursor's
 drains energy, so a mounted shield guards nothing yet.
 
+### Lower the shields a scenario's switch-off leaves up
+
+- Priority: P3
+- Affected files: `internal/system/shield.go` (`HandleEvent`)
+- Guide: [Gameplay §5](gameplay.md#5-energy-heat-boost-and-shield)
+
+A scenario that turns the shield system off, by its toggle or by ending a region
+that runs it, leaves a raised shield up: drawn, its ping bounds held and its drain
+stopped, and the deactivate a mode change sends is refused while the system is off.
+The tutorial's Visual lesson lowers the shield in its exit before it ends its
+region, so nothing stands there. The smallest fix lowers each shield its owner
+simulates as the command turns the system off, as `setActive` does (D-2).
+
 ## Species
 
 ### Play test the death visuals
