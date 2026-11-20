@@ -1285,8 +1285,9 @@ Libraries · Branches.
   transformer, which vif does not require; `make tools` builds ascimage's command
   from the version `go.mod` requires.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
-  engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
-  `snapshot.Schema` beside `StreamingStateVersion`.
+  engine's checkpoint, so a change to `genetic.StreamingState`'s layout, or to
+  how a state is continued, bumps `snapshot.Schema` beside
+  `StreamingStateVersion`.
 
 ## Branches
 

@@ -10,7 +10,7 @@ github.com/lixenwraith/auth v0.5.3 h1:Oo0mqVbOmQpeWhQ1w11R16Ehh3L2/g1XggioLBq/8o
 github.com/lixenwraith/auth v0.5.3/go.mod h1:411JUqnbQgy9jgoFV+fH91TfVUEfzYA4dyPv7f4c264=
 github.com/lixenwraith/color v0.1.5 h1:GRT4PBb9R04ahXW7SGlsfDttqew8E2lgt9GGujL0jEo=
 github.com/lixenwraith/color v0.1.5/go.mod h1:L/I3Vxp6pqslAIzWyZGgKCm2lyStHCA4vKaUoMUm7bU=
-github.com/lixenwraith/genetic v0.4.0 h1:lHY6rjOxOvQURrgQxsmCzUS7rOpF8QbDTeFwNUbTAy8=
+github.com/lixenwraith/genetic v0.4.0 h1:gz7qQF6Nn2l2YLJQUeTemOfnlXt/4jfsAswkWg0oHjM=
 github.com/lixenwraith/genetic v0.4.0/go.mod h1:ND17YfR1ldULc+1bItbP9zxg4juSnOl4iBaRFpSXwAU=
 github.com/lixenwraith/log v0.1.19 h1:nAmfuhAC6z3fb5lC4Ub3pTqwWJEvTwCf2DYfX9a3iZw=
 github.com/lixenwraith/log v0.1.19/go.mod h1:EE8i5nSAW2yZBTytKuhdgehmgzrby6kW1k5DyH1SvBg=
