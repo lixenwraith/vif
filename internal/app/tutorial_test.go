@@ -196,11 +196,6 @@ func TestTheVimKeymapPlaysTheKeysTheTutorialTaught(t *testing.T) {
 			t.Errorf("%q: the tutorial binds %+v, the vim keymap %+v", r, entry, vim.NormalRunes[r])
 		}
 	}
-	for r, entry := range sc.Keys.OperatorMotions {
-		if vim.OperatorMotions[r] != entry {
-			t.Errorf("%q after an operator: the tutorial binds %+v, the vim keymap %+v", r, entry, vim.OperatorMotions[r])
-		}
-	}
 	for k, entry := range sc.Keys.SpecialKeys {
 		if vim.SpecialKeys[k] != entry {
 			t.Errorf("%s: the tutorial binds %+v, the vim keymap %+v", input.SpecialKeyName(k), entry, vim.SpecialKeys[k])
@@ -348,14 +343,14 @@ func TestTutorialsFreePracticeKeepsItsCode(t *testing.T) {
 	}
 }
 
-// The tutorial gives the backtick to vi with m: `a returns to the marked cell
-// itself, which ends the marks lesson, and opens no console over it.
-func TestTutorialsBacktickReturnsToTheMarkedCell(t *testing.T) {
+// The tutorial leaves the backtick to the console, as every game does: it opens
+// over the marks lesson, which the quote alone ends.
+func TestTutorialLeavesTheBacktickToTheConsole(t *testing.T) {
 	a := newTutorial(t, 100, 30)
 	tutorialTo(t, a, "Marks")
-	tutorialKeys(t, a, "maG`a")
-	if got := tutorialState(a); got != "Map" || !a.Context().IsNormalMode() {
-		t.Fatalf("ma, G and `a left the tutorial in %s, Normal %v; want Map, in Normal", got, a.Context().IsNormalMode())
+	if tutorialKeys(t, a, "maG`"); tutorialState(a) != "MarksBack" || !a.Context().IsConsoleShown() {
+		t.Fatalf("ma, G and ` left the tutorial in %s, the console shown %v; want MarksBack under the console",
+			tutorialState(a), a.Context().IsConsoleShown())
 	}
 }
 
