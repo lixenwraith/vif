@@ -358,9 +358,70 @@ a scenario's bot to the regions and states its `InState` names. Decided (Lixen,
       of seed 1's pairs field a `raid` its own rounds put high, 55,864 over
       45 and 61,735 over 14. A `kraken`'s rounds score the cap, 306,500, or
       less, and one took the title on fifteen at the cap.
-    - Owed before either is read again: a title that does not pass on the
-      rounds that test promise, and rounds enough to tell its holders apart,
-      where one candidate in six goes to the title's test.
+    - **A title held only on 24 rounds**, the proof left at eight for rank
+      and breeding, was read alone and with the weight at four and the rival
+      each on top, and is not built. It was judged by what luck does not
+      pick, on six seeds a start: the candidates' recent mean, a hold of
+      every proved member, twelve rounds each beside the other network's
+      most trusted, and beside them the pair a run fields over 100. The
+      starts are nothing after 600,000 ticks, `seed`'s weights after three
+      million and the model fielding 341,701 after fifteen; a figure is the
+      seeds' mean and its standard error, `recent` and `proved` `raid`'s:
+
+      ```
+      start   read        as built        title   and weight    and rival
+      nothing recent      3781±446     3549±263     3945±136     3782±486
+              proved      4607±485     5008±892     4858±651     4166±777
+              fields      6778±974     3225±176     3150±169     3429±335
+      seed's  recent     19420±427    18474±891    18157±838   18193±1145
+              proved    51662±5055   47869±3607   46480±2174   49579±6094
+              fields    57236±4837   52923±3572   47273±4179   41276±2647
+      cave's  recent     31589±386    30580±984    31325±994    31105±743
+              proved   289582±6492 292002±10666  304584±9523  311333±8612
+              fields  310945±10266  325885±8216  322200±5863  319848±6209
+      ```
+
+    - Nothing luck does not pick moves past two standard errors under any
+      of the three, `kraken`'s reads as `raid`'s; the widest is `raid`'s
+      proved under the rival on the model, 21,751 over at 2.0. What a run
+      fields moves from nothing, where no `kraken` has 24 rounds inside the
+      600,000 ticks and none is fielded: with the most trusted of the proved
+      fielded where nothing is written and none holds the title, the rule
+      fields 5,643±687. From `seed`'s the rival on top fields 15,960 less
+      than the learner as built: it spreads the title's turns over
+      claimants, and two runs in six end with no `kraken` of 24 rounds and
+      the written one fielded.
+    - The rule does what it says in a young population and nothing in an
+      old one. As built a title changes hands 12.2 times a run from `seed`'s
+      for `raid` and 6.0 for `kraken`, 5.8 and every one of them to a member
+      under 24 rounds, and on the model 5.8 and 5.8, 2.3 and 4.3 so. Under
+      the rule none does, and no member holds a title for 28 and 57 rounds
+      in 100 from `seed`'s and 15 and 32 on the model, the written weights
+      fielded meanwhile. On the trainer's populations (above) it is the
+      learner as built, byte for byte: of fifteen million ticks' 153 `raid`
+      title turns, 74 go to the title and 79 to its rival.
+    - On those populations the weight and the rival each play the twelve
+      and crown them. Under the weight a title passes at 24 rounds, `raid`'s
+      6 and 13 times in fifteen million ticks on two seeds and `kraken`'s 11
+      and 10. Under the rival `raid`'s goes at 39 and 40 rounds to the
+      member of 57,289 over 18, which holds 302,886 beside the shipped
+      `kraken` for the pair's 341,453, and it holds the title as both runs
+      end. Held out as they end, the four runs field 326,325 to 331,531
+      where the populations' own titles field 351,075.
+    - Rounds do not tell a `raid` challenger from its title, as its own
+      score does not say what it holds. Played by the rival, five of the six
+      fell to the title's own mean inside 16 to 44 rounds, 51,673 to 52,193
+      for its 52,325, though held out they stand from level with the pair to
+      85,159 under. The sixth kept 54,793 over 228 further rounds of four
+      runs, 2.0 standard errors over the title, and holds 38,567 under.
+    - Where members differ, a title's own measure does tell them. Of 24
+      runs a start, the most trusted of the proved holds 5,339±1,400 over
+      the other proved from `seed`'s and 24,693±7,428 on the model for
+      `raid`, 6,088±1,587 and 10,798±5,941 for `kraken`; the highest plain
+      mean holds 12,508±10,535 over them on the model for `raid`.
+    - Owed before a title's test is read again: a score for `raid` that
+      says what its member holds beside the other network, since no count
+      of rounds by its own score told the twelve from their title.
 - **`default`'s network `walk`** learns in a run alone, a population a
   scenario, which a seat fields too, and writes no weight
   ([Bots](bots.md#writing-a-graph)). Owed:

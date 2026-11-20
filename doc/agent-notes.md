@@ -1114,6 +1114,20 @@ Libraries · Branches.
   nothing, and the same population bytes say the runs read so far are main's
   still. A scenario's own model is a file of the merge: a start on it is read
   again.
+- A rule of who is fielded is read inside one archive: the pair the rule
+  fields and the pair main's rule would field of the same population, a
+  hundred rounds each, differ by the rule alone, where two runs differ by
+  their search. Every proved member is held twelve rounds beside the other
+  network's most trusted, which says what a title's own measure tells: on
+  `cave`'s model the most trusted held 24,693±7,428 over the other proved,
+  the highest plain mean 12,508±10,535.
+- A rule of the title is tried on a trainer's kept populations as well as
+  from a start, a run begun on a copy of them in its fresh user root. There
+  a title and its rival hold thousands of rounds, and a rule six seeds from
+  three starts showed at work read as the learner as built, byte for byte.
+- A waiter that follows a queue by `pgrep -f` finds its own command line and
+  waits for ever: bracket a letter of the pattern (`[q]2.py plan`). A machine
+  restart ends the queue and every waiter chained behind it.
 - In `cave` an unsteered ship falls to the first raider's first charge at tick
   144, and one that only fires at about 158. A hit pays energy and a raider's
   touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
