@@ -1199,8 +1199,8 @@ Docs · Libraries · Branches.
 - A transition on a request runs its entry before the system that handles the
   request, so what that system pushes lands after the entry's events: typing's step
   right overtook the next lesson's cursor placement until the tutorial's `Stand`
-  took `delay_ms = 1`. A mode is the router's alone, so a lesson entered from
-  Insert stays in Insert.
+  took `delay_ms = 1`. A mode is the router's alone: `Stand` asks for Normal, which
+  the router takes on its input tick, so a headless test runs `InputTick` too.
 - The router's change history ends at a glyph clear (`glyph.cleared`) and a new
   game: without the first, `u` in a lesson laid back the line the lesson before
   deleted, into cells the new one left empty.

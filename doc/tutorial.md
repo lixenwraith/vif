@@ -61,6 +61,8 @@ makes of the keys the tutorial gave back to vi. What it stands on:
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutorial captures `s` and
   `S` in Normal and Visual with no operator, prefix or label pending, so `fs` and
   `qs` still take their letter, Insert types it and `2s` skips once.
+- `EventModeRequest` asks the router for a play mode, which it enters as the
+  mode's key would: each lesson asks for Normal as it stands the cursor.
 - The entry's `[keymap.normal]`, `[keymap.normal_keys]` and `[keymap.operator]`
   bind, over the player's keymap, `a` to `mode_append`, `p` and `P` to the puts,
   `o` and `O` to `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to
@@ -76,11 +78,12 @@ glyph and the heading, under a white flash; the parent's exit runs only when the
 last lesson leaves) and whose entry lays its text; `s` goes to the next and `S`
 to the one before, and a lesson in steps nests each further step as a child,
 which keeps the text laid. A lesson that ends on a typed glyph ends in a step
-that waits for esc, so the next starts in Normal; `.`, which ends its replay in
-Normal, passes it at once. One that ends on a delete waits for no esc, which a
-`d` in place of a `c` never needs, so the lesson after `cc` starts in Insert and
-its prompt says so. `Stand` places the cursor a tick after the entry, behind the
-step right that typing a lesson's last glyph still owes. The map floor is 79 by
+that waits for esc, which drills it; `.`, which ends its replay in Normal, passes
+it at once. One that ends on a delete waits for no esc, which a `d` in place of a
+`c` never needs. `Stand` asks for Normal (`EventModeRequest`), so every lesson
+opens there whatever mode the key that ended the last left, `cc`'s Insert or the
+Visual an `s` skipped from, and places the cursor a tick after the entry, behind
+the step right that typing a lesson's last glyph still owes. The map floor is 79 by
 20, the view an 80 by 24 terminal shows, so no lesson there scrolls and `G`
 leaves the next heading in sight: the heading at row 1, the notes at rows 8 to
 12 and the practice lines at rows 14 to 17, all from column 4 and ending by

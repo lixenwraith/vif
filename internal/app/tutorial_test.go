@@ -68,7 +68,8 @@ func TestTutorialALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 }
 
 // tutorialKeys types keys into a headless tutorial as its player would, a tick or two
-// after each so a lesson's delayed placement lands: \x1b is Escape, \x12 Ctrl-R.
+// after each so a lesson's delayed placement lands, and the input tick a live run
+// gives the router, which takes a lesson's ask for a mode: \x1b is Escape, \x12 Ctrl-R.
 func tutorialKeys(t *testing.T, a *App, keys string) {
 	t.Helper()
 	for _, r := range keys {
@@ -83,6 +84,7 @@ func tutorialKeys(t *testing.T, a *App, keys string) {
 			inject(t, a, intent)
 		}
 		a.Tick(2)
+		a.InputTick()
 	}
 }
 
@@ -241,7 +243,7 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 		{"\x1b", "Open"},
 		{"obelow\x1bkOabove", "OpenEsc"},
 		{"\x1b", "Change"},
-		{"cw\x1bjcc\x1b", "Replace"},
+		{"cw\x1bjcc", "Replace"},
 		{"fzrsfS5~", "Repeat"},
 		{"Ino\x1bj.j.", "Yank"},
 		{"yypddp", "Undo"},
@@ -411,15 +413,29 @@ func TestTutorialStandsACursorThatCameBack(t *testing.T) {
 }
 
 // The change lesson goes on however its deletes were made: c leaves insert mode
-// for esc to end, and d stays in normal mode, where esc would open the menu, so
-// no step waits for an esc that d never needs.
+// and d stays in normal mode, where esc would open the menu, so no step waits for
+// an esc that d never needs, and the next lesson asks for normal mode.
 func TestTutorialsChangeLessonTakesADeleteToo(t *testing.T) {
-	for _, keys := range []string{"cw\x1bjcc\x1b", "dwjdd", "cw\x1bjdd", "dejcc\x1b"} {
+	for _, keys := range []string{"cw\x1bjcc", "dwjdd", "cw\x1bjdd", "dejcc"} {
 		a := newTutorial(t, 100, 30)
 		tutorialTo(t, a, "Change")
-		if tutorialKeys(t, a, keys); tutorialState(a) != "Replace" {
-			t.Errorf("%q in the change lesson left the tutorial in %s, want Replace", keys, tutorialState(a))
+		if tutorialKeys(t, a, keys); tutorialState(a) != "Replace" || !a.Context().IsNormalMode() {
+			t.Errorf("%q in the change lesson left the tutorial in %s, Normal %v, want Replace in Normal",
+				keys, tutorialState(a), a.Context().IsNormalMode())
 		}
+	}
+}
+
+// Every lesson opens in normal mode, whatever mode the key that ended the last one
+// left: s pressed in Visual skips to the next lesson in Normal, and Free starts there.
+func TestTutorialsLessonsOpenInNormalMode(t *testing.T) {
+	a := newTutorial(t, 100, 30)
+	if tutorialKeys(t, a, "vs"); tutorialState(a) != "Words" || !a.Context().IsNormalMode() {
+		t.Fatalf("v then s left the tutorial in %s, Normal %v, want Words in Normal", tutorialState(a), a.Context().IsNormalMode())
+	}
+	tutorialTo(t, a, "Keys")
+	if tutorialKeys(t, a, "vs"); tutorialState(a) != "Free" || !a.Context().IsNormalMode() {
+		t.Fatalf("v then s in the last lesson left the tutorial in %s, Normal %v, want Free in Normal", tutorialState(a), a.Context().IsNormalMode())
 	}
 }
 
