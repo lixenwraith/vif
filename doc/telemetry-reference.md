@@ -188,7 +188,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `player.slot` (int) | The slot this instance drives, or -1 when it drives none |
 | `player.entity` (int) | The cursor entity this instance drives, the number an `:emit` payload names it by, or zero |
 | `player.peer` (int) | The participant that owns the cursor this instance drives: its own identity in a session, zero outside one |
-| `session.any_defeated` (bool) | The defeat latch (owner-authored `EventCursorDefeatState`, or a crush) of a cursor whose defeat decides is set: a person's in play or, where no person's is, any in play; never a Wraith's, nor a bot's beside a person. A shipped game-over guard |
+| `session.any_defeated` (bool) | The defeat latch (owner-authored `EventCursorDefeatState`, or a crush) of a cursor whose defeat decides is set: a person's in play or, where no person holds a place, a bot's in play; never a Wraith's, nor a bot's beside a person, in play or away. A shipped game-over guard |
 | `session.all_defeated` (bool) | The latch of every cursor whose defeat decides is set, there being one |
 | `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower's death is never counted: the structure is the players' own, and `kills.tower` stays zero |
 | `kills.total`, `kills.uncredited` (int) | All counted deaths, and those whose killer resolves to no roster cursor |

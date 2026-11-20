@@ -112,7 +112,7 @@ func TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt(t *testing.T) {
 			t.Cleanup(func() { stop(); host.Close() })
 			cfg := Config{Membership: Membership{JoinAddress: host.HostAddr()}}
 			tt.guest(&cfg)
-			guest, _ := driveBot(t, cfg, "patrol", nil)
+			guest, _ := driveBot(t, cfg, "default", nil)
 			waitForCursors(t, host, 2)
 			id := link.PeerID(guest.membership.LocalParticipant())
 			declared := guest.reach.DeclaredAddr()
@@ -139,9 +139,9 @@ func TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt(t *testing.T) {
 func TestAJoinHandshakeNamesNoAddress(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr, door := freeAddress(t), freeAddress(t)
-	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Migrate: true, Bots: []string{"roam"}}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Migrate: true, Bots: []string{"default"}}}, "default", nil)
 	waitForCursors(t, host, 2)
-	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: door}, Play: takingOver()}, "patrol", nil)
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: door}, Play: takingOver()}, "default", nil)
 	id := link.PeerID(first.membership.LocalParticipant())
 	named := func(a *App) func() bool {
 		return func() bool { at, ok := a.authority.Chain().Lookup(id); return ok && at != "" }
@@ -165,9 +165,9 @@ func TestAJoinHandshakeNamesNoAddress(t *testing.T) {
 		t.Fatalf("a seat's offer names %v; want no address before the join completes", offer.Chain)
 	}
 
-	leaf, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
+	leaf, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "default", nil)
 	waitUntil(t, named(leaf), "the candidate's address in the chain of a run that joined")
-	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "patrol", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "default", nil)
 	waitUntil(t, named(person), "the candidate's address in the chain of a run that joined behind a relay")
 }
 

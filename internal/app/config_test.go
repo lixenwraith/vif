@@ -203,9 +203,9 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	dialled := &membership.JoinDial{}
 	console := []engine.ConsoleLine{{Text: ":join 10.0.0.2:7777/abc", Kind: parameter.StatusInput, At: 1, Count: 1}}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
-		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true, Console: console})
+		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"default"}, Journal: true, Console: console})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
-		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.wiring.journalCarried {
+		!slices.Equal(next.Membership.Bots, []string{"default"}) || !next.Journal || !next.wiring.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
 	}
 	if !slices.Equal(next.wiring.console, console) || solo == nil || !slices.Equal(solo.wiring.console, console) {

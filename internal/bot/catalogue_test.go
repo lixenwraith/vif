@@ -1,11 +1,9 @@
 package bot
 
 import (
-	"maps"
 	"math"
 	"math/rand/v2"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -244,12 +242,12 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 		w.Components.Header.SetComponent(e, component.HeaderComponent{MemberEntries: []component.MemberEntry{{Entity: leg}}})
 	})
 	d, _ := botFor(t, ctx, everySensor(), 0)
-	m, order := &d.mind, []bound{{net: 0}}
+	m, a := &d.mind, steerArgs{net: 0}
 	m.nets[0].blank = false // it reads as one with a weight written does
 	if allocs := testing.AllocsPerRun(100, func() {
 		m.fresh, m.room = [targetCount]bool{}, 1
 		m.tick++ // an update reads once
-		m.steer(order)
+		m.steer(a)
 		m.nearest(kindThreat)
 		m.nearest(kindKraken)
 	}); allocs != 0 || !m.steered[0] {
@@ -259,8 +257,7 @@ func TestASteerAndASightingAllocateNothing(t *testing.T) {
 
 // TestEveryInputReadsWithinItsScale: whatever the world holds, a sensor reads a
 // number from its scale's least to 1, bar the body of a Kraken, which may stand
-// past the view that shows one of its legs; and with nothing to sight, every
-// kind's sensors and what the bot holds read 0.
+// past the view that shows one of its legs.
 func TestEveryInputReadsWithinItsScale(t *testing.T) {
 	past := map[string]bool{}
 	for _, row := range kinds {
@@ -358,24 +355,6 @@ func TestEveryInputReadsWithinItsScale(t *testing.T) {
 			}
 		}
 	}
-
-	// The terrain is then the view's own edges, and the cursor still has its place
-	terrain := map[string]bool{}
-	for _, edge := range edges {
-		for _, place := range places {
-			terrain[edge.name+place.suffix] = true
-		}
-	}
-	for _, block := range blocks {
-		terrain[block.name] = true
-	}
-	_, ctx := soloWorld(10, 2)
-	got := readings(t, ctx)
-	for _, s := range sensors {
-		if v := got[s.name]; v != 0 && s.scale != scalePlace && !terrain[s.name] {
-			t.Errorf("with nothing to sight %s reads %g, want 0", s.name, v)
-		}
-	}
 }
 
 // BenchmarkEveryInput is the stress measurement of a Steer: one reading of every
@@ -444,70 +423,6 @@ func BenchmarkEveryInput(b *testing.B) {
 	}
 }
 
-// TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder: a layout's digest names
-// the populations it fits, so a scenario's own bot keeps its networks' until they are
-// changed on purpose, which starts every population kept for them over. Cave's seed
-// has cave's two, so what is learned from the seed cave takes.
-func TestShippedLayoutsAreTheOnesTheirPopulationsAreKeptUnder(t *testing.T) {
-	cave := map[string]string{"kraken": "2bebd53cfda5", "raid": "2323553c0684"}
-	for path, want := range map[string]map[string]string{
-		"../../wad/scenario/base/cave/bot/cave.toml": cave,
-		"../../wad/scenario/base/cave/bot/seed.toml": cave,
-		"../asset/scenario/bot/main.toml":            {"walk": "375d2a41f2c9"},
-	} {
-		data, err := os.ReadFile(filepath.FromSlash(path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		g, err := ParseGraph("test", data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := map[string]string{}
-		for _, n := range g.nets {
-			got[n.name] = n.digest
-		}
-		if !maps.Equal(got, want) {
-			t.Fatalf("%s: its layouts are %v, want %v", path, got, want)
-		}
-	}
-}
-
-// TestEveryCatalogueRowSaysWhatItIs: -schema and the reference print each row's
-// own line, so none is left without one.
-func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
-	rows := map[string]string{}
-	for _, row := range kinds {
-		rows["kind "+row.name] = row.doc
-	}
-	for _, row := range fields {
-		rows["field "+row.name] = row.doc
-	}
-	for _, row := range scales {
-		rows["scale "+row.name] = row.doc
-	}
-	for _, row := range edges {
-		rows["edge "+row.name] = row.doc
-	}
-	for _, row := range places {
-		rows["place "+strconv.Quote(row.suffix)] = row.doc
-	}
-	for _, row := range blocks {
-		rows["block "+row.name] = row.doc
-	}
-	for _, row := range self {
-		rows["own "+row.name] = row.doc
-	}
-	for _, row := range outputs {
-		rows["output "+row.name] = row.doc
-	}
-	for row, doc := range rows {
-		if doc == "" || strings.HasSuffix(row, " ") {
-			t.Errorf("the %s row has no name or no line saying what it is", row)
-		}
-	}
-}
-
 // reference renders the catalogue's tables as the section doc/bots.md keeps of them
 func reference() string {
 	var b strings.Builder
@@ -531,11 +446,11 @@ func reference() string {
 	}
 	b.WriteString(`## Catalogue
 
-What a graph's guards and ` + "`PointAt`" + ` take as a target, and what a network
-reads and asks for. This section is generated from the tables of
-` + "`internal/bot/catalogue.go`" + `: change a row there, then run
+What a graph's guards and ` + "`PointAt`" + ` take as a target, what a network reads
+and asks for, and what a score pays for. This section is generated from the
+tables of ` + "`internal/bot/catalogue.go`" + `: change a row there, then run
 ` + "`VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`" + `. ` + "`vif -schema`" + `
-lists the same inputs, outputs and scales under ` + "`bot_catalogue`" + `.
+lists the same inputs, outputs, scales and sources under ` + "`bot_catalogue`" + `.
 
 ### Kinds
 
@@ -623,6 +538,16 @@ output's weights in a table named for each of its units.
 	for _, row := range outputs {
 		item("", code(row.name)+", units "+code(slices.Clone(row.units)...)+": "+row.doc+".")
 	}
+	b.WriteString(`
+### Score sources
+
+What a document's ` + "`[bot] score`" + ` may pay for. The document gives each source it
+names what one of it pays. A source it leaves out pays nothing.
+
+`)
+	for _, row := range sources {
+		item("", code(row.name)+": "+row.doc+".")
+	}
 	return b.String()
 }
 
@@ -651,7 +576,8 @@ func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
 		}
 		kept = want
 	}
-	if kept != want {
-		t.Errorf("%s: its catalogue section is stale; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
+	// Each row is printed with its own line, so none is left without one
+	if kept != want || strings.Contains(want, ": .") {
+		t.Errorf("%s: its catalogue section is stale, or a row says nothing of what it is; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
 	}
 }

@@ -391,33 +391,15 @@ func capturedField(payload any, key string) (int64, bool) { return captured(Stru
 // guard makes the guard name and args spell from the registered guards and the
 // dialect tree's And, Or and Not over them, each leaf built for t
 func (m *Machine[T]) guard(name string, args map[string]any, t Trigger) (GuardFunc[T], error) {
-	return m.guards(t, false).Build(name, args)
-}
-
-// Guard makes a guard an embedder asks of no state, as a binding of its own: one
-// that reads a trigger's payload or the state it guards is refused, and the region
-// it is asked with may be nil
-func (m *Machine[T]) Guard(name string, args map[string]any) (GuardFunc[T], error) {
-	return m.guards(Trigger{}, true).Build(name, args)
-}
-
-// guards is the tree a guard is built from; stateless refuses a leaf that reads
-// its region
-func (m *Machine[T]) guards(t Trigger, stateless bool) dialect.Tree[GuardFunc[T]] {
 	return dialect.Tree[GuardFunc[T]]{
 		Leaf: func(name string) (func(map[string]any) (GuardFunc[T], error), bool) {
 			g, ok := m.guardReg[name]
-			return func(args map[string]any) (GuardFunc[T], error) {
-				if stateless && g.state {
-					return nil, errors.New("reads the state it guards, and guards none here")
-				}
-				return g.build(args, t)
-			}, ok
+			return func(args map[string]any) (GuardFunc[T], error) { return g.build(args, t) }, ok
 		},
 		All: allOf[T],
 		Any: anyOf[T],
 		Not: negate[T],
-	}
+	}.Build(name, args)
 }
 
 // allOf, anyOf and negate are And, Or and Not over guards; And and Or of no guards

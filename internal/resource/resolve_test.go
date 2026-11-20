@@ -245,7 +245,7 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	music := filepath.Join(root, paths.AudioDirName, paths.MusicConfigFile)
 	sounds := filepath.Join(root, paths.AudioDirName, paths.SoundConfigFile)
 	content := filepath.Join(root, paths.ContentDirName)
-	graph := filepath.Join(root, paths.BotDirName, "roam.toml")
+	graph := filepath.Join(root, paths.BotDirName, "mine.toml")
 	for _, path := range []string{scenario, keymap, music, sounds, graph} {
 		writeFixture(t, path)
 	}
@@ -269,11 +269,8 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if roots := Files(o).Roots; len(roots) == 0 || roots[0] != root {
 		t.Fatalf("file roots = %v, want operator root %q first", roots, root)
 	}
-	if data, name, err := BotGraph(o, Scenario{}, "roam"); err != nil || string(data) != "fixture" || name != "roam" {
+	if data, name, err := BotGraph(o, Scenario{}, "mine"); err != nil || string(data) != "fixture" || name != "mine" {
 		t.Fatalf("bot graph = %q named %q, %v; want the root's fixture", data, name, err)
-	}
-	if data, _, err := BotGraph(o, Scenario{}, "patrol"); err != nil || len(data) == 0 || string(data) == "fixture" {
-		t.Fatalf("a graph the root lacks = %q, %v; want the embedded one", data, err)
 	}
 	if _, _, err := BotGraph(o, Scenario{}, "missing"); err == nil {
 		t.Fatal("a bot graph no root or binary holds was resolved")

@@ -275,8 +275,8 @@ func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 }
 
 // TestAReturnBringsBackOnlyTheGameStillPlayed: a record a reset's new game was not
-// played under, or one holding more than play produces, leaves the Wraith taken
-// back with the template, as a cursor the new game built.
+// played under, one holding more than play produces, or one that reads a defeat
+// leaves the Wraith taken back with the template, as a cursor the new game built.
 func TestAReturnBringsBackOnlyTheGameStillPlayed(t *testing.T) {
 	const template = 100
 	for name, tc := range map[string]struct {
@@ -287,6 +287,7 @@ func TestAReturnBringsBackOnlyTheGameStillPlayed(t *testing.T) {
 		"more health than a cursor has":    {record: event.CursorRecord{Energy: 4321, HitPoints: parameter.CombatInitialHPCursor + 1}},
 		"more heat than the meter holds":   {record: event.CursorRecord{Energy: 4321, Heat: parameter.HeatMax + 1}},
 		"more charges than a weapon takes": {record: event.CursorRecord{Energy: 4321, Charges: []int{parameter.WeaponMaxChargeRod + 1}}},
+		"a cursor that left defeated":      {record: event.CursorRecord{HitPoints: 37}},
 	} {
 		w, _, _ := testCursorWorld(t)
 		remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)

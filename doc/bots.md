@@ -17,6 +17,7 @@ vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot -watch -size fit             #   on a map the size of this terminal
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -s cave -bot -watch               # watch cave's own bot fly it, learning on as it goes
+vif -s cave -bot -watch -field        #   or what it has learned, teaching it nothing
 vif -s cave -bot -headless -speed max # the same flat out on every core, kept at each Ctrl-C
 vif -s cave -bot seed -headless -speed max   # learn from its start written by hand instead
 vif -replay <journal>                 # replay what it recorded
@@ -31,8 +32,9 @@ vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, i
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; no count is one, and no graph the scenario's own bot, `default` where it carries none ([Writing a graph](#writing-a-graph)). |
 | `-bot <verb> …` | Keep bot files and exit: `list`, `create`, `import`, `export` or `clear` with what follows it ([A player's bot files](#a-players-bot-files)). |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
-| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`, summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
-| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
+| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, R rounds, score S`, the rounds closed and all the run was paid ([Score](#score-and-comparing-graphs)), summed and led by `G games,` where it played several, and for each network of a graph that learned `Bot learned <network>: rounds R of T, recent M, fielding S over C`: the rounds its learner scored this run and in all, their recent mean, and the score of the member it fields with the rounds behind it ([Networks and learning](#networks-and-learning)). Not with `-watch` or `-serve`. |
+| `-games <n>` | With `-headless`, how many games a bot alone whose graph learns plays at once, all teaching its learners, or with `-field` only fielding: one more than the cores unless given ([Learning](#learning)). Any other run plays one, and refuses a higher count. |
+| `-field` | With `-watch` or `-headless`, a bot alone whose graph learns plays what its populations field and teaches them nothing. No round is scored and no file written. Each round still ends at the graph's `round_seconds`, and headless the run prints `Round N scored S` as each closes, from every game ([Learning](#learning)). |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH\|fit>` | A bot's own view, watched or headless, default 120x40: the terminal only shows it. `fit` takes the screen's as the run starts, the terminal, window or page that shows it or, headless, the terminal it was started in, and 120x40 with none. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise, as with `fit`, the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
@@ -75,12 +77,13 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - A seated bot belongs to its holder, so it is never a candidate: the
   succession list holds only independent participants. A watched or headless bot is one and
   takes over as any other does, where its run says so (`-listen`, `[play] takeover`).
-- A bot's defeat or crush ends the game only where every cursor in play is a
-  bot's, this run's or another's: a seat, or a run `-bot` plays itself. Beside a
-  person it comes back a second later as a new game makes it, at the cell and
-  with the heat, energy and loadout a cursor starts on, and the game ends at a
-  person's defeat, at `:n`, or as the last person leaves a bot inside that
-  second ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+- A bot's defeat or crush ends the game only where no person holds a place.
+  Every cursor there is a bot's: a seat, or a run `-bot` plays itself. Beside a
+  person, one who is away included, the bot comes back a second of game time
+  later. It comes back as a new game makes it, at the cell and with the heat,
+  energy and loadout a cursor starts on. The game then ends at a person's
+  defeat, at `:n`, or when the last person's place is given up while a bot is
+  down ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - `:bot drop <slot>` drops one of your bots; the host may drop any player's.
   `:player drop <slot>` (host only) drops a player with all its bots, one bot,
   or a run a bot plays itself, which `:bot drop` does not reach.
@@ -182,9 +185,10 @@ unavailable in a browser`, `list` excepted.
 failing that a scenario's name, for that scenario's own bot; `clear` takes a
 name alone. `.<network>` after it is one of its `[network.<name>]`, and
 `<name>` a graph of yours by its name.
-The scenario is never written: it is the run's, `-s` on the command line. A
-member is its genes, whatever scored them: `export` reads a population of any
-`version` whose `layout` is the network's.
+The scenario is never written: it is the run's, `-s` on the command line.
+A population is read by one rule, by a run, `list`, `export` and `import`'s
+note alike: its `layout` is the network's, its `scored_by` the document's
+`score` and its `version` this build's. Any other is none.
 
 ## Telling cursors apart
 
@@ -221,9 +225,8 @@ A graph resolves as a path, then as `bot/<name>.toml` under `-config-dir`, the u
 root, the checkout's `wad/` beside a `bin/` binary, `/usr/local/etc/vif` and
 `/etc/vif`, a player's own; then as the bot of that name the run's scenario
 carries; then as the embedded `default`, the generic bot, bound to no scenario.
-`make install-config` installs `default` into the user root. `roam` and `patrol`
-load `default` unless a root holds a file of that name. `-d` does not pin bot
-graphs.
+`make install-config` installs `default` into the user root. `-d` does not pin
+bot graphs.
 
 A scenario carries the graphs made for its map among its own files, its bots,
 which its entry lists, as `cave`'s does:
@@ -238,8 +241,7 @@ bots = ["bot/cave.toml", "bot/seed.toml"]
 - The first is the scenario's own bot: what a seat that names no graph plays, from
   `-bot`, `-bot 2`, `:bot` and `:bot 2` alike. A scenario that lists none has
   `default` play.
-- The embedded scenario carries `main`, `default`'s graph with a walk learned
-  there ([Examples](#examples)).
+- The embedded scenario lists none: `default` is what `-bot` seats there.
 - A player's graph of the same name plays in the scenario's place, so a copy is
   how one is changed, which `create <name> import <graph>` writes
   ([A player's bot files](#a-players-bot-files)); what any of them learns is
@@ -254,8 +256,8 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights, and `round_seconds`: the game time after which it ends a round the game has not, default 0 for never. `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
-| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs`, the `while` that has it steer and, if any, weights written by hand. |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. `auto_fire`: the auto-fire its run starts each game on, `off`, `main` or `on` as `[play]` spells them, default the embedded `[play]`'s. `learn = true`: a solo run evolves the networks' weights; without it the graph learns no more and still plays what was kept for it. `round_seconds`: the game time after which a solo run of a graph that learns ends a round the game has not, default 0 for never. `score`: what pays the bot, each name a [source](#score-sources) and its number what one of it pays; `learn` needs one ([Score](#score-and-comparing-graphs)). `inputs`: the sensors every network reads ahead of its own ([Networks and learning](#networks-and-learning)). |
+| `[network.<name>]` | A policy `Steer` runs: `inputs`, `hidden`, `outputs` and, if any, weights written by hand. |
 | `[regions.<name>]` | `initial` only. Regions update in name order, so what one queues in a step goes ahead of a later one's. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -275,7 +277,7 @@ Allowance left idle builds up to one second's worth.
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
-| `Steer` | `network`: the `[network.<name>]` to run, or a list of them, the first whose `while` holds running; a graph with one may leave it out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack where it asks for it |
+| `Steer` | `network`: the `[network.<name>]` to run, which a graph with one may leave out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack where it asks for it |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), one that opens the command
@@ -309,7 +311,6 @@ or no cell gains ground.
 | `InMode` | `mode`: `normal`, `visual`, `insert`, `search`, `command`, `overlay` | the router is in that mode |
 | `Chance` | `percent`, 1..100 | a draw from the bot's own stream |
 | `Idle` | none | the intent queue is empty |
-| `InState` | `region`, `states` | the scenario's region runs and, where `states` names any, is in one of them or in a state within one |
 | `Own` | `field` | that event payload field names the bot's own cursor |
 | `Asks` | `output`, `above`, `network` | the network's output of one unit, `special` or `wheel`, reads above `above` (0) this update; a graph's one network needs no name, and one with no weight asks nothing |
 
@@ -385,7 +386,7 @@ transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", g
 ```
 
 The shipped [`default`](../internal/asset/bot/default.toml) types text left to
-right, backs off a threat on it and collects nuggets between patrols:
+right, backs off a threat on it and collects nuggets between walks:
 
 | State | Does | Moves on |
 |---|---|---|
@@ -401,53 +402,45 @@ right, backs off a threat on it and collects nuggets between patrols:
 The other shipped bots, and what each scores, are under
 [The shipped bots](#the-shipped-bots). Run `vif -check` after editing a graph:
 it prints `bot ok: <path>` for each graph that loads and fails naming each that
-does not. A graph a scenario carries is also held to that scenario: an `InState`
-naming a region or a state the scenario lacks would load and never hold, so
-`-check` fails naming it. A player's graph, which any scenario may play, is held
-to none. A graph outside every root is checked by putting it under `<dir>/bot/`
+does not. A graph outside every root is checked by putting it under `<dir>/bot/`
 and running `vif -check -config-dir <dir>`.
 
-## Fitness and comparing graphs
+## Score and comparing graphs
 
-A bot is measured two ways, both from the events its own steps dispatched.
-Players have no score.
+A bot has one measure: what its document's `[bot] score` pays for what its own
+steps did. Players have no score.
 
-**Fitness** is one sum over the whole run:
+    score = { travel = 1, kill = 5, hit_points = 12, kraken = 1 }
 
-- a correctly typed character (`EventBoostReward`): +1;
-- a typing error (`EventBoostDeactivate`): -1;
-- a gold sequence completed (`EventGoldCompleted`): +25;
-- a kill (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted
-  kill is proved):
-  - of a species a scenario declares: 12 times the hit points its program
-    gives it, 96 for a raider of `cave`'s first cave;
-  - of a Kraken: the ticks its hit points take at four a second, for a kill at
-    that pace or faster. A slower kill earns the share that pace is of its
-    own, a quarter at least;
-  - of any other species: +5;
-- its cursor defeated (`EventCursorDefeatState`) or crushed
-  (`EventCursorCrushed`): -100, once a round.
+- A name is a [source](#score-sources). Its number is what one of it pays. A
+  source left out pays nothing. A document with no `score` scores 0 and may
+  not learn.
+- A kill is paid by one source: `hit_points`, `kraken` or `kill`, whichever
+  measures it.
+- No source pays for time. A run may close a round by the clock
+  (`round_seconds`), and pay for time would pay a ship for outlasting it.
+- No source pays for a defeat. A defeat ends every round, so it tells no round
+  from another.
+- A kill a session's guest only predicted is paid once it is proved.
+- `default` pays every source. `cave` and `seed` pay the four of the line
+  above.
 
-**A round's score** is what learning reads. A round is one game, from its start
-to the new game its own play brought on. Its score is the columns the cave
-scrolled in it, which only `cave` has, plus the fitness earned in it without
-the -100: a defeat ends every round, so it tells no round from another.
+**A round's score** is what was paid in it, and is what learning reads. A round
+is one game, from its start to the new game its own play brought on. In `cave`
+the scroll halts while a Kraken is up. Shooting it down is what pays there, and
+the sooner it is down the further the round travels.
 
-- Time alone scores nothing. A run may close a round by the clock
-  (`round_seconds`), and a score for time would pay a ship for outlasting it.
-- In `cave` the scroll halts while a Kraken is up. Shooting it down is what
-  pays there, and the sooner it is down the further the round travels.
-- In a scenario with no cave a round's score is the fitness earned in it.
-
-Fitness is in the `-headless` summary, in the `bot stopped` log record, which
-also holds the rounds and their summed score, and in a seat's `bot left`
-record. From a checkout with `bin/vif` built,
-`./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` as
-written, its learning left off, headless and flat out at 120x40 for `secs` (60)
-over seeds 1..`seeds` (4) on the embedded scenario and `td`, and prints each
-scenario's sum. Given a graph file, it fails unless that graph beats `default`
-on every scenario. It appends a `stop` region (states `StopWait` and
-`StopQuit`), so a graph cannot use those names.
+The score is in the `-headless` summary, the `bot stopped` log record and a
+seat's `bot left` record, each beside the rounds closed. It is all the run was
+paid, the round in play included. From a checkout with `bin/vif` built,
+`./script/test.sh botscore [graph-file] [seeds] [secs]` plays `default` as
+written, its learning left off and under a user root of its own, where nothing
+is kept for it, headless and flat out at 120x40 for `secs` (60) over seeds
+1..`seeds` (4) on the embedded scenario and `td`, and prints each scenario's
+sum. Given a graph file, it fails unless that graph beats `default` on every
+scenario. Each graph is read by the score its own document declares. It appends
+a `stop` region (states `StopWait` and `StopQuit`), so a graph cannot use those
+names.
 
 ## Networks and learning
 
@@ -470,7 +463,6 @@ on once its energy is gone.
 inputs = ["ceiling", "floor", "column"]
 
 [network.kraken]
-while = { name = "InState", args = { region = "boss", states = ["BossFight"] } }
 inputs = ["kraken_near_x", "kraken_near_y"]
 outputs = ["move"]
 x = { kraken_near_x = -1.0, column = -0.1 }
@@ -482,7 +474,10 @@ y = { species_y = 0.9, hidden = [0.5] }
 units = [{ species_near_x = 1.0, bias = -0.2 }]
 
 [states.Fly]
-on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
+on_update = [
+    { action = "Steer", payload = { network = "kraken" }, guard = "HasTarget", guard_args = { target = "kraken" } },
+    { action = "Steer", payload = { network = "raid" }, guard = "Not", guard_args = { guard = { name = "HasTarget", args = { target = "kraken" } } } },
+]
 ```
 
 - A network's name is lowercase letters, digits and underscores, as it is part
@@ -510,17 +505,11 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
   - `wheel` is had only by listing it, and `Steer` does nothing with it. The
     graph reads it by the guard `Asks`, so its states hand over to the network
     while it asks and take over again when it stops.
-- `while`: the guard that has the network steer, written `{ name, args }` as
-  `And` lists one. `InState` binds a network to the scenario's own states. It
-  is asked of no state of the graph, so a guard of a state's time
-  (`StateTimeExceeds`) or of an event's payload is refused at load.
-  - A `Steer` plays a network only while its `while` holds. Given a list, it
-    asks each in turn, once an update, and plays the first whose `while`
-    holds. A network with none always steers, so only a list's last may have
-    none.
-  - A guard on the `Steer` action itself does the same job, and is what the
-    shipped bots use: `cave` steers by `kraken` while `HasTarget` sights a
-    Kraken and by `raid` otherwise.
+- Which network steers is the graph's to say, in the dialect's own words: a
+  guard on each `Steer`, as `cave` steers by `kraken` while `HasTarget` sights
+  a Kraken and by `raid` otherwise, or a state for each, as `default` steers by
+  `walk` only in `Walk`. A network carries no condition of its own, so guards
+  that overlap have two networks steer in one update.
 - Weights: a unit's table (`x`, `y`, `special`, `wheel`) gives its weight from
   each input by name, its `bias` and, as `hidden`, a weight for each hidden
   unit in their order. `units` lists a table for each hidden unit: its weight
@@ -545,7 +534,9 @@ on_update = [{ action = "Steer", payload = { network = ["kraken", "raid"] } }]
 
 **What is learned.** The weights of each network of a graph whose `[bot]` says
 `learn = true`. Each network has a learner and a population of its own. The
-graph's states and rates are not learned.
+graph's states and rates are not learned. A graph plays what its populations
+field whether or not it still learns: take `learn` out to hold a model where it
+stands, and `clear` it to play what the document writes.
 
 **When.** Only while the bot plays alone: a `-watch` or `-headless` run of the
 graph with no session. Each round such a run plays one candidate for each
@@ -554,12 +545,20 @@ player included, because a round there is not its own: another's defeat ends
 it. It plays what its population *fields*, the member its rounds have proved
 best, or the weights its graph writes where none is proved.
 
-**From what signal.** [A round's score](#fitness-and-comparing-graphs), split
+- A seat, and a run in a session as it starts, reads each population once and
+  builds no learner.
+- A watched run that opens a session (`:host`, `:bot`) scores nothing from the
+  round in play on. It plays what its learners field from the next round, and
+  learns no more in that run, its bots dropped or not: a run never leaves a
+  session for none.
+- `-field` has a run alone field instead: it reads the model and teaches it
+  nothing.
+
+**From what signal.** [A round's score](#score-and-comparing-graphs), split
 between the networks by who steered.
 
 - The ticks of a round belong to the network that steered last, until another
-  steers. A network's part of the round is the columns scrolled and the fitness
-  earned in its ticks.
+  steers. A network's part of the round is what the score paid in its ticks.
 - In `cave`, `kraken`'s part runs from the Kraken's rise to its death or the
   round's end, and `raid`'s is all the rest.
 - A candidate whose network never steered in a round stays in play until a
@@ -577,25 +576,34 @@ between the networks by who steered.
 an archive of 32 members, each a genome with the mean score of the rounds it
 has played and their count.
 
-- A new population starts from the weights its graph writes, where it writes
-  any. Where it writes none, its first 32 rounds play genomes drawn at random,
-  each weight about zero with a spread of 0.12.
-- A new candidate is bred from members of the archive: mostly one parent's,
-  mixed a hidden unit or an output at a time, with three weights in a hundred
-  stepped by a normal draw of 0.24, which is 0.03 of a weight's range.
-- Every third candidate is a member played again. By turns it is the unproved
-  member the archive trusts most, and whichever of the fielded member and its
-  rival has played fewer rounds.
+- A run first plays the weights its graph writes, where it writes any, in each
+  of its games until a round has scored them. While they are the archive's only
+  member, the next candidates are those weights with three in a hundred, one at
+  least, stepped by a normal draw of 0.12.
+- Where the graph writes none, a new population's first candidates are drawn at
+  random, each weight about zero with a spread of 0.12: 32 as they are taken,
+  then two its engine had queued.
+- After those a candidate is bred from two members, each the best by its plain
+  mean of three drawn at random. It is mostly one parent's, mixed a hidden unit
+  or an output at a time, with three weights in a hundred stepped by a normal
+  draw of 0.24, which is 0.03 of a weight's range. A child that comes out a
+  member's copy is that member played again.
+- Every third candidate is a member played again, which the learner names to
+  its engine. By turns it is the unproved member the archive trusts most, and
+  whichever of the fielded member and its rival has played fewer rounds. A turn
+  with none of its kind takes the other's.
 - A round is mostly luck, so the archive ranks a member by a *trusted* mean:
   its mean weighed as if eight more rounds had scored the population's recent
   mean. Eight lucky rounds then do not outrank thirty good ones.
 - A member with eight rounds is *proved*. The proved rank above the rest, eight
   of them at most. The other 24 places are probation.
-- A candidate whose first round would enter a full archive plays a second
-  round, and enters or not on that one alone, since the first was picked for
-  its luck. It takes the place of the last on probation, never of a proved
-  member. When a ninth member is proved, the least trusted of the proved leaves
-  as the next newcomer enters.
+- A candidate whose first round is trusted above the last member of a full
+  archive plays a second round, and enters or not on that one alone, since the
+  first was picked for its luck. It takes the place of the last on probation.
+- When a ninth member is proved, the least trusted of the proved leaves at the
+  next newcomer's round, and that newcomer enters whatever the round scored.
+- A member that left the archive with a round of it in play comes back, if that
+  round ranks it in, on the mean of all its rounds, counted as one.
 - The member fielded is the most trusted of the proved. Its *rival* is the
   next.
 
@@ -622,6 +630,7 @@ or not, so a watched run and a headless one teach the same population:
 vif -s cave -bot -headless -speed max      # learn flat out, a game on every core
 vif -s cave -bot -watch                    # the same population, watched at speed 1
 vif -s cave -bot seed -headless -speed max # learn from the start written by hand
+vif -s cave -bot -headless -field -seed 101   # what is fielded over fresh rounds, a line each
 vif -s cave -bot list                      # what each population holds
 vif -s cave -bot clear cave                # start cave's populations over
 vif -s cave -bot clear cave.raid           #   or one network's
@@ -644,9 +653,13 @@ can be trusted:
   archive are those whose luck held. In runs from nothing it was 1.7 to 3 times
   what the same member scored held out.
 - *Held out* is what the fielded members score over fresh rounds, on seeds the
-  run never played, with no learner. It is what a seat will play. No command
-  reads it yet: it takes a scratch test
-  ([agent notes](agent-notes.md#measuring)).
+  run never played, with no learner. It is what a seat will play. `-headless
+  -field` reads it, on a `-seed` no learning run played. With an empty user
+  root it reads the document's own weights. Its games tell their rounds in the
+  order a learning run's close into its learners, and a round a game closes
+  past the run's end is not told. So a run its graph quits prints the same
+  lines for one seed and one count of games. What ended a round still takes a
+  scratch test ([agent notes](agent-notes.md#measuring)).
 
 Luck is wide in `cave`: a round scores from a few hundred, lost in the first
 cave, to 375,000 for nine Krakens down in its half hour. Read a median and
@@ -659,7 +672,9 @@ A watched run's bar says what each round came to as it closes and how far each
 learner is: `Round 12 scored 5480 | kraken recent 2210, fielding 2790 over 9 |
 raid recent 4100, fielding 5300 over 31`. A headless run prints `Bot learned
 raid: rounds R of T, recent M, fielding S over C` for each learner as it stops,
-and each save writes a `bot population kept` log record.
+and each save writes a `bot population kept` log record. A run that only fields
+says the same of each population it read, and the figures do not move; headless
+it prints no `Bot learned` line.
 
 #### The population file
 
@@ -669,16 +684,26 @@ as the run stops. A browser keeps none. The learner lives beside the driver,
 outside the world and its captures. The file is JSON because one cut short
 never parses, where a TOML one could read as fewer members.
 
-`make install-config CLEAN=1` removes the user root's `bot/` whole, a player's
-graphs and populations with it: copy them out first.
+An install asked to purge (`./script/install.sh install-config -purge`) removes
+the user root's `bot/` whole, a player's graphs and populations with it: copy
+them out first ([Filesystem §4](filesystem-layout.md#4-installation)).
 
-A population starts over when its file is removed (`clear`), when the network's
-layout changes (the inputs read, `hidden`, or the outputs it has), which the
-file's `layout` digest names, or when what a round scores changes, which its
-`version` counts.
+A population starts over in four cases, and a run, `list`, `export` and
+`import`'s note all read the file by the same rule.
+
+- Its file is removed (`clear`).
+- The network's layout changes: the inputs read, `hidden`, or the outputs it
+  has. The file's `layout` digest names the layout.
+- The document's `score` line changes, which starts every population of that
+  graph over. The file's `scored_by` spells the score, for `cave`
+  `hit_points=12 kill=5 kraken=1 travel=1`.
+- The code's own rules of scoring or search change, a source's worth among
+  them. The file's `version` counts those.
+
+What else the file holds:
 
 - `rounds`: every round scored since the population began, over all its runs.
-- `recent`: their mean lately. `step`: the mutation step, a constant 0.03.
+- `recent`: their mean lately.
 - `members`: the archive in its order, the proved first and the most trusted
   at their head, then those on probation. It is no generation: members of
   every age stand side by side.
@@ -691,8 +716,9 @@ file's `layout` digest names, or when what a round scores changes, which its
   is proved.
 
 The candidate in play, the engine's queue and its random stream are not kept:
-a run resumes the archive, not the exact search. A learner in a run takes an
-`import` or a `clear` only from its next run.
+a run resumes the archive, not the exact search. A run reads a population
+once, as it starts or as its seat is taken. An `import` or a `clear` reaches
+the next run or seat, not one in play.
 
 A run whose disk fails learns on in memory and says so once, in the log (`bot
 population not kept`) and on a watched run's bar:
@@ -706,7 +732,11 @@ population not kept`) and on a watched run's bar:
 - a save that fails is tried again each half minute, and only the first is
   said.
 
-A run that ends without keeping what it learned ends with that error.
+A run that ends without keeping what it learned ends with that error. A run
+that only fields and cannot read or parse a population plays what its graph
+writes and says so once, in the log (`bot population not read`) and on a
+watched run's bar. A run told to field (`-field`) ends with that error instead,
+before it plays: it was asked for the model.
 
 ### The shipped bots
 
@@ -723,26 +753,25 @@ A run that ends without keeping what it learned ends with that error.
     other.
   - A run of `default` alone learns `walk`, in a population for each scenario.
     What that population fields is what `default` plays in that scenario from
-    then on, as a seat too.
+    then on, as a seat too. In the embedded scenario, which carries no bot, it
+    is `default.main.walk.json`.
   - It sends sixteen actions a second, twelve for the keys and four for the
     special attack. The region `special` updates after `play`, so a key goes
     out ahead of a special attack asked for in the same step: the other way
     round, the blast took the glyph the key was for.
-- [`main`](../internal/asset/scenario/bot/main.toml), the embedded scenario's
-  own: `default`'s graph with a `walk` learned there from nothing in six
-  minutes, 29 weights. A solo run learns on from them in `main.main.walk.json`.
-  The two graphs have one layout, so a population of `default`'s copied to that
-  name is `main`'s.
+  - Its score pays every source, as it plays any scenario: `typed` 1,
+    `mistyped` -1, `gold` 25, `kill` 5, `hit_points` 12, `kraken` 1, `travel` 1.
 - [`seed`](../wad/scenario/base/cave/bot/seed.toml), `cave`'s start written by
   hand. It has two networks, `raid` and `kraken`, each its inputs through six
   hidden units. Twelve direct weights hold the nearest raider's row, back off
-  what is near and keep to the middle.
+  what is near and keep to the middle. Its score pays `travel` 1, `kill` 5,
+  `hit_points` 12 and `kraken` 1.
 - [`cave`](../wad/scenario/base/cave/bot/cave.toml), the `cave` scenario's
-  own: `seed`'s two networks with a model learned from `seed`'s weights, 194 of
-  its 540 weights not zero. A run of five games learned it, and a trainer then
-  ran on from it in cycles of fifty minutes. The pair it fielded after the
-  fourth cycle ships, and fifteen more cycles fielded no better. The trainer is
-  stopped; its populations are on the branch `claude/cave-training-state`.
+  own: `seed`'s two networks and `seed`'s score, with a model learned from
+  `seed`'s weights, 194 of its 540 weights not zero. A run of five games
+  learned it, and a trainer then ran on from it in cycles of fifty minutes. The
+  pair it fielded after the fourth cycle ships, and fifteen more cycles fielded
+  no better. The trainer is stopped.
 
 What each scores held out, with no learner. In `cave`: 100 rounds of seeds 101
 to 104, each closed at half an hour, 36,000 ticks.
@@ -762,10 +791,13 @@ the limit allows, and a bot document's `round_seconds` is its own to raise.
 In the embedded scenario: 100 rounds of half an hour, seeds 201 to 204.
 
 ```
-bot                    mean     median   Krakens met in most rounds
-default, unlearned  622,467    620,447   twelve, in 84 rounds
-main                718,430    721,430   fourteen, in 92 rounds
+bot                            mean     median   Krakens met in most rounds
+default, as shipped         622,467    620,447   twelve, in 84 rounds
+default, a walk learned     718,430    721,430   fourteen, in 92 rounds
 ```
+
+No model ships for this scenario. The second row is a `walk` a run learned
+there from nothing in six minutes, 29 weights; a player's runs learn their own.
 
 Nearly all of that is Kraken bounty, 50,000 each: 97 in 100 of what `default`
 earns. A `default` that never fires the special attack scores 402,940.
@@ -854,7 +886,7 @@ What a round scores, and when it ends:
   20,666 to 50,244 where `kraken` learned in `cave` fielded 23,074 to 51,120,
   on four seeds.
 - A raider's kill paid a flat 100, a probe: one run of four learned to shoot
-  in the first cave. What is built pays 12 times a species' hit points.
+  in the first cave. `cave`'s document pays 12 times a species' hit points.
 
 What a network reads and asks for:
 
@@ -870,15 +902,19 @@ What a network reads and asks for:
   -8,304 over 60,000 ticks of `armada` where no walk scored 7,868.
 - Backing off a threat written as `walk`'s weights, in place of the state
   `Flee`: in `td` it gained seven tenths of what the state gains at most.
+- A network's own `while`, a `Steer` over a list of networks that played the
+  first whose `while` held, and a guard `InState` over the scenario's states:
+  `cave` written so kept its populations' bytes, and a guard on each `Steer`
+  does the same with nothing added.
 
 <!-- catalogue: generated, see its first lines -->
 ## Catalogue
 
-What a graph's guards and `PointAt` take as a target, and what a network
-reads and asks for. This section is generated from the tables of
-`internal/bot/catalogue.go`: change a row there, then run
+What a graph's guards and `PointAt` take as a target, what a network reads
+and asks for, and what a score pays for. This section is generated from the
+tables of `internal/bot/catalogue.go`: change a row there, then run
 `VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`. `vif -schema`
-lists the same inputs, outputs and scales under `bot_catalogue`.
+lists the same inputs, outputs, scales and sources under `bot_catalogue`.
 
 ### Kinds
 
@@ -1011,6 +1047,23 @@ output's weights in a table named for each of its units.
 - `wheel`, units `wheel`: asks its graph for the wheel: Steer does nothing with
   it, and the guard Asks holds while it is above what the guard names. A network
   has it only by listing it.
+
+### Score sources
+
+What a document's `[bot] score` may pay for. The document gives each source it
+names what one of it pays. A source it leaves out pays nothing.
+
+- `typed`: a character typed right.
+- `mistyped`: a typing error.
+- `gold`: a gold sequence completed.
+- `kill`: a kill neither hit_points nor kraken measures: of a species the game's
+  own code flies, or of a Kraken whose fight could not be timed.
+- `hit_points`: a kill of a species a scenario declares, by the hit points its
+  program gives it.
+- `kraken`: a Kraken shot down, by the ticks its hit points take at four a
+  second: all of them at that pace or faster, the share that pace is of a slower
+  one, a quarter at least.
+- `travel`: a column the cave scrolled.
 <!-- /catalogue -->
 
 ## Recording and replaying
@@ -1037,11 +1090,11 @@ unattended.
   around the bot. So a person's bots play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
 - It plays the game a person plays. The game differs for a bot in two decided
-  ways only: its defeat ends a game only where every cursor in play is a bot's,
-  and beside a person it comes back a second later
-  ([Ownership and leaving](#ownership-and-leaving)). No other mechanic, event
-  or engine path is made for a bot, and none is to be added (Lixen,
-  2026-11-20).
+  ways only: its defeat ends a game only where no person holds a place, and
+  beside a person, one who is away included, it comes back a second of game
+  time later ([Ownership and leaving](#ownership-and-leaving)). No other
+  mechanic, event or engine path is made for a bot, and none is to be added
+  (Lixen, 2026-11-20).
 - A solo bot run is reproducible from its seed, and a learning one from its
   seed, its count of games and the population it started with. In a session only
   a journal reproduces a run: the front instance's, or a seat's this process
@@ -1056,14 +1109,16 @@ unattended.
 | Symptom | Fix |
 |---|---|
 | `bot graph "x" not found as a path, in a configuration root, in scenario <name> or embedded` | Check the name and `-config-dir`, or give a path; a scenario's bot is found only in a run of that scenario. |
-| `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place; installs before the scenario carried its bots left one there, which `make install-config` names. Remove it. |
+| `cave` flies as if it had learned nothing | A `bot/cave.toml` in a root is a player's own and plays in the scenario's place: remove or rename it. |
 | `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
-| A `roam` or `patrol` bot plays an old graph | An installed file of that name shadows `default`: use `-bot default` or update the file. |
+| `bot <name>: learn needs a [bot] score: …` | The graph learns and declares no `score`, as one written before the key existed. Give it the `score` line of its scenario's own bot ([Score](#score-and-comparing-graphs)). |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
 | `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
 | `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
 | `-games N: only a -headless bot alone and flat out whose graph learns plays more than one game` | Run the graph alone, with no session, further bots or `-speed` but `max`, and with `learn = true` in its `[bot]`; or leave the count out. |
 | `-games is how many games a -headless -bot run learns from at once, 1 or more` | Give `-games` only with `-headless -bot`. |
+| `-field is how a -watch or -headless -bot run plays what its bot learned, teaching it nothing` | Give `-field` only with `-bot` and `-watch` or `-headless`. |
+| `<network> population could not be read: …` or `could not be parsed: …` ends a `-field` run | That network's file in the user root's `bot/` is unreadable or broken: put a good one back, or `clear` it to read the weights the document writes. |
 | `Bot <graph>: …` on the status bar | The seat failed to join; the log has `bot not seated` with the error. |
 
 The holder logs `bot seated`, `bot left` and `bot not seated` for each seat, whose
