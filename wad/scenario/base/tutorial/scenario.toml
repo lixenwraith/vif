@@ -25,7 +25,8 @@ blocks = true
 only_systems = ["cursor", "typing", "timer", "death", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
 # With no gun to cycle, no clock to stop and no fight to find a column in, the keys
-# a game reads its own way are vi's here; the backtick stays the console's
+# a game reads its own way are vi's here, and y, which a game leaves unbound, yanks;
+# the backtick stays the console's
 [keymap.normal]
 a = "mode_append"
 p = "put_after"
@@ -34,6 +35,7 @@ o = "mode_open_below"
 O = "mode_open_above"
 u = "undo_change"
 m = "mark_set"
+y = "operator_yank"
 
 [keymap.normal_keys]
 ctrl_r = "redo_change"
@@ -68,14 +70,19 @@ params = { text = "string" }
 body = { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "${text}", font = "small", color = { r = 255, g = 200, b = 0 }, origin_x = 4, origin_y = 1 }, reconcile = true }
 
 [macros.Note]
-doc = "Lay `text` at row `row` as scenery: part of the lesson, which nothing types or deletes."
+doc = "Lay `text` at row `row` as scenery: part of the lesson, which nothing types or deletes, in 62 columns at most so the magnifier has the map's right. A key it names stands between two | and is laid bright."
 params = { text = "string", row = "int" }
-body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "white", level = "normal", scenery = true }, reconcile = true }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "white", level = "normal", scenery = true, accent = "|" }, reconcile = true }
 
 [macros.Line]
-doc = "Lay the practice line `text` at row `row`, typeable."
+doc = "Lay the practice line `text` at row `row`, typeable; the glyphs a step asks for stand between two | and are laid bright white."
 params = { text = "string", row = "int" }
-body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "blue", level = "bright" }, reconcile = true }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "blue", level = "bright", accent = "|" }, reconcile = true }
+
+[macros.Label]
+doc = "Lay `text` from column `x` of row `row` as scenery beside the practice lines: what a step does there."
+params = { text = "string", x = "int", row = "int" }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = "${x}", y = "${row}", type = "white", level = "normal", scenery = true, accent = "|" }, reconcile = true }
 
 [macros.Stand]
 doc = "Stand the cursor on `x`, `y` in Normal mode, a tick on: after the move the key that ended the last lesson made."
@@ -197,10 +204,11 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "h j k l" },
-    { macro = "Note", text = "h moves the cursor left and l right; j moves it down and k up.", row = 8 },
-    { macro = "Note", text = "The arrow keys move the same way; page up and page down leap half a screen.", row = 9 },
-    { macro = "Note", text = "A lesson ends when you reach its goal; s skips a lesson and S goes back.", row = 10 },
-    { macro = "Note", text = "Stand on the x at the end of the third line below to go on.", row = 11 },
+    { macro = "Note", text = "|h| moves the cursor left and |l| right; |j| down and |k| up.", row = 8 },
+    { macro = "Note", text = "The arrow keys move the same way; page up and page down", row = 9 },
+    { macro = "Note", text = "leap half a screen.", row = 10 },
+    { macro = "Note", text = "A lesson ends at its goal; |s| skips one and |S| goes back.", row = 11 },
+    { macro = "Note", text = "Stand on the bright x at the end of the third line.", row = 12 },
     { macro = "Line", text = "start on this line", row = 14 },
     { macro = "Line", text = "move down two rows", row = 15 },
     { macro = "Line", text = "and right to the", row = 16 },
@@ -218,9 +226,9 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "w b e" },
-    { macro = "Note", text = "w jumps to the start of the next word and b to the start of the last.", row = 8 },
-    { macro = "Note", text = "e lands on the last glyph of a word; punctuation is a word of its own.", row = 9 },
-    { macro = "Note", text = "W B and E take everything up to a space as one word, punctuation included.", row = 10 },
+    { macro = "Note", text = "|w| jumps to the start of the next word, |b| of the one before.", row = 8 },
+    { macro = "Note", text = "|e| lands on a word's last glyph. Punctuation is a word too;", row = 9 },
+    { macro = "Note", text = "|W| |B| |E| take all up to a space as one word.", row = 10 },
     { macro = "Note", text = "Reach the start of dog, the last word of the line.", row = 11 },
     { macro = "Line", text = "the quick.brown fox, jumping over the lazy-dog!", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
@@ -237,9 +245,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "0 ^ $" },
-    { macro = "Note", text = "0 jumps to the first cell of the line and $ to its last glyph.", row = 8 },
-    { macro = "Note", text = "^ finds the first glyph after the indent; home and end work like 0 and $.", row = 9 },
-    { macro = "Note", text = "Go to the period at the end of the line, then back to its first glyph.", row = 10 },
+    { macro = "Note", text = "|0| jumps to the first cell of the line, |$| to its last glyph.", row = 8 },
+    { macro = "Note", text = "|^| finds the first glyph after the indent.", row = 9 },
+    { macro = "Note", text = "Home and end work like |0| and |$|.", row = 10 },
+    { macro = "Note", text = "Go to the period at the line's end, then back to its start.", row = 11 },
     { macro = "Line", text = "    an indented line ends with a period.", row = 14 },
     { macro = "Stand", x = 8, y = 14 },
     { macro = "Say", message = "Lesson 3 of 22: $ to the period, then ^ to the first glyph" },
@@ -264,9 +273,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "f t ; ," },
-    { macro = "Note", text = "f and a glyph jump to its next one on the line; t stops just before it.", row = 8 },
-    { macro = "Note", text = "F and T look backward instead; ; repeats the last find and , reverses it.", row = 9 },
-    { macro = "Note", text = "Hop from x to x: fx finds the first one, then ; finds each one after it.", row = 10 },
+    { macro = "Note", text = "|f| and a glyph jump to its next one on the line;", row = 8 },
+    { macro = "Note", text = "|t| stops just before it. |F| and |T| look backward.", row = 9 },
+    { macro = "Note", text = "|;| repeats the last find and |,| reverses it.", row = 10 },
+    { macro = "Note", text = "Hop from x to x: |fx| finds the first, |;| each one after.", row = 11 },
     { macro = "Line", text = "hop x from x here x to x the last x", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 4 of 22: reach the last x with fx and ;" },
@@ -282,9 +292,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "3w 2j" },
-    { macro = "Note", text = "A count before a motion repeats it: 3w is three words, 2j two rows down.", row = 8 },
-    { macro = "Note", text = "Counts work with every motion, 5l, 4h, 2k, and with x and dd as well.", row = 9 },
-    { macro = "Note", text = "Reach five in as few keys as you can.", row = 10 },
+    { macro = "Note", text = "A count before a motion repeats it: |3w| is three words,", row = 8 },
+    { macro = "Note", text = "|2j| two rows down. Counts work with every motion,", row = 9 },
+    { macro = "Note", text = "|5l| |4h| |2k|, and with |x| and |dd| as well.", row = 10 },
+    { macro = "Note", text = "Reach five in as few keys as you can.", row = 11 },
     { macro = "Line", text = "one two three four", row = 14 },
     { macro = "Line", text = "nine ten five six", row = 15 },
     { macro = "Line", text = "seven eight twelve", row = 16 },
@@ -302,10 +313,11 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "x dd" },
-    { macro = "Note", text = "x deletes the glyph under the cursor and X the one left of it.", row = 8 },
-    { macro = "Note", text = "A count deletes that many: 3x. dd deletes the whole line, 2dd two of them.", row = 9 },
-    { macro = "Note", text = "First press x on the x, then delete the third line with dd.", row = 10 },
-    { macro = "Line", text = "x marks this glyph", row = 14 },
+    { macro = "Note", text = "|x| deletes the glyph under the cursor, |X| the one left of it.", row = 8 },
+    { macro = "Note", text = "A count deletes that many: |3x|.", row = 9 },
+    { macro = "Note", text = "|dd| deletes the whole line, |2dd| two of them.", row = 10 },
+    { macro = "Note", text = "First |x| on the bright x, then |dd| on the third line.", row = 11 },
+    { macro = "Line", text = "|x| marks this glyph", row = 14 },
     { macro = "Line", text = "keep this line", row = 15 },
     { macro = "Line", text = "delete this whole line", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
@@ -331,10 +343,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "dw D" },
-    { macro = "Note", text = "d waits for a motion and deletes as far as it goes: dw a word, de its end.", row = 8 },
-    { macro = "Note", text = "d3w takes three words, dfx as far as the next x, dj this row and the next.", row = 9 },
-    { macro = "Note", text = "D deletes from the cursor to the end of the line, as d$ does.", row = 10 },
-    { macro = "Note", text = "Delete the first word with dw, then go to the x and cut the rest with D.", row = 11 },
+    { macro = "Note", text = "|d| waits for a motion and deletes as far as it goes:", row = 8 },
+    { macro = "Note", text = "|dw| a word, |de| to its end, |d3w| three words, |dfx| to the", row = 9 },
+    { macro = "Note", text = "next x, |dj| this row and the next. |D| cuts to the line's end.", row = 10 },
+    { macro = "Note", text = "Delete the first word with |dw|, then |D| from the x on.", row = 11 },
     { macro = "Line", text = "remove this word, then cut from the x on", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 7 of 22: dw on the first word, then D on the x" },
@@ -359,11 +371,11 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "i esc" },
-    { macro = "Note", text = "i enters insert mode at the cursor and esc returns to normal mode.", row = 8 },
-    { macro = "Note", text = "In insert mode, type the glyph under the cursor to clear it and move on.", row = 9 },
+    { macro = "Note", text = "|i| enters insert mode at the cursor; |esc| returns to normal.", row = 8 },
+    { macro = "Note", text = "In insert mode, type the glyph under the cursor to clear it.", row = 9 },
     { macro = "Note", text = "A match feeds the heat and the boost; a miss burns ten heat.", row = 10 },
-    { macro = "Note", text = "Type both lines: esc, j, ^ and i again take you to the second one.", row = 11 },
-    { macro = "Note", text = "In normal mode esc opens the menu and pauses; esc again closes it.", row = 12 },
+    { macro = "Note", text = "Type both lines: |esc|, |j|, |^| and |i| reach the second one.", row = 11 },
+    { macro = "Note", text = "In normal mode |esc| opens the menu; |esc| again closes it.", row = 12 },
     { macro = "Line", text = "type me", row = 14 },
     { macro = "Line", text = "then me", row = 15 },
     { macro = "Stand", x = 4, y = 14 },
@@ -392,46 +404,71 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "A I a" },
-    { macro = "Note", text = "A jumps to the last glyph of the line and enters insert mode there.", row = 8 },
-    { macro = "Note", text = "I does the same at the first glyph; a steps one cell right, then inserts.", row = 9 },
-    { macro = "Note", text = "In a game a cycles auto fire: this tutorial gives it back to vi.", row = 10 },
-    { macro = "Note", text = "Type the brace at each end: A then }, esc, I then {.", row = 11 },
-    { macro = "Line", text = "{ clear both of these braces }", row = 14 },
-    { macro = "Line", text = "->", row = 15 },
+    { macro = "Note", text = "|A| jumps to the line's last glyph and enters insert mode.", row = 8 },
+    { macro = "Note", text = "|I| does the same at its first glyph.", row = 9 },
+    { macro = "Note", text = "|a| steps one cell right, then inserts; |i| inserts in place.", row = 10 },
+    { macro = "Note", text = "In a game |a| cycles auto fire: here it is vi's again.", row = 11 },
+    { macro = "Note", text = "Type the bright glyph each key lands on, then |esc|.", row = 12 },
+    { macro = "Line", text = "jump to the en|d|", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
-    { macro = "Say", message = "Lesson 9 of 22: A and type the closing brace" },
+    { macro = "Say", message = "Lesson 9 of 22: A, then type the bright d" },
 ]
 transitions = [
-    { macro = "Typed", target = "AppendFirst", char = 125, x = 33, y = 14 },
-    { macro = "Gone", target = "AppendFirst", x = 33, y = 14 },
+    { macro = "Typed", target = "AppendEnd", char = 100, x = 18, y = 14 },
+    { macro = "Gone", target = "AppendFirst", x = 18, y = 14 },
     { macro = "Next", target = "Open" },
     { macro = "Back", target = "Insert" },
+]
+
+# A step that ends on a typed glyph waits for the esc that ends typing, which would
+# open the menu over the step after it; each step lays its own line and stands the
+# cursor, so none is done before its turn
+[states.AppendEnd]
+parent = "Append"
+on_enter = [
+    { macro = "Say", message = "esc returns to normal mode" },
+]
+transitions = [
+    { macro = "Normal", target = "AppendFirst" },
 ]
 
 [states.AppendFirst]
 parent = "Append"
 on_enter = [
-    { macro = "Say", message = "Now esc, then I and type the opening brace" },
+    { macro = "Line", text = "|f|irst glyph of the line", row = 15 },
+    { macro = "Stand", x = 16, y = 15 },
+    { macro = "Say", message = "Now I, then type the bright f" },
 ]
 transitions = [
-    { macro = "Typed", target = "AppendStep", char = 123, x = 4, y = 14 },
-    { macro = "Gone", target = "AppendStep", x = 4, y = 14 },
+    { macro = "Typed", target = "AppendFirstEnd", char = 102, x = 4, y = 15 },
+    { macro = "Gone", target = "AppendStep", x = 4, y = 15 },
+]
+
+[states.AppendFirstEnd]
+parent = "Append"
+on_enter = [
+    { macro = "Say", message = "esc returns to normal mode" },
+]
+transitions = [
+    { macro = "Normal", target = "AppendStep" },
 ]
 
 [states.AppendStep]
 parent = "Append"
 on_enter = [
-    { macro = "Say", message = "Now esc, j and ^ onto the dash, then a and type the >" },
+    { macro = "Line", text = "g|o| on", row = 16 },
+    { macro = "Stand", x = 4, y = 16 },
+    { macro = "Say", message = "Now a, then type the bright o" },
 ]
 transitions = [
-    { macro = "Typed", target = "AppendEsc", char = 62, x = 5, y = 15 },
-    { macro = "Gone", target = "Open", x = 5, y = 15 },
+    { macro = "Typed", target = "AppendEsc", char = 111, x = 5, y = 16 },
+    { macro = "Gone", target = "Open", x = 5, y = 16 },
 ]
 
 [states.AppendEsc]
 parent = "Append"
 on_enter = [
-    { macro = "Say", message = "Insert mode still: esc to go on" },
+    { macro = "Say", message = "esc returns to normal mode" },
 ]
 transitions = [
     { macro = "Normal", target = "Open" },
@@ -442,37 +479,48 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "o O" },
-    { macro = "Note", text = "o moves to the first glyph of the row below and enters insert mode.", row = 8 },
-    { macro = "Note", text = "O does the same on the row above. vi opens a new line; vif types what is.", row = 9 },
-    { macro = "Note", text = "In a game o and O find the next glyph below and above in the column.", row = 10 },
-    { macro = "Note", text = "Press o and type the row below, then esc, k and O for the row above.", row = 11 },
-    { macro = "Line", text = "above", row = 14 },
-    { macro = "Line", text = "below", row = 16 },
-    { macro = "Note", text = "o goes down from this row and O up", row = 15 },
+    { macro = "Note", text = "|o| moves to the first glyph of the row below and inserts.", row = 8 },
+    { macro = "Note", text = "|O| does the same on the row above.", row = 9 },
+    { macro = "Note", text = "vi opens a new line there; vif types what the row holds.", row = 10 },
+    { macro = "Note", text = "In a game |o| and |O| find the next glyph in the column.", row = 11 },
+    { macro = "Note", text = "Type the bright glyph each key lands on, then |esc|.", row = 12 },
+    { macro = "Label", text = "start here: |o| goes a row down and |O| a row up", x = 4, row = 15 },
+    { macro = "Line", text = "|b|elow", row = 16 },
     { macro = "Stand", x = 4, y = 15 },
-    { macro = "Say", message = "Lesson 10 of 22: o and type the word below" },
+    { macro = "Say", message = "Lesson 10 of 22: o, then type the bright b" },
 ]
 transitions = [
-    { macro = "Typed", target = "OpenAbove", char = 119, x = 8, y = 16 },
-    { macro = "Gone", target = "OpenAbove", x = 8, y = 16 },
+    { macro = "Typed", target = "OpenEnd", char = 98, x = 4, y = 16 },
+    { macro = "Gone", target = "OpenAbove", x = 4, y = 16 },
     { macro = "Next", target = "Change" },
     { macro = "Back", target = "Append" },
+]
+
+[states.OpenEnd]
+parent = "Open"
+on_enter = [
+    { macro = "Say", message = "esc returns to normal mode" },
+]
+transitions = [
+    { macro = "Normal", target = "OpenAbove" },
 ]
 
 [states.OpenAbove]
 parent = "Open"
 on_enter = [
-    { macro = "Say", message = "Now esc, k back to this row, then O and type the word above" },
+    { macro = "Line", text = "|a|bove", row = 14 },
+    { macro = "Stand", x = 4, y = 15 },
+    { macro = "Say", message = "Now O, then type the bright a" },
 ]
 transitions = [
-    { macro = "Typed", target = "OpenEsc", char = 101, x = 8, y = 14 },
-    { macro = "Gone", target = "Change", x = 8, y = 14 },
+    { macro = "Typed", target = "OpenEsc", char = 97, x = 4, y = 14 },
+    { macro = "Gone", target = "Change", x = 4, y = 14 },
 ]
 
 [states.OpenEsc]
 parent = "Open"
 on_enter = [
-    { macro = "Say", message = "Insert mode still: esc to go on" },
+    { macro = "Say", message = "esc returns to normal mode" },
 ]
 transitions = [
     { macro = "Normal", target = "Change" },
@@ -483,10 +531,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "c cc C" },
-    { macro = "Note", text = "c deletes as d does and leaves you in insert mode: cw a word, c$ the rest.", row = 8 },
-    { macro = "Note", text = "cc clears the whole line and C the rest of it; cw stops at its word's end.", row = 9 },
-    { macro = "Note", text = "In a game s is cl and S is cc; here they skip a lesson and go back.", row = 10 },
-    { macro = "Note", text = "Change the first word with cw and press esc, then cc on the second line.", row = 11 },
+    { macro = "Note", text = "|c| deletes as |d| does and leaves you in insert mode:", row = 8 },
+    { macro = "Note", text = "|cw| a word, |c$| the rest. |cc| clears the line, |C| its rest.", row = 9 },
+    { macro = "Note", text = "In a game |s| is |cl| and |S| is |cc|; here they skip and go back.", row = 10 },
+    { macro = "Note", text = "Change the first word with |cw|, |esc|, then |cc| on line two.", row = 11 },
     { macro = "Line", text = "wrong word here", row = 14 },
     { macro = "Line", text = "clear this whole line", row = 15 },
     { macro = "Stand", x = 4, y = 14 },
@@ -514,9 +562,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "r ~" },
-    { macro = "Note", text = "r and a glyph retype the one under the cursor: no insert mode, no score.", row = 8 },
-    { macro = "Note", text = "A count retypes that many: 3rx. ~ flips a letter's case and moves on.", row = 9 },
-    { macro = "Note", text = "Fix the z with rs, then stand on SHOUT and quieten it with 5~.", row = 10 },
+    { macro = "Note", text = "|r| and a glyph retype the one under the cursor:", row = 8 },
+    { macro = "Note", text = "no insert mode, no score. A count retypes that many: |3rx|.", row = 9 },
+    { macro = "Note", text = "|~| flips a letter's case and moves on.", row = 10 },
+    { macro = "Note", text = "Fix the z with |rs|, then quieten SHOUT with |5~|.", row = 11 },
     { macro = "Line", text = "thiz line has a SHOUT in it", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 12 of 22: fz to the z, then rs" },
@@ -542,31 +591,30 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "." },
-    { macro = "Note", text = ". repeats the last change: a delete, a change, a retype or a put.", row = 8 },
-    { macro = "Note", text = "A count before it replaces the change's own: dw then 2. takes two words.", row = 9 },
-    { macro = "Note", text = "What insert mode typed after i, I, a, A, o, O or c is typed again with it.", row = 10 },
-    { macro = "Note", text = "Clear no from each line: I, type no, esc, then j and . twice.", row = 11 },
-    { macro = "Line", text = "no way", row = 14 },
-    { macro = "Line", text = "no fear", row = 15 },
-    { macro = "Line", text = "no pain", row = 16 },
+    { macro = "Note", text = "|.| repeats the last change: a delete, a change, a retype,", row = 8 },
+    { macro = "Note", text = "a put, or what insert mode typed after |i| |I| |a| |A| |o| |O| |c|.", row = 9 },
+    { macro = "Note", text = "A count before it replaces the change's own: |2.| after |dw|.", row = 10 },
+    { macro = "Note", text = "Delete the bright word with |dw|; |j| and |.| then does it again.", row = 11 },
+    { macro = "Line", text = "|junk| keep this", row = 14 },
+    { macro = "Line", text = "|junk| and this", row = 15 },
+    { macro = "Line", text = "|junk| and this too", row = 16 },
     { macro = "Stand", x = 4, y = 14 },
-    { macro = "Say", message = "Lesson 13 of 22: I, type no, esc, then j and . for each line" },
+    { macro = "Say", message = "Lesson 13 of 22: dw deletes the bright word" },
 ]
 transitions = [
-    { macro = "Typed", target = "RepeatEsc", char = 111, x = 5, y = 16 },
-    { macro = "Gone", target = "Yank", x = 5, y = 16 },
+    { macro = "Gone", target = "Yank", x = 4, y = 16 },
+    { macro = "Gone", target = "RepeatDot", x = 4, y = 14 },
     { macro = "Next", target = "Yank" },
     { macro = "Back", target = "Replace" },
 ]
 
-# . returns to normal mode itself, which this step passes at once
-[states.RepeatEsc]
+[states.RepeatDot]
 parent = "Repeat"
 on_enter = [
-    { macro = "Say", message = "Insert mode still: esc to go on" },
+    { macro = "Say", message = "Now j and . repeats the delete, on each line below" },
 ]
 transitions = [
-    { macro = "Normal", target = "Yank" },
+    { macro = "Gone", target = "Yank", x = 4, y = 16 },
 ]
 
 [states.Yank]
@@ -574,13 +622,15 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "y p P" },
-    { macro = "Note", text = "y and a motion yank into the register: yw a word, yy the line.", row = 8 },
-    { macro = "Note", text = "p puts it after the cursor and P before it; a line goes below or above.", row = 9 },
-    { macro = "Note", text = "A put passes over a cell that holds a glyph, and every delete yanks too.", row = 10 },
-    { macro = "Note", text = "In a game p pauses. Yank this line with yy and put it below with p.", row = 11 },
-    { macro = "Line", text = "yank me with yy, put me with p", row = 14 },
+    { macro = "Note", text = "|y| and a motion yank into the register: |yw| a word, |yy| a line.", row = 8 },
+    { macro = "Note", text = "|p| puts it after the cursor and |P| before it;", row = 9 },
+    { macro = "Note", text = "a line goes on the row below or above.", row = 10 },
+    { macro = "Note", text = "A put passes over a cell that holds a glyph, and every delete", row = 11 },
+    { macro = "Note", text = "yanks too. In a game |p| pauses and |y| does nothing.", row = 12 },
+    { macro = "Line", text = "copy this line", row = 14 },
+    { macro = "Label", text = "<- |p| puts the copy on this row", x = 24, row = 15 },
     { macro = "Stand", x = 4, y = 14 },
-    { macro = "Say", message = "Lesson 14 of 22: yy, then p" },
+    { macro = "Say", message = "Lesson 14 of 22: yy yanks this line, then p puts it below" },
 ]
 transitions = [
     { trigger = "EventGlyphPutRequest", target = "YankDelete" },
@@ -591,7 +641,7 @@ transitions = [
 [states.YankDelete]
 parent = "Yank"
 on_enter = [
-    { macro = "Say", message = "A delete fills the register too: dd this line" },
+    { macro = "Say", message = "A delete yanks too: dd on the line you stand on" },
 ]
 transitions = [
     { trigger = "EventDeleteRequest", target = "YankPut", guard = "PayloadIntCompare", guard_args = { field = "range_type", op = "eq", value = 1 } },
@@ -600,7 +650,7 @@ transitions = [
 [states.YankPut]
 parent = "Yank"
 on_enter = [
-    { macro = "Say", message = "Now p puts it back, a row down" },
+    { macro = "Say", message = "Now p puts it back on the row below, or P on the row above" },
 ]
 transitions = [
     { trigger = "EventGlyphPutRequest", target = "Undo" },
@@ -611,10 +661,11 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "u ctrl-r" },
-    { macro = "Note", text = "u takes back the last change: a delete, a retype or a put.", row = 8 },
-    { macro = "Note", text = "ctrl-r makes it again. A change is forgotten once its cells change.", row = 9 },
-    { macro = "Note", text = "In a game u undoes a cursor move: this tutorial gives it back to vi.", row = 10 },
-    { macro = "Note", text = "Delete this line with dd, bring it back with u, then redo with ctrl-r.", row = 11 },
+    { macro = "Note", text = "|u| takes back the last change: a delete, a retype or a put.", row = 8 },
+    { macro = "Note", text = "|ctrl-r| makes it again.", row = 9 },
+    { macro = "Note", text = "A change is forgotten once its cells change.", row = 10 },
+    { macro = "Note", text = "In a game |u| undoes a cursor move: here it is vi's again.", row = 11 },
+    { macro = "Note", text = "Delete the line with |dd|, bring it back with |u|, then |ctrl-r|.", row = 12 },
     { macro = "Line", text = "delete me, then undo", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 15 of 22: dd, then u" },
@@ -648,9 +699,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "% { }" },
-    { macro = "Note", text = "% jumps between a bracket and its pair, ( ) [ ] or { }, across lines too.", row = 8 },
-    { macro = "Note", text = "{ and } hop to the empty row before and after a block of text.", row = 9 },
-    { macro = "Note", text = "From the opening brace, jump to the closing one.", row = 10 },
+    { macro = "Note", text = "|%| jumps between a bracket and its pair,", row = 8 },
+    { macro = "Note", text = "( ) [ ] or { }, across lines too.", row = 9 },
+    { macro = "Note", text = "|{| and |}| hop to the empty row before and after a block.", row = 10 },
+    { macro = "Note", text = "From the opening brace, jump to the closing one.", row = 11 },
     { macro = "Line", text = "func main() {", row = 14 },
     { macro = "Line", text = "    run()", row = 15 },
     { macro = "Line", text = "}", row = 16 },
@@ -668,9 +720,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "/ n N" },
-    { macro = "Note", text = "/ opens a search: type a word and press enter to jump to its first match.", row = 8 },
-    { macro = "Note", text = "n walks to the next match and N back; the search wraps around the map.", row = 9 },
-    { macro = "Note", text = "Search for needle, then n to the second one.", row = 10 },
+    { macro = "Note", text = "|/| opens a search: type a word and press enter", row = 8 },
+    { macro = "Note", text = "to jump to its first match.", row = 9 },
+    { macro = "Note", text = "|n| walks to the next match and |N| back; the search wraps.", row = 10 },
+    { macro = "Note", text = "Search for needle, then |n| to the second one.", row = 11 },
     { macro = "Line", text = "a haystack hides a needle", row = 14 },
     { macro = "Line", text = "and another needle here", row = 15 },
     { macro = "Line", text = "the search wraps around", row = 16 },
@@ -688,10 +741,10 @@ parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
     { macro = "Heading", text = "* #" },
-    { macro = "Note", text = "* searches forward for the word under the cursor and # backward.", row = 8 },
-    { macro = "Note", text = "Only whole words match, so the in of within is passed over; n and N repeat.", row = 9 },
-    { macro = "Note", text = "A count goes that many matches on: 2* is the second one.", row = 10 },
-    { macro = "Note", text = "From the first in, press * twice for the last one, then # to step back.", row = 11 },
+    { macro = "Note", text = "|*| searches forward for the word under the cursor, |#| back.", row = 8 },
+    { macro = "Note", text = "Only whole words match, so the in of within is passed over.", row = 9 },
+    { macro = "Note", text = "|n| and |N| repeat it; |2*| is the second match on.", row = 10 },
+    { macro = "Note", text = "From the first in, |*| twice for the last one, then |#| back.", row = 11 },
     { macro = "Line", text = "in the room", row = 14 },
     { macro = "Line", text = "within reach, not in sight", row = 15 },
     { macro = "Line", text = "an inn is in town", row = 16 },
@@ -719,11 +772,11 @@ on_exit = [{ macro = "Clear" }]
 on_update = [{ macro = "Bottom" }]
 on_enter = [
     { macro = "Heading", text = "m '" },
-    { macro = "Note", text = "m and a letter mark the cursor's cell; ' and the letter return to its row.", row = 8 },
-    { macro = "Note", text = "The jump lands on the row's first glyph, and d'a deletes every row to it.", row = 9 },
-    { macro = "Note", text = "In vim ` returns to the marked cell itself; here ` is the console's key.", row = 10 },
-    { macro = "Note", text = "In a game m is the middle column: this tutorial gives it back to vi.", row = 11 },
-    { macro = "Note", text = "Press ma here, G for the bottom row, then 'a to come back.", row = 12 },
+    { macro = "Note", text = "|m| and a letter mark the cursor's cell;", row = 8 },
+    { macro = "Note", text = "|'| and the letter return to the first glyph of its row.", row = 9 },
+    { macro = "Note", text = "|d'a| deletes every row to it. In vim ` returns to the cell", row = 10 },
+    { macro = "Note", text = "itself; here ` is the console's key, and |m| is vi's again.", row = 11 },
+    { macro = "Note", text = "Press |ma| here, |G| for the bottom row, then |'a| to come back.", row = 12 },
     { macro = "Line", text = "mark this line with ma", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 19 of 22: ma, then G to the bottom row" },
@@ -749,10 +802,10 @@ on_exit = [{ macro = "Clear" }]
 on_update = [{ macro = "Bottom" }]
 on_enter = [
     { macro = "Heading", text = "gg G M" },
-    { macro = "Note", text = "gg jumps to the top row of the map and G to its bottom row.", row = 8 },
-    { macro = "Note", text = "M finds the map's middle row.", row = 9 },
-    { macro = "Note", text = "go is the top left corner and g$ the bottom right.", row = 10 },
-    { macro = "Note", text = "Press G to reach the bottom row, then gg to come back to the top.", row = 11 },
+    { macro = "Note", text = "|gg| jumps to the top row of the map and |G| to its bottom row.", row = 8 },
+    { macro = "Note", text = "|M| finds the map's middle row.", row = 9 },
+    { macro = "Note", text = "|go| is the top left corner and |g$| the bottom right.", row = 10 },
+    { macro = "Note", text = "Press |G| for the bottom row, then |gg| back to the top.", row = 11 },
     { macro = "Line", text = "G and gg move along this column", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 20 of 22: G to the bottom row, then gg to the top" },
@@ -785,10 +838,10 @@ on_enter = [
     { action = "SpawnRegion", region = "reach", initial_state = "Reach" },
     { action = "EmitEvent", event = "EventEnergySetRequest", payload = { entity = 0, value = 10000 }, payload_vars = { entity = "player_entity" } },
     { macro = "Heading", text = "v" },
-    { macro = "Note", text = "v enters visual mode, where the cross through the cursor widens to a block.", row = 8 },
-    { macro = "Note", text = "Motions step by the block, and d, c, y, r and ~ act on every glyph in it.", row = 9 },
-    { macro = "Note", text = "Its size is half the shield's, which a game raises while you hold energy.", row = 10 },
-    { macro = "Note", text = "Press v, then d takes the block around the cursor.", row = 11 },
+    { macro = "Note", text = "|v| enters visual mode: the cross through the cursor widens", row = 8 },
+    { macro = "Note", text = "to a block. Motions step by it, and |d| |c| |y| |r| |~| act on all", row = 9 },
+    { macro = "Note", text = "its glyphs. It is half the size of a game's shield.", row = 10 },
+    { macro = "Note", text = "Press |v|, then |d| takes the block around the cursor.", row = 11 },
     { macro = "Line", text = "visual mode reaches as far as", row = 13 },
     { macro = "Line", text = "the block around the cursor:", row = 14 },
     { macro = "Line", text = "every glyph inside that block is", row = 15 },
@@ -817,12 +870,12 @@ transitions = [
 parent = "Lesson"
 on_exit = [{ macro = "Clear" }]
 on_enter = [
-    { macro = "Heading", text = "a p o u m s" },
-    { macro = "Note", text = "vif plays a subset of vi, and a game reads some of its keys its own way.", row = 8 },
-    { macro = "Note", text = "There a cycles auto fire, p pauses, o and O find a glyph in the column,", row = 9 },
-    { macro = "Note", text = "u undoes a cursor move, m is the middle column, s is cl and S is cc.", row = 10 },
-    { macro = "Note", text = "A keymap gives a key back to vi by its action: put_after, undo_change.", row = 11 },
-    { macro = "Note", text = "The vim keymap gives them back in any game: -k vim, or keymap in vif.toml.", row = 12 },
+    { macro = "Heading", text = "in a game" },
+    { macro = "Note", text = "vif plays a subset of vi, and a game reads some keys its way:", row = 8 },
+    { macro = "Note", text = "|a| cycles auto fire, |p| pauses, |o| |O| find a glyph in the column,", row = 9 },
+    { macro = "Note", text = "|u| undoes a cursor move, |m| is the middle column, |s| is |cl|,", row = 10 },
+    { macro = "Note", text = "|S| is |cc| and |y| does nothing. A keymap gives a key back by", row = 11 },
+    { macro = "Note", text = "its action; the vim keymap gives them all back: |-k vim|.", row = 12 },
     { macro = "Line", text = "this tutorial played them as vi does: s goes on", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 22 of 22: what a game makes of these keys; s goes on" },
