@@ -116,7 +116,9 @@ where every lesson ends.
   and go back here).
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
-  since a state re-entering itself runs no entry actions.
+  since a state re-entering itself runs no entry actions. Below 80 columns the
+  camera cuts the notes, which reach column 78; a lesson laid from the viewport's
+  width would show them whole.
 - **Centring from the map's edge**: a text or line placed from the right or the
   bottom edge, or the centre (an `origin` on the request,
   [FSM reference](fsm-reference.md#event-emission)), would spare the scenario
@@ -141,3 +143,6 @@ where every lesson ends.
   moves and edits as Normal does.
 - The tutorial runs no particle system: Space, a game's special fire, which auto
   fire presses too, would turn the practice code's dark glyphs to dust.
+- A click or tap on a lesson's goal ends it as the motion would:
+  `CursorMovedPayload` carries no pointer bit, and a tap is how a phone moves the
+  cursor.
