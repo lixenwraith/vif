@@ -22,7 +22,7 @@ blocks = true
 # No particle system: Space, a game's special fire that auto fire presses too, would
 # turn the practice code's dark glyphs to dust
 [systems]
-only_systems = ["cursor", "typing", "timer", "death", "glyph", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
+only_systems = ["cursor", "typing", "timer", "death", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
 # With no gun to cycle, no clock to stop and no fight to find a column in, the keys
 # a game reads its own way are vi's here; :console opens the console
@@ -48,6 +48,16 @@ initial = "Wait"
 [regions.player]
 initial = "PlayerBoot"
 background = true
+
+# Spawned by Free and by Visual: a region's systems, unlike an action's toggle, an
+# install re-derives, so a player who joins or reloads there runs them
+[regions.practice]
+background = true
+enabled_systems = ["glyph"]
+
+[regions.reach]
+background = true
+enabled_systems = ["shield"]
 
 # --- Macros ---
 
@@ -155,9 +165,6 @@ body = { trigger = "EventModeChanged", target = "${target}", guard = "PayloadInt
 # so no corpus line lands on a lesson
 [states.Wait]
 parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "glyph", enabled = false } },
-]
 transitions = [
     { trigger = "EventCursorSpawned", target = "Move" },
 ]
@@ -769,10 +776,10 @@ parent = "Lesson"
 on_exit = [
     { macro = "Clear" },
     { action = "EmitEvent", event = "EventShieldDeactivate", payload = { entity = 0 }, payload_vars = { entity = "player_entity" } },
-    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "shield", enabled = false } },
+    { action = "TerminateRegion", region = "reach" },
 ]
 on_enter = [
-    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "shield", enabled = true } },
+    { action = "SpawnRegion", region = "reach", initial_state = "Reach" },
     { macro = "Heading", text = "v" },
     { macro = "Note", text = "v enters visual mode, where the cross through the cursor widens to a block.", row = 8 },
     { macro = "Note", text = "Motions step by the block, and d, c, y, r and ~ act on every glyph in it.", row = 9 },
@@ -826,9 +833,16 @@ transitions = [
 [states.Free]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "glyph", enabled = true } },
+    { action = "SpawnRegion", region = "practice", initial_state = "Practice" },
     { macro = "Say", message = "That is the tutorial: the code around you is yours to move through, type and edit" },
 ]
+
+# The regions Free and Visual spawn stand here while they run
+[states.Practice]
+parent = "Root"
+
+[states.Reach]
+parent = "Root"
 
 # --- Player: one cursor at the practice line; with no weapon or particle system, Enter and Space do nothing ---
 

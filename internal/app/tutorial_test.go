@@ -507,6 +507,62 @@ func TestTutorialAnInstalledLessonLaysItsOwnText(t *testing.T) {
 	}
 }
 
+// A participant that installs Visual or Free runs what that lesson runs, as a
+// reload into either does: the shield, whose reach Visual's block shows, and the
+// glyph spawner, which lays Free's code. An install re-derives a region's systems.
+func TestTutorialAnInstalledLessonRunsItsSystems(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	boot := func() *App {
+		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		t.Cleanup(a.Close)
+		a.Tick(10)
+		return a
+	}
+	runs := func(a *App, lesson string) (on bool) {
+		w := a.World()
+		w.RunSafe(func() {
+			if lesson == "Free" {
+				on = w.Resources.Status.Bools.Get("glyph.enabled").Load()
+				return
+			}
+			shield, _ := w.Components.Shield.GetComponent(w.Resources.Player.Entity)
+			on = shield.Active
+		})
+		return on
+	}
+	for _, lesson := range []string{"Visual", "Free"} {
+		host, joiner := boot(), boot()
+		for range 30 {
+			var state string
+			host.World().RunSafe(func() { state = host.World().Resources.Status.Strings.Get("fsm.state").Load() })
+			if state == lesson {
+				break
+			}
+			tutorialKeys(t, host, "s")
+		}
+		if !runs(host, lesson) {
+			t.Fatalf("the host in %s runs none of what the lesson turns on", lesson)
+		}
+		capture := host.scheduler.ExportFSM()
+		joiner.World().RunSafe(func() {
+			if err := joiner.scheduler.ImportFSM(capture, true); err != nil {
+				t.Errorf("import fsm: %v", err)
+			}
+		})
+		joiner.Settle()
+		joiner.Tick(5)
+		if !runs(joiner, lesson) {
+			t.Errorf("a participant that installed %s runs none of what the lesson turns on", lesson)
+		}
+	}
+}
+
 // The first lesson's x ends its third line as a word does, so $, w and e reach it
 // as they reach any word's glyph, and h j k l still do.
 func TestTutorialsFirstMarkIsAWordsGlyph(t *testing.T) {

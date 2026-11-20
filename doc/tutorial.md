@@ -83,7 +83,10 @@ floor is 79 by 20, the view an 80 by 24 terminal shows, so no lesson there
 scrolls and `G` leaves the next heading in sight: the heading at row 1, the
 notes at rows 8 to 12 and the practice lines at rows 14 to 17, all from column 4
 and ending by column 78. The Visual lesson practises on five rows and turns the
-shield system on for itself alone, so the ping bounds have a reach to show.
+shield system on for itself alone, so the ping bounds have a reach to show, and
+Free turns the glyph spawner on: each through a region it spawns (`reach`,
+`practice`), whose systems a join's or a reload's install re-derives, as it
+would not an action's toggle.
 
 The lesson's text is each instance's own, laid by `reconcile = true` actions, so a
 join or a reload that installs a later lesson lays that lesson's text in place of
