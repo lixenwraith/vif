@@ -36,7 +36,7 @@ The main campaign lives only in `internal/asset/scenario/`. Native, headless,
 and browser builds embed that same tree; `-s main` falls back to it when no
 external override exists. To author a variant, copy that directory into a
 configuration root's `scenario/` under a name of its own. A scenario named `main`
-in any root takes precedence, a copy an earlier release installed included.
+in any root takes precedence.
 
 ## 2. Installed configuration tree
 
