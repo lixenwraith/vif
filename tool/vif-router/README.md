@@ -90,9 +90,12 @@ One session row has this shape:
 there is one, except that `expires_in` is the sooner of the game's countdown and the
 Job's `activeDeadlineSeconds`. An occupied game runs no countdown, so the Job's
 deadline is what it reports. `guests` counts the session's own bots too, since each
-holds a seat; `bots` is how many of them are bots. A pod that is not ready, or
-whose probe fails, reports `live=false` with its pod phase or `starting`, and
-`routable` is false until its address is a ready endpoint. `scenario` and `size` are
+holds a seat; `bots` is how many of them are bots. `ready` says the door takes a dial
+for a place: a seat is free, or a guest away holds one, which their reload takes
+back and, past a session's one place, a newcomer is given; `guests` below `capacity`
+tells which. A pod that is not ready, or whose probe fails, reports `live=false`
+with its pod phase or `starting`, and `routable` is false until its address is a
+ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
 it has, from the first tick on. `build` is the binary the session runs, named as a
 refusal of another build names it, so a page can be told before it dials one.
