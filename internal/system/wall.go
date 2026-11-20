@@ -334,6 +334,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 type batchSpawnResult struct {
 	count        int
 	headerEntity core.Entity
+	first, last  core.Entity // the walls laid, numbered in a run
 	minX, minY   int
 	maxX, maxY   int
 }
@@ -438,6 +439,10 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	for _, rc := range resolved {
 		cell := payload.Cells[rc.idx]
 		entity := s.world.CreateEntity(core.DomainShared)
+		if result.count == 0 {
+			result.first = entity
+		}
+		result.last = entity
 
 		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 			BlockMask: payload.BlockMask,
@@ -1109,7 +1114,13 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 
 	// Anchored at the origin: the offsets are absolute positions
 	batch.BlockMask, batch.BoxStyle, batch.CollisionMode = payload.BlockMask, vis.BoxStyle, payload.CollisionMode
-	s.executeBatchSpawn(batch)
+	laid := s.executeBatchSpawn(batch)
+	// The walls block at once and only their look fades in, on each instance alone
+	if payload.FadeInMs > 0 && laid.count > 0 {
+		s.world.PushLocal(event.EventWallFadeInRequest, &component.WallFadeIn{
+			First: laid.first, Last: laid.last, Duration: time.Duration(payload.FadeInMs) * time.Millisecond,
+		})
+	}
 }
 
 // computeBoxCharsInArea recomputes box-drawing characters for walls in rectangular area

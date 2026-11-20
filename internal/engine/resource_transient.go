@@ -9,15 +9,16 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// TransientResource holds player-domain spatial presentation: explosion centers
-// and the Krakens burning away. Systems write, renderers read. All fields are
-// render-frame stable.
+// TransientResource holds player-domain spatial presentation: explosion centers,
+// the Krakens burning away and the walls a maze laid fading in. Systems write,
+// renderers read. All fields are render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
 	BurnBacking      [parameter.KrakenBurnCap]component.KrakenBurn
 	BurnCount        int
+	WallFadeIn       component.WallFadeIn // the zero run while no walls fade in
 }
 
 // ViewResource holds player-domain screen-space effect state; never replicated.
@@ -89,7 +90,8 @@ func (r *TransientResource) KrakenBurns() []component.KrakenBurn {
 	return r.BurnBacking[:r.BurnCount]
 }
 
-// Clear drops every explosion center and every burn
+// Clear drops every explosion center, every burn and the walls' fade-in
 func (r *TransientResource) Clear() {
 	r.ExplosionCount, r.BurnCount = 0, 0
+	r.WallFadeIn = component.WallFadeIn{}
 }

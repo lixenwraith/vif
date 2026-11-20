@@ -16,7 +16,8 @@ import (
 )
 
 // TransientSystem manages player-domain presentation: screen overlays,
-// short-lived spatial explosion centers and the Krakens burning away.
+// short-lived spatial explosion centers, the Krakens burning away and the walls a
+// maze laid fading in.
 type TransientSystem struct {
 	world *engine.World
 
@@ -70,6 +71,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
 		event.EventKrakenBurnRequest,
+		event.EventWallFadeInRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -133,6 +135,12 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 			transient.BurnBacking[transient.BurnCount] = *p
 			transient.BurnCount++
 		}
+
+	case event.EventWallFadeInRequest:
+		// One maze stands at a time: a new one's walls take over the fade
+		if p, ok := ev.Payload.(*component.WallFadeIn); ok {
+			s.world.Resources.Transient.WallFadeIn = *p
+		}
 	}
 }
 
@@ -164,6 +172,12 @@ func (s *TransientSystem) Update() {
 	}
 	s.updateExplosions()
 	s.updateKrakenBurns()
+	if fade := &s.world.Resources.Transient.WallFadeIn; fade.Duration > 0 {
+		fade.Elapsed += s.world.Resources.Time.DeltaTime
+		if fade.Elapsed >= fade.Duration {
+			*fade = component.WallFadeIn{}
+		}
+	}
 
 	strobe := &s.world.Resources.View.Strobe
 	if !strobe.Active {

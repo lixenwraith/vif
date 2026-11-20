@@ -3,8 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -289,7 +287,7 @@ func (s *DeathSystem) shown(entity core.Entity) (cell component.EffectCell, ok b
 		return cell, false
 	}
 	cell.Solid = wall.RenderBg
-	cell.Fg, cell.Bg = wallFadeoutColors(wall)
+	cell.Fg, cell.Bg = visual.WallRGB(wall)
 	if wall.RenderFg {
 		cell.Rune = wall.Rune
 	}
@@ -325,19 +323,6 @@ func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.Par
 		entry.Char = sigil.Rune
 	}
 	return entry, ok
-}
-
-// wallFadeoutColors returns a wall's colours as RGB for the fadeout to blend: a
-// 256-colour pattern wall holds palette indices in its colours' R bytes
-func wallFadeoutColors(wall *component.WallComponent) (color.RGB, color.RGB) {
-	fg, bg := wall.FgColor, wall.BgColor
-	if wall.Attrs&terminal.AttrFg256 != 0 {
-		fg = visual.Palette256RGB(fg.R)
-	}
-	if wall.Attrs&terminal.AttrBg256 != 0 {
-		bg = visual.Palette256RGB(bg.R)
-	}
-	return fg, bg
 }
 
 // --- Shared helpers ---

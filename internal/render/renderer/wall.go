@@ -50,6 +50,7 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	if rock != nil {
 		r.renderRock(&ctx, buf, rock, carry)
 	}
+	fade, risen := wallFadeIn(ctx, r.gameCtx.World)
 
 	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
 		if !(wallComp.RenderFg || wallComp.RenderBg) {
@@ -70,10 +71,37 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			return true
 		}
 
+		if wallEntity >= fade.First && wallEntity <= fade.Last {
+			r.renderRising(buf, screenX, screenY, wallComp, risen)
+			return true
+		}
 		r.renderCell(buf, screenX, screenY, wallComp.Rune, wallComp.FgColor, wallComp.BgColor,
 			wallComp.RenderFg, wallComp.RenderBg, wallComp.Attrs)
 		return true
 	})
+}
+
+// renderRising draws a wall risen this far from the ground already drawn under it
+func (r *WallRenderer) renderRising(buf *render.RenderBuffer, screenX, screenY int, wall *component.WallComponent, risen float64) {
+	under := buf.BackgroundAt(screenX, screenY, visual.RgbBackground)
+	fg, bg := visual.WallRGB(wall)
+	r.renderCell(buf, screenX, screenY, wall.Rune, color.Blend(under, fg, risen), color.Blend(under, bg, risen),
+		wall.RenderFg, wall.RenderBg, wall.Attrs&^(terminal.AttrFg256|terminal.AttrBg256))
+}
+
+// wallFadeIn is the walls fading in at the frame's moment and how far they have
+// risen from the ground under them; the zero run, once they stand, names no wall
+func wallFadeIn(ctx render.RenderContext, world *engine.World) (component.WallFadeIn, float64) {
+	fade := world.Resources.Transient.WallFadeIn
+	if fade.Duration <= 0 {
+		return component.WallFadeIn{}, 1
+	}
+	since, _ := sinceTick(ctx, world.Resources.Time)
+	risen := float64(fade.Elapsed+since) / float64(fade.Duration)
+	if risen >= 1 {
+		return component.WallFadeIn{}, 1
+	}
+	return fade, risen
 }
 
 // rockCarry is how many columns the cave's scroll stands past its tick at the frame's

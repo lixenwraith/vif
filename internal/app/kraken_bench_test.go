@@ -43,7 +43,7 @@ func BenchmarkKrakenRegion(b *testing.B) {
 			a.Settle()
 			a.Region(event.RegionPause, "main", "")
 			a.Region(event.RegionSpawn, "kraken", "KrakenSetup")
-			a.Tick(25) // past the spawn, into the chase
+			a.Tick(55) // past the maze's fade-in and the spawn, into the chase
 			if w.Components.Kraken.CountEntities() != 1 {
 				b.Fatal("no kraken")
 			}

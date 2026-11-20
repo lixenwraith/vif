@@ -1633,6 +1633,7 @@ type MazeSpawnRequestPayload struct {
 	DefaultRoomWidth  int                     `toml:"default_room_width"`
 	DefaultRoomHeight int                     `toml:"default_room_height"`
 	Braiding          float64                 `toml:"braiding"`
+	FadeInMs          int64                   `toml:"fade_in_ms"` // 0 draws the walls whole at once
 	BlockMask         component.WallBlockMask `toml:"block_mask"`
 
 	// Mixed/smaller structs and scalars

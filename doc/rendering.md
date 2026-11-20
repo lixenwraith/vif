@@ -496,6 +496,12 @@ fades as haze, while typeable text keeps its level's color. In 256-color mode a
 glyph hue has two console entries, one for dark and one shared by normal and
 bright, so only the dark layer stands apart there.
 
+A maze laid with `fade_in_ms` blocks from its tick, and its walls rise from the
+ground: `Transient`'s `component.WallFadeIn` names them, and the wall renderer takes
+each one's colors as far from the background already drawn there as the fade has
+run at the frame's moment, then draws it as any wall, so 256 colors step through
+the palette as a fadeout does.
+
 ### Local and peer cursors
 
 Two renderers rather than one loop, and they answer different questions. The local

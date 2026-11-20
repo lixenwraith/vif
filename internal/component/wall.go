@@ -1,9 +1,12 @@
 package component
 
 import (
+	"time"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/position"
 )
 
@@ -80,6 +83,13 @@ type WallComponent struct {
 	// Color mode attributes (AttrFg256/AttrBg256 from pattern pipeline)
 	// Zero value = TrueColor RGB; renderer converts to 256 at render time
 	Attrs terminal.Attr
+}
+
+// WallFadeIn is the walls one batch laid, numbered First to Last, fading in from the
+// ground under them over Duration, of which Elapsed has run
+type WallFadeIn struct {
+	First, Last       core.Entity
+	Elapsed, Duration time.Duration
 }
 
 // WallCellDef defines a single cell in composite wall structure (used by event payload)

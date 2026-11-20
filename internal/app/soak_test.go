@@ -117,9 +117,22 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 				if mazeWalls == 0 || p.X != w.Resources.Config.MapWidth/2 || p.Y != w.Resources.Config.MapHeight/2 {
 					t.Error("Kraken did not spawn at the center after maze construction")
 				}
+				if w.Resources.Transient.WallFadeIn != (component.WallFadeIn{}) {
+					t.Error("Kraken rose before its maze had faded in")
+				}
 			}
 		}
 	})
+	// The maze fades in before the Kraken rises, and the tick after it breaks walls
+	untilKraken := func(spawns int) {
+		for range int(2 * time.Second / parameter.GameUpdateInterval) {
+			if krakenSpawns == spawns {
+				break
+			}
+			a.Tick(1)
+		}
+		a.Tick(1)
+	}
 	for round := 1; round <= 2; round++ {
 		for killed := 1; killed <= 3; killed++ {
 			a.Region(event.RegionPause, "main", "")
@@ -138,6 +151,7 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 				t.Fatal("Storm escalated before the third kill")
 			}
 		}
+		untilKraken(round)
 		if krakenSpawns != round || mazeCount != round || (round == 1 && w.Components.Wall.CountEntities() >= mazeWalls) {
 			t.Fatal("third Storm kill did not spawn Kraken into a destructible maze")
 		}
@@ -169,7 +183,7 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 	}
 	a.Region(event.RegionTerminate, "tower", "")
 	a.Region(event.RegionSpawn, "kraken", "KrakenSetup")
-	a.Tick(1)
+	untilKraken(3)
 	a.Context().PushEventOrigin(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: cursor, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()}, event.OriginDebug)
 	a.Tick(3)
 	if w.Components.Kraken.CountEntities() != 0 || w.Resources.Status.Strings.Get("fsm.kraken.state").Load() != "-" {
