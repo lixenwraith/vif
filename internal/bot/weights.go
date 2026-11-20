@@ -2,7 +2,6 @@ package bot
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -10,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/toml"
 )
 
@@ -188,44 +186,35 @@ func (n *network) spell(b *bytes.Buffer, genes []float64) {
 }
 
 // Kept is what a population's document holds for a network: the rounds scored
-// and their recent mean, its members, and the one a run fields, with its score
-// and the rounds behind it, nil while none is proved. Stale is one scored by
-// another version's rule, which a run that learns starts over.
+// and their recent mean, and the member a run fields, with its score and the
+// rounds behind it, nil while none is proved.
 type Kept struct {
-	Rounds, Members int
-	Recent          float64
-	Fielded         []float64
-	Score           float64
-	Proved          int
-	Stale           bool
+	Rounds  int
+	Recent  float64
+	Fielded []float64
+	Score   float64
+	Proved  int
 }
 
 // Kept reads the population store keeps for g's network name, false where it
-// keeps none of that layout. Its version is not asked: a model is its genes,
-// whatever its rounds were scored by.
+// keeps none a run would learn on from (readPopulation)
 func (g *Graph) Kept(name string, store Store) (Kept, bool, error) {
 	n := g.net(name)
 	if n == nil {
 		return Kept{}, false, fmt.Errorf("bot %s has no network %s", g.Name, name)
 	}
 	data, err := store.Load()
-	if err != nil || len(data) == 0 {
+	if err != nil {
 		return Kept{}, false, err
 	}
-	var doc population
-	if err := json.Unmarshal(data, &doc); err != nil {
+	doc, members, err := readPopulation(data, n.digest, n.geneCount())
+	if err != nil {
 		return Kept{}, false, fmt.Errorf("%s population could not be parsed: %w", name, err)
 	}
-	if doc.Layout != n.digest {
+	if doc == nil {
 		return Kept{}, false, nil
 	}
-	k := Kept{Rounds: doc.Rounds, Members: len(doc.Members), Recent: doc.Recent, Stale: doc.Version != populationVersion}
-	members := make([]genetic.Candidate[[]float64, float64], 0, len(doc.Members))
-	for _, m := range doc.Members {
-		if len(m.Genes) == n.geneCount() {
-			members = append(members, genetic.Candidate[[]float64, float64]{Data: m.Genes, Score: m.Score, Count: m.Rounds})
-		}
-	}
+	k := Kept{Rounds: doc.Rounds, Recent: doc.Recent}
 	if f, _ := fieldedOf(members, doc.Recent); f >= 0 {
 		k.Fielded, k.Score, k.Proved = members[f].Data, members[f].Score, members[f].Count
 	}

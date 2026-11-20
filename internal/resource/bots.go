@@ -173,9 +173,6 @@ func listBots(o Options, sc Scenario, dir string) []string {
 			default:
 				told += fmt.Sprintf("%d rounds, recent %.0f, fields %.0f over %d", k.Rounds, k.Recent, k.Score, k.Proved)
 			}
-			if k.Stale {
-				told += ", scored by an older rule so a run starts it over"
-			}
 			learned = append(learned, told)
 		}
 		switch {

@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	// DefaultActionsPerSecond is a graph's intent rate when its [bot] table names none
-	DefaultActionsPerSecond = 12
+	// defaultActionsPerSecond is a graph's intent rate when its [bot] table names none
+	defaultActionsPerSecond = 12
 
 	// queueMax bounds the intents waiting on the rate; one that finds it full is dropped
 	queueMax = 256
@@ -92,7 +92,7 @@ func ParseGraph(name string, data []byte) (*Graph, error) {
 	if doc, err = macro.ExpandDocument(doc); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, text: data, doc: doc}
+	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: defaultActionsPerSecond}, text: data, doc: doc}
 	if err := g.validate(); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}

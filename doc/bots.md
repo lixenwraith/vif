@@ -179,9 +179,9 @@ unavailable in a browser`, `list` excepted.
 failing that a scenario's name, for that scenario's own bot; `clear` takes a
 name alone. `.<network>` after it is one of its `[network.<name>]`, and
 `<name>` a graph of yours by its name.
-The scenario is never written: it is the run's, `-s` on the command line. A
-member is its genes, whatever scored them: `export` reads a population of any
-`version` whose `layout` is the network's.
+The scenario is never written: it is the run's, `-s` on the command line.
+`list` and `export` read what a run would: a population of the network's
+`layout` and this build's `version`.
 
 ## Telling cursors apart
 
@@ -573,25 +573,34 @@ between the networks by who steered.
 an archive of 32 members, each a genome with the mean score of the rounds it
 has played and their count.
 
-- A new population starts from the weights its graph writes, where it writes
-  any. Where it writes none, its first 32 rounds play genomes drawn at random,
-  each weight about zero with a spread of 0.12.
-- A new candidate is bred from members of the archive: mostly one parent's,
-  mixed a hidden unit or an output at a time, with three weights in a hundred
-  stepped by a normal draw of 0.24, which is 0.03 of a weight's range.
-- Every third candidate is a member played again. By turns it is the unproved
-  member the archive trusts most, and whichever of the fielded member and its
-  rival has played fewer rounds.
+- A run first plays the weights its graph writes, where it writes any, in each
+  of its games until a round has scored them. While they are the archive's only
+  member, the next candidates are those weights with three in a hundred, one at
+  least, stepped by a normal draw of 0.12.
+- Where the graph writes none, a new population's first candidates are drawn at
+  random, each weight about zero with a spread of 0.12: 32 as they are taken,
+  then two its engine had queued.
+- After those a candidate is bred from two members, each the best by its plain
+  mean of three drawn at random. It is mostly one parent's, mixed a hidden unit
+  or an output at a time, with three weights in a hundred stepped by a normal
+  draw of 0.24, which is 0.03 of a weight's range. A child that comes out a
+  member's copy is that member played again.
+- Every third candidate is a member played again, which the learner names to
+  its engine. By turns it is the unproved member the archive trusts most, and
+  whichever of the fielded member and its rival has played fewer rounds. A turn
+  with none of its kind takes the other's.
 - A round is mostly luck, so the archive ranks a member by a *trusted* mean:
   its mean weighed as if eight more rounds had scored the population's recent
   mean. Eight lucky rounds then do not outrank thirty good ones.
 - A member with eight rounds is *proved*. The proved rank above the rest, eight
   of them at most. The other 24 places are probation.
-- A candidate whose first round would enter a full archive plays a second
-  round, and enters or not on that one alone, since the first was picked for
-  its luck. It takes the place of the last on probation, never of a proved
-  member. When a ninth member is proved, the least trusted of the proved leaves
-  as the next newcomer enters.
+- A candidate whose first round is trusted above the last member of a full
+  archive plays a second round, and enters or not on that one alone, since the
+  first was picked for its luck. It takes the place of the last on probation.
+- When a ninth member is proved, the least trusted of the proved leaves at the
+  next newcomer's round, and that newcomer enters whatever the round scored.
+- A member that left the archive with a round of it in play comes back, if that
+  round ranks it in, on the mean of all its rounds, counted as one.
 - The member fielded is the most trusted of the proved. Its *rival* is the
   next.
 
@@ -672,10 +681,10 @@ them out first ([Filesystem §4](filesystem-layout.md#4-installation)).
 A population starts over when its file is removed (`clear`), when the network's
 layout changes (the inputs read, `hidden`, or the outputs it has), which the
 file's `layout` digest names, or when what a round scores changes, which its
-`version` counts.
+`version` counts. A run, `list` and `export` read the file by that one rule.
 
 - `rounds`: every round scored since the population began, over all its runs.
-- `recent`: their mean lately. `step`: the mutation step, a constant 0.03.
+- `recent`: their mean lately.
 - `members`: the archive in its order, the proved first and the most trusted
   at their head, then those on probation. It is no generation: members of
   every age stand side by side.

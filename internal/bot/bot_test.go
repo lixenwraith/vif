@@ -1362,38 +1362,6 @@ func TestACandidateTheArchiveHoldsIsThatMemberAgain(t *testing.T) {
 	}
 }
 
-// TestARoundIsScoredThoughTheEngineDroppedItsEvaluation: the engine's table gives
-// an evaluation's slot to a newer one where eight fill its window, as nine games
-// can while one plays short rounds, and the round that outlasted them is scored.
-func TestARoundIsScoredThoughTheEngineDroppedItsEvaluation(t *testing.T) {
-	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const games = 9
-	l, err := NewLearner(g, "fly", 1, games, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	long := slices.Clone(l.take(0, true))
-	for game := 1; game < games-1; game++ {
-		l.take(game, true)
-	}
-	for round := 0; l.engine.Stats().Evicted == 0; round++ {
-		if round == 1000 {
-			t.Fatal("no evaluation in flight was dropped, so the round to score is not the one this test is of")
-		}
-		l.take(games-1, true)
-		l.settle(games-1, float64(round%7), true)
-	}
-	for !l.settle(0, 1e9, true) {
-		l.take(0, true)
-	}
-	if !l.holds(long) {
-		t.Fatal("the genome in flight since the first round, scored above every other, is not in the archive")
-	}
-}
-
 // TestAMemberThatLeftTheArchiveComesBackOnTheMeanOfItsRounds: a member played
 // again in two games may be pushed off before the second's round closes, once
 // the first's has brought it to the foot of probation and a newcomer entered. It
@@ -2023,14 +1991,15 @@ func TestWhatAPopulationFieldsIsReadWhateverScoredIt(t *testing.T) {
 		}
 		return &memory{doc: data}
 	}
-	for _, version := range []int{1, populationVersion} {
-		k, ok, err := g.Kept("fly", doc(version, net.digest))
-		if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Members != 3 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
-			t.Fatalf("version %d: kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", version, k, ok, err)
-		}
+	k, ok, err := g.Kept("fly", doc(populationVersion, net.digest))
+	if err != nil || !ok || k.Rounds != 70 || k.Recent != 12.5 || k.Score != 50 || k.Proved != 30 || !slices.Equal(k.Fielded, genome(0.3)) {
+		t.Fatalf("kept %+v, %v, %v: want its 70 rounds and the member a run fields, the most trusted", k, ok, err)
 	}
 	if _, ok, err := g.Kept("fly", doc(populationVersion, "another")); ok || err != nil {
 		t.Fatalf("a population of another layout was read: %v, %v", ok, err)
+	}
+	if _, ok, err := g.Kept("fly", doc(populationVersion-1, net.digest)); ok || err != nil {
+		t.Fatalf("a population another version scored was read: %v, %v", ok, err)
 	}
 	if _, ok, err := g.Kept("fly", &memory{}); ok || err != nil {
 		t.Fatalf("no population was read as one: %v, %v", ok, err)

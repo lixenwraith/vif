@@ -985,12 +985,12 @@ Libraries · Branches.
   the tick when the step injected input. What a system leaves for a tick, as
   `Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens,
   and a driver closes its round before it counts such a tick.
-- `genetic`'s table of evaluations in flight evicts by a window of eight slots
-  from an id's home, whatever its capacity, and completing an evicted id does
-  nothing: a host whose evaluations outlive a lap of ids keeps the genome and
-  completes under an evaluation begun as the round closes (`Learner.settle`).
-  Its `Inject` keeps the gene slices it is handed, so a test builds each
+- `genetic`'s `Inject` keeps the gene slices it is handed, so a test builds each
   learner its own population.
+- A learner's search is read without a game by a scratch test in
+  `internal/bot`: it deals and settles scripted rounds into a learner on a
+  store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
+  A changed repeat order moves every hash.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.

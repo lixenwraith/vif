@@ -16,21 +16,19 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// What the learner searches by. A population whose graph writes no weight plays
-// learnPool genomes drawn learnSpread of a weight's bound about zero first. A step
-// is learnStep of a weight's range. Every learnRepeat-th candidate is a member
-// again, learnProven rounds prove one, learnProbation slots stay with the
-// unproved, and recent looks back learnRecent.
+// What the learner searches by, each a rule of its own: three hold 0.03 and two
+// hold 8, and none follows from another
 const (
-	learnPool      = 32
-	learnSpread    = 0.03
-	learnRate      = 0.03
-	learnStep      = 0.03
-	learnKeep      = 0.9
-	learnRepeat    = 3
-	learnProven    = 8
-	learnProbation = 24
-	learnRecent    = 200
+	learnPool      = 32   // members an archive holds, and genomes a population with no weight written draws first
+	learnSpread    = 0.03 // a drawn weight's deviation, of a weight's bound
+	learnRate      = 0.03 // the share of its weights a child steps
+	learnStep      = 0.03 // a step's deviation, of a weight's range
+	learnKeep      = 0.9  // a block's chance to stay with its parent as two are mixed
+	learnRepeat    = 3    // every one of this many candidates is a member again
+	learnProven    = 8    // rounds that prove a member
+	learnTrust     = 8    // rounds at the recent mean a member's own are weighed with
+	learnProbation = 24   // places the proved leave to the rest
+	learnRecent    = 200  // rounds the recent mean looks back
 
 	// learnSaveEvery is the least wall time between two saves of a population in play
 	learnSaveEvery = 30 * time.Second
@@ -49,16 +47,35 @@ type Store interface {
 
 // population is the document a learner keeps: its archive in its order, the
 // proved first, and what reads it without the code. Rounds is every round scored
-// since the population began, Recent their mean lately, Step the mutation step,
-// and Fielded the member a run that is not learning plays, -1 with none.
+// since the population began, Recent their mean lately, and Fielded the member a
+// run that is not learning plays, -1 with none.
 type population struct {
 	Version int      `json:"version"`
 	Layout  string   `json:"layout"`
 	Rounds  int      `json:"rounds"`
 	Recent  float64  `json:"recent"`
-	Step    float64  `json:"step"`
 	Fielded int      `json:"fielded"`
 	Members []member `json:"members"`
+}
+
+// readPopulation is the population data holds under layout, with its members of
+// genes weights as the engine takes them. It is nil where data holds none, one
+// of another layout or one another version's rule scored: each starts over.
+func readPopulation(data []byte, layout string, genes int) (*population, []genetic.Candidate[[]float64, float64], error) {
+	var doc population
+	if len(data) == 0 {
+		return nil, nil, nil
+	}
+	if err := json.Unmarshal(data, &doc); err != nil || doc.Version != populationVersion || doc.Layout != layout {
+		return nil, nil, err
+	}
+	var members []genetic.Candidate[[]float64, float64]
+	for _, m := range doc.Members {
+		if len(m.Genes) == genes && m.Rounds > 0 {
+			members = append(members, genetic.Candidate[[]float64, float64]{Data: m.Genes, Score: m.Score, Count: m.Rounds})
+		}
+	}
+	return &doc, members, nil
 }
 
 // member is one genome of a population: the mean score of the rounds it has
@@ -120,16 +137,13 @@ type slot struct {
 }
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
-// and since its population began, their recent mean, which no luck picked, its
-// archive's size and its first member's score, and the score and rounds of the
-// member it fields, zero while none is proven.
+// and since its population began, their recent mean, which no luck picked, and
+// the score and rounds of the member it fields, zero while none is proven.
 type LearnStats struct {
 	Network       string
 	Scored        int
 	Rounds        int
 	Recent        float64
-	Size          int
-	Best          float64
 	Fielded       float64
 	FieldedRounds int
 }
@@ -151,25 +165,22 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l.written = slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
 	l.seeded = !l.written
 	l.stats.Store(&LearnStats{Network: name})
-	var kept population
+	var kept *population
+	var members []genetic.Candidate[[]float64, float64]
 	if store != nil {
 		data, err := store.Load()
 		if err != nil {
 			// The file may be a good one, so nothing this run learns replaces it
 			l.store, l.failed = nil, fmt.Errorf("%s population could not be read and is left as it is: %w", name, err)
 			l.untold = l.failed
-		} else if err := json.Unmarshal(data, &kept); len(data) > 0 && err != nil {
-			kept, l.untold = population{}, fmt.Errorf("%s population could not be parsed and starts over: %w", name, err)
+		} else if kept, members, err = readPopulation(data, l.layout, len(l.seed)); err != nil {
+			l.untold = fmt.Errorf("%s population could not be parsed and starts over: %w", name, err)
 		}
 	}
-	var members []genetic.Candidate[[]float64, float64]
-	if kept.Version == populationVersion && kept.Layout == l.layout {
+	if kept != nil {
 		l.rounds, l.recent = max(kept.Rounds, 0), kept.Recent
 		for _, m := range kept.Members {
-			if len(m.Genes) == len(l.seed) && m.Rounds > 0 {
-				l.born[genomeKey(m.Genes)] = m.Born
-				members = append(members, genetic.Candidate[[]float64, float64]{Data: m.Genes, Score: m.Score, Count: m.Rounds})
-			}
+			l.born[genomeKey(m.Genes)] = m.Born
 		}
 	}
 
@@ -179,8 +190,8 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	}
 	perturb := &genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}
 	cfg := genetic.DefaultStreamingConfig()
-	// Four slots a game, as the engine asks; one in flight may still be evicted (settle)
-	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, 4*games)
+	// A game holds one evaluation in flight, so the engine's table never gives one up
+	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, games)
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, learnStep
 	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
@@ -192,6 +203,7 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l.engine.SetEqual(slices.Equal[[]float64])
 	l.engine.SetMerge(genetic.MeanScore[float64])
 	l.engine.SetRank(l.rank)
+	l.engine.SetDue(l.due)
 	l.engine.Inject(members, 0)
 	l.engine.Start()
 	return l, nil
@@ -228,10 +240,10 @@ func genomeKey(genes []float64) uint64 {
 }
 
 // settle closes the evaluation game has in flight with the round its candidate
-// played, scored when it was played to its own end, and reports whether it is
-// over. A candidate whose first round would enter a full archive is held for
-// another and scored by that round alone, the first being picked for its luck.
-func (l *Learner) settle(game int, score float64, played bool) bool {
+// played, scored when it was played to its own end. A candidate whose first round
+// qualifies (enters) is held for another and scored by that round alone, the
+// first being picked for its luck.
+func (l *Learner) settle(game int, score float64, played bool) {
 	s := &l.slots[game]
 	if s.id != 0 && played {
 		l.scored++
@@ -243,23 +255,19 @@ func (l *Learner) settle(game int, score float64, played bool) bool {
 			held := l.Stats()
 			held.Scored, held.Rounds, held.Recent = l.scored, l.rounds, l.recent
 			l.stats.Store(&held)
-			return false
+			return
 		}
 		// A member that left the archive with this round in flight comes back, if at
 		// all, on the mean of its rounds, not on this one as a new genome would
 		if s.count > 0 && !l.holds(s.genes) {
 			score = genetic.MeanScore(s.mean, score, s.count)
 		}
-		// The engine evicts an evaluation in flight once eight newer fill its window,
-		// as nine games can, so the round is scored under one begun as it closes
-		l.engine.AbandonEvaluation(s.id)
-		l.engine.CompleteEvaluation(l.engine.BeginEvaluation(s.genes), score)
+		l.engine.CompleteEvaluation(s.id, score)
 		l.seeded = true
 	} else if s.id != 0 {
 		l.engine.AbandonEvaluation(s.id)
 	}
 	s.id = 0
-	return true
 }
 
 // take is the genome game's next round plays. Exploring, it is the candidate the
@@ -275,7 +283,8 @@ func (l *Learner) take(game int, explore bool) []float64 {
 	}
 	l.settle(game, 0, false)
 	members := l.engine.Snapshot().Members
-	*s = slot{genes: l.field(members), fresh: explore}
+	fielded, _ := l.field(members)
+	*s = slot{genes: fielded, fresh: explore}
 	if explore {
 		l.drawn++
 		var genes []float64
@@ -286,20 +295,7 @@ func (l *Learner) take(game int, explore bool) []float64 {
 			genes = l.draw()
 			s.id = l.engine.BeginEvaluation(genes)
 		case l.drawn%learnRepeat == 0:
-			// By turns the member short of its proof the archive trusts most, and the less
-			// played of the fielded and its rival, so a title is tested while it is held
-			again := -1
-			for i, c := range members {
-				if c.Count+l.playing(c.Data) < learnProven && (again < 0 || trusted(c, l.recent) > trusted(members[again], l.recent)) {
-					again = i
-				}
-			}
-			if rival := l.rival(members); rival >= 0 && (again < 0 || l.drawn/learnRepeat%2 == 1) {
-				again = rival
-			}
-			if again >= 0 {
-				genes, s.id = members[again].Data, l.engine.BeginEvaluation(members[again].Data)
-			}
+			genes, s.id = l.engine.Reevaluate()
 		}
 		if s.id == 0 {
 			genes, s.id = l.engine.Propose()
@@ -316,6 +312,22 @@ func (l *Learner) take(game int, explore bool) []float64 {
 		l.save()
 	}
 	return s.genes
+}
+
+// due is the member a repeat plays, -1 for none: by turns the one short of its
+// proof the archive trusts most, and the less played of the fielded and its
+// rival, so a title is tested while it is held
+func (l *Learner) due(members []genetic.Candidate[[]float64, float64]) int {
+	again := -1
+	for i, c := range members {
+		if c.Count+l.playing(c.Data) < learnProven && (again < 0 || trusted(c, l.recent) > trusted(members[again], l.recent)) {
+			again = i
+		}
+	}
+	if rival := l.rival(members); rival >= 0 && (again < 0 || l.drawn/learnRepeat%2 == 1) {
+		again = rival
+	}
+	return again
 }
 
 // holds reports whether genes is an archive member as the archive stands
@@ -345,38 +357,36 @@ func (l *Learner) playing(genes []float64) (n int) {
 	return n
 }
 
-// field is the genome a round plays where no candidate does: the member fielded
-// (fieldedOf), which stands first of the archive, or with none proved the
-// hand-written one. It brings the stats, and the round each member entered at,
-// up to the archive as it stands.
-func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) []float64 {
-	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent, Size: len(members)}
+// field is the genome a round plays where no candidate does, and its place in
+// members: the member fielded (fieldedOf), or with none proved the hand-written
+// one and -1. It brings the stats, and the round each member entered at, up to
+// the archive as it stands.
+func (l *Learner) field(members []genetic.Candidate[[]float64, float64]) ([]float64, int) {
+	st := LearnStats{Network: l.name, Scored: l.scored, Rounds: l.rounds, Recent: l.recent}
 	born := make(map[uint64]int, len(members))
 	fielded := slices.Clone(l.seed)
-	for i, c := range members {
+	for _, c := range members {
 		key := genomeKey(c.Data)
 		at, known := l.born[key]
 		if !known {
 			at = l.rounds
 		}
 		born[key] = at
-		if i == 0 {
-			st.Best = c.Score
-		}
 	}
-	if f, _ := fieldedOf(members, l.recent); f >= 0 {
-		st.Fielded, st.FieldedRounds, fielded = members[f].Score, members[f].Count, members[f].Data
+	at, _ := fieldedOf(members, l.recent)
+	if at >= 0 {
+		st.Fielded, st.FieldedRounds, fielded = members[at].Score, members[at].Count, members[at].Data
 	}
 	l.born = born
 	l.stats.Store(&st)
-	return fielded
+	return fielded, at
 }
 
 // trusted is a member's mean as its rounds are trusted for: weighed with
-// learnProven rounds at the population's recent mean, so a few lucky rounds do
+// learnTrust rounds at the population's recent mean, so a few lucky rounds do
 // not outrank many good ones.
 func trusted(c genetic.Candidate[[]float64, float64], recent float64) float64 {
-	return (c.Score*float64(c.Count) + recent*learnProven) / float64(c.Count+learnProven)
+	return (c.Score*float64(c.Count) + recent*learnTrust) / float64(c.Count+learnTrust)
 }
 
 // rank keys the archive for the engine by what its members' rounds prove: each
@@ -405,8 +415,9 @@ func (l *Learner) rank(members []genetic.Candidate[[]float64, float64], keys []f
 	}
 }
 
-// enters reports whether a first round of score would have its genome enter a
-// full archive, which is where a member of that one round ranks above the last
+// enters reports whether a first round of score qualifies its genome for a
+// second: where a member of that one round would be trusted above the last of a
+// full archive
 func (l *Learner) enters(score float64) bool {
 	members := l.engine.Snapshot().Members
 	return len(members) == learnPool &&
@@ -445,10 +456,9 @@ func (l *Learner) save() {
 	if l.store == nil {
 		return
 	}
-	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent, Step: learnStep, Fielded: -1}
+	doc := population{Version: populationVersion, Layout: l.layout, Rounds: l.rounds, Recent: l.recent}
 	members := l.engine.Snapshot().Members
-	l.field(members)
-	doc.Fielded, _ = fieldedOf(members, l.recent)
+	_, doc.Fielded = l.field(members)
 	for _, c := range members {
 		doc.Members = append(doc.Members, member{Score: c.Score, Rounds: c.Count, Born: l.born[genomeKey(c.Data)], Genes: c.Data})
 	}
@@ -478,14 +488,11 @@ func (l *Learner) save() {
 // ahead is the failure of a save onto a population of this layout that holds
 // more rounds: another run's, further on, which keeps the file
 func (l *Learner) ahead() error {
-	var kept struct {
-		Version, Rounds int
-		Layout          string
-	}
-	if data, err := l.store.Load(); err != nil || json.Unmarshal(data, &kept) != nil {
+	data, err := l.store.Load()
+	if err != nil {
 		return nil
 	}
-	if kept.Version == populationVersion && kept.Layout == l.layout && kept.Rounds > l.rounds {
+	if kept, _, _ := readPopulation(data, l.layout, len(l.seed)); kept != nil && kept.Rounds > l.rounds {
 		return fmt.Errorf("another run has it %d rounds further on", kept.Rounds-l.rounds)
 	}
 	return nil
