@@ -185,20 +185,37 @@ so a copy restored from it serves the blocks the original run would have.
 
 `internal/asset` is this module's only package that embeds shipped data, and it
 embeds everything a build must be able to play without a filesystem, the audio
-banks aside, which the audio module's `bank` package embeds:
+banks and the cell font aside, which the audio module's `bank` package and the
+terminal module's `atlas` embed:
 
-| Asset | Source | Purpose |
-|---|---|---|
-| FSM bundle | `internal/asset/scenario/*.toml` | Fallback campaign and region files. |
-| Content bundle | `internal/asset/content/*.toml` | Always-available tutorial corpus. |
-| Keymaps | `internal/asset/input/*.toml` | `keymap.toml`, the default bindings, and those `-k` reads over it by name, as `vim.toml`; also what `make install-config` installs. |
-| Settings | `internal/asset/vif.toml` | The defaults a root's `vif.toml` overrides; also installed. |
-| Bot graphs | `internal/asset/bot/*.toml` | `default`, the generic graph, bound to no scenario; also installed. A scenario's own bots are its files (`wad/scenario/base/cave/bot/`). |
-| Sound bank | the audio module's `bank/sfx.toml`, `drums.toml`, `voices.toml` | Built-in specs the engine renders and the tonal voices it plays, a later file overriding an earlier one by name. |
-| Music bank | the audio module's `bank/music.toml` | Built-in patterns the conductor arranges. |
-| Version stamp | `internal/asset/version.txt` | Tag and commit `git archive` writes for `-version`. |
-| Splash faces | `internal/asset/splash_font.go` | Two bitmap faces of 95 printable ASCII glyphs plus a fallback each, a 12-row bitmap a glyph: the large face 12 pixels wide, the small 6; Go source, not embedded. |
-| Cell font | the terminal module's `atlas/hack.bin`, `hack.woff2` | Hack 3.003 (MIT and Bitstream Vera licences) as bitmaps at 6x12, 8x16 and 12x24, which the window and Android draw cells with (`atlas.Hack()`), and as a web font for a browser (`atlas.HackWeb()`); in no `vif_headless` build. `internal/asset`'s test holds every rune the code and the shipped scenarios draw to it. |
+- **FSM bundle** (`internal/asset/scenario/*.toml`): fallback campaign and region
+  files.
+- **Content bundle** (`internal/asset/content/*.toml`): always-available tutorial
+  corpus.
+- **Keymaps** (`internal/asset/input/*.toml`): `keymap.toml`, the default bindings,
+  and those `-k` reads over it by name, as `vim.toml`; also what `make
+  install-config` installs.
+- **Settings** (`internal/asset/vif.toml`): the defaults a root's `vif.toml`
+  overrides; also installed.
+- **Bot graphs** (`internal/asset/bot/*.toml`): `default`, the generic graph, bound
+  to no scenario; also installed. A scenario's own bots are its files
+  (`wad/scenario/base/cave/bot/`).
+- **Sound bank** (the audio module's `bank/sfx.toml`, `drums.toml`, `voices.toml`):
+  built-in specs the engine renders and the tonal voices it plays, a later file
+  overriding an earlier one by name.
+- **Music bank** (the audio module's `bank/music.toml`): built-in patterns the
+  conductor arranges.
+- **Version stamp** (`internal/asset/version.txt`): tag and commit `git archive`
+  writes for `-version`.
+- **Splash faces** (`internal/asset/splash_font.go`): two bitmap faces of 95
+  printable ASCII glyphs plus a fallback each, a 12-row bitmap a glyph: the large
+  face 12 pixels wide, the small 6; Go source, not embedded.
+- **Cell font** (the terminal module's `atlas/hack.bin`, `hack.woff2`): Hack 3.003
+  (MIT and Bitstream Vera licences) as bitmaps at 6x12, 8x16 and 12x24, which the
+  window and Android draw cells with (`atlas.Hack()`), and as a web font for a
+  browser (`atlas.HackWeb()`); linked only by the builds with a graphical host, so
+  by no `vif_headless`, `vif_nogui` or Windows build. `internal/asset`'s test holds
+  every rune the code and the shipped scenarios draw to it.
 
 The embedded filesystems are narrowed with `fs.Sub`, so their runtime root is
 the category directory rather than `internal/asset/...`. Missing embedded

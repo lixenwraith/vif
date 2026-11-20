@@ -104,7 +104,7 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 
 	if help := render.StartHelpRect(w, ctx.StartHelp); ctx.StartHelp != "" && help.X0 >= 0 && help.Y1 <= h {
 		box := root.Sub(help.X0, help.Y0, help.Width(), help.Height())
-		box.Box(tui.LineSingle, r.pal.ghost) // the glyph atlas a window draws with has no rounded corners
+		box.Box(tui.LineSingle, r.pal.ghost) // a text console's font has no rounded corners
 		box.Text(2, 1, ctx.StartHelp, r.pal.ghostText, r.pal.bg, terminal.AttrNone)
 	}
 

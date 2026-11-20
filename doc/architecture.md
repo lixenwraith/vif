@@ -44,18 +44,48 @@ flowchart TD
 
 The main architectural planes are:
 
-| Plane | Owners | Responsibility |
-|---|---|---|
-| Composition | `cmd/vif`, `internal/app`, `internal/manifest`, `internal/resource`, `internal/paths`, `internal/asset` | Resolve options and config roots, construct services/resources/systems/renderers, load the FSM, start and stop the process; the embedded shipped files a root falls back to. |
-| Simulation data | `internal/engine`, `internal/component`, `internal/core`, `internal/parameter`, `internal/profile` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, shared time/state, tunables, and per-kind profile tables. |
-| Simulation behavior | `internal/system`, `internal/fsm`, `internal/event`, `internal/behavior`, `internal/pattern` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement; the behavior programs a data species runs, and the wall cells an image or a stone preset lays. |
-| Interaction | `internal/input`, `internal/mode`, `internal/bot`, `internal/help` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock; project the live bindings into the help overlay. |
-| Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
-| Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
-| Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |
-| I/O boundaries | `internal/service`, `internal/content`, `internal/network` over `pkg/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP, TLS or WebSocket sessions with their admission: a participant's key proven at every door, the pass that brings it back, the router's ticket, a passphrase door's Argon2-SCRAM exchange, and the account exchange with the site's identity service ([Auth and session design](auth-session-design.md)). |
-| Supervision and diagnostics | `internal/lifecycle`, `internal/probe`, `internal/vlog`, `internal/status`, `internal/prof` | An allocated session's lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight recorder and profiler. |
-| Reusable algorithms | `pkg/*` | float64 math/physics, the map's spatial index, navigation, maze and cave generation, per-entity state machines, link pacing, framed TCP and WebSocket messages, and a graphical host's window, browser page, glyph drawer and key report. |
+- **Composition** (`cmd/vif`, `internal/app`, `internal/manifest`,
+  `internal/resource`, `internal/paths`, `internal/asset`): resolve options and
+  config roots, construct services/resources/systems/renderers, load the FSM, start
+  and stop the process; the embedded shipped files a root falls back to.
+- **Simulation data** (`internal/engine`, `internal/component`, `internal/core`,
+  `internal/parameter`, `internal/profile`): entity identities, typed sparse-set
+  component stores, singleton resources, spatial indexing, shared time/state,
+  tunables, and per-kind profile tables.
+- **Simulation behavior** (`internal/system`, `internal/fsm`, `internal/event`,
+  `internal/behavior`, `internal/pattern`): per-tick mechanics, event reactions,
+  encounter control, reset, and system enablement; the behavior programs a data
+  species runs, and the wall cells an image or a stone preset lays.
+- **Interaction** (`internal/input`, `internal/mode`, `internal/bot`,
+  `internal/help`): parse terminal events, or step a bot graph, into semantic
+  intents and apply them under the world lock; project the live bindings into the
+  help overlay.
+- **Authority and convergence** (`internal/converge`, `internal/snapshot`): hold the
+  session's authority term and run its succession, publish the correction cadence,
+  answer the selective manifest exchange, install what arrives, and keep the links
+  a handoff needs. `converge` reads and writes the live world only through the seam
+  the composition root supplies; `snapshot` is the capture wire model and
+  comparison surface.
+- **Deterministic run streams** (`internal/journal`): attach recording sinks,
+  capture/load journals, order replay records, generate seeded fuzz input, and
+  execute authored tick scripts through App-independent target contracts.
+- **Presentation** (`internal/render`, `internal/render/renderer`,
+  `internal/parameter/visual`): snapshot frame context, layer cells, apply
+  masks/effects, and flush to the presentation's surface.
+- **I/O boundaries** (`internal/service`, `internal/content`, `internal/network`
+  over `pkg/network`, external modules): categorized file access, terminal polling,
+  corpus loading, audio device/process management, and framed TCP, TLS or WebSocket
+  sessions with their admission: a participant's key proven at every door, the pass
+  that brings it back, the router's ticket, a passphrase door's Argon2-SCRAM
+  exchange, and the account exchange with the site's identity service ([Auth and
+  session design](auth-session-design.md)).
+- **Supervision and diagnostics** (`internal/lifecycle`, `internal/probe`,
+  `internal/vlog`, `internal/status`, `internal/prof`): an allocated session's
+  lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight
+  recorder and profiler.
+- **Reusable algorithms** (`pkg/*`): float64 math/physics, the map's spatial index,
+  navigation, maze and cave generation, per-entity state machines, link pacing, and
+  framed TCP and WebSocket messages.
 
 See [Package map](package-map.md) for the medium-level dependency view.
 

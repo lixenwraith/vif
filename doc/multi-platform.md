@@ -332,17 +332,19 @@ it to `TerminalPage.open` as `argv`, which terminal's worker hands to the progra
 2. repeated `arg` query parameters.
 
 `web/` after `make wasm` is the launcher, and it is copied to a deployment as it
-stands: the page and its stylesheet, and what the Makefile writes there, `vif.wasm`
-and `wasm_exec.js` from one Go, and the two scripts no commit holds, `terminal.js`
-(the terminal module's `web/page.js`, then `web/vif.js`, vif's part) and
-`worker.js` (the module's), of the version the build links (`make page`). A
-deployment needs no `vif.js`, and one that edits any of the rest has forked the
-launcher, the fork only visible the next time one side changes.
+stands: the page, its stylesheet, its `fonts/` and the AudioWorklet, and what the
+Makefile writes there: `vif.wasm` and `wasm_exec.js` from one Go, `NOTICES`, and
+the two scripts no commit holds, `terminal.js` (the terminal module's
+`web/page.js`, then `web/vif.js`, vif's part) and `worker.js` (the module's), of
+the version the build links (`make page`). A deployment needs no `vif.js`, and one
+that edits any of the rest has forked the launcher, the fork only visible the next
+time one side changes.
 
-The page's text is Roboto, as lixen.com's is: the stylesheet takes it from
-`/fonts/`, where the site serves it, and then from `fonts/` beside the page, which
+The page's text is Roboto: the stylesheet takes a copy installed on the player's
+system, then `/fonts/` on the page's site, then `fonts/` beside the page, which
 `web/fonts/` holds with its licence, so no deployment fetches a font from
-elsewhere, and one that serves neither shows the system's sans-serif.
+elsewhere, and one that serves neither shows the system's sans-serif where Roboto
+is not installed.
 
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
@@ -677,8 +679,9 @@ Decisions taken for the host model, in force: the terminal module's value types
 vocabulary, so the 14 KB of it a headless binary links is accepted; the cell grid
 is copied to a `Surface`, never serialized to ANSI and parsed back (a pipe into an
 emulator widget was measured at 80x the cell copy per frame;
-`terminal.NewWithBackend` keeps that seam for tooling); the font is a bitmap atlas
-generated once, not a TrueType rasterized at load; Android draws on a Canvas
+`terminal.NewWithBackend` keeps that seam for tooling); the window and Android draw
+a font baked once to bitmaps (terminal's `atlas`), not a TrueType rasterized at
+load, and a page the same face from its web font; Android draws on a Canvas
 behind a drawer interface, and a GLES drawer is written only if a device misses
 60 fps; the configuration menu is one tree the router holds, which the terminal and
 the desktop window draw as the `tui` overlay and Android and the browser with their

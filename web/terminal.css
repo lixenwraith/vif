@@ -6,8 +6,8 @@
 
 /* lixen.com's dark theme, which every host's start screen wears: its page, its
    cards, hairlines, muted text, links and the two buttons, a blue fill and a blue
-   ring around a periwinkle label. Its font is Roboto, kept beside this file and
-   never fetched from elsewhere; the site serves the same files at /fonts/. */
+   ring around a periwinkle label. Its font is Roboto: an installed copy, else
+   /fonts/ on the page's site, else fonts/ beside this file, never from elsewhere. */
 :root {
     --bg: #11111b;
     --surface: #1a1b26;
