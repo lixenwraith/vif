@@ -382,27 +382,6 @@ that leaves:
 - `parameter.BotRespawnTicks` is a second of the default tick, not of the
   run's (`World.TickInterval`), so under `-tick` a bot is down for another time.
 
-### Hold every scenario to the shared-region rule at load
-
-- Priority: P1
-- Affected files: `internal/resource/check.go` (`ValidateScenario`),
-  `internal/app/domain_test.go` (`scenarioTrees`),
-  `wad/scenario/base/tutorial/scenario.toml`
-- Guide: [D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)
-
-A region a local event moves advances on the instance that produced the event and
-nowhere else. `TestFSMTriggersAreReplicated` holds the shipped scenarios to that
-through a list kept by hand (`scenarioTrees`), which leaves out `armada`, which
-passes, and `tutorial`, which fails: its lessons step on a player's edit requests,
-typed glyphs and mode changes and count `EventEnergyGlyphConsumed`. A scenario an
-author writes is never read by it: it loads, plays alone and comes apart in a
-session.
-
-What closes it: `ValidateScenario` refuses a transition a local event triggers in
-a scenario seating more than one player, naming the state and the trigger, so
-`-check`, a start, `:n` and the editor hold every scenario alike; the tutorial
-takes `max_players = 1`; and `scenarioTrees`' list goes with the rule's move.
-
 ### Describe a scenario document in the schema
 
 - Priority: P1

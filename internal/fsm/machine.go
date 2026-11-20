@@ -479,6 +479,27 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.D
 // are active, for an embedder choosing what to deliver ahead of HandleEvent.
 func (m *Machine[T]) Reacts(et event.EventType) bool { return m.reacts.has(et) }
 
+// LocalTriggers names each transition a local event triggers, "State on Event" in
+// name order. No other instance holds such an event, so the transition is taken
+// only where the instance whose player made it holds the machine (D-20): a run
+// that plays alone.
+func (m *Machine[T]) LocalTriggers() []string {
+	var out []string
+	for _, node := range m.nodes {
+		for i := range node.Transitions {
+			et := node.Transitions[i].Event
+			if et == event.EventNone {
+				continue // Tick, the machine's own pulse on every instance
+			}
+			if c := event.ClassOf(et); c == event.ClassLocal || c == event.ClassUnset {
+				out = append(out, node.Name+" on "+event.GetEventName(et))
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // HandleEvent routes an external event through all active regions.
 // Returns true if some region consumed it via a transition or internal action.
 // The machine-wide mask rejects unmatched types before any graph walk.

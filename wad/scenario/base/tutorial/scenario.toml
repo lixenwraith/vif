@@ -1,6 +1,6 @@
 description = "Tutorial: the game and its vi-style moving, typing and editing, a lesson at a time, with combat off."
 min_players = 1
-max_players = 16
+max_players = 1
 
 # Each lesson lays its heading in the small splash face, a few lines that explain
 # and a practice line or block the cursor is stood on, then waits for the result

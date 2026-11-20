@@ -172,8 +172,11 @@ transitions and every instance applies each at one tick, a playout lead after th
 authority took it; the unguarded `Tick` hops after a transition's target ride the
 same crossing, so a chain of them costs one lead. A `[local]` event (its
 class in `internal/event/type.go`) cannot steer a region, since only the
-authority's player could move it (D-20). The loader accepts one;
-`TestFSMTriggersAreReplicated` holds the shipped scenarios to the rule.
+authority's player could move it (D-20), so a scenario one triggers a transition
+on plays alone: validation (`-check`, a start, `:n`) refuses it a `max_players`
+above 1, naming the transition (`resource.CheckLocalTriggers`). A guest of a
+server holding such a scenario never moves it by a local event; `:leave` plays on
+alone, where it does.
 
 ### Variable Capture from Payloads
 

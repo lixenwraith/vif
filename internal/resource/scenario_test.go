@@ -844,3 +844,25 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 		t.Fatal("a content file the scenario lacks loaded")
 	}
 }
+
+// TestALocalTriggerSeatsOnePlayer: a transition a local event triggers is taken only
+// where its player's instance holds the machine, so validation refuses a scenario
+// seating more than one player that has one, naming it, and takes it at one.
+func TestALocalTriggerSeatsOnePlayer(t *testing.T) {
+	for players, want := range map[int]string{
+		1: "",
+		2: "a local event moves its machine (Main on EventModeChanged), which a run of one player alone takes: max_players is 2, want 1",
+	} {
+		dir := t.TempDir()
+		doc := fmt.Sprintf("max_players = %d\n[regions.main]\ninitial = \"Main\"\n"+
+			"[states.Main]\nparent = \"Root\"\ntransitions = [{ trigger = \"EventModeChanged\", target = \"Done\" }]\n"+
+			"[states.Done]\nparent = \"Root\"\n", players)
+		if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := ValidateScenario(Options{Scenario: dir})
+		if got := fmt.Sprint(err); want == "" && err != nil || want != "" && !strings.Contains(got, want) {
+			t.Errorf("max_players %d: error %v, want %q", players, err, want)
+		}
+	}
+}

@@ -13,8 +13,6 @@ import (
 
 	"github.com/lixenwraith/vif/internal/content"
 
-	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -26,6 +24,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // sharedGlyphs returns the shared-domain glyph entities and the ones that are not
@@ -78,119 +77,48 @@ func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	}
 }
 
-// scenarioTrees names every scenario a build can boot: the shipped ones, the empty
-// one, and the copy embedded in the binary. A rule that holds for one of
-// them and not the others is not a rule.
-func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
-	t.Helper()
-	root := repoRoot(t)
-	trees := map[string]func() (map[string]any, error){
-		"asset(embedded)": func() (map[string]any, error) {
-			return fsm.ResolveScenario(asset.MainScenario, asset.MainScenarioEntry)
-		},
-	}
-	for _, dir := range []string{"scenario/base/td", "scenario/base/blank", "scenario/base/recall", "scenario/base/cave", "scenario/base/dummy"} {
-		d := filepath.Join(root, "wad", dir)
-		if _, err := os.Stat(filepath.Join(d, "scenario.toml")); err != nil {
-			continue
-		}
-		trees["wad/"+dir] = func() (map[string]any, error) {
-			return fsm.ResolveScenario(os.DirFS(d), "scenario.toml")
-		}
-	}
-	return trees
-}
-
-// repoRoot walks up from the test's working directory to the module root.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for range 8 {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	t.Fatal("module root not found above the test's working directory")
-	return ""
-}
-
 // TestFSMTriggersAreReplicated is D-20 made mechanical: every FSM region is shared
 // state, so a region stays in agreement only if every event that moves it is an
 // event every instance holds. A ClassLocal trigger never replicates, so the region
 // advances on the producing instance and nowhere else, and nothing re-derives the
 // missing event — which is how MonitorActive on EventHeatBurst diverged a session.
+// Validation refuses one in a scenario seating more than one player, and every
+// scenario that ships passes it: the tutorial plays alone.
 func TestFSMTriggersAreReplicated(t *testing.T) {
 	t.Parallel()
 	event.EnsureRegistry()
-
-	totalChecked := 0
-	trees := scenarioTrees(t)
-	if len(trees) < 2 {
-		t.Fatalf("only %d scenario(s) reachable; the check would barely cover anything", len(trees))
+	names := resource.Scenarios(resource.Options{Dir: soakRoot})
+	if len(names) < 2 {
+		t.Fatalf("only %d scenario(s) reachable; the check would barely cover anything", len(names))
 	}
-	for name, load := range trees {
-		t.Run(name, func(t *testing.T) {
-			merged, err := load()
-			if err != nil {
-				t.Fatalf("resolve config: %v", err)
+	local := 0
+	for _, name := range names {
+		opts := resource.Options{Dir: soakRoot, Scenario: name}
+		sc, err := resource.ValidateScenario(opts)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		m := fsm.NewMachine[*engine.World]()
+		programs, _ := sc.Behaviors()
+		loot, _ := sc.Loot()
+		set, err := system.CompileBehaviors(programs, loot)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		manifest.RegisterFSMComponents(m, set.Declared())
+		if err := fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if triggers := m.LocalTriggers(); len(triggers) > 0 {
+			local++
+			if sc.MaxPlayers != 1 {
+				t.Errorf("%s seats %d players and a local event moves it: %v", name, sc.MaxPlayers, triggers)
 			}
-			var root fsm.ScenarioDoc
-			if err := toml.Decode(merged, &root); err != nil {
-				t.Fatalf("decode config: %v", err)
-			}
-			if len(root.States) == 0 {
-				t.Fatal("no states decoded; the check would pass vacuously")
-			}
-
-			var offenders []string
-			checked := 0
-			for stateName, state := range root.States {
-				if state == nil {
-					continue
-				}
-				for _, tr := range state.Transitions {
-					// "Tick" is the machine's own pulse, not a game event, and it
-					// arrives on every instance by construction.
-					if tr.Trigger == "" || tr.Trigger == "Tick" {
-						continue
-					}
-					et, ok := event.GetEventType(tr.Trigger)
-					if !ok {
-						offenders = append(offenders, stateName+": unknown trigger "+tr.Trigger)
-						continue
-					}
-					checked++
-					// Stamped is resolved per event from the producer's domain, so
-					// the type alone cannot condemn it; a Stamped trigger is the one
-					// case this check hands to the producer's own domain rules.
-					if c := event.ClassOf(et); c == event.ClassLocal || c == event.ClassUnset {
-						offenders = append(offenders,
-							stateName+" transitions on "+tr.Trigger+" ("+c.String()+")")
-					}
-				}
-			}
-			// wad/scenario/base/blank declares no transitions at all, so a per-tree floor
-			// would fail it; the suite-wide floor below is what keeps the check
-			// from passing vacuously.
-			totalChecked += checked
-			if len(offenders) > 0 {
-				sort.Strings(offenders)
-				t.Fatalf("a shared FSM region is steered by an event that does not "+
-					"replicate, so only the producing instance advances it:\n  %v",
-					offenders)
-			}
-		})
+		}
 	}
-	if totalChecked == 0 {
-		t.Fatal("no event triggers found in any scenario; the check passed vacuously")
+	if local == 0 {
+		t.Fatal("no shipped scenario has a local trigger; the tutorial's lessons should")
 	}
 }
 
