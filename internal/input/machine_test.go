@@ -254,9 +254,11 @@ func TestDotTypesWhatInsertTypedAfterItsChange(t *testing.T) {
 
 // TestAnOperatorInVisualTakesTheBoundsAtOnce: in Normal an operator waits for its
 // motion, and y doubled yanks its row; in Visual d, c and y complete at once over
-// the ping bounds, c naming Insert. A yank is no change for '.' to repeat.
+// the ping bounds, c naming Insert. A yank is no change for '.' to repeat. No
+// default key yanks, so the table here binds y as the vim keymap does.
 func TestAnOperatorInVisualTakesTheBoundsAtOnce(t *testing.T) {
 	m := NewMachine()
+	m.keyTable.NormalRunes['y'], _ = ActionEntry("operator_yank")
 	key := func(r rune) *Intent {
 		return m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
 	}
