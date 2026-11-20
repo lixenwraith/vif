@@ -58,10 +58,12 @@ These hold regardless of which repository is targeted first.
   archive's build, Gradle the Android library's (`NOTICES_OF=android`, which
   fetches `golang.org/x/mobile` where the cache lacks it) and the session
   image's builder the headless build's, which the image holds as `/NOTICES`
-  beside `/LICENSE`. The font atlas the window and `vif.wasm` draw cells with,
-  `internal/asset/font/mono.toml`, is rendered from a font under the
-  Bitstream-Vera licence and comes from no module, so
-  `internal/asset/font/LICENSE` travels beside `NOTICES` as `LICENSE.font`.
+  beside `/LICENSE`. The font the window, Android and `vif.wasm` draw cells
+  with is Hack, under the MIT licence and Bitstream Vera's, which the terminal
+  module embeds; its licence is that module's `atlas/LICENSE`, below the root
+  `notices` reads, so it travels beside `NOTICES` as `LICENSE.font`: `make
+  release` copies it to `bin/` and `make install` stops without it, and the
+  release workflow and Gradle copy it from the module they build with.
   The About overlay points to `NOTICES`.
 
 ## 2. Release surface
@@ -140,7 +142,8 @@ Target `vif` (release) with `vif-git` optional.
    `make release` sets `-s -w`, which Arch's debug packaging wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.
    Confirm the licences land in `/usr/share/licenses/vif/`; a `build()` that
-   runs `go build` itself also runs `make notices`, which `install` stops without.
+   runs `go build` itself also runs `make notices` and copies the font's licence
+   to `bin/LICENSE.font`, as `make release` does: `install` stops without either.
 4. `check()` runs `go test ./...`. `script/test.sh` binds ports and must not
    run in a build chroot.
 5. Namcap the result. Expect a warning about the size of `/etc/vif`;
@@ -172,7 +175,7 @@ Lowest priority: Go game packages move slowly through NEW.
 
 1. `debian/rules` with `dh $@`; override `dh_auto_install` to call
    `make install DESTDIR=debian/vif PREFIX=/usr SYSCONFDIR=/etc`.
-2. Debian prefers vendored dependencies or packaged Go modules. The four
+2. Debian prefers vendored dependencies or packaged Go modules. The
    `lixenwraith/*` modules are not in Debian, so vendoring is the realistic
    route; commit a `vendor/` only on the packaging branch.
 3. `debian/copyright` in DEP-5 form enumerates the corpus files in

@@ -768,8 +768,8 @@ its look under its tier's macro. To define one:
   box drawing, `█░▒`, `■▲▶▼◀♦`, the arrows `←↑→↓` and `·×÷°±•‼≈≡≤≥`. A console
   draws any other as `#` or a replacement mark, and a look has no console frames
   to fall back on, so half and quadrant blocks (`▀▄▌▐▘`) are out. The desktop
-  window draws from the font atlas (`internal/asset/font/mono.toml`, rendered by
-  `tool/font-atlas`), which must hold every glyph too.
+  window and Android draw from the terminal module's font atlas (`atlas.Hack()`),
+  which must hold every glyph too.
   `TestConsoleGlyphsAreInEveryConsoleFont` and
   `TestTheFontAtlasCoversEveryGlyphTheCodeDraws` read every shipped scenario's
   TOML, so a glyph outside either set fails CI; `-check` does not test the glyph

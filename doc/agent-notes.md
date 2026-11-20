@@ -38,8 +38,11 @@ Libraries · Branches.
 - The Java app type-checks without an SDK: `javac --release 17 -cp android-all.jar`
   (Robolectric's `org.robolectric:android-all` from Maven Central, at the release
   `compileSdk` names: `16-robolectric-13921718` for `android-36.1`) over
-  `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker` and
-  `Listener`; the jar's `UnsupportedAppUsage` warnings are noise.
+  `android/app/src/main/java`, a stub for `R` and the binding itself, which
+  `go -C android tool gobind -lang=java -javapkg=com.lixen.vif -outdir=<dir>
+  github.com/lixenwraith/vif/android/game` writes without an SDK; `androidTest`
+  adds `junit:junit:4.13.2` and a stub of `AndroidJUnit4`. The jar's
+  `UnsupportedAppUsage` warnings are noise.
 - Go on Android reads local time as UTC whatever the device's zone (`time` sets
   `Local` to UTC there), so a wall-clock time the player reads, as the console's
   stamps, takes the zone the app names (`game.Zone`), which the first `game.Start`
@@ -74,6 +77,12 @@ Libraries · Branches.
 - `qemu-user-static` from apt runs a test binary built for another architecture
   (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
   path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
+- The gates against a dependency's branch run under a `go.work` kept outside both
+  trees and named by `GOWORK=`: `use` each checkout, a nested module's too
+  (`terminal/window`). Once a `go.mod` there requires a version no tag serves, as
+  the window's does of terminal, every build stops ("reading .../go.mod at
+  revision vX: unknown revision"): a workspace still reads the required version's
+  `go.mod`, so it takes `replace <module> vX => <its checkout>` as well.
 - A bump to a dependency's untagged release: serve the commit the tag will name
   from a file `GOPROXY` (`golang.org/x/mod`'s `zip.CreateFromVCS` writes
   `<module>/@v/<v>.zip`; `<v>.mod`, `<v>.info` and `list` beside it), listed first
@@ -115,11 +124,10 @@ Libraries · Branches.
   neither `go.mod`'s toolchain line nor `GOTOOLCHAIN`: on a container whose base Go
   is older it stops on "requires go1.26 or later". Put the module's toolchain
   first on `PATH` (`$(go env GOROOT)/bin`).
-- deadcode reads one profile: `pkg/browser`'s `keyCode` reads dead on linux and is
-  live on js/wasm, `glyph.Texture.Atlas` and `Frames.ColorMode` on js/wasm and
-  Android. Call a function dead only where every profile compiling its file reports
-  it. Its `-test` run stops on `vif_headless` and windows, where `internal/app`'s
-  tests do not build: list the packages without it. The Android module has no
+- deadcode reads one profile: a function can read dead on linux and be live on
+  js/wasm or Android. Call one dead only where every profile compiling its file
+  reports it. Its `-test` run stops on `vif_headless` and windows, where
+  `internal/app`'s tests do not build: list the packages without it. The Android module has no
   `main`; a scratch one under `android/tmp/` calling every bound function, run with
   `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`, stands in for
   gomobile's wrapper.
@@ -315,7 +323,8 @@ Libraries · Branches.
   does besides, as saving a changed `[play]`, is done there for a watched run.
 - A presentation's size is read once by what keeps it
   ([Runtime §1](runtime.md#1-process-modes)), so a host whose size settles after
-  it opens waits for it in `Init` (`window.settle`, `browser.Open`'s `fitted`) and
+  it opens waits for it in `Init` (`window.Open`'s `settle`, `terminal.OpenPage`'s
+  `fitted`) and
   posts no resize for it: one at the launch starts a person's held first game
   over (`App.handleResize`), as run 1 on the next session's streams, and reaches
   a host's map after its door locked it.
@@ -522,14 +531,6 @@ Libraries · Branches.
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
   `TestEitherRouteRefusesBeforeDialling`).
-- A test that is its own window manager
-  (`TestAWindowOpensAtTheSizeItsManagerGivesIt`) selects `SubstructureRedirect` on
-  the root of an Xvfb it starts. Xlib answers a second `XInternAtom` of one name
-  from its cache, with no round trip and no flush: `XSync` is the round trip. Xvfb
-  starts over as its last client leaves and refuses a connection meanwhile
-  (`-noreset`), and killed, not terminated, leaves its socket and lock in `/tmp`.
-  An X error ends the process before a failure prints: keep a window until
-  whatever still sizes it is done.
 
 ## Locks
 
@@ -746,12 +747,13 @@ Libraries · Branches.
 
 ## Glyphs and widgets
 
-- A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the
-  desktop font atlas regenerated (`tool/font-atlas/README.md`), and only
-  `go test ./internal/asset`, a package the change never touches, catches it.
-  Regenerate into scratch and diff: only the new glyph changes. The test reads
-  every string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody
-  sees stays ASCII, and a comment after code on its line as code, so that comment
+- A new non-ASCII rune in a drawing package or a shipped scenario's TOML must be
+  one the terminal module's atlas holds (`atlas.Hack()`), and only
+  `go test ./internal/asset`, a package the change never touches, catches it. A
+  rune it lacks is one Hack lacks: pick another, since nothing is regenerated in
+  vif and only terminal's `tool/font-atlas` could draw it. The test reads every
+  string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody sees
+  stays ASCII, and a comment after code on its line as code, so that comment
   does too.
 - `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
   a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
@@ -836,29 +838,34 @@ Libraries · Branches.
 - The desktop window runs under `Xvfb` with Mesa's `libegl1`, `libgles2` and
   `libgl1-mesa-dri` and `LIBGL_ALWAYS_SOFTWARE=1`; `openbox` beside it grants
   `-maximized` and `-fullscreen`. `xwininfo -root -tree` reads the window's pixels,
-  a cell being 12x24, `xdotool windowsize` resizes it, and the run's size is its
+  a cell being 12x24 until a zoom, which the scratch `vif.toml`'s `[presentation]
+  cell` reads back, `xdotool windowsize` resizes it, and the run's size is its
   log's `init completed` line (`-l=<dir> -lv debug`).
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
   clears what it recorded there.
-- The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
-  build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
-  `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
+- The browser launcher runs end to end in the container: `make wasm`, serve a copy
+  of `web/` with `python3 -m http.server` and drive it with Playwright. A checkout's
+  `web/` holds no `terminal.js` or `worker.js` until then: a copy built by hand
+  (`GOOS=js GOARCH=wasm go build -o <copy>/vif.wasm ./cmd/vif`) takes them from
+  `make page PAGE_DIR=<copy>`. `?arg=-join=ws://127.0.0.1:9/x`
   ends the run at once with a refused join's message, and a native
   `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session the page joins or
   spectates, its status line read beside the page's. A `devices['Pixel 7']`
   context is the phone's page, where a held `mouse.down` on the canvas's last
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
-  the desktop's. `pkg/browser`'s tests run under node with
+  the desktop's. The browser tests (`-run Browser ./cmd/vif ./pkg/network`, and
+  the page host's by import path, `-run Page github.com/lixenwraith/terminal`) run
+  under node with
   `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`;
   in a container whose environment is large, Go's `wasm_exec.js` refuses it ("total
   length of command line and environment variables exceeds limit"): run it under
   `env -i` with `HOME`, `PATH`, `GOCACHE` and `GOMODCACHE`.
-- An init script wrapping `window.Worker` hears the worker's `atlas` and `frame`
-  messages before the page does: the atlas's runes, read as `runesOf` reads them,
-  and each frame's cell slots, kept as `applyFrame` keeps them, give the screen's
-  text. The status bar is two rows, its items (`PAUSED` for a hold, `GT:` the tick)
+- An init script wrapping `window.Worker` hears the worker's `frame` messages
+  before the page does: each record's second word is its cell's rune, so the
+  records, kept as terminal's `applyFrame` keeps them, give the screen's text. The
+  status bar is two rows, its items (`PAUSED` for a hold, `GT:` the tick)
   above its line; a menu's or an away's pause shows nothing there, but the map
   cells changed over a second tell a running game from a paused one, and the first
   frame after a return against the last before it tells whether the game ran
@@ -1279,6 +1286,10 @@ Libraries · Branches.
   `git push --force-with-lease=<branch>:<the head its PR shows>`, which is taken;
   a force push with no lease was refused, so a branch whose PR merged starts again
   from main only once its owner deletes it: ask.
+- An agent's `git rm` stages its deletions in the checkout it shares, and the
+  parent's next `git commit` takes them with another agent's work: a commit that
+  does not build alone. An agent deletes with `rm`; the parent commits by path
+  (`git commit -- <paths>`).
 - Take the next `snapshot.Schema`, `event.JournalSchema` or `manifest.SchemaVersion`
   past main's, and check again after merging main, where another PR may have taken
   it.

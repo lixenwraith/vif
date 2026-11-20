@@ -27,8 +27,7 @@ wad/                            internal/asset/
 │   └── base/   the shipped      ├── content/   fallback corpus
 │               scenarios        ├── input/     built-in and vim keymaps
 ├── content/    typing corpus    ├── bot/       the generic bot graph
-└── image/      .aimg assets     ├── font/      cell font atlas
-                                 ├── vif.toml   default settings
+└── image/      .aimg assets     ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
                                  └── splash_font.go
 ```

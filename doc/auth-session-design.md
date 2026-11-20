@@ -803,8 +803,8 @@ Parameters, paths, settings and commands:
 
 Hosts:
 
-- `web/terminal.js` and `web/worker.js`: the site's places in `localStorage` under
-  a Web Lock, a second tab's in `sessionStorage`, the launch arguments.
+- `web/vif.js`: the site's places in `localStorage` under a Web Lock, a second
+  tab's in `sessionStorage`, the launch arguments.
 - `android/game/game.go`, and `StartScreen.java` and `MainActivity.java` under
   `android/app/src/main/java/com/lixen/vif`: the Android run, whose places and
   sign-ins are in the app's files.

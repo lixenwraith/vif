@@ -49,7 +49,7 @@ Three things read a screen's size once and keep it: a run under `-size fit`, the
 map a hosting run's door locks as it opens (D-14), and the size a joiner reports at
 its seat, which a dedicated host sizes its session by. So a presentation holds its
 settled size before a run is built on it and posts no resize for it: a terminal's
-is its own, `browser.Open` waits for the page's fit, and `window.Open` for the
+is its own, `terminal.OpenPage` waits for the page's fit, and `window.Open` for the
 window manager to place the window
 ([Platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 

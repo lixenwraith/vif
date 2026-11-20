@@ -6,10 +6,10 @@ the game runs in-process through a `gomobile bind` library, presents on a
 
 | Path | What |
 |---|---|
-| `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config`, and an `app.Host` of the view and the speakers, and hands both to `app.Run`. |
+| `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config`, and an `app.Host` of the view and the speakers, and hands both to `app.Run`. The view's grid, its keys and touches as events and its frames are `terminal/android`'s (`View`), of lixenwraith/terminal. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back, and for nearby games the device's networks and the Wi-Fi multicast lock), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
-| `../LICENSE`, `NOTICES` | Packaged as assets beside it, with the font atlas's licence as `LICENSE.font`: Gradle has `make notices NOTICES_OF=android` write `NOTICES`, the licences of Go and of the modules the library links, on every build, so `./gradlew` alone needs `make` on `PATH`. |
+| `../LICENSE`, `NOTICES` | Packaged as assets beside it, with the licence of Hack, the font cells are drawn in (MIT and Bitstream Vera), as `LICENSE.font`, the terminal module's `atlas/LICENSE`: Gradle copies it, and has `make notices NOTICES_OF=android` write `NOTICES`, the licences of Go and of the modules the library links, on every build, so `./gradlew` alone needs `make` on `PATH`. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
@@ -85,7 +85,7 @@ A browser shows the same screen in the same words and waits for its tap too; a
 desktop's asks for a click or a key instead, and a terminal or the desktop window
 draws its own over the waiting game.
 
-A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
+A cell is 12 dp tall (`android.DefaultCell`) until a pinch zooms it, and the grid the view
 holds is stretched over the view edge to edge. Add `--ez raster true` to paint with
 Go's software raster instead of the Canvas drawer. `adb logcat -s vif` prints the
 render thread's frame time every five seconds: frames painted per second, mean, p95
@@ -110,7 +110,7 @@ above the keyboard stands for it; a bar drawn under 48 dp, Android's touch targe
 takes taps and the menu's hold on the view's bottom 48 dp, a finger held there
 wobbling as it may) and each finger straying up to Android's double tap slop; a second finger landing with the first lets its press go, one
 joining a finger held or dragging being play; a pinch zooms the cell from 4 to 40 dp, the browser's range
-too, never under the atlas's 12x24 pixels, the grid refitting as it does on a
+too, never under the font's smallest cell, 6x12 pixels, the grid refitting as it does on a
 rotation (a `crop_on_resize` map crops to it) and the cell kept in `vif.toml`'s
 `[presentation] cell` for the next run; two taps near each other within
 `MouseDoubleClickWindow` fire special; with mouse input disabled a press on the
@@ -123,13 +123,15 @@ opens the menu from Normal mode; Home sends the app to the background, the game 
 
 ## Test
 
-`go test ./...` here covers the tap and key mapping, the menu crossing the binding
-and that `MenuDialog.java` names the node kinds, ops and field inputs the run's
-snapshot uses; the frame hand-off and that a
-cell frame painted from the atlas texture is the raster's pixels are `pkg/glyph`'s
-tests. On a device or
-emulator, `./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas`
-against `glyph.Raster` pixel for pixel on Android's own Canvas. It runs on every
+`go test ./...` here covers the menu crossing the binding, the texture a run's
+drawer is first handed, and that `MenuDialog.java` names the node kinds, ops and
+field inputs the run's snapshot uses; the tap and key mapping and the swap of a
+strike's texture on a zoom are `terminal/android`'s tests, the frame hand-off
+`terminal`'s, and that a cell frame painted from a strike's texture is the
+raster's pixels `terminal/glyph`'s. On a device or emulator,
+`./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas` against
+`glyph.Raster` pixel for pixel on Android's own Canvas, at each of the font's
+cell sizes. It runs on every
 device adb sees and uninstalls the app from each afterwards, its files with it:
 name one, as `ANDROID_SERIAL=emulator-5554`, when a phone you play on is plugged
 in.

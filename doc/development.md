@@ -526,11 +526,12 @@ the project owner runs, not per-change steps. `make verify` regenerates, runs
 `go test -race ./...`, builds `./...` plain, with cgo off and under `novlog`,
 `vif_noaudio`, `vif_headless` and `vif_nogui`, tests `./internal/...` under
 `vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
-under both, vets and tests the `android` module, tests `pkg/window` with cgo off,
+under both, vets and tests the `android` module, tests the window module
+(`github.com/lixenwraith/terminal/window`) with cgo off,
 cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), builds `./...`
 natively and for `js/wasm` under `GOEXPERIMENT=simd`, fails if the headless
 command imports the renderer or audio implementation, and runs
-`go vet ./...` and the `vif_gui` vet of `pkg/window` and `cmd/vif`. It does not
+`go vet ./...` and the `vif_gui` vet of that module and `cmd/vif`. It does not
 execute a Windows artifact or a real terminal/audio backend; Windows is played by
 hand, not a supported release target, and its known issues are in [Build profiles
 §4](multi-platform.md#4-platform-matrix).
@@ -610,8 +611,9 @@ manual smoke test because unit tests do not reproduce every emulator.
 `claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
 on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
 and targets, the window and Android module tests, the browser build's tests under
-Node (`pkg/browser` and the `Browser` tests of `pkg/network`, through
-`go_js_wasm_exec`), and `go test -race ./...` with `GORACE` halting on the first
+Node (the terminal module's `Page` tests, by import path, and the `Browser` tests
+of `pkg/network` and `cmd/vif`, through `go_js_wasm_exec`), and
+`go test -race ./...` with `GORACE` halting on the first
 race. The test steps print failures alone, a race's report beside its package.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
@@ -635,20 +637,22 @@ terminal/audio smoke tests.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
+| `js/wasm` | Supported constrained build | `terminal.Page` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
 | Android | Native target, a debug-signed APK | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer and `AudioTrack`; the wad as its system root ([android/README.md](../android/README.md)). |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; 32-bit targets are not supported ([Build profiles §4](multi-platform.md#4-platform-matrix)). |
 
 ### WASM host
 
-`web/index.html` holds a canvas and a hidden text field; `web/terminal.js` sizes
-the grid to the cells the page holds, starts the Go WASM instance in a Worker
-(`web/worker.js`), so a frame the page takes long to draw never delays a tick, a
-probe echo or a socket read, draws each frame the Worker hands it (the cells changed
-since the last, `pkg/glyph`) with one WebGL quad over a glyph mask rasterized from a
-monospace font at the cell's device size, and reports keys, text, the pointer and
-resizes to it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+`web/index.html` holds a canvas and a hidden text field; `web/terminal.js`, which
+`make wasm` assembles from the terminal module's `page.js` and `web/vif.js`, sizes
+the grid to the cells the page holds, starts the Go WASM instance in a Worker (the
+module's `worker.js`), so a frame the page takes long to draw never delays a tick,
+a probe echo or a socket read, draws each frame the Worker hands it (the cells
+changed since the last, `terminal.RuneFrame`) with one WebGL quad over a glyph mask
+rasterized at the cell's device size from Hack, the web font `vif.wasm` carries,
+and reports keys, text, the pointer and resizes to it
+([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 Where the browser offers no WebGL (Brave and other Chromium builds blocklist older
 GPUs, and `--ignore-gpu-blocklist` needs device access an ordinary session may not
 have) the page paints on a 2D canvas instead and says so in a notice at the start:
@@ -824,7 +828,7 @@ across instances is the invariant the domain model rests on.
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
 | End-to-end checks | `script/test.sh`, `script/*.toml` |
-| Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css`, `web/fonts/` |
+| Browser host | `cmd/vif/browser.go`, `web/index.html`, `web/vif.js`, `web/terminal.css`, `web/fonts/`; the terminal module's `page_js.go`, `web/page.js`, `web/worker.js` |
 | Android host | `android/game`, `android/app/src/main/java/com/lixen/vif`, `android/toolchain.sh` |
 | Session admission: keys, passes, tickets, passphrase doors and accounts | `internal/network/admission.go`, `account.go`, `session.go`, `internal/app/internal/membership/place.go`, `signin.go`, `host.go`, `session.go`; [Auth and session design](auth-session-design.md) |
 | Doors, the `vifs://` TLS front door and its trust | `pkg/network/endpoint.go`, `pkg/websocket`, `internal/app/internal/config/membership.go` |

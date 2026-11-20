@@ -23,7 +23,7 @@ node's id. The terminal and the desktop window keep the `tui` menu.
   miss the rows built at run time (scenarios, players, bots) and duplicate every
   label. The contract is the node kinds, the hook ops and the field input types
   (`mode.MenuKinds`, `MenuOps`, `MenuInputs`); a test reads them from the Java
-  source and from `web/terminal.js` and fails on a mismatch. If `android/` ever
+  source and from `web/vif.js` and fails on a mismatch. If `android/` ever
   leaves this repository, the snapshot gains a schema version then.
 - **General tree.** Pages, sections and rows are one tree of nodes of any depth,
   which both menus draw: the `tui` menu enters a top-level group as a page and draws
@@ -205,13 +205,13 @@ stay one mechanism. The `vif_headless` profile builds without it.
 
 ## 8. Browser
 
-- `pkg/browser`: `Host.Menu` hands the page a snapshot through the Worker's
-  `vifMenu`, and a `menu` message from the page reaches `Host.MenuOp`; `HasMenu`
-  says whether the worker defines `vifMenu`. `cmd/vif/browser.go` wraps the host
-  as `menuHost`, the `menuPresentation`, only when it does, so an older page keeps
-  the `tui` menu rather than none.
+- `cmd/vif/browser.go`: `menuHost`, the `menuPresentation`, posts each snapshot
+  as the page's `menu` message (`terminal.PagePost`) and takes the page's `menu`
+  ops through `Page.Handle`. It is the presentation only where
+  `terminal.PageHas("menu")`, which `web/vif.js` says in the `features` it opens
+  the page with, so a page whose script draws no menu keeps the `tui` one.
 - `web/index.html` holds the `<dialog id="config">`, `web/terminal.css` its rules
-  in the site's tokens, shared with the controls window, and `web/terminal.js` its
+  in the site's tokens, shared with the controls window, and `web/vif.js` its
   section, the layout and kinds of §7 in the page's controls: a page is a heading
   ruled off from the one above whose rows open under it in the tinted panel behind
   the stripe; a toggle is a switch, a choice a `<select>`, a step − and +, a pick a
@@ -235,7 +235,7 @@ stay one mechanism. The `vif_headless` profile builds without it.
   `go test ./internal/mode ./internal/render/renderer` and the menu and
   presentation tests of `./internal/app`, `go -C android test ./...`, and
   `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
-  ./pkg/browser`.
+  -run Browser ./cmd/vif`.
 - Tests, one per rule: every node's kind matches its fields and ids are unique; a
   host's op and the key path reach the same state, for each kind; an op on a
   vanished id is dropped; an op on a disabled id answers with its reason; a failed

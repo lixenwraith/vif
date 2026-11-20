@@ -31,10 +31,12 @@ whose flags, files and formats may change without notice.
 - `LICENSE`: vif's licence, BSD-3-Clause
 - `NOTICES`: the licences of Go and of the modules this build links
 <!-- if client -->
-- `LICENSE.font`: the licence of the font the desktop window draws its cells in
+- `LICENSE.font`: the licence of Hack, the font the desktop window draws its cells
+  in: MIT, with Bitstream Vera's
 <!-- end -->
 <!-- if web -->
-- `LICENSE.font`: the licence of the font `vif.wasm` draws its cells in
+- `LICENSE.font`: the licence of Hack, the font the page draws its cells in, which
+  `vif.wasm` carries: MIT, with Bitstream Vera's
 <!-- end -->
 
 <!-- if client windows web -->
