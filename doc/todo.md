@@ -226,12 +226,12 @@ follow the terrain.
 - Affected files: `internal/bot`, `internal/fsm/file_loader.go`,
   `internal/resource/scenario.go`, `internal/app/internal/membership/seat.go`,
   `internal/app/script.go`, `internal/mode/commands.go`, `cmd/vif`
-- Guide: [Bots](bots.md#networks-and-learning), [Bot catalogue](bot-catalogue.md)
+- Guide: [Bots](bots.md#networks-and-learning), [its catalogue](bots.md#catalogue)
 
 A scenario carries the bots made for its map among its own files, and the user
 root's `bot/` holds a player's alone: what they made, changed or trained
 ([Bots](bots.md#writing-a-graph)). Built: the catalogue a network reads through
-([Bot catalogue](bot-catalogue.md)), with no `loot` and `threat` a target alone;
+([Bots: Catalogue](bots.md#catalogue)), with no `loot` and `threat` a target alone;
 the bot document, a network's `while`, a `Steer` over a list, `InState`,
 `outputs`, `[bot] inputs` and every weight written; a scenario's `bots`, a seat
 that names no graph playing the first; `cave`'s two in its scenario, `seed`

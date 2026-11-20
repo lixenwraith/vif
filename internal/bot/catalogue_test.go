@@ -508,7 +508,7 @@ func TestEveryCatalogueRowSaysWhatItIs(t *testing.T) {
 	}
 }
 
-// reference renders the catalogue's tables as the document doc/ keeps of them
+// reference renders the catalogue's tables as the section doc/bots.md keeps of them
 func reference() string {
 	var b strings.Builder
 	// item writes a list item wrapped at 80 columns, its later lines indented
@@ -529,15 +529,15 @@ func reference() string {
 		}
 		return strings.Join(names, ", ")
 	}
-	b.WriteString(`# Bot catalogue
+	b.WriteString(`## Catalogue
 
-What a bot graph's guards and ` + "`PointAt`" + ` take as a target, and what a network
-reads and asks for ([Bots](bots.md#networks-and-learning)). It is generated from
-the tables of ` + "`internal/bot/catalogue.go`" + `: change a row there, then run
+What a graph's guards and ` + "`PointAt`" + ` take as a target, and what a network
+reads and asks for. This section is generated from the tables of
+` + "`internal/bot/catalogue.go`" + `: change a row there, then run
 ` + "`VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`" + `. ` + "`vif -schema`" + `
 lists the same inputs, outputs and scales under ` + "`bot_catalogue`" + `.
 
-## Kinds
+### Kinds
 
 A kind is a class of thing the world holds. A guard or ` + "`PointAt`" + ` names one as
 its ` + "`target`" + `, nearest the cursor over the whole world; a network reads the
@@ -564,13 +564,13 @@ nearest ones the view shows, each by its fields.
 		item("", text)
 	}
 	b.WriteString(`
-## Inputs
+### Inputs
 
 A network's ` + "`inputs`" + ` name what it reads, in the order its weights take them.
 ` + "`<kind>_<field>`" + ` is the nearest of a kind, ` + "`<kind>2_<field>`" + ` the second nearest
 and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 
-### Fields
+#### Fields
 
 `)
 	// scaled names a row's scale, with the half a count or a rate reads at
@@ -583,7 +583,7 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 	for _, row := range fields {
 		item("", code(row.name)+", "+scaled(row.scale, row.half)+": "+row.doc+".")
 	}
-	b.WriteString("\n### The rock\n\n")
+	b.WriteString("\n#### The rock\n\n")
 	names := []string{}
 	for _, row := range edges {
 		names = append(names, row.name)
@@ -597,7 +597,7 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 		}
 		item("", code(at...)+": "+row.doc+".")
 	}
-	b.WriteString("\n### Blocks\n\nA block is a cell the cursor may not enter: a wall, the rock or the map's edge.\nEach is an offset from the cursor, to the cell past the view's edge where none\nit shows blocks:\n\n")
+	b.WriteString("\n#### Blocks\n\nA block is a cell the cursor may not enter: a wall, the rock or the map's edge.\nEach is an offset from the cursor, to the cell past the view's edge where none\nit shows blocks:\n\n")
 	for _, row := range blocks {
 		scale := scaleDown
 		if row.dx != 0 {
@@ -605,16 +605,16 @@ and so on. Every reading keeps to its scale, and what is not sighted reads 0.
 		}
 		item("", code(row.name)+", "+scales[scale].name+": "+row.doc+".")
 	}
-	b.WriteString("\n### The bot's own\n\n")
+	b.WriteString("\n#### The bot's own\n\n")
 	for _, row := range self {
 		item("", code(row.name)+", "+scaled(row.scale, row.half)+": "+row.doc+".")
 	}
-	b.WriteString("\n### Scales\n\n")
+	b.WriteString("\n#### Scales\n\n")
 	for _, row := range scales {
 		item("", row.name+", "+strconv.FormatFloat(row.low, 'g', -1, 64)+" to 1: "+row.doc+".")
 	}
 	b.WriteString(`
-## Outputs
+### Outputs
 
 What a network asks for, in the order ` + "`Steer`" + ` acts on it. A graph writes an
 output's weights in a table named for each of its units.
@@ -626,21 +626,32 @@ output's weights in a table named for each of its units.
 	return b.String()
 }
 
-// TestTheCatalogueReferenceIsItsTables keeps doc/bot-catalogue.md as the tables
-// render it; VIF_WRITE_GENERATED=1 rewrites it after a row changes.
+// TestTheCatalogueReferenceIsItsTables keeps the section of doc/bots.md between
+// its two markers as the tables render it; VIF_WRITE_GENERATED=1 rewrites it
+// after a row changes.
 func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
-	const page = "../../doc/bot-catalogue.md"
-	want := reference()
-	if os.Getenv("VIF_WRITE_GENERATED") == "1" {
-		if err := os.WriteFile(page, []byte(want), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	const (
+		page = "../../doc/bots.md"
+		open = "<!-- catalogue: generated, see its first lines -->\n"
+		shut = "<!-- /catalogue -->\n"
+	)
 	got, err := os.ReadFile(page)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != want {
-		t.Errorf("%s is stale; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
+	before, rest, found := strings.Cut(string(got), open)
+	kept, after, closed := strings.Cut(rest, shut)
+	if !found || !closed {
+		t.Fatalf("%s has no catalogue section between %q and %q", page, open, shut)
+	}
+	want := reference()
+	if os.Getenv("VIF_WRITE_GENERATED") == "1" && kept != want {
+		if err := os.WriteFile(page, []byte(before+open+want+shut+after), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		kept = want
+	}
+	if kept != want {
+		t.Errorf("%s: its catalogue section is stale; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
 	}
 }
