@@ -71,8 +71,8 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # purego, which the desktop window links, builds with cgo off on fewer platforms
 # than the terminal does (not under Termux), so a client build tries it first and
 # names the terminal-only builds rather than leaving purego's errors to explain it.
-WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -q '/pkg/window$$' && \
-	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) ./pkg/window 2>&1); then \
+WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -qx 'github.com/lixenwraith/terminal/window' && \
+	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) github.com/lixenwraith/terminal/window 2>&1); then \
 	printf '%s\n' "The desktop window does not build for $$($(GO) env GOOS)/$$($(GO) env GOARCH) with cgo off:" \
 		"  $$(printf '%s\n' "$$err" | grep -v '^\#' | head -n 1)" "Build the terminal alone instead:" \
 		"  make cli                     bin/vif-cli" \
@@ -175,9 +175,13 @@ serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
+# The font's licence lies beside the atlas in the terminal module the build links,
+# in the module cache or vendor/: release copies it for install, which runs no Go
 release: check-go $(BIN_DIR) notices
 	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	@dir=$$($(GO) list -m -f '{{.Dir}}' github.com/lixenwraith/terminal); \
+	install -m 0644 "$${dir:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" $(BIN_DIR)/LICENSE.font
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
@@ -264,7 +268,7 @@ verify: generate test
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
 	cd android && $(GO) vet ./... && $(GO) test ./...
-	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) ./pkg/window
+	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) github.com/lixenwraith/terminal/window
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	GOEXPERIMENT=simd $(GO) build ./...
 	GOOS=js GOARCH=wasm GOEXPERIMENT=simd $(GO) build ./...
@@ -273,7 +277,7 @@ verify: generate test
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
 	$(GO) vet ./...
-	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui ./pkg/window $(SRC)
+	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui github.com/lixenwraith/terminal/window $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
@@ -381,6 +385,7 @@ install:
 	@set -eu; \
 	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built: make release first, as in make release install" >&2; exit 1; }; \
 	[ -f '$(NOTICES)' ] || { echo "$(NOTICES) is not made: make notices first, as make release does" >&2; exit 1; }; \
+	[ -f $(BIN_DIR)/LICENSE.font ] || { echo "$(BIN_DIR)/LICENSE.font is not made: make release first" >&2; exit 1; }; \
 	for d in '$(PREFIX)/bin' '$(PREFIX)/share' '$(SYSCONFDIR)/vif'; do d='$(DESTDIR)'"$$d"; \
 		while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; \
 		[ -w "$$d" ] || { echo "no write access to $$d: sudo make install, or set PREFIX and SYSCONFDIR" >&2; exit 1; }; \
@@ -392,7 +397,7 @@ install:
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
 	put 0644 '$(NOTICES)' "$$dest/share/licenses/vif/NOTICES"; \
-	put 0644 internal/asset/font/LICENSE "$$dest/share/licenses/vif/LICENSE.font"; \
+	put 0644 $(BIN_DIR)/LICENSE.font "$$dest/share/licenses/vif/LICENSE.font"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
 	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \
 	put 0644 $(PKG_DIR)/vif.svg "$$dest/share/icons/hicolor/scalable/apps/vif.svg"; \

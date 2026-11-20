@@ -116,9 +116,23 @@ val notices = tasks.register<Exec>("notices") {
     commandLine("make", "-s", "notices", "NOTICES_OF=android", "NOTICES=" + noticesFile.get().asFile.path)
 }
 
+// The font's licence lies beside the atlas in the terminal module the library
+// links: copied on every build, as the notices are written
+val fontLicenceFile = layout.buildDirectory.file("notices/LICENSE.font")
+val fontLicence = tasks.register<Exec>("fontLicence") {
+    workingDir = goModule
+    outputs.file(fontLicenceFile)
+    outputs.upToDateWhen { false }
+    val out = fontLicenceFile.get().asFile
+    val mod = "github.com/lixenwraith/terminal"
+    doFirst { out.parentFile.mkdirs() }
+    commandLine("sh", "-c", "go mod download $mod && " +
+        "install -m 0644 \"\$(go list -m -f '{{.Dir}}' $mod)/atlas/LICENSE\" \"\$0\"", out.path)
+}
+
 val licenceAssets = tasks.register<Sync>("licenceAssets") {
     from(repoRoot.resolve("LICENSE"))
-    from(repoRoot.resolve("internal/asset/font/LICENSE")) { rename { "LICENSE.font" } }
+    from(fontLicence)
     from(notices)
     into(layout.buildDirectory.dir("generated/licence"))
 }

@@ -120,6 +120,9 @@ func Art256(p ArtPreset, seed uint64, c ArtCell) (rune, uint8, uint8) {
 	if !l.hued {
 		l.fg = color.Grayscale(l.fg)
 	}
+	if l.r == visual.CrystalPoint {
+		l.r = visual.CrystalPoint256
+	}
 	return l.r, color.RGBTo256(l.fg), color.RGBTo256(color.Grayscale(l.bg))
 }
 

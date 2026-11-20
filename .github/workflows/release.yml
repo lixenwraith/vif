@@ -94,9 +94,11 @@ jobs:
             make -s release-readme RELEASE_TARGET="$target" RELEASE_LABEL="$label" >"stage/$p-$target/README.md"
             cp LICENSE "stage/$p-$target/"
           done
-          # The client binaries embed the font atlas, and vif.wasm the same face as a web font.
+          # The client binaries embed the font atlas, and vif.wasm the same face as a web font:
+          # the terminal module's, whose licence lies beside it in the version they link.
+          font="$(go list -m -f '{{.Dir}}' github.com/lixenwraith/terminal)/atlas/LICENSE"
           for target in linux-amd64 linux-arm64 freebsd-amd64 web; do
-            cp internal/asset/font/LICENSE "stage/$p-$target/LICENSE.font"
+            install -m 0644 "$font" "stage/$p-$target/LICENSE.font"
           done
           cp -R web/. "stage/$p-web/"
           # terminal.js and worker.js as make wasm writes them; vif.js is inside the first.

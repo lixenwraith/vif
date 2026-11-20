@@ -54,7 +54,7 @@ jobs:
     # A passing package says nothing: the log keeps a failure's output, what a step
     # prints on its own and the race detector's reports.
     - name: Test the desktop window package
-      run: CGO_ENABLED=0 go test ./pkg/window 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+      run: CGO_ENABLED=0 go test github.com/lixenwraith/terminal/window 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     # js/wasm caps a program's argv and environment together at 8 KiB, which a
     # runner's environment passes, so these run under Node with almost none of it.

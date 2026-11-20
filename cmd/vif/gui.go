@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/terminal/atlas"
+	"github.com/lixenwraith/terminal/glyph"
+	"github.com/lixenwraith/terminal/window"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/glyph"
 	"github.com/lixenwraith/vif/pkg/vmath"
-	"github.com/lixenwraith/vif/pkg/window"
 )
 
 // The window is in every Linux and FreeBSD build: -g opens it, a vif_gui build
@@ -36,16 +36,15 @@ func (h *windowHost) Init() error {
 	if h.win != nil {
 		return nil
 	}
-	atlas, err := glyph.Parse(asset.DefaultFont)
-	if err != nil {
-		return err
-	}
-	h.aspect = atlas.Aspect()
+	font := atlas.Hack()
+	strikes := font.Strikes() // the largest is the face's own size
+	h.aspect = vmath.Aspect(strikes[len(strikes)-1].Aspect())
 	cols, rows := parameter.WindowCols, parameter.WindowRows
 	if c, r, err := parseSize(flagSession.size); err == nil {
 		cols, rows = c, r // the size its run names, which the window opens holding
 	}
-	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
+	var err error
+	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Font: font,
 		Cols: cols, Rows: rows, Scale: *flagScale,
 		Cell:      settings.Presentation.Cell,
 		Zoom:      glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep},
