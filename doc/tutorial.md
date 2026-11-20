@@ -72,9 +72,10 @@ and the heading, under a white flash; the parent's exit runs only when the last
 lesson leaves) and whose entry lays its text; `s` goes to the next and `S` to the
 one before, and a lesson in steps nests each further step as a child, which keeps
 the text laid. `Stand` places the cursor a tick after the entry, behind the step
-right that typing a lesson's last glyph still owes. The map floor is 80 by 24: the
-heading at row 1, the notes at rows 8 to 11 and the practice lines at rows 14 to
-16, all from column 4. The Visual lesson practises on five rows and turns the
+right that typing a lesson's last glyph still owes. The map floor is 79 by 20, the
+view an 80 by 24 terminal shows, so no lesson there scrolls and `G` leaves the next
+heading in sight: the heading at row 1, the notes at rows 8 to 12 and the practice
+lines at rows 14 to 17, all from column 4 and ending by column 78. The Visual lesson practises on five rows and turns the
 shield system on for itself alone, so the ping bounds have a reach to show.
 
 The lesson's text is each instance's own, laid by `reconcile = true` actions, so a

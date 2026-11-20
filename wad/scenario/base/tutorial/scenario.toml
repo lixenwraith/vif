@@ -9,9 +9,11 @@ max_players = 1
 # Free practice turns the glyph spawner on, which types this scenario's own corpus:
 # code, laid in blocks, so % finds its pair.
 
+# The view an 80 by 24 terminal shows, below the top row and above the status
+# rows: no lesson there scrolls, so G leaves the next heading in sight
 [map]
-min_width = 80
-min_height = 24
+min_width = 79
+min_height = 20
 
 [content]
 files = ["lessons.toml"]

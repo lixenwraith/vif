@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -246,6 +247,26 @@ func TestTutorialsTypingLessonsEndHoweverTheirGlyphsGo(t *testing.T) {
 			t.Errorf("%q left the tutorial in %s, want %s", c.keys, state, c.want)
 		}
 		a.Close()
+	}
+}
+
+// The tutorial's map floor is the view an 80 by 24 terminal shows, so no lesson
+// there scrolls: G lands on a row in view and the next heading shows whole.
+func TestTutorialsMapIsTheViewOfAnEightyByTwentyFourTerminal(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	a.Tick(10)
+	var width, height int
+	a.World().RunSafe(func() { width, height = a.World().Resources.Config.MapWidth, a.World().Resources.Config.MapHeight })
+	if vw, vh := engine.Viewport(80, 24); width != vw || height != vh {
+		t.Fatalf("at 80 by 24 the tutorial's map is %d by %d, want the view's %d by %d", width, height, vw, vh)
 	}
 }
 
