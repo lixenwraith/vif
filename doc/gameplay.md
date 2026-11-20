@@ -410,8 +410,9 @@ a blocked tracer drains to its stop point.
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; its parameters are evolution-managed. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
+| Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line that comes to hold three of a kind fires the kind's effect from `component.SquareKinds`, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
-| Gateway | Timed anchored spawner. It emits eye or snake spawn requests with route/adaptation metadata and disappears when its anchor is gone. |
+| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` lasts, and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
@@ -606,8 +607,9 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
 `tutorial` teaches the game's vi-style typing and editing a lesson at a time,
 `cave` is a side-scroller whose raiders are species its own behavior programs
-define, and `armada` is a vertical scroller whose ranks, squadrons and flagship
-are seven more. Each entry has a short `description` for scenario listings.
+define, `armada` is a vertical scroller whose ranks, squadrons and flagship
+are seven more, and `magic` is a magic square held against a swarm. Each entry has
+a short `description` for scenario listings.
 
 `tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
@@ -762,6 +764,30 @@ heat and energy both run out, the stars stop under a red strobe, and the game st
 over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
 fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
+`magic` plays on a map with no cursor (`[map] cursors = false`), its players' keys
+their only input. The square stands in the middle: the Lo Shu square, 2 7 6 over
+9 5 1 over 4 3 8, its digits in three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9
+defense, one of each along every row and column. The scenario captures 1-9 and h, j,
+k and l: a digit selects its block for the pressing slot, h and l turn the block's
+row a place left and right, the last block round to the first (9 5 1 turned right
+is 1 9 5), and k and j its column up and down; the selection follows its block. A
+line that comes to hold three of a kind fires the kind once, if it is ready, and the
+kind recharges after its effect ends: attack strikes every swarm dead, a bolt flying
+from the line's middle block to each, then recharges for 8 s; hold stuns every swarm
+and holds every gateway's spawns for 5 s, recharging for 10; defense wards every
+cell and pushes off the swarms its shield, an ellipse a margin past the square's
+corners, covers, for 6 s, recharging for 10. A legend under the square counts each
+kind's seconds. Since a row turn keeps the row's kinds, and the square's rows are
+turns of one another, aligning one column by row turns aligns all three. Eight
+pylons on the corners and the edges' middles each carry a gateway of swarms homing
+on target group 1, each on an interval of its own, faster by a tenth every 20 s down
+to one in 3 s. The cell of each standing block nearest its middle holds the group's
+anchor, so a swarm wears a block down to its last cell; a group holds eight, so
+while all nine stand the middle block, which the others ring, holds none. A swarm's
+body costs each block cell it covers a hit point a damage window (the `contact`
+family). A block with no cell left falls, still turning and aligning; the game is
+lost with the last, and starts over four seconds later.
+
 ## 11. System inventory
 
 The manifest registers these tick systems, grouped here by responsibility. The
@@ -772,7 +798,7 @@ declares for itself:
 |---|---|
 | Transport | `network` |
 | Frame/player | `cursor`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
-| Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
+| Typing/world | `typing`, `composite`, `wall`, `tower`, `square`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `kraken`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
@@ -797,6 +823,7 @@ Each entry declares a domain profile and its dependencies in
 |---|---|
 | Player and collectible constants | `internal/parameter/gameplay.go`, `player.go`, `collectible.go` |
 | Species tuning | `internal/parameter/{drain,quasar,swarm,storm,kraken,pylon,snake,eye,tower}.go` |
+| Magic square kinds and their effects | `component.SquareKinds`, `internal/parameter/square.go` |
 | Weapons, combat matrix and profiles | `internal/component/weapon.go` (`WeaponSpecs`), `internal/profile/combat.go`, `internal/parameter/combat.go`, `player.go`, `tracer.go`, `internal/system/combat.go` |
 | Drop tables and rewards | `internal/profile/loot.go`, `internal/component/loot.go`, `internal/parameter/loot.go`, a scenario's `[loot]` and `[drops]` (`internal/behavior/loot.go`) |
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
