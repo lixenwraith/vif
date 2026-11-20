@@ -59,6 +59,7 @@ func (s *GatewaySystem) EventTypes() []event.EventType {
 		event.EventMetaSystemCommandRequest,
 		event.EventGatewaySpawnRequest,
 		event.EventGatewayDespawnRequest,
+		event.EventGatewayHoldRequest,
 	}
 }
 
@@ -85,6 +86,15 @@ func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGatewayDespawnRequest:
 		if payload, ok := ev.Payload.(*event.GatewayDespawnRequestPayload); ok {
 			s.handleDespawnRequest(payload.AnchorEntity)
+		}
+
+	case event.EventGatewayHoldRequest:
+		if payload, ok := ev.Payload.(*event.GatewayHoldRequestPayload); ok {
+			d := time.Duration(payload.DurationMs) * time.Millisecond
+			s.world.Components.Gateway.Each(func(_ core.Entity, gw *component.GatewayComponent) bool {
+				gw.Held = max(gw.Held, d)
+				return true
+			})
 		}
 	}
 }
@@ -132,7 +142,6 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		GroupID:           payload.GroupID,
 		BaseInterval:      baseInterval,
 		Accumulated:       0,
-		Active:            true,
 		RateMultiplier:    rateMultiplier,
 		RateAccelInterval: rateAccelInterval,
 		RateAccelElapsed:  0,
@@ -201,7 +210,8 @@ func (s *GatewaySystem) Update() {
 			continue
 		}
 
-		if !gw.Active {
+		if gw.Held > 0 {
+			gw.Held = max(gw.Held-dt, 0)
 			activeCount++
 			continue
 		}
@@ -287,6 +297,13 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 			X:            x,
 			Y:            y,
 			SegmentCount: parameter.SnakeMaxSegments,
+		})
+
+	case component.SpeciesSwarm:
+		s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+			X:             x,
+			Y:             y,
+			TargetGroupID: groupID,
 		})
 	}
 }

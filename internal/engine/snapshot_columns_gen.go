@@ -106,26 +106,30 @@ func SharedWorldEncodeStoreColumns(dst []byte, s *SharedWorldState, i int) []byt
 	case 45:
 		return encodeColumnsTower(dst, s.Tower)
 	case 46:
-		return encodeColumnsKraken(dst, s.Kraken)
+		return encodeColumnsSquare(dst, s.Square)
 	case 47:
-		return encodeColumnsBehavior(dst, s.Behavior)
+		return encodeColumnsBlock(dst, s.Block)
 	case 48:
-		return encodeColumnsHeader(dst, s.Header)
+		return encodeColumnsKraken(dst, s.Kraken)
 	case 49:
-		return encodeColumnsMember(dst, s.Member)
+		return encodeColumnsBehavior(dst, s.Behavior)
 	case 50:
-		return encodeColumnsFlash(dst, s.Flash)
+		return encodeColumnsHeader(dst, s.Header)
 	case 51:
-		return encodeColumnsFadeout(dst, s.Fadeout)
+		return encodeColumnsMember(dst, s.Member)
 	case 52:
-		return encodeColumnsSplash(dst, s.Splash)
+		return encodeColumnsFlash(dst, s.Flash)
 	case 53:
-		return encodeColumnsMarker(dst, s.Marker)
+		return encodeColumnsFadeout(dst, s.Fadeout)
 	case 54:
-		return encodeColumnsButton(dst, s.Button)
+		return encodeColumnsSplash(dst, s.Splash)
 	case 55:
-		return encodeColumnsDeath(dst, s.Death)
+		return encodeColumnsMarker(dst, s.Marker)
 	case 56:
+		return encodeColumnsButton(dst, s.Button)
+	case 57:
+		return encodeColumnsDeath(dst, s.Death)
+	case 58:
 		return encodeColumnsTimer(dst, s.Timer)
 	}
 	return dst
@@ -229,26 +233,30 @@ func SharedWorldDecodeStoreColumns(s *SharedWorldState, i int, data []byte) erro
 	case 45:
 		s.Tower = decodeColumnsTower(r)
 	case 46:
-		s.Kraken = decodeColumnsKraken(r)
+		s.Square = decodeColumnsSquare(r)
 	case 47:
-		s.Behavior = decodeColumnsBehavior(r)
+		s.Block = decodeColumnsBlock(r)
 	case 48:
-		s.Header = decodeColumnsHeader(r)
+		s.Kraken = decodeColumnsKraken(r)
 	case 49:
-		s.Member = decodeColumnsMember(r)
+		s.Behavior = decodeColumnsBehavior(r)
 	case 50:
-		s.Flash = decodeColumnsFlash(r)
+		s.Header = decodeColumnsHeader(r)
 	case 51:
-		s.Fadeout = decodeColumnsFadeout(r)
+		s.Member = decodeColumnsMember(r)
 	case 52:
-		s.Splash = decodeColumnsSplash(r)
+		s.Flash = decodeColumnsFlash(r)
 	case 53:
-		s.Marker = decodeColumnsMarker(r)
+		s.Fadeout = decodeColumnsFadeout(r)
 	case 54:
-		s.Button = decodeColumnsButton(r)
+		s.Splash = decodeColumnsSplash(r)
 	case 55:
-		s.Death = decodeColumnsDeath(r)
+		s.Marker = decodeColumnsMarker(r)
 	case 56:
+		s.Button = decodeColumnsButton(r)
+	case 57:
+		s.Death = decodeColumnsDeath(r)
+	case 58:
 		s.Timer = decodeColumnsTimer(r)
 	default:
 		return fmt.Errorf("store %d is not a shared store", i)
@@ -400,6 +408,12 @@ func SharedWorldEncodeDelta(dst []byte, d *SharedWorldDelta) []byte {
 	dst = encodeColumnsTower(dst, d.Tower.Changed)
 	dst = appendEntities(dst, d.Tower.Removed)
 	dst = appendEntities(dst, d.Tower.Order)
+	dst = encodeColumnsSquare(dst, d.Square.Changed)
+	dst = appendEntities(dst, d.Square.Removed)
+	dst = appendEntities(dst, d.Square.Order)
+	dst = encodeColumnsBlock(dst, d.Block.Changed)
+	dst = appendEntities(dst, d.Block.Removed)
+	dst = appendEntities(dst, d.Block.Order)
 	dst = encodeColumnsKraken(dst, d.Kraken.Changed)
 	dst = appendEntities(dst, d.Kraken.Removed)
 	dst = appendEntities(dst, d.Kraken.Order)
@@ -581,6 +595,12 @@ func SharedWorldDecodeDelta(data []byte) (SharedWorldDelta, error) {
 	d.Tower.Changed = decodeColumnsTower(r)
 	d.Tower.Removed = readEntities(r)
 	d.Tower.Order = readEntities(r)
+	d.Square.Changed = decodeColumnsSquare(r)
+	d.Square.Removed = readEntities(r)
+	d.Square.Order = readEntities(r)
+	d.Block.Changed = decodeColumnsBlock(r)
+	d.Block.Removed = readEntities(r)
+	d.Block.Order = readEntities(r)
 	d.Kraken.Changed = decodeColumnsKraken(r)
 	d.Kraken.Removed = readEntities(r)
 	d.Kraken.Order = readEntities(r)
@@ -1118,7 +1138,7 @@ func encodeColumnsGateway(dst []byte, rows []StoreEntry[component.GatewayCompone
 		dst = appendInt(dst, rows[i].Value.Accumulated)
 	}
 	for i := range rows {
-		dst = appendBool(dst, rows[i].Value.Active)
+		dst = appendInt(dst, rows[i].Value.Held)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.RateMultiplier)
@@ -1173,7 +1193,7 @@ func decodeColumnsGateway(r *columnReader) []StoreEntry[component.GatewayCompone
 		readInt(&rows[i].Value.Accumulated, r)
 	}
 	for i := range rows {
-		readBool(&rows[i].Value.Active, r)
+		readInt(&rows[i].Value.Held, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.RateMultiplier, r)
@@ -3615,6 +3635,152 @@ func decodeColumnsTower(r *columnReader) []StoreEntry[component.TowerComponent] 
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Type, r)
+	}
+	return rows
+}
+
+func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent]) []byte {
+	dst = appendEntityColumn(dst, rows)
+	for i := range rows {
+		for j := range rows[i].Value.Places {
+			dst = appendUint(dst, rows[i].Value.Places[j])
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Selected {
+			dst = appendUint(dst, rows[i].Value.Selected[j])
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Lines {
+			dst = appendUint(dst, rows[i].Value.Lines[j])
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			dst = appendInt(dst, rows[i].Value.Effects[j].Active)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			dst = appendInt(dst, rows[i].Value.Effects[j].Recharge)
+		}
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.X)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Y)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Width)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Height)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Group)
+	}
+	return dst
+}
+
+func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent] {
+	n := r.rows()
+	if n == 0 {
+		return nil
+	}
+	rows := make([]StoreEntry[component.SquareComponent], n)
+	readEntityColumn(rows, r)
+	for i := range rows {
+		for j := range rows[i].Value.Places {
+			readUint(&rows[i].Value.Places[j], r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Selected {
+			readUint(&rows[i].Value.Selected[j], r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Lines {
+			readUint(&rows[i].Value.Lines[j], r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			readInt(&rows[i].Value.Effects[j].Active, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			readInt(&rows[i].Value.Effects[j].Recharge, r)
+		}
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.X, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Y, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Width, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Height, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Group, r)
+	}
+	return rows
+}
+
+func encodeColumnsBlock(dst []byte, rows []StoreEntry[component.BlockComponent]) []byte {
+	dst = appendEntityColumn(dst, rows)
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Square)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Anchor)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Digit)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Kind)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HP)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Fallen)
+	}
+	return dst
+}
+
+func decodeColumnsBlock(r *columnReader) []StoreEntry[component.BlockComponent] {
+	n := r.rows()
+	if n == 0 {
+		return nil
+	}
+	rows := make([]StoreEntry[component.BlockComponent], n)
+	readEntityColumn(rows, r)
+	for i := range rows {
+		readUint(&rows[i].Value.Square, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Anchor, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Digit, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Kind, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HP, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Fallen, r)
 	}
 	return rows
 }

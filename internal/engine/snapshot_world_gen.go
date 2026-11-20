@@ -84,6 +84,8 @@ type SharedWorldState struct {
 	SnakeMember  []StoreEntry[component.SnakeMemberComponent]  `json:"snakemember,omitempty"`
 	Eye          []StoreEntry[component.EyeComponent]          `json:"eye,omitempty"`
 	Tower        []StoreEntry[component.TowerComponent]        `json:"tower,omitempty"`
+	Square       []StoreEntry[component.SquareComponent]       `json:"square,omitempty"`
+	Block        []StoreEntry[component.BlockComponent]        `json:"block,omitempty"`
 	Kraken       []StoreEntry[component.KrakenComponent]       `json:"kraken,omitempty"`
 	Behavior     []StoreEntry[component.BehaviorComponent]     `json:"behavior,omitempty"`
 	Header       []StoreEntry[component.HeaderComponent]       `json:"header,omitempty"`
@@ -155,6 +157,8 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.SnakeMember = captureRows(w.Components.SnakeMember.dense, w.Components.SnakeMember.entities, core.DomainShared)
 	s.Eye = captureRows(w.Components.Eye.dense, w.Components.Eye.entities, core.DomainShared)
 	s.Tower = captureRows(w.Components.Tower.dense, w.Components.Tower.entities, core.DomainShared)
+	s.Square = captureRows(w.Components.Square.dense, w.Components.Square.entities, core.DomainShared)
+	s.Block = captureRows(w.Components.Block.dense, w.Components.Block.entities, core.DomainShared)
 	s.Kraken = captureRows(w.Components.Kraken.dense, w.Components.Kraken.entities, core.DomainShared)
 	s.Behavior = captureRows(w.Components.Behavior.dense, w.Components.Behavior.entities, core.DomainShared)
 	s.Header = captureRows(w.Components.Header.dense, w.Components.Header.entities, core.DomainShared)
@@ -314,6 +318,12 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	}
 	for _, en := range s.Tower {
 		w.Components.Tower.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.Square {
+		w.Components.Square.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.Block {
+		w.Components.Block.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Kraken {
 		w.Components.Kraken.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -530,6 +540,8 @@ type WorldOrder struct {
 	SnakeMember  []core.Entity                     `json:"snakemember,omitempty"`
 	Eye          []core.Entity                     `json:"eye,omitempty"`
 	Tower        []core.Entity                     `json:"tower,omitempty"`
+	Square       []core.Entity                     `json:"square,omitempty"`
+	Block        []core.Entity                     `json:"block,omitempty"`
 	Kraken       []core.Entity                     `json:"kraken,omitempty"`
 	Behavior     []core.Entity                     `json:"behavior,omitempty"`
 	Header       []core.Entity                     `json:"header,omitempty"`
@@ -593,6 +605,8 @@ func (w *World) CaptureOrder() WorldOrder {
 	o.SnakeMember = orderOf(w.Components.SnakeMember.entities)
 	o.Eye = orderOf(w.Components.Eye.entities)
 	o.Tower = orderOf(w.Components.Tower.entities)
+	o.Square = orderOf(w.Components.Square.entities)
+	o.Block = orderOf(w.Components.Block.entities)
 	o.Kraken = orderOf(w.Components.Kraken.entities)
 	o.Behavior = orderOf(w.Components.Behavior.entities)
 	o.Header = orderOf(w.Components.Header.entities)
@@ -751,6 +765,12 @@ func (w *World) InstallOrder(o WorldOrder) error {
 	if err := reorderStore(w.Components.Tower, o.Tower); err != nil {
 		return fmt.Errorf("tower: %w", err)
 	}
+	if err := reorderStore(w.Components.Square, o.Square); err != nil {
+		return fmt.Errorf("square: %w", err)
+	}
+	if err := reorderStore(w.Components.Block, o.Block); err != nil {
+		return fmt.Errorf("block: %w", err)
+	}
 	if err := reorderStore(w.Components.Kraken, o.Kraken); err != nil {
 		return fmt.Errorf("kraken: %w", err)
 	}
@@ -846,6 +866,8 @@ type SharedWorldDelta struct {
 	SnakeMember  StoreDelta[component.SnakeMemberComponent]  `json:"snakemember,omitzero"`
 	Eye          StoreDelta[component.EyeComponent]          `json:"eye,omitzero"`
 	Tower        StoreDelta[component.TowerComponent]        `json:"tower,omitzero"`
+	Square       StoreDelta[component.SquareComponent]       `json:"square,omitzero"`
+	Block        StoreDelta[component.BlockComponent]        `json:"block,omitzero"`
 	Kraken       StoreDelta[component.KrakenComponent]       `json:"kraken,omitzero"`
 	Behavior     StoreDelta[component.BehaviorComponent]     `json:"behavior,omitzero"`
 	Header       StoreDelta[component.HeaderComponent]       `json:"header,omitzero"`
@@ -914,6 +936,8 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.SnakeMember = diffStore(base.SnakeMember, next.SnakeMember, equalSnakeMember)
 	d.Eye = diffStore(base.Eye, next.Eye, equalEye)
 	d.Tower = diffStore(base.Tower, next.Tower, equalTower)
+	d.Square = diffStore(base.Square, next.Square, equalSquare)
+	d.Block = diffStore(base.Block, next.Block, equalBlock)
 	d.Kraken = diffStore(base.Kraken, next.Kraken, equalKraken)
 	d.Behavior = diffStore(base.Behavior, next.Behavior, equalBehavior)
 	d.Header = diffStore(base.Header, next.Header, equalHeader)
@@ -978,6 +1002,8 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.SnakeMember = applyStore(base.SnakeMember, d.SnakeMember)
 	s.Eye = applyStore(base.Eye, d.Eye)
 	s.Tower = applyStore(base.Tower, d.Tower)
+	s.Square = applyStore(base.Square, d.Square)
+	s.Block = applyStore(base.Block, d.Block)
 	s.Kraken = applyStore(base.Kraken, d.Kraken)
 	s.Behavior = applyStore(base.Behavior, d.Behavior)
 	s.Header = applyStore(base.Header, d.Header)
@@ -1041,6 +1067,8 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.SnakeMember.Entries()
 	n += d.Eye.Entries()
 	n += d.Tower.Entries()
+	n += d.Square.Entries()
+	n += d.Block.Entries()
 	n += d.Kraken.Entries()
 	n += d.Behavior.Entries()
 	n += d.Header.Entries()
@@ -1107,6 +1135,8 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.SnakeMember, b.SnakeMember, touched, equalSnakeMember)
 	w.Entries += countStoreDifference(a.Eye, b.Eye, touched, equalEye)
 	w.Entries += countStoreDifference(a.Tower, b.Tower, touched, equalTower)
+	w.Entries += countStoreDifference(a.Square, b.Square, touched, equalSquare)
+	w.Entries += countStoreDifference(a.Block, b.Block, touched, equalBlock)
 	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched, equalKraken)
 	w.Entries += countStoreDifference(a.Behavior, b.Behavior, touched, equalBehavior)
 	w.Entries += countStoreDifference(a.Header, b.Header, touched, equalHeader)
@@ -1286,6 +1316,12 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Tower {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Square {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Block {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Kraken {
 		target[en.Entity] = struct{}{}
 	}
@@ -1382,6 +1418,8 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.SnakeMember, s.SnakeMember)
 	reconcileStore(w.Components.Eye, s.Eye)
 	reconcileStore(w.Components.Tower, s.Tower)
+	reconcileStore(w.Components.Square, s.Square)
+	reconcileStore(w.Components.Block, s.Block)
 	reconcileStore(w.Components.Kraken, s.Kraken)
 	reconcileStore(w.Components.Behavior, s.Behavior)
 	reconcileStore(w.Components.Header, s.Header)
@@ -1454,6 +1492,8 @@ func (w *World) ReconcileSharedFrom(src *World, record bool) *WorldReconcile {
 	d.SnakeMember = compareStoreFrom(r, w.Components.SnakeMember, src.Components.SnakeMember, equalSnakeMember)
 	d.Eye = compareStoreFrom(r, w.Components.Eye, src.Components.Eye, equalEye)
 	d.Tower = compareStoreFrom(r, w.Components.Tower, src.Components.Tower, equalTower)
+	d.Square = compareStoreFrom(r, w.Components.Square, src.Components.Square, equalSquare)
+	d.Block = compareStoreFrom(r, w.Components.Block, src.Components.Block, equalBlock)
 	d.Kraken = compareStoreFrom(r, w.Components.Kraken, src.Components.Kraken, equalKraken)
 	d.Behavior = compareStoreFrom(r, w.Components.Behavior, src.Components.Behavior, equalBehavior)
 	d.Header = compareStoreFrom(r, w.Components.Header, src.Components.Header, equalHeader)
@@ -1536,7 +1576,7 @@ func equalLoot(a, b *component.LootComponent) bool {
 }
 
 func equalGateway(a, b *component.GatewayComponent) bool {
-	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Active == b.Active && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
+	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Held == b.Held && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
 }
 
 func equalEnergy(a, b *component.EnergyComponent) bool {
@@ -1704,6 +1744,14 @@ func equalEye(a, b *component.EyeComponent) bool {
 }
 
 func equalTower(a, b *component.TowerComponent) bool {
+	return *a == *b
+}
+
+func equalSquare(a, b *component.SquareComponent) bool {
+	return *a == *b
+}
+
+func equalBlock(a, b *component.BlockComponent) bool {
 	return *a == *b
 }
 

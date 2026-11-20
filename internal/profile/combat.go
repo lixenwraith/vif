@@ -23,7 +23,8 @@ type AttackProfile struct {
 	Chain   *AttackProfile
 	Charged *AttackProfile
 
-	// A CombatDamageOverTime profile leaves Status, ticking DamageValue every Period for Duration
+	// A CombatDamageOverTime profile leaves Status, ticking DamageValue every Period
+	// for Duration; a stun lasts Duration, parameter.PulseStunDuration when zero
 	Status           component.StatusKind
 	Period, Duration time.Duration
 
@@ -298,6 +299,41 @@ func init() {
 		}
 		register(&rayProfiles[d])
 	}
+
+	// A tower's own attacks, as a magic square's aligned kinds land them: a strike
+	// that kills, a stun as long as the hold, and its shield's push
+	register(&AttackProfile{
+		AttackType:  component.CombatAttackStrike,
+		Attacker:    component.CombatEntityTower,
+		Defender:    component.CombatEntitySwarm,
+		DamageType:  component.CombatDamageArea,
+		DamageValue: parameter.CombatDamageSquareStrike,
+	})
+	register(&AttackProfile{
+		AttackType: component.CombatAttackHold,
+		Attacker:   component.CombatEntityTower,
+		Defender:   component.CombatEntitySwarm,
+		DamageType: component.CombatDamageArea,
+		EffectMask: component.CombatEffectStun,
+		Duration:   parameter.SquareHoldDuration,
+	})
+	towerShield := &AttackProfile{
+		AttackType: component.CombatAttackShield,
+		Attacker:   component.CombatEntityTower,
+		Defender:   component.CombatEntitySwarm,
+		DamageType: component.CombatDamageArea,
+	}
+	withKinetic(towerShield, &shieldCollision)
+	register(towerShield)
+
+	// A swarm's body wears the tower cells it covers
+	register(&AttackProfile{
+		AttackType:  component.CombatAttackContact,
+		Attacker:    component.CombatEntitySwarm,
+		Defender:    component.CombatEntityTower,
+		DamageType:  component.CombatDamageArea,
+		DamageValue: parameter.CombatDamageContact,
+	})
 
 	// Eye self-destruct: uniform across every target
 	for _, d := range eyeTargets {
