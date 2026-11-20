@@ -65,7 +65,10 @@ const (
 	CombatAttackSelfDestruct
 	CombatAttackBullet
 	CombatAttackRay
-	CombatAttackBurn // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
+	CombatAttackBurn    // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
+	CombatAttackContact // a body wearing the structure cells it covers
+	CombatAttackStrike  // a magic square's strike, all a body's hit points
+	CombatAttackHold    // a magic square's hold, a stun as long as the hold
 	CombatAttackTypeCount
 )
 
@@ -82,6 +85,9 @@ var CombatAttackNames = [CombatAttackTypeCount]string{
 	CombatAttackBullet:       "bullet",
 	CombatAttackRay:          "ray",
 	CombatAttackBurn:         "burn",
+	CombatAttackContact:      "contact",
+	CombatAttackStrike:       "strike",
+	CombatAttackHold:         "hold",
 }
 
 // Effect Types

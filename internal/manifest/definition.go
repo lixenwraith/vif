@@ -89,6 +89,8 @@ var Components = []ComponentDef{
 	{"SnakeMember", "SnakeMemberComponent", "shared"},
 	{"Eye", "EyeComponent", "shared"},
 	{"Tower", "TowerComponent", "shared"},
+	{"Square", "SquareComponent", "shared"},
+	{"Block", "BlockComponent", "shared"},
 	{"Kraken", "KrakenComponent", "shared"},
 	{"Behavior", "BehaviorComponent", "shared"},
 
@@ -138,7 +140,9 @@ var Systems = []SystemDef{
 	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Snapshot: "state",
 		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // carries its generator, not a vmath stream, and the cave; pushes both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
-	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake"}},    // shared route anchor; gated species are optional
+	{Name: "square", Constructor: "NewSquareSystem", Domain: "shared", Requires: []string{"composite"},
+		Optional: []string{"navigation", "combat", "gateway", "lightning"}}, // shared composite blocks; its effects land through combat, its bolts are each instance's own
+	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake", "swarm"}}, // shared route anchor; gated species are optional
 
 	// --- Entity Behaviors ---
 	{Name: "loot", Constructor: "NewLootSystem", Domain: "player",
@@ -253,6 +257,7 @@ var Renderers = []RendererDef{
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
 	{"tower", "NewTowerRenderer", "PriorityTower"},
+	{"square", "NewSquareRenderer", "PrioritySquare"},
 	{"eye", "NewEyeRenderer", "PriorityEye"},
 	{"snake", "NewSnakeRenderer", "PrioritySnake"},
 	{"drain", "NewDrainRenderer", "PriorityDrain"},

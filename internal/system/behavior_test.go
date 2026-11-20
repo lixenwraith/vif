@@ -839,11 +839,11 @@ func TestCombatRefusesToStunAShieldedDataSpecies(t *testing.T) {
 	c, _ := w.Components.Combat.GetPtr(header)
 
 	b.Shielded = true
-	if combat.applyStunEffect(header, c) {
+	if combat.applyStunEffect(header, c, 0) {
 		t.Fatal("a shielded warden was stunned")
 	}
 	b.Shielded = false
-	if !combat.applyStunEffect(header, c) {
+	if !combat.applyStunEffect(header, c, 0) {
 		t.Fatal("an unshielded warden refused the stun")
 	}
 }
