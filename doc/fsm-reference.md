@@ -728,6 +728,16 @@ miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
 
 `value` defaults to `true`.
 
+### PayloadCovers
+
+```toml
+{ trigger = "EventDeleteRequest", target = "Gone", guard = "PayloadCovers", guard_args = { x = 10, y = 15 } }
+```
+
+Passes when the event's range takes the cell, read as the typing system reads a
+delete's: a span, line or block, its ends in either order. A trigger whose payload
+names no range fails the load.
+
 ### PayloadStringEquals
 
 ```toml

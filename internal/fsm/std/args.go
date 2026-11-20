@@ -136,6 +136,10 @@ type (
 	fieldArgs struct {
 		Field string `toml:"field"`
 	}
+	cellArgs struct {
+		X int `toml:"x"`
+		Y int `toml:"y"`
+	}
 )
 
 // originArgs is an origin as its table writes it; a bare anchor name is its at, and
