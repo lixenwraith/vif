@@ -270,6 +270,50 @@ func TestTutorialsMapIsTheViewOfAnEightyByTwentyFourTerminal(t *testing.T) {
 	}
 }
 
+// Free practice lays the corpus for the player alone to type and edit: Space, a
+// game's special fire, which auto fire presses too, turns none of its dark glyphs
+// to dust, since the tutorial runs no particle system.
+func TestTutorialsFreePracticeKeepsItsCode(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	read := func() (state string, dark int) {
+		w.RunSafe(func() {
+			state = w.Resources.Status.Strings.Get("fsm.state").Load()
+			w.Components.Glyph.Each(func(_ core.Entity, g *component.GlyphComponent) bool {
+				if g.Level == component.GlyphDark {
+					dark++
+				}
+				return true
+			})
+		})
+		return state, dark
+	}
+	a.Tick(10)
+	for range 30 {
+		if state, _ := read(); state == "Free" {
+			break
+		}
+		tutorialKeys(t, a, "s")
+	}
+	a.Tick(600)
+	state, before := read()
+	if state != "Free" || before == 0 {
+		t.Fatalf("the tutorial stands in %s with %d dark glyphs, want Free with its corpus laid", state, before)
+	}
+	tutorialKeys(t, a, "  ")
+	if _, after := read(); after < before {
+		t.Fatalf("Space in Free took %d of %d dark glyphs, want none", before-after, before)
+	}
+}
+
 // tutorialRow reads the glyphs on row y from column 4, a gap as a space.
 func tutorialRow(a *App, y int) string {
 	w := a.World()

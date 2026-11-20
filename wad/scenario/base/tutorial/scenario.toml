@@ -19,8 +19,10 @@ min_height = 20
 files = ["lessons.toml"]
 blocks = true
 
+# No particle system: Space, a game's special fire that auto fire presses too, would
+# turn the practice code's dark glyphs to dust
 [systems]
-only_systems = ["cursor", "typing", "timer", "death", "glyph", "particle", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
+only_systems = ["cursor", "typing", "timer", "death", "glyph", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
 # With no gun to cycle, no clock to stop and no fight to find a column in, the keys
 # a game reads its own way are vi's here

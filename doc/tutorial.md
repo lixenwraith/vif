@@ -122,3 +122,5 @@ where every lesson ends.
   before.
 - The tutorial's cursor has no shield outside the Visual lesson, so Visual there
   moves and edits as Normal does.
+- The tutorial runs no particle system: Space, a game's special fire, which auto
+  fire presses too, would turn the practice code's dark glyphs to dust.
