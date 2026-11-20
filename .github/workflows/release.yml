@@ -94,11 +94,14 @@ jobs:
             make -s release-readme RELEASE_TARGET="$target" RELEASE_LABEL="$label" >"stage/$p-$target/README.md"
             cp LICENSE "stage/$p-$target/"
           done
-          # The client binaries and vif.wasm embed the font atlas the cells are drawn with.
+          # The client binaries embed the font atlas, and vif.wasm the same face as a web font.
           for target in linux-amd64 linux-arm64 freebsd-amd64 web; do
             cp internal/asset/font/LICENSE "stage/$p-$target/LICENSE.font"
           done
           cp -R web/. "stage/$p-web/"
+          # terminal.js and worker.js as make wasm writes them; vif.js is inside the first.
+          rm "stage/$p-web/vif.js"
+          make -s page PAGE_DIR="stage/$p-web"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"
 

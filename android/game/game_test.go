@@ -236,14 +236,14 @@ func TestTheMenuCrossesTheBindingAsJSONAndOps(t *testing.T) {
 }
 
 // TestTheHostsAreWrittenToTheRunsMenuContract: MenuDialog.java and the page's
-// terminal.js name the node kinds, the ops and the field inputs the run's snapshot
+// vif.js name the node kinds, the ops and the field inputs the run's snapshot
 // and hooks use, each list in the run's order, so no host drifts from the run.
 func TestTheHostsAreWrittenToTheRunsMenuContract(t *testing.T) {
 	for _, host := range []struct {
 		path, declaration string
 	}{
 		{"../app/src/main/java/com/lixen/vif/MenuDialog.java", `static final String\[\] %s = \{([^}]*)\};`},
-		{"../../web/terminal.js", `const MENU_%s = \[([^\]]*)\];`},
+		{"../../web/vif.js", `const MENU_%s = \[([^\]]*)\];`},
 	} {
 		src, err := os.ReadFile(host.path)
 		if err != nil {

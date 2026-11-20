@@ -25,6 +25,7 @@ WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 NOTICES ?= $(BIN_DIR)/NOTICES
+PAGE_DIR ?= $(WEB_DIR)
 RELEASE_TARGET ?= linux-amd64
 RELEASE_LABEL ?= nightly
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
@@ -83,7 +84,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme notices image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -99,7 +100,8 @@ help:
 	@echo "  android-toolchain Install what android needs: Go and a JDK (asking first), the SDK's"
 	@echo "           command-line tools, platform, NDK and platform-tools (android/README.md)"
 	@echo "  nolog    Release build without logger"
-	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted)"
+	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted), with the page's scripts"
+	@echo "  page     Write the page's terminal.js and worker.js into $(PAGE_DIR), from the terminal module and web/vif.js"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  router Build the website-to-K3s session router"
@@ -221,7 +223,20 @@ nolog: check-go $(BIN_DIR)
 wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
+	@$(MAKE) -s page
 	@GOOS=js GOARCH=wasm $(MAKE) -s notices NOTICES=$(WEB_DIR)/NOTICES
+
+# page writes the page's two scripts, which no commit holds: terminal.js is the
+# terminal module's page.js, the screen and its input, and then web/vif.js, and
+# worker.js is the module's, both of the version the build links. They go to
+# PAGE_DIR, web/ unless set, as the release sets it.
+page: check-go
+	@set -eu; mod=github.com/lixenwraith/terminal; \
+	$(GO) mod download $$mod; dir=$$($(GO) list -m -f '{{.Dir}}' $$mod); \
+	[ -f "$$dir/web/page.js" ] || { echo "page: $$mod has no web/page.js in '$$dir'" >&2; exit 1; }; \
+	mkdir -p '$(PAGE_DIR)'; \
+	cat "$$dir/web/page.js" $(WEB_DIR)/vif.js >'$(PAGE_DIR)/terminal.js'; \
+	install -m 0644 "$$dir/web/worker.js" '$(PAGE_DIR)/worker.js'
 
 # windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
