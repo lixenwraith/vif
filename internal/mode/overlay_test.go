@@ -55,6 +55,7 @@ type menuSession struct {
 	near   []engine.NearbySession
 	calls  []string
 	err    error
+	botErr error // why it refuses any bot, as a scenario seating one player does
 }
 
 func (s *menuSession) Nearby() []engine.NearbySession { return s.near }
@@ -63,6 +64,7 @@ func (s *menuSession) Announce()                      { s.calls = append(s.calls
 func (s *menuSession) HostError() error                          { return nil }
 func (s *menuSession) JoinError() error                          { return nil }
 func (s *menuSession) LeaveError() error                         { return nil }
+func (s *menuSession) BotError() error                           { return s.botErr }
 func (s *menuSession) SessionSummary() string                    { return "Test session" }
 func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
 func (s *menuSession) Participants() []engine.SessionParticipant { return nil }
@@ -552,6 +554,31 @@ func TestABotIsSeatedFromItsGraphsRow(t *testing.T) {
 	r.handleOverlayActivate()
 	if !slices.Equal(session.calls, []string{"add 1:cave"}) || ctx.IsOverlayActive() {
 		t.Fatalf("a graph's row did not seat one bot of it and leave the menu: %v", session.calls)
+	}
+}
+
+// TestABotRowSaysWhyTheRunTakesNoBot: where the run refuses any bot, as a scenario
+// seating one player does, Add bots and every graph's row are disabled with the
+// sentence :bot answers, and a graph's row seats nothing.
+func TestABotRowSaysWhyTheRunTakesNoBot(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	session := &menuSession{graphs: []engine.BotGraph{{Name: "default", Owner: "shipped"}},
+		botErr: errors.New("scenario tutorial seats one player, so no bot joins it")}
+	ctx.SessionCtl = session
+	r := NewRouter(ctx, input.NewMachine())
+	r.handleConfigMenu()
+	showConfigMenu(ctx, "multiplayer")
+	const why = "Scenario tutorial seats one player, so no bot joins it"
+	for _, id := range []string{"multiplayer/#Bots/add", "multiplayer/#Bots/seat/default"} {
+		if row := menuRow(ctx, id); row.Disabled != why {
+			t.Fatalf("%s is disabled %q, want %q", id, row.Disabled, why)
+		}
+	}
+	ctx.SetOverlaySelection("multiplayer/#Bots/seat/default")
+	r.handleOverlayActivate()
+	if len(session.calls) != 0 {
+		t.Fatalf("a disabled bot row seated one: %v", session.calls)
 	}
 }
 

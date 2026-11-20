@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,9 +16,11 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // A tutorial lesson clears itself as it exits and the next lays its own text, with
@@ -593,6 +596,11 @@ func TestTutorialSeatsNoBot(t *testing.T) {
 	if a.membership.SessionTransport() != nil {
 		t.Fatal(":bot opened a session for a bot the tutorial has no seat for")
 	}
+	injectExCommand(t, a, "bot list")
+	a.Tick(2)
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "No bots: scenario tutorial seats one player") {
+		t.Fatalf(":bot list in the tutorial reports %q, want why it seats none", got)
+	}
 }
 
 // A lesson's prompt is a progress line, up till the next lesson's rather than for a
@@ -610,5 +618,57 @@ func TestTutorialsPromptsStayUp(t *testing.T) {
 	}
 	if text, kind := shown(); kind != parameter.StatusProgress || !strings.HasPrefix(text, "Lesson 2 of 22") {
 		t.Fatalf("a minute into Words the bar shows %q, a %s line; want lesson 2's prompt", text, parameter.StatusKindNames[kind])
+	}
+}
+
+// tutorialServer is a dedicated host of the tutorial serving its lobby, one place
+// its only guest's, or skips where the scenario is not present
+func tutorialServer(t *testing.T) (*App, string) {
+	t.Helper()
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	a, addr, _ := lobbyHost(t, Config{Mode: ModeServer, Membership: Membership{Participants: 1},
+		Width: 100, Height: 30, Resources: opts, Seed: fixtureSeed})
+	return a, addr
+}
+
+// A bot's own run that dials a server of the tutorial is refused at the door, as a
+// seat is where it is added, and leaves the place to the person who dials next; a
+// dial past that person is told the scenario seats one player.
+func TestTutorialsDoorTakesNoBotsOwnRun(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a, addr := tutorialServer(t)
+	dial, offered := seatedDial(t, addr)
+	if err := dial.Complete(nil, network.JoinerReport{Identity: offered.Identity, Bot: true}); err != nil {
+		t.Fatalf("a bot's own run's reply: %v", err)
+	}
+	if _, err := dial.WaitStart(); err == nil || !strings.Contains(err.Error(), "seats one player, so no bot joins it") {
+		t.Fatalf("a bot's own run joining the tutorial's server reached its start gate with %v", err)
+	}
+	waitUntil(t, func() bool { return a.membership.GuestCount() == 0 }, "the refused bot's place released")
+	seatedDial(t, addr)
+	_, _, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
+	if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) || !strings.Contains(err.Error(), "scenario tutorial seats one player") {
+		t.Fatalf("a dial past the tutorial's one player got %v, want a full refusal naming its one seat", err)
+	}
+}
+
+// A scripted host of the tutorial, whose own cursor fills its one seat, refuses a
+// lobby that would wait for a guest forever.
+func TestTutorialsScriptedHostRefusesALobbyThatNeverStarts(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	_, _, gate := lobbyHost(t, Config{Mode: ModeHeadless, Width: 100, Height: 30, Resources: opts, Seed: fixtureSeed})
+	select {
+	case err := <-gate:
+		if err == nil || !strings.Contains(err.Error(), "never starts") {
+			t.Fatalf("the tutorial's scripted host opened its lobby with %v", err)
+		}
+	case <-time.After(socketWait):
+		t.Fatal("the tutorial's scripted host waits for a guest its one seat has no place for")
 	}
 }

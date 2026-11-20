@@ -44,6 +44,7 @@ type configForm struct {
 var configForms = map[string]configFormSpec{
 	"add": {
 		label: "Add bots", description: "Seat local bots in this session. A solo run opens a session only they can join; host first to invite remote players.", command: "bot",
+		unavailable: engine.SessionController.BotError,
 		fields: []configFormField{
 			{"Count", "1", "Number of bots to add. Each bot occupies a player slot.", inputNumber},
 			{"Graph", "", "Graph name or path; blank is the scenario's own bot, or default where it carries none. Bots belong to this run and leave with it.", inputText},
@@ -239,6 +240,7 @@ func botGraphOptions(ctx *engine.GameContext) []configNode {
 	options := make([]configNode, 0, len(graphs))
 	for _, g := range graphs {
 		options = append(options, configNode{kind: kindAction, key: "seat/" + g.Name, label: "Add " + g.Name, command: "bot", read: enterValue,
+			disabled:    sessionRefusal(engine.SessionController.BotError),
 			description: fmt.Sprintf("Seat one bot playing %s (%s), which plays what your runs have taught it in this scenario, or as its graph writes. Bot files' list says what each has learned.", g.Name, g.Owner),
 			activate: func(r *Router) {
 				if err := r.ctx.SessionCtl.AddBot("1:" + g.Name); err != nil {

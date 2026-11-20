@@ -325,12 +325,30 @@ func (c Control) RequestSession(site string, players, bots int, scenario string)
 	return c.m.joinSessionLocked(site, players, bots, scenario, nil)
 }
 
-func (c Control) AddBot(graph string) error {
+// hostingNotice is what opening the doors at bound says: where, and that only
+// spectators come in where the scenario's one seat is the host's own
+func (m *Membership) hostingNotice(bound string) string {
+	if m.SessionCapacity() > 0 {
+		return "Hosting on " + bound
+	}
+	return "Hosting on " + bound + "; scenario " + m.scenario.Shown() + " seats one player, so others can only spectate"
+}
+
+// BotError is why AddBot refuses whatever it is asked: a join being dialled, a run
+// that spectates or a scenario seating one player, which the menu's rows say too
+func (c Control) BotError() error {
 	switch {
 	case c.m.dialling.Load():
 		return errors.New("a join is already being dialled")
 	case c.m.world.Watches():
 		return errors.New("a run that spectates holds no place a bot could play from")
+	}
+	return botRefused(*c.m.scenario)
+}
+
+func (c Control) AddBot(graph string) error {
+	if err := c.BotError(); err != nil {
+		return err
 	}
 	specs, err := BotSpecs(cmp.Or(graph, "1"))
 	if err != nil {
@@ -708,7 +726,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	bound := doorsText(m.newcomerDoors(port))
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
 		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
-	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.ctx.SetStatusMessage(m.hostingNotice(bound), parameter.StatusNotice)
 	m.announce()
 	return nil
 }
@@ -766,7 +784,7 @@ func (m *Membership) hostTakenSessionLocked(addr string) error {
 	m.sessionMu.Unlock()
 	m.log.Info("session", "msg", "hosting opened on a session taken over",
 		"address", bound, "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
-	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.ctx.SetStatusMessage(m.hostingNotice(bound), parameter.StatusNotice)
 	m.announce()
 	return nil
 }

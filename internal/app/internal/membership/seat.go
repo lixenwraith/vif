@@ -154,14 +154,21 @@ func (m *Membership) SeatBots() error {
 	return err
 }
 
+// botRefused is why sc takes no bot, seat or run of its own: one seating a single
+// player has that place for the person, which a bot would take or wait on forever
+func botRefused(sc resource.Scenario) error {
+	if sc.MaxPlayers > 1 {
+		return nil
+	}
+	return fmt.Errorf("scenario %s seats one player, so no bot joins it", sc.Shown())
+}
+
 // addSeatLocked seats one bot playing spec. The graph is parsed here, so a name that
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
 func (m *Membership) addSeatLocked(spec string) error {
-	// A seat is a roster guest: under a scenario seating one player it would take
-	// the place the person has, or wait for one that never frees
-	if m.scenario.MaxPlayers <= 1 {
-		return fmt.Errorf("scenario %s seats one player, so no bot joins it", m.scenario.Shown())
+	if err := botRefused(*m.scenario); err != nil {
+		return err
 	}
 	graph, err := LoadBotGraph(m.run.Resources(), *m.scenario, spec)
 	if err != nil {
@@ -371,6 +378,9 @@ func (m *Membership) botSeats() []engine.BotSeat {
 func (m *Membership) seatsSummary() string {
 	bots := m.botSeats()
 	if len(bots) == 0 {
+		if err := botRefused(*m.scenario); err != nil {
+			return "No bots: " + err.Error()
+		}
 		return "No bots; :bot [N[:graph]|graph] seats bots"
 	}
 	parts := make([]string, 0, len(bots))

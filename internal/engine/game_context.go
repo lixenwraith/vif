@@ -69,8 +69,10 @@ type SessionController interface {
 	// Scenarios names what ChangeScenario starts by name, and the one running.
 	Scenarios() (names []string, current string)
 	SessionSummary() string
-	// A solo run opens a session with no listener for its bots.
+	// A solo run opens a session with no listener for its bots. BotError is why
+	// AddBot would refuse whatever it is asked, nil when it would try.
 	AddBot(graph string) error
+	BotError() error
 	DropBot(slot int) error
 	RemoveBot(id uint64) error
 	BotSummary() string

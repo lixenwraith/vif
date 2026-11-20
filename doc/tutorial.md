@@ -103,11 +103,16 @@ join or a reload that installs a later lesson lays that lesson's text in place o
 the first one its own boot laid. Lesson 1's x is a typeable glyph, which `$`, `w`
 and `e` reach as they reach a word.
 
-The tutorial seats one player (`max_players = 1`) and takes no bot. Its lessons end
-on a player's edits, typed glyphs and mode changes, local events that move the
-machine only where that player's instance holds it (D-20). A guest of a server
-holding it moves on by the cursor, `s` and `S` alone; `:leave` plays on alone,
-where every lesson ends.
+The tutorial seats one player (`max_players = 1`) and takes no bot beside that
+player: a seat is refused before a session opens and a bot's own run at the door,
+though a bot may play it alone (`-watch -bot 1`). Its lessons end on a player's
+edits, typed glyphs and mode changes, local events that move the machine only
+where that player's instance holds it (D-20). A guest of a server holding it moves
+on by the cursor, `s` and `S` alone; `:leave` plays on alone, where every lesson
+ends. A server's probe reads ready while its one place waits for a player away, so
+a reloaded page takes that place back; a second person is told the scenario seats
+one player, a host of it lets others spectate only, and a scripted host refuses a
+lobby that would wait for a guest forever.
 
 ## 3. The next round
 
