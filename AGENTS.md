@@ -98,6 +98,10 @@ in the same PR.
   a new term of art, updates its entry.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or
   add a concise one in the file's pattern.
+- A todo item states what is owed and the smallest thing that would close it, in
+  a few lines. It carries no account of what was built and no measurement beyond
+  the one figure that shows the gap. What was built is documented in its own doc;
+  an approach that was measured and not built gets one line there.
 
 ## Commits and PRs
 

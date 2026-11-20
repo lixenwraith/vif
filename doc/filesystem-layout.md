@@ -121,7 +121,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.aimg`, or `.aimgz` | none; failure is reported in the game status |
-| Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
+| Bot graph | `bot/<name>.toml`, or the path `-bot` names | the run's scenario's bot of that name, then the embedded `default` ([Bots](bots.md#writing-a-graph)) |
 
 An explicit scenario directory means one whose entry is directly at
 `<directory>/scenario.toml`. A named scenario is searched root by root, each
@@ -250,7 +250,9 @@ removes the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/`
 its `base/` and the copies of shipped scenarios an install from before `base/`
 left at its top, which would shadow them) and those two files, so the root holds
 only the fresh install plus `audio/`, a player's own scenarios and anything else a
-player put beside them. `install` adds the binary, licence, manual, desktop entry
+player put beside them. `bot/` goes whole: in the user root that is a player's own
+graphs and every population their bots learned
+([Bots](bots.md#the-population-file)). `install` adds the binary, licence, manual, desktop entry
 and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
 `PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs

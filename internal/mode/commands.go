@@ -1476,9 +1476,9 @@ func handleAccountCommand(ctx *engine.GameContext, cmd string, args []string) Co
 	return result
 }
 
-// handleBotCommand lists, seats or drops the bots this run holds. Outside the
-// live-session guard, like :host: a bot joins the session as any participant does.
-// Usage: :bot | :bot add [N[:graph]|graph] | :bot drop <slot>
+// handleBotCommand seats or drops the bots this run holds, or keeps bot files,
+// by the verb engine.BotVerbs names. Outside the live-session guard, like :host:
+// a bot joins the session as any participant does.
 func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, sessionsUnavailable)

@@ -182,7 +182,8 @@ its list says so. See
 Under **Players**, every other participant has a **Drop &lt;slot&gt;: player|bot**
 row that only the host can activate. Dropping a player removes its bots; dropping a
 bot leaves its holder and siblings. Commands are `:player` and
-`:player drop <slot>`; `:bot drop <slot>` also lets the host remove any bot.
+`:player drop <slot>`; `:bot drop <slot>` also lets the host remove any player's
+bot.
 Decimal `10`, hexadecimal `A` and `0xA` all refer to the cursor marked `A`. A
 player who left reads `player, away` while its Wraith waits; dropping it ends the
 wait. Slots may be reused once a departed player is dropped.

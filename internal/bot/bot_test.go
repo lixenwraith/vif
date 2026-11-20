@@ -1523,9 +1523,9 @@ func TestAPopulationStartsFromTheWeightsItsGraphWrites(t *testing.T) {
 }
 
 // TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom: a population with no
-// rounds behind it has nothing to breed from, so its first learnPool rounds play
-// genomes drawn about the hand-written one, zero where a graph writes none, each
-// its own; one past them breeds, and a graph that writes no weight tries none.
+// rounds behind it has nothing to breed from, so where its graph writes no weight
+// its first learnPool rounds play genomes drawn about zero, each its own; one
+// past them breeds, and the written genome, having no weight, is not tried.
 func TestANewPopulationsFirstRoundsPlayGenomesDrawnAtRandom(t *testing.T) {
 	g, err := ParseGraph("net", []byte(strings.Replace(steering("inputs = [\"column\", \"energy\"]\nhidden = 2"), "[bot]", "[bot]\nlearn = true", 1)))
 	if err != nil {

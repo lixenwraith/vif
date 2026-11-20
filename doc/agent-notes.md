@@ -111,6 +111,10 @@ Libraries · Branches.
   the tool's own minimum Go (1.26), which refuses this module ("package requires
   newer Go version go1.27"): install it, and staticcheck, under
   `GOTOOLCHAIN=go1.27.4`.
+- deadcode asks the Go version with `GO111MODULE=off go list`, which follows
+  neither `go.mod`'s toolchain line nor `GOTOOLCHAIN`: on a container whose base Go
+  is older it stops on "requires go1.26 or later". Put the module's toolchain
+  first on `PATH` (`$(go env GOROOT)/bin`).
 - deadcode reads one profile: `pkg/browser`'s `keyCode` reads dead on linux and is
   live on js/wasm, `glyph.Texture.Atlas` and `Frames.ColorMode` on js/wasm and
   Android. Call a function dead only where every profile compiling its file reports
@@ -866,390 +870,180 @@ Libraries · Branches.
   changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
   32 in the next: for a few percent, read the minimum of seven to nine rounds
   beside the median.
-- A bot graph is compared in seconds: a 60 s round at 120x40 under `-headless
-  -speed max` takes 0.1 to 0.2 s (td 0.8 s). Read rounds from the log, not the
-  fitness, which weighs no crush: at `-lv debug -log-stdout` each FSM transition
-  carries a tick that restarts with the game, so `cave`'s `"to":"PlayerCrushed"`
-  and `"to":"PlayerDied"` lines are round lengths. A scenario copied to
-  `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
-- A network graph and its learners are compared in rounds ([Bots](bots.md#learning)):
-  a scratch test in `internal/app`, kept out of the commit, puts `bot.NewDriver`
-  on a `NewHeadless` `cave`, its `Play` from `botPlay`, and has it learn as
-  `RunBot` does: `App.playBeside` builds the further games, `App.learn` the
-  learners over every driver, `sideGames.start` steps them and the test the
-  run's own, then `Driver.End` at its tick and `sideGames.close`. A graph parsed
-  under another name (`bot.ParseGraph`) keeps its populations apart, in the user
-  root the test's environment names. A core plays 4,700 to 7,000 ticks a
-  second, by the machine, whatever steers. The binary learns as the harness
-  does, a seed's rounds the same in both. `Driver.Stats` takes the world lock:
-  called inside `RunSafe` it hangs.
-- Games that learn together are read by ticks a second, and only against a run
-  whose rounds are alike: a tick costs by where its game stands, 64 µs in the
-  twenty after a new game and 149 in the mean, and no count of dispatched events
-  predicts it. Games side by side so drift hundreds of ticks apart, which is
-  what a round's close waits on.
+- What a bot's figures mean, and which of them luck moves, is in
+  [Bots: Learning](bots.md#learning); what was measured and left out is in
+  [Tried and not built](bots.md#tried-and-not-built). The notes here are how
+  to take a reading.
+- A graph with no network is compared in seconds: a 60 s round at 120x40 under
+  `-headless -speed max` takes 0.1 to 0.2 s. At `-lv debug -log-stdout` each FSM
+  transition carries a tick that restarts with the game, so `cave`'s
+  `"to":"PlayerCrushed"` and `"to":"PlayerDied"` lines are round lengths. A
+  scenario copied to `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s
+  <name>`.
+- A network graph and its learners are compared in rounds by a scratch test in
+  `internal/app`, kept out of the commit. It puts `bot.NewDriver` on a
+  `NewHeadless` run, its `Play` from `botPlay`, and has it learn as `RunBot`
+  does: `App.playBeside` builds the further games, `App.learn` the learners
+  over every driver, `sideGames.start` steps them and the test steps the run's
+  own, then `Driver.End` at its tick and `sideGames.close`. The binary learns
+  as the harness does, a seed's rounds the same in both. A graph parsed under
+  another name (`bot.ParseGraph`) keeps its populations apart.
+- What a model fields is read held out, with no learner: a driver on the graph
+  whose weights are the model's, `App.Reset(false)` closing each round at the
+  graph's limit, `Driver.Round` giving its score. An `Instance` wrapping the
+  App, whose `SetDispatchTap` calls the test's tap ahead of the driver's,
+  counts what ended a round: `EventKrakenSpawnRequest` for a Kraken met, its
+  `EventSpeciesKilled` for one shot down, `EventFireSpecialRequest` for a
+  special asked for and `EventHeatSpendRequest` for one spent. 100 rounds of
+  four seeds take a minute on four cores.
+- What a population fields is played the same way by learners attached not
+  alone (`bot.Learn`, `alone` false), which field and never save, each on its
+  file's path (`paths.PlaceFile`). The package's TestMain points
+  `XDG_CONFIG_HOME` at an empty directory, and a relative one is no root: a
+  learning run under it keeps no population and says nothing.
+- Held-out rows are a function of the genomes played: two runs fielding one
+  pair give the same rows, so a queue keeps them by the genomes. The i-th round
+  of a seed draws one game's streams for every member
+  (`RandResource.NextSession`), but two members part as soon as they differ,
+  so rounds are not paired. Cap a held-out round at the graph's limit, as a run
+  would, and give a learning run ticks, not rounds: a learner that masters a
+  phase makes its rounds long.
+- One member is held alone from a population of it only, kept in a `bot.Store`
+  in memory with its rounds raised to eight, which the learner then fields
+  (`LearnStats.Fielded`, `FieldedRounds`). A member is held beside another
+  network's by populations of a member each. Hold a member this way before
+  calling it promising: its own mean over a few rounds does not say.
+- A learner's rule or setting is read as an arm: a `tar` copy of the tree
+  whose constant or rule reads the environment, so one frozen test binary
+  serves every row. With no knob set it must keep main's population bytes.
+  Read it by the candidates' recent mean and by every proved member held out,
+  on six seeds a start or more, from nothing, from `seed`'s weights and on a
+  population already good. What a run fields at its stop is a lottery.
+- A rule of who is fielded is read inside one archive: the pair the rule
+  fields and the pair main's rule would field of the same population differ
+  by the rule alone, where two runs differ by their search. Try it on a
+  trainer's kept populations too, a run begun on a copy of them in a fresh
+  user root: a rule at work in young populations can do nothing there.
+- A learner's archive is read by its events, not its file: a scratch
+  `learner.go` logging each scored round with its genome's key, what drew it,
+  its member's mean and rounds, and who holds the title.
 - Whether a change leaves the search alone is read by bytes: one seed and one
-  count of ticks leave the same population files, between two runs of one count
-  of games and, for one game, between main's test binary built in a worktree and
-  the branch's (`sha256sum`). Two binaries read it with no harness: each plays
-  `-headless -speed max -seed N -games G` on `-config-dir <checkout>/wad` under
-  its own `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a
-  `stop` region that quits at a game time, as `botfitness` appends one. 36,000
-  ticks of one game reach no Kraken; 600,000 score twenty or more of its rounds.
-  The line's `actions` and ticks of several games move by one from run to run,
-  a game ahead of the run's own having played past its quit: compare the files,
-  and hold a test of the sums to a bound.
-- A rewritten reader of the world is proven where it reads: a copy of the tree
-  keeps the old one beside the new under other names, `mind.steer` reads every
-  sensor both ways and stops at the first that differs by `math.Float64bits`,
-  and the copy's own population bytes say it played as main did.
-- A scan a table calls is told its visitor as an interface whose value the mind
-  or the network already holds: a closure handed through a table escapes, an
-  allocation a scan, which `TestASteerAndASightingAllocateNothing` holds at none.
-  A local array sliced into a call through a table moves to the heap too, as a
-  `Steer`'s outputs did until the network kept them, an allocation an update no
-  test of `read` and `pass` saw: the test steers, and `go build -gcflags=-m`
-  names what moves.
-- A steer is timed in the game, not in a loop: a field read of an entity after
-  its scan runs cold there, 15 to 20 ns where a benchmark over a standing scene
-  reads 2. What costs is the call and not the lookup: read off the component
-  its scan held, with no lookup, six such inputs cost `cave`'s raid the same
-  0.1 µs a steer; told by the scan with each thing, they cost none.
-- Two binaries timed side by side differ by 30 ns a steer from run to run, more
-  than most changes move it. Each plays alone, in turn, three rounds or more: a
-  scratch copy whose `mind.steer` times `read` and `pass`, on one seed and tick.
-  A game of 120,000 ticks orders them as one of 600,000 does, at half the gap.
-- A form a bot document takes is proven on `cave` before `cave` takes it: a
-  copy of its graph written that way, as with `[bot] inputs`, a `while` and a
-  `Steer` over a list, leaves main's population bytes.
-- A tick can run no system. One whose opening settle dispatches a new game
-  asked for between ticks ends there, and `App.InputTick` settles one ahead of
-  the tick when the step injected input, so that tick is the new game's first.
-  What a system leaves for a tick, as `Cave.Steps`, is cleared as the tick
-  opens, and a driver closes its round before it counts such a tick.
-- `genetic`'s table of evaluations in flight evicts by a window of eight slots
-  from an id's home, whatever its capacity, and completing an evicted id does
-  nothing. A host whose evaluations outlive a lap of ids keeps the genome and
-  completes under an evaluation begun as the round closes (`Learner.settle`).
+  count of ticks leave the same population files (`sha256sum`), between two
+  runs and between main's test binary, built in a `git worktree`, and the
+  branch's. Two binaries read it with no harness: each plays `-headless -speed
+  max -seed N -games G` on `-config-dir <checkout>/wad` under its own
+  `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a `stop`
+  region that quits at a game time, as `botfitness` appends one. The line's
+  `actions` and ticks of several games move by one between runs: compare the
+  files.
 - A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
   script that puts each fix's lines back and runs the one test of its rule,
-  which must fail. A test of the games' order that would hang without its fix
-  is given the late `End` a run makes, so it fails instead.
+  which must fail. A mutation that deadlocks the games' order hangs where it
+  should fail: run it under `timeout`, whose 124 is the test holding, and give
+  a scratch run past ten minutes `-test.timeout 0`.
+- A merge under a measurement is checked before a baseline is kept: main's
+  binary after it and before it play one seed from nothing, and the same
+  population bytes say the runs read so far are main's still. A gameplay change
+  is held the same way against `cave`'s own bot learning alone.
 - A population kept under an older `version` is fielded by a newer binary from
-  a copy with its `version` raised. Where play did not change its held-out
-  rounds repeat the older binary's to the tick, which proves the harness too.
-  Main's binary and the branch's are read from `seed` in six minutes a seed on
-  four cores: two each to train four games' three million ticks, one each to
-  hold what they field out over 100 rounds.
-- A scenario's bots are files of the scenario, `cave`'s in
-  `wad/scenario/base/cave/bot/`, and only `default` is embedded. A test reads
-  one through `resource.LoadScenario` and `Scenario.Bot`, or by its path from
-  the package, and `-bot` with no graph is the way to play it. A copy of the
-  name in a root's `bot/` plays in its place, as an install before the move
-  left one. A held-out harness built earlier refuses a scenario whose entry has
-  a key it does not know: run it on a copy of `wad/` taken before the change.
-- A model is landed in a bot document by `-bot export <graph> <file>`, which
-  writes what each population fields over the bot's own document
-  (`bot.Graph.Document`: every weight not zero, parsed back to the same
-  `math.Float64bits`). A population written by another tool is raised to this
-  `version` in a copy by a JSON round trip, not by `sed`: its spacing is its
-  writer's. The document then replays the population's held-out rounds line
-  for line with no learner. `toml.Document.Delete` takes a table with the
-  comment block above it.
+  a copy with its `version` raised, by a JSON round trip and not by `sed`,
+  whose spacing is its writer's. A model is landed in a bot document by `-bot
+  export`, and moves to a graph that reads its inputs and more by `-bot
+  import` ([Bots](bots.md#a-players-bot-files)). `toml.Document.Delete` takes a
+  table with the comment block above it.
+- An output is held off in a copy of a population: its weights zeroed and its
+  bias negative in every member. `Inject` merges members whose genes then
+  match, so check that the member fielded keeps its score and rounds.
+- A learning run's ticks at a save are in nothing the binary prints: run it
+  with `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game
+  whose `tick` is the length of the run it ended, and sum those by the log's
+  time to each save. Copy the population files as their mtime moves to keep
+  what the run fielded along the way.
+- What a bot's inputs read in play is counted, not guessed: a scratch `Driver`
+  method running `network.read` under `World.RunSafe` on a probe network of
+  every input, tallied by `Driver.Stats().State`. `Driver.Stats` takes the
+  world lock: called inside `RunSafe` it hangs with nothing printed.
+- A rewritten reader of the world is proven where it reads: a copy of the tree
+  keeps the old one beside the new, `mind.steer` reads every sensor both ways
+  and stops at the first that differs by `math.Float64bits`. A form a bot
+  document takes is proven on `cave` the same way: a copy of its graph written
+  in the new form leaves main's population bytes.
+- A scan a table calls is told its visitor as an interface whose value the mind
+  or the network already holds: a closure handed through a table escapes, an
+  allocation a scan, which `TestASteerAndASightingAllocateNothing` holds at
+  none. A local array sliced into a call through a table moves to the heap
+  too: `go build -gcflags=-m` names what moves.
+- A steer is timed in the game, not in a loop: a field read of an entity after
+  its scan runs cold there. Two binaries timed side by side differ by 30 ns a
+  steer from run to run, so each plays alone, in turn, three rounds or more.
+- Games that learn together are read by ticks a second, and only against a run
+  whose rounds are alike: a tick costs by where its game stands. A build or a
+  probe beside a timed run takes a tenth off its rate.
+- A tick can run no system. One whose opening settle dispatches a new game
+  asked for between ticks ends there, and `App.InputTick` settles one ahead of
+  the tick when the step injected input. What a system leaves for a tick, as
+  `Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens,
+  and a driver closes its round before it counts such a tick.
+- `genetic`'s table of evaluations in flight evicts by a window of eight slots
+  from an id's home, whatever its capacity, and completing an evicted id does
+  nothing: a host whose evaluations outlive a lap of ids keeps the genome and
+  completes under an evaluation begun as the round closes (`Learner.settle`).
+  Its `Inject` keeps the gene slices it is handed, so a test builds each
+  learner its own population.
 - A guard asked outside a state, as a network's `while` (`Machine.Guard`), is
   given no region: one that reads its region registers by `RegisterStateGuard`
   and is refused there at load.
-- What a population fields is played held out by learners attached not alone
-  (`bot.Learn`, `alone` false), which field and never save, each on its file's
-  path (`paths.PlaceFile`): the package's TestMain points `XDG_CONFIG_HOME` at
-  an empty directory. `App.Reset(false)` closes a round at the graph's limit,
-  `Driver.Round` reads its score, and an `Instance` wrapping the App, whose
-  `SetDispatchTap` calls the test's tap ahead of the driver's, counts what ended
-  it: `EventKrakenSpawnRequest` for a Kraken met, its `EventSpeciesKilled` for
-  one shot down, `EventFireSpecialRequest` for a special asked for and
-  `EventHeatSpendRequest`, which only the special's blast pushes, for one spent.
-- An output is held off in a copy of a population: its weights zeroed and its
-  bias negative in every member, the genes each hidden unit's inputs and bias,
-  then `x`, `y` and `special`, each its inputs, hidden units and bias. `Inject`
-  merges members whose genes then match, so check that the member fielded keeps
-  its score and rounds. To hold it off in a learning run, a scratch copy of the
-  tree has `mind.steer` skip the `special` row of `outputs` for the network an
-  environment variable names: unset, its run keeps main's population bytes;
-  set, it plays as the file's ablation does, round for round. What a raider's
-  kill pays is probed the same way in `mind.killWorth`.
-- The i-th held-out round of one seed draws one game's streams for every
-  member (`RandResource.NextSession`, a counter that advances once a game), but
-  it does not pair them: with one `raid` network and two `kraken` ones, round 5
-  of seed 101 ran its half hour under one and was crushed at tick 211 under the
-  other, 2 rounds of 100 scoring alike. Read a mean with its spread, 11,000
-  to 14,000 over 100 rounds of a model that closes 85 at the limit. A five-game
-  run stops at a count of ticks by a graph whose stop region quits at a fifth
-  of it in game time, every game ending at the tick the run's own reached; its
-  `actions` can differ by a few between two runs of one seed, its population
-  bytes not.
-- A rule that changes what a learner plays or fields is read three ways, each
-  on several seeds, since one says nothing: from nothing, a game's 600,000
-  ticks and a hold of seconds, six seeds a rule in five minutes on four cores,
-  a game a core (2,304 beside 6,640 on one seed, the six means 4% apart); from
-  `seed`'s weights; and on a population already good, `cave`'s own, where the
-  best of eight rounds fielded 257,385 for its 300,260. `-bot create <name>`
-  writes the graph with no weight that from nothing starts on.
-- `Driver.Stats` takes the world lock: a harness reads it before its own
-  `World.RunSafe`, never inside, or the run hangs with nothing printed.
-- A relative `XDG_CONFIG_HOME` is no root, as the XDG rule has it: a learning
-  run under one keeps no population and says nothing. Name a run's fresh roots
-  by absolute paths.
-- A script a background arm is running is replaced by a rename, never edited
-  in place: bash reads a script as it goes, and one edited under a run played
-  that run again without its `env -i`, into the real home. Stopping an arm
-  hands its queue the next job at once, which the same stop then takes too: a
-  run that kept no population holds out a still ship, 159.
-- A cloud machine restarted three times in four hours of four games on four
-  cores, ending the run in flight and whatever `nohup` had started, and nothing
-  runs between a session's turns. Queue runs so a restart costs one, an arm
-  skipping the sets it has held out, play them at `nice -n 19`, and chain a
-  long run as legs, each on the populations the last kept.
-- A learner's archive is read by its events, not its file: a scratch
-  `learner.go` logging each scored round with its genome and what drew it,
-  and each member that enters, is proved or leaves, counts the tested members
-  a run lost (`raid` from `seed`'s under the plain mean: 11, 8 and 7, the most
-  tested over 50 rounds) and tells a criterion by what a member's first rounds
-  foretell of its later ones. With no option set it must keep main's bytes,
-  and the built learner the measured arm's.
-- From `seed`'s weights three seeds' mean is no measure: ten seeds field
-  42,704 to 113,267 after three million ticks, a mean of 58,005 and a median of
-  48,268, and only the two that learn `kraken`'s fight within the run pass
-  53,000.
-- One member is played alone from a population of it only, kept in a
-  `bot.Store` in memory with its rounds raised to eight, which the learner then
-  fields: `LearnStats` names it by `Fielded`, `FieldedRounds` and `Size` 1. A
-  population's draws are what one game learning in the harness holds once
-  `raid`'s `Scored` reaches 32, kept by `Close` into such a store.
-- A learning run's ticks at a save are in nothing the binary prints: run it
-  with `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game whose
-  `tick` is the length of the run it ended, at about 1.5% of the rate, and sum
-  those by the log's time to each save. Copy the population files as their
-  mtime moves to keep what the run fielded along the way.
-- What a graph's written weights field is read with no learner: a scratch test
-  in `internal/app` puts a driver on the graph, closes a round at the graph's
-  limit with `App.Reset(false)` and reads `Driver.Round`, its tap counting what
-  a round shot down, 100 rounds of seeds 101 to 104 in a minute on four cores.
-  A change of pay is read from one play: a round plays the same under both, so
-  its new score is the old plus what its kills now pay, which every round of
-  both runs is checked against.
-- A change to how a population starts is read from a written start as well as
-  from nothing, by what it fields held out beside the start itself: drawing
-  every weight about the start passed every test and read well from nothing,
-  and from weights that fielded 12,170 it fielded 4,863 after five minutes.
-  Whether the start is still in the archive is one look at its members' zero
-  weights.
-- A model moves to a graph that reads its inputs and more by `-bot import`,
-  a zero weight for each added input in every unit's row (`bot.Graph.Fit`):
-  four learned under 901ac22's inputs, widened so to the `*_soon` readings
-  `cave` takes, replayed their 60 held-out rounds round for round.
-- A held-out mean in `cave` is moved by its longest rounds, as a Kraken's pay
-  doubles a cave: 60 rounds of one fielded pair had a mean of 60,530 and a
-  median of 48,271, of another 201,735 and 319,994. Read the median and what
-  ended the rounds beside it, and several seeds: four runs of one setting
-  fielded 35,177 to 201,735. A build or a probe run beside a timed run takes a
-  tenth off its rate (24,160 ticks a second for 27,000).
-- A learner's setting is read over twelve seeds, four minutes a seed on four
-  cores at five million ticks of five games and 40 held-out rounds, and then
-  only if it moves what is fielded 1.7 times: read the seeds' geometric mean
-  and Krakens down a round. A copy of the tree whose `learner.go` constants
-  read the environment makes one frozen test binary serve every row.
-- A scratch run past ten minutes takes `-test.timeout 0`. A mutation that
-  deadlocks the games' order, or never ends them, hangs where it should fail:
-  run it under `timeout`, whose 124 is the test holding. The commands of a cloud
-  session share one memory limit, which games that never end fill in a minute.
-- A learner is read three ways and only two hold. Its candidates' mean over the
-  last 500 rounds is picked by no luck and tells two settings apart on six
-  seeds (1,160 to 1,283 against 918 to 1,178). The fielded member's mean over
-  held-out rounds on other seeds is what a run plays, and spans 1,652 to 1,850
-  across six seeds of one setting. The archive's own score is neither: only
-  members whose luck held are still in it, so 2,309 over twelve rounds was 1,625
-  held out, and a member fielded on two rounds scored under the weights the
-  search began from.
-- Settings are compared on a `tar` copy of the tree whose constants read the
-  environment, four runs at once. Send a run's lines to its file line-buffered
-  (`grep --line-buffered`): a container restart ends the runs and loses what a
-  pipe still held. `genetic`'s `Inject` keeps the gene slices it is handed, so a
-  test builds each learner its own population.
-- What a run fields at its stop in `cave` is the pair holding its titles then,
-  a lottery wider than a hundred rounds' luck and no measure of its learner.
-  Two learners alike past each population's fifteenth round fielded 28,511
-  apart after three million ticks on `cave`'s weights and 31,722 the other way
-  on another seed, a second hundred rounds moved ten pairs' means by 357 to
-  29,113, and from nothing six seeds put every arm over main's 4,824 where
-  twelve read level at 5,466. Read a learner's setting by the candidates'
-  recent mean, which no luck picks, by every proved member, and on six seeds
-  a start or more.
-- A rule of the learner is read as an arm: a `tar` copy whose rule reads the
-  environment and logs every scored round, with its genome's key, what drew
-  it, its member's mean and rounds after it and who holds the title. With no
-  knob set it keeps main's population bytes, and what is built keeps its
-  knob's. The runs go through a queue keyed by a done marker a run, which a
-  restart costs one run and which is reordered by stopping it as a run ends.
-- Held-out rows are a function of the genomes played: two runs fielding one
-  pair give the same rows, so a queue keeps them by the genomes, and a hold of
-  25 rounds opens with the rounds a hold of 3 plays. One member is held beside
-  another network's by populations of a member each, eight rounds apiece.
-- The trusted mean is read a round ahead, each repeat against its member's
-  mean before it, in units of the recent mean so that runs weigh alike. A
-  member's later rounds after its eighth are those of the members whose rounds
-  held up. The weight that reads level is its start's more than its
-  network's: 1.2 to 2.7 in a population played on from written weights, 5 to
-  7 from nothing, 3.3 and 3.7 over every run.
-- A title holder's own mean tells little, so count the rounds behind a title
-  before reading what it fields. A fielded `raid`'s round scores 65,000 to
-  71,000 or, lost before the first Kraken, 3,000 to 7,000, so 45 rounds carry
-  3,000 either way, and a `kraken`'s scores the cap, 306,500, or less. Giving
-  promise its turn cleared most or all of the proved members left unplayed
-  and passed `raid`'s title on 14 to 48 rounds under a rival of the highest
-  plain mean and 33 to 53 under a lighter trust weight, for 55 and 72 as
-  built: seed 1 fielded 40,445 less over 200 rounds by it, and a `kraken`
-  took its title on fifteen rounds at the cap.
-- A merge under a measurement is checked before a baseline is kept: main's
-  binary after it and before it play one seed, a game's 600,000 ticks from
-  nothing, and the same population bytes say the runs read so far are main's
-  still. A scenario's own model is a file of the merge: a start on it is read
-  again.
-- A rule of who is fielded is read inside one archive: the pair the rule
-  fields and the pair main's rule would field of the same population, a
-  hundred rounds each, differ by the rule alone, where two runs differ by
-  their search. Every proved member is held twelve rounds beside the other
-  network's most trusted, which says what a title's own measure tells: on
-  `cave`'s model the most trusted held 24,693±7,428 over the other proved,
-  the highest plain mean 12,508±10,535.
-- A rule of the title is tried on a trainer's kept populations as well as
-  from a start, a run begun on a copy of them in its fresh user root. There
-  a title and its rival hold thousands of rounds, and a rule six seeds from
-  three starts showed at work read as the learner as built, byte for byte.
-- A waiter that follows a queue by `pgrep -f` finds its own command line and
-  waits for ever: bracket a letter of the pattern (`[q]2.py plan`). A machine
-  restart ends the queue and every waiter chained behind it.
-- In `cave` an unsteered ship falls to the first raider's first charge at tick
-  144, and one that only fires at about 158. A hit pays energy and a raider's
-  touch takes 600 to 1,500 again every tick or two it lasts (2,319 to none in
-  five), so energy buys no time in a raider's cells: a policy lives by leaving
-  them. `EventCursorDefeatState` can cross `defeated` twice in one game, a hit's
-  energy lifting it inside the 250 ms before the reset, and fitness weighs each:
-  read a round by `Stats.Score`.
-- A Kraken's `Kinetic` holds no velocity: `KrakenSystem.animate` places the
-  body and zeroes `VelX` and `VelY` each tick, so a reading of them is 0 in
-  play though a test world can set them. Its motion is its `State` and target,
-  what a `landing` reads.
-- What a bot's inputs read in play is counted, not guessed: a scratch `Driver`
-  method running `network.read` under `World.RunSafe` on a probe network of
-  every input, tallied by `Driver.Stats().State`, 60,000 ticks a scenario in
-  seconds (`td` 85 s). `default` is in `Walk` 18% of the embedded scenario's
-  ticks, 90% of `cave`'s and 0.1% of `td`'s; only `armada`'s mounts fire a
-  hostile missile, and a bot alone sights no other cursor.
-- The embedded game pays about twice as much late as early: `default` earns 18
-  a tick over an unbroken 60,000 and 9.7 over five-minute rounds. Compare
-  graphs there at one round length, never a learning run's sum with an
-  unbroken run's.
-- In the embedded scenario a bot's fitness is its Krakens: `default` earns 97
-  in 100 of it as their bounty, 50,000 each, as 10,000 hit points die well
-  inside `krakenPar`, twelve a half hour. A mean of 24 half-hour rounds has a
-  standard error of 2,000 in 622,000; a round of five minutes ends before the
-  second Kraken and tells nothing. Size a learner's round to span what pays.
-- Weights learned in one scenario are tried in every scenario their graph
-  plays before they are written into it: the embedded scenario's walk turned
-  `default`'s 7,868 in `armada` into -8,304.
-- A change to a graph that looks needed is read against the graph as it stands
-  at the same round length: a state and a guard keeping `default`'s own drift
-  out of a learned walk's way fielded 696,029 where the graph as merged
-  fielded 704,339.
-- A seat fields what its player's population holds: `PlaySeat` builds the
-  learners a run in a session does. Read what a seated bot plays on a run of two
-  bots with and without the population in the user root, at `-speed 8`, as a
-  session cannot run flat out.
-- `armada` is the quick map to try a graph on: four games' 2,400,000 ticks took 15 s
-  on four cores before its stars and squadrons, which take a headless tick from 28
-  to 32 µs with nobody steering, where `td` takes 1.4 ms a tick. Try a reflex by
-  hand before asking a learner for it: backing off a threat within three cells
-  doubled `default` in `td`, and 142 rounds of learning found none of it.
 - An output added to the catalogue is asked (`outputRow.asked`): given to every
   network that lists none, `cave`'s two would grow a unit, their layouts change
   and every population of theirs start over.
+- A scenario's bots are files of the scenario, and only `default` is embedded.
+  A test reads one through `resource.LoadScenario` and `Scenario.Bot`. A copy
+  of the name in a root's `bot/` plays in its place. A harness built earlier
+  refuses a scenario whose entry has a key it does not know: run it on a copy
+  of `wad/` taken before the change.
 - The scenario machine takes an event before any system handles it
   (`Scheduler.dispatchOnePass`), so a transition on an event reads the status
   keys as they stood: guard it on the world (`PayloadCursorDecides`), not on a
   key the event is about to move.
 - Whether a bot plays a run reaches its replay only by the session latch's note
-  (`SessionState.Bot`). `drive` with kind "bot", so `driveBot`, marks its run a
-  bot's; `playBot` and a bare `NewHeadless` with a driver do not, and a harness
-  built so holds a person's cursor, whose defeat ends its game as before.
-- A gameplay change is held against `cave`'s own bot learning alone, before
-  and after on one seed: 200,000 ticks of it are 81,549 actions and a fitness
-  of 1,838,475 on seed 1, which a trainer's populations rest on.
+  (`SessionState.Bot`). `drive` with kind "bot" marks its run a bot's;
+  `playBot` and a bare `NewHeadless` with a driver do not, and a harness built
+  so holds a person's cursor, whose defeat ends its game.
+- A seat fields what its player's population holds: `PlaySeat` builds the
+  learners a run in a session does. Read what a seated bot plays on a run of two
+  bots with and without the population in the user root, at `-speed 8`, as a
+  session cannot run flat out.
+- Compare graphs at one round length: the embedded game pays about twice as
+  much late as early. Weights learned in one scenario are tried in every
+  scenario their graph plays before they are written into it, and a reflex is
+  tried by hand, as a state, before a learner is asked for it. `armada` is the
+  quick map to try a graph on.
 - A bar a model must clear is set in standard errors read from its rows, not
-  in points. A round of `cave`'s model of 300,260 spreads 134,733 and one of
-  341,701 spreads 92,217, so 15,000 on each of two sets of 400 rounds passed a
-  real gain of 10,000 one time in eleven before and one in twenty after.
-- The embedded scenario is the cheap one to read: a round of half an hour is
-  six seconds of a core, pays by its Krakens in steps of 50,000 and spreads
-  19,000 to 20,000, unlearned or learned, so 100 rounds a side tell 90,000
-  apart at over thirty standard errors.
+  in points.
 - A bot that falls where it typed well has `typing.errors` to read, beside its
-  heat and energy every few hundred ticks and what it sent each tick before
-  an error. `default` fell faster the more actions it had because its graph's
-  region `fire` updated ahead of `play`, regions going in name order, so a
-  special attack went out before the key of its step and blew up the key's
-  glyph. The remedy was the graph's, a region's name: the game was right.
-- A proved member's mean over a few rounds says nothing of it held out. Twelve
-  of `cave`'s whose means over 8 to 37 rounds stood 2 to 26 in 100 above their
-  titles read level or lower beside the shipped other network, one 85,159
-  under: hold a member alone, in a population file of its own, before
-  calling it promising.
-- A network's input set is read by learning from nothing on three seeds a
-  scenario and by the candidates' recent mean beside what is fielded: in the
-  fixed-shooter `armada` three fielded members of one set ran from 6,489 to
-  50,826, and the recent mean told seventeen inputs from 161 at 8,850 for
-  2,650.
-- A hold reads the graph file it names as its process starts. One queued behind
-  others on a file of the checkout failed once that document changed: a chain
-  holds copies.
+  heat and energy every few hundred ticks and what it sent each tick before an
+  error. Regions update in name order, which decides what a step sends first.
+- In `cave` a ship that does not steer falls at tick 144 and one that only
+  fires at about 158: rounds that all end there steer nothing. A defeat is
+  energy and heat both at nothing, so a lost round ends at heat 0: read what
+  its blasts left by what the round had, 10 and its loot, less its blasts.
+  `explosion.triggered` counts the cells blasted, reset each game. A Kraken's
+  `Kinetic` holds no velocity in play: its motion is its `State` and target.
+  A Kraken policy is read by fights won of those met.
+- A hold reads the graph file it names as its process starts: one queued
+  behind others on a file of the checkout fails once that file changes, so a
+  chain holds copies. A script a background arm is running is replaced by a
+  rename, never edited in place: bash reads a script as it goes.
+- A cloud machine restarts, ending the run in flight and whatever `nohup` had
+  started, and nothing runs between a session's turns. Queue runs by a done
+  marker a run, so a restart costs one, play them at `nice -n 19`, send each
+  run's lines to its file line-buffered, and chain a long run as legs, each on
+  the populations the last kept. A waiter that follows a queue by `pgrep -f`
+  finds its own command line: bracket a letter of the pattern.
 - A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`:
   keep it out of commits (`.git/info/exclude`) and out of a search
   (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd`
   into the worktree moves the shell there.
-- Heat is what stands between an empty shield and a defeat in `cave`, a touch
-  taking 6 to 15 of it, and the special attack costs one: auto-fire `on` spends
-  the 10 a game starts with in its first seconds, on blasts wherever dust lies.
-  The same weights score 1,644 a round with it and 2,406 on `main`. A special
-  costs its heat only where it blasts, and it first turns every dark glyph the
-  player owns to dust anywhere on the map, at no distance from the ship, so in
-  the first cave nearly every one blasts 200 to 240 cells of the 256 a blast
-  holds, a screen clear. `explosion.triggered` counts those cells and a
-  missile's explosions, reset each game. A defeat is energy and heat both at
-  nothing, so a lost round ends at heat 0: read what blasts left by what a
-  round had, 10 and its loot, less its blasts.
-- `cave`'s Kraken covers its body and its legs, 30 cells long at rest, 42 on a
-  charge and 70 striking, rows counted twice, and its touch takes 10,000 energy a
-  tick: weights that hold a raider's standoff, 28 cells, lose 50,000 in six
-  ticks. Its charge ends on the cell the ship stood on as it began to spin, so
-  weights that leave that cell leave where the ship already is. A Kraken policy
-  is read by fights won of those met, 300 of them in 400 rounds over four seeds,
-  three points either way.
-- A network's inputs name every one of a kind its scenario can field, `cave`'s
-  three raiders and their three landings: the nearest two drop one for no reason
-  its charge knows, and the learner is scored on what it could not see. Leave
-  out only what play never steers by, as loot, which homes on the ship.
-- A learner that masters a phase makes its rounds long. Within a hundred of
-  `kraken`'s candidates a run finds the hop from the edge the Kraken's charge
-  heads for to the far one, and a round goes from 7,300 ticks to 60,000 and,
-  before the graph's `round_seconds`, past 500,000: the Kraken's hit points
-  double each time. Give a learning run ticks, not rounds,
-  cap its held-out rounds at the graph's limit as the run would, and read the
-  spread with the mean, which a few long rounds carry.
-- A round in `cave` snowballs: a ship that outlives the first cave has its gun
-  raised and 50,000 energy, so weights drawn at random have shot down three
-  Krakens within a population's first thousand rounds and a round's score runs
-  from 150 to 10,000 before anything is learned. `Resources.Cave.Steps` is the
-  columns a tick scrolled, one in the first cave, one or two in a rush and none
-  while a Kraken is up, which is the distance a round scores.
 - valgrind's callgrind counts the instructions one function runs
   (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
   tells a build that does more work from one laid out differently (Position's
