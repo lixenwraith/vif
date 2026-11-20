@@ -516,15 +516,24 @@ func (r *Router) rememberFind(intent *input.Intent, result MotionResult) {
 	}
 }
 
-// repeatFind makes the last find again from the cursor, or its reverse
-func (r *Router) repeatFind(reverse bool) {
+// repeatFind makes the last find again from the cursor, count times, or its
+// reverse. A till the cursor already stands against goes on to the next target, as
+// vim's ; and , do with a count of one, so ; after t is never stuck.
+func (r *Router) repeatFind(count int, reverse bool) {
 	op := r.lastFind
 	if reverse {
 		op = reverseFind[op]
 	}
-	if pos, ok := r.ctx.World.LocalCursor(); ok && op != input.MotionNone {
-		OpMove(r.ctx, r.charLUT[op](r.ctx, pos.X, pos.Y, 1, r.lastFindChar))
+	pos, ok := r.ctx.World.LocalCursor()
+	if !ok || op == input.MotionNone {
+		return
 	}
+	count = max(count, 1)
+	result := r.charLUT[op](r.ctx, pos.X, pos.Y, count, r.lastFindChar)
+	if till := op == input.MotionTillForward || op == input.MotionTillBack; till && !result.Valid && count == 1 {
+		result = r.charLUT[op](r.ctx, pos.X, pos.Y, 2, r.lastFindChar)
+	}
+	OpMove(r.ctx, result)
 }
 
 // rowEnd is the range D, C and an operator's $ take: from the cursor to its row's
@@ -767,10 +776,10 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 		}
 
 	case input.SpecialRepeatFind:
-		r.repeatFind(false)
+		r.repeatFind(intent.Count, false)
 
 	case input.SpecialRepeatFindRev:
-		r.repeatFind(true)
+		r.repeatFind(intent.Count, true)
 	}
 	return r.handleModeSwitch(intent)
 }

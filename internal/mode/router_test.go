@@ -659,3 +659,30 @@ func TestDeletingToTheRowsEndNeverReachesBack(t *testing.T) {
 		}
 	}
 }
+
+// TestARepeatedFindTakesItsCountAndPassesATillsTarget: ; and , repeat the last find
+// a count of times, and a till the cursor already stands against goes on to the
+// next target, as vim's do, so ; after t never sticks.
+func TestARepeatedFindTakesItsCountAndPassesATillsTarget(t *testing.T) {
+	for _, c := range []struct {
+		keys string
+		at   int
+	}{
+		{"fx;", 3},
+		{"fx2;", 5},
+		{"fx3;,", 5},
+		{"tx", 1},
+		{"tx;", 2},
+		{"tx;;", 4},
+		{"tx2;", 2},
+		{"$Tx;", 6},
+		{"$Tx,", 8},
+		{"$Tx2;", 6},
+	} {
+		ctx, keys := lineWorld(t, "a xx x x x", 0)
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); pos.X != c.at {
+			t.Errorf("%q on \"a xx x x x\" left the cursor at %d, want %d", c.keys, pos.X, c.at)
+		}
+	}
+}
