@@ -611,7 +611,8 @@ The newest replaces the one shown, except that a lower kind does not displace an
 alert or an announcement younger than its minimum, and each leaves after its
 kind's wall time. A goal is held apart (`Held`): the bar shows the message, else
 the prompt a game waiting for its start stands with (`RenderContext.Prompt`),
-else the goal, until the next goal or a new game. Its
+else the goal, until the next goal or a new game; under the start screen, whose
+button asks, neither. Its
 colors come from one palette per color mode: the theme's in truecolor, and in an
 emulator in 256 colors through xterm's cube, labelled 256; on a text console fixed
 entries, each apart from the items beside it and with the text that reads best on it. The audio state is a letter: X muted, S sfx, M music,
