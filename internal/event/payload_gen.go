@@ -807,6 +807,7 @@ func (p *GlyphLinePayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecGlyphLinePayload = structCodec{size: unsafe.Sizeof(GlyphLinePayload{}), fields: []field{
 	{off: unsafe.Offsetof(GlyphLinePayload{}.Text), kind: kindString},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Accent), kind: kindString},
 	{off: unsafe.Offsetof(GlyphLinePayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GlyphLinePayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GlyphLinePayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.GlyphType(0))},

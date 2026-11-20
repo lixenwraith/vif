@@ -29,6 +29,10 @@ const (
 	// look through it. Read on glyph paths only, as ProtectAll holds it
 	ProtectFromTyping
 
+	// ProtectFromSplash keeps the magnifier off a glyph a scenario laid to be read,
+	// where it finds room clear of them. Read on glyph paths only, as ProtectAll holds it
+	ProtectFromSplash
+
 	// ProtectAll makes an entity immune to every protected mechanic and lets it
 	// survive a level clear; World.DestroyEntity does not check it, so its callers must
 	ProtectAll ProtectionFlags = 0xFF

@@ -26,6 +26,7 @@ import (
 	"github.com/lixenwraith/vif/internal/render/renderer"
 	"github.com/lixenwraith/vif/internal/resource"
 	link "github.com/lixenwraith/vif/pkg/network"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // A tutorial lesson clears itself as it exits and the next lays its own text, with
@@ -221,10 +222,10 @@ func TestTheVimKeymapPlaysTheKeysTheTutorialTaught(t *testing.T) {
 }
 
 // Each lesson on an edit ends on the keys it asks for, played through the real
-// systems: a delete by motion, the Insert entries, a change, a retype, a repeat
-// with its Insert text, a yank and its puts, an undo and redo, which take back no
+// systems: a delete by motion, the Insert entries a step each, a change, a retype,
+// a delete repeated, a yank and its puts, an undo and redo, which take back no
 // earlier lesson's change, the word searches, a mark and Visual, whose lesson alone
-// raises the shield its d takes a block under. One that ends typing waits for esc.
+// raises the shield its d takes a block under. A step that ends typing waits for esc.
 func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -250,13 +251,16 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 		{"ssssss", "DeleteMotion"},
 		{"dwfxD", "Insert"},
 		{"s", "Append"},
-		{"A}\x1bI{\x1bj^a>", "AppendEsc"},
+		{"Ad", "AppendEnd"},
+		{"\x1bIf", "AppendFirstEnd"},
+		{"\x1bao", "AppendEsc"},
 		{"\x1b", "Open"},
-		{"obelow\x1bkOabove", "OpenEsc"},
+		{"ob", "OpenEnd"},
+		{"\x1bOa", "OpenEsc"},
 		{"\x1b", "Change"},
 		{"cw\x1bjcc", "Replace"},
 		{"fzrsfS5~", "Repeat"},
-		{"Ino\x1bj.j.", "Yank"},
+		{"dwj.j.", "Yank"},
 		{"yypddp", "Undo"},
 		{"u", "Undo"},
 		{"ddu\x12", "Bracket"},
@@ -290,9 +294,9 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 	}
 }
 
-// A lesson waiting on a typed glyph, its line's last, also moves on when a delete of
-// any shape takes it, so a glyph gone another way never strands it: a typo's Space,
-// an x or a dd, and a delete repeated with ., which clears no as I no does.
+// A lesson waiting on a typed glyph also moves on when a delete of any shape takes
+// it, so a glyph gone another way never strands it: a typo's Space, an x or a dd,
+// and whatever delete . repeats down the lines.
 func TestTutorialsTypingLessonsEndHoweverTheirGlyphsGo(t *testing.T) {
 	for _, c := range []struct{ lesson, keys, want string }{
 		{"Insert", "itypo me\x1bj^ithen me\x1b", "Append"},
@@ -669,6 +673,45 @@ func TestTutorialsGoalsFitTheStatusLine(t *testing.T) {
 	}
 	if goals == 0 {
 		t.Fatal("the tutorial posts no goal; the check passed vacuously")
+	}
+}
+
+// At the tutorial's own size the magnifier covers no glyph a lesson laid: its notes
+// keep to 62 columns, which leaves the map's right clear, and the letter shown
+// large beside the cursor hides nothing the lesson says.
+func TestTutorialsMagnifierStandsClearOfItsText(t *testing.T) {
+	a := newTutorial(t, 80, 24)
+	w := a.World()
+	width, height := asset.SplashFaces[component.SplashLarge].Cells(1)
+	stood := 0
+	for range 30 {
+		state := tutorialState(a)
+		if state == "Free" {
+			break
+		}
+		w.RunSafe(func() {
+			for _, e := range w.Components.Splash.Entities() {
+				splash, _ := w.Components.Splash.GetComponent(e)
+				if splash.Slot != component.SlotMagnifier {
+					continue
+				}
+				stood++
+				for y := splash.AnchorY; y < splash.AnchorY+height; y++ {
+					for x := splash.AnchorX; x < splash.AnchorX+width; x++ {
+						for _, held := range w.Positions.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll) {
+							if w.Components.Glyph.HasEntity(held) {
+								t.Errorf("%s: the magnifier at %d, %d covers the lesson's glyph at %d, %d", state, splash.AnchorX, splash.AnchorY, x, y)
+								return
+							}
+						}
+					}
+				}
+			}
+		})
+		tutorialKeys(t, a, "s")
+	}
+	if stood < 15 {
+		t.Fatalf("the magnifier stood in %d lessons; the check passed over most of them", stood)
 	}
 }
 

@@ -16,6 +16,7 @@ p = "put_after"            # the game's: pause, which Ctrl-Z is here
 P = "put_before"
 u = "undo_change"          # the game's: undo a cursor move, which Ctrl-O is here
 m = "mark_set"             # the game's: the middle column, which gm is here
+y = "operator_yank"        # the game's: nothing, as no key there puts what it yanks
 "`" = "mark_jump"          # the game's: the console, which :console opens
 H = "motion_screen_top"    # the map's top row; the game's: half a page left
 L = "motion_screen_bottom" # the map's bottom row; the game's: half a page right

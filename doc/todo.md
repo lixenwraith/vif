@@ -1235,27 +1235,22 @@ Two rules were weighed against the window and not taken:
   live one whose link is half open, and the old relay's late notice then retires
   the returned player again.
 
-### Refuse a combat crossing that acts as another cursor or emitter
+### Hold a crossing's content to what its sender could mean
 
 - Priority: P1
-- Affected files: `internal/system/network.go` (`crossingActors`,
-  `admissibleFromSource`), `internal/system/combat.go` (`applyHitDirect`,
-  `applyHitArea`), `internal/app/correction_test.go`
+- Affected files: `internal/system/network.go` (`crossingRules`),
+  `internal/system/death.go` (`processBatch`), `internal/system/combat.go`
+  (`applyHeal`, `applyHitDirect`, `applyHitArea`)
 - Guide: [Multiplayer §2](multi-player.md#2-current-contract) (Trust)
 
-`crossingActors` holds no row for `EventCombatAttackDirectRequest`, so a modified
-participant's rod, tracer or bullet hit may name another participant's cursor as
-its `OwnerEntity`: every instance then spends that cursor's immunity allowance
-against the target (its own hits are refused for the window), credits it the kill,
-and its own instance pays it the drain reward. Neither combat crossing checks
-`OriginEntity`, the area crossing's row reading the owner alone, yet both resolve
-the attacker's profile from it: an area crossing naming an eye with
-`CombatAttackSelfDestruct` deals the eye's 5 against a Shared species where a
-cursor weapon deals 1. Every legitimate combat crossing names its own cursor as
-both, since a Player-domain emitter is never named and a Shared one (an eye, a
-mount) never crosses. What would close it: a row for the direct request on its
-owner, and on both requests an emitter that is zero or the owner; a refusal test
-for each beside the `network.artifacts_refused` ones.
+A crossing's type, tag and author are checked where it applies; what it names
+inside that is not. A modified participant's `EventDeathBatch` lists any entity a
+death is not kept from, a species among them, whose end every instance then
+derives and a scenario's machine moves on; its `EventCombatHealRequest` names any
+live target and any amount, and its `EventSpeciesLandRequest` any species and
+cell. What would close it: each receiver holding a batch to the gold members
+under its sender's drain, a heal to a drain's hit points, and a landing to a
+fusion its sender was elected for.
 
 A crossing's target is an entity number too, its producer's: an instance that
 applied an arrival late allocates the cursor after what the others allocated

@@ -226,14 +226,15 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   nothing ([Gameplay §3](gameplay.md#3-typing-rules)).
 - **Delete.** `x` takes the glyph under the cursor and `X` the one left of it,
   stepping there, a count that many.
-- **Yank and put.** `y` with a motion and `yy` fill the register with the glyphs
-  the range covers, each with its rune, colour and level, and delete nothing;
+- **Yank and put.** `operator_yank` with a motion, or doubled for its row, fills
+  the register with the glyphs
+  the range covers, each with its rune, colour and level, and deletes nothing;
   every delete fills it too, as vim's unnamed register. `put_after` lays a span
   from the cell right of the cursor and `put_before` one ending at the cell left
   of it, yanked rows on the rows below and above, a count that many copies on. A
   cell a glyph, a wall or rock holds is passed over, and the cursor goes to the
   far end of what was put, where a repeat continues. `p` pauses, so no default key
-  binds either.
+  binds a put, nor then a yank, which nothing there would put.
 - **Change undo.** `undo_change` takes back the last delete, retype or put and
   `redo_change` makes it again, one a press, from the last `changeHistorySize`
   (64); a new change ends what could be redone. A change whose cells changed
@@ -307,7 +308,8 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   glyph that way; the direction key again (`gll`) jumps to the nearest of any colour.
 - **Editing.**
   - `d` + motion, `dd`: delete the motion's range, the current row; `c` + motion,
-    `cc`: the same, then Insert; `y` + motion, `yy`: yank it.
+    `cc`: the same, then Insert; `y` + motion, `yy`, where a keymap binds `y`:
+    yank it.
   - `x`, `X`, `D`, `C`: delete the current glyph, the one left of it, through the
     row's end, through the row's end then Insert; `s`, `S`: the current glyph, the
     row, then Insert.
@@ -322,7 +324,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   a keymap or a scenario binds, as the vim keymap does (§10): `mode_append` (`a`), `mode_open_below` and
   `mode_open_above` (`o`, `O`), `put_after` and `put_before` (`p`, `P`),
   `undo_change` and `redo_change` (`u`, Ctrl-R), `mark_set` (`m`) and `mark_jump`
-  (the backtick).
+  (the backtick); and `operator_yank` (`y`), which a game leaves unbound.
 
 The implementation is Vim-inspired, not an attempt to reproduce every Vim
 edge case. Commands operate on the two-dimensional game grid and delete glyph
@@ -700,7 +702,7 @@ own way goes back to vim wherever vif has vim's action for it, so any game plays
 on the keys the tutorial taught. It names only what differs from the built-in
 table and says `fill = false`:
 
-- **Normal.** `a`, `o`, `O`, `p`, `P`, `u`, `m` and the backtick take the actions
+- **Normal.** `a`, `o`, `O`, `p`, `P`, `u`, `m`, `y` and the backtick take the actions
   of §4's last item. `H` and `L` are the map's top and bottom rows, as `M` is its
   middle; `J` and `K`, by which vim joins lines and looks a word up, are unbound.
 - **Control keys.** `Ctrl-R` redoes a change, `Ctrl-D` and `Ctrl-U` move half a

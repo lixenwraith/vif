@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -127,6 +128,25 @@ func TestEventClassMatchesSystemProfile(t *testing.T) {
 			strings.Join(bad, "\n  "))
 	}
 	t.Logf("checked %d system/event pushes against the class table", checked)
+}
+
+// TestEveryCrossingASystemPushesHasItsRule: a peer's artifact of a type with no
+// row in crossingRules is refused wherever it applies, so a crossing added to the
+// D-3 table without one would cross and apply nowhere.
+func TestEveryCrossingASystemPushesHasItsRule(t *testing.T) {
+	event.EnsureRegistry()
+	names := slices.Collect(maps.Values(crossingHelpers))
+	for key := range crossingPushes {
+		_, name, _ := strings.Cut(key, ":")
+		names = append(names, name)
+	}
+	for _, name := range names {
+		if et, ok := event.GetEventType(name); !ok {
+			t.Errorf("%s is no event the registry knows", name)
+		} else if _, ruled := crossingRules[et]; !ruled {
+			t.Errorf("%s crosses and has no row in crossingRules: every instance would refuse it", name)
+		}
+	}
 }
 
 // TestCrossingPushesAreLive fails on an entry no longer describing real code, and
