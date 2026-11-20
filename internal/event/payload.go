@@ -288,6 +288,18 @@ type FSMTransitionPayload struct {
 	Then []FSMHop `toml:"then,omitempty"`
 }
 
+// FSMTransitionRequestPayload asks the authority for one transition a local event
+// triggered where its player plays (D-20): the asker judged its guard, and the
+// authority takes it only as Machine.Grant allows. Trigger is that event, and Vars
+// the fields it captured there.
+type FSMTransitionRequestPayload struct {
+	Vars    []FSMVar  `toml:"vars,omitempty"`
+	Region  string    `toml:"region"`
+	Owner   int       `toml:"owner"`
+	Index   int       `toml:"index"`
+	Trigger EventType `toml:"trigger"`
+}
+
 // FSMHop is one transition of a folded chain: the state owning it and its index.
 type FSMHop struct {
 	Owner int `toml:"owner"`
