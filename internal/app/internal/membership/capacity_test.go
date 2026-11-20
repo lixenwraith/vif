@@ -124,7 +124,7 @@ func TestASessionsOnePlaceWaitsForItsOwnPlayer(t *testing.T) {
 		wiring: &Wiring{}, life: lifecycle.New(lifecycle.Policy{}), awayOrder: []link.PeerID{2},
 		sessionRoster: []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: parameter.NoPlayerSlot},
 			{ID: 2, Slot: 0, Away: true, Key: key}}}
-	if !m.MayYield() {
+	if !m.PlaceWaits() {
 		t.Fatal("a one-place session whose player left reads as seating no dial; its door takes that player back")
 	}
 	for range 2 {

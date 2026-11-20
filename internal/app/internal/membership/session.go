@@ -267,9 +267,9 @@ func (m *Membership) PlayersFit(sc resource.Scenario) error {
 func (m *Membership) noteJoinerReport(id link.PeerID, report network.JoinerReport) error {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	// A bot's own run is refused here as a seat is where it is added
+	// A bot's own run is refused here as a seat is where it is added, for good
 	if err := botRefused(*m.scenario); err != nil && (report.Bot || report.Holder != 0) {
-		return err
+		return &network.Refusal{Code: network.RefusalNoSeat, Reason: err.Error()}
 	}
 	if report.Holder != 0 {
 		i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == report.Holder })
@@ -1243,11 +1243,11 @@ func (m *Membership) yieldLocked() bool {
 	return true
 }
 
-// MayYield reports whether a full session's door still seats a dial on the place of
-// a participant away and not coming back: its own player's, as a reloaded page dials
-// back to it, and past a session's one place a newcomer's, which that place is given
-// up to. What the readiness probe reads beside the room left (previewSeat).
-func (m *Membership) MayYield() bool {
+// PlaceWaits reports whether a place waits for a participant away and not coming
+// back, which a full session's door still seats a dial on: its player's, as a
+// reloaded page dials back with, and past a session's one place a newcomer's. What
+// the readiness probe reads beside the room left.
+func (m *Membership) PlaceWaits() bool {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	return m.awayPlaceLocked()

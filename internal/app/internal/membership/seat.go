@@ -160,7 +160,7 @@ func botRefused(sc resource.Scenario) error {
 	if sc.MaxPlayers > 1 {
 		return nil
 	}
-	return &network.Refusal{Code: network.RefusalNoSeat, Reason: "scenario " + sc.Shown() + " seats one player, so no bot joins it"}
+	return fmt.Errorf("scenario %s seats one player, so no bot joins it", sc.Shown())
 }
 
 // addSeatLocked seats one bot playing spec. The graph is parsed here, so a name that
