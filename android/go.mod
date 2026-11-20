@@ -3,14 +3,14 @@ module github.com/lixenwraith/vif/android
 go 1.27.4
 
 require (
-	github.com/lixenwraith/terminal v0.7.2
+	github.com/lixenwraith/terminal v0.7.4
 	github.com/lixenwraith/vif v0.0.0
 )
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/lixenwraith/ascimage v0.1.0 // indirect
-	github.com/lixenwraith/audio v0.32.0 // indirect
+	github.com/lixenwraith/ascimage v0.1.2 // indirect
+	github.com/lixenwraith/audio v0.34.0 // indirect
 	github.com/lixenwraith/auth v0.5.3 // indirect
 	github.com/lixenwraith/color v0.1.5 // indirect
 	github.com/lixenwraith/genetic v0.4.0 // indirect

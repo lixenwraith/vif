@@ -3,14 +3,14 @@ module github.com/lixenwraith/vif
 go 1.27.4
 
 require (
-	github.com/lixenwraith/ascimage v0.1.0
-	github.com/lixenwraith/audio v0.32.0
+	github.com/lixenwraith/ascimage v0.1.2
+	github.com/lixenwraith/audio v0.34.0
 	github.com/lixenwraith/auth v0.5.3
 	github.com/lixenwraith/color v0.1.5
 	github.com/lixenwraith/genetic v0.4.0
 	github.com/lixenwraith/log v0.1.19
-	github.com/lixenwraith/terminal v0.7.2
-	github.com/lixenwraith/terminal/window v0.7.2
+	github.com/lixenwraith/terminal v0.7.4
+	github.com/lixenwraith/terminal/window v0.7.4
 	github.com/lixenwraith/toml v0.10.0
 	golang.org/x/sys v0.50.0
 )
