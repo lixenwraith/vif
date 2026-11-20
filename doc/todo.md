@@ -887,6 +887,17 @@ since it spells them. What it costs, and what it does not reach:
   removes only sensitive data that rotating a credential cannot make safe, so it
   will not purge them. PR titles and bodies are edited on GitHub by hand.
 
+### Put the font's licence beside the page
+
+- Priority: P2
+- Affected files: `Makefile` (`page`), `.gitignore`
+
+`make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which only
+the release workflow's web archive carries, so a deployment of `web/` serves
+Hack's web font, inside `vif.wasm`, without its licence. Closes with `page`
+installing the terminal module's `atlas/LICENSE` as `$(PAGE_DIR)/LICENSE.font`,
+which `.gitignore` takes as it takes the page's scripts.
+
 ### Wrap and scroll the About window
 
 - Priority: P2
