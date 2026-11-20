@@ -255,11 +255,14 @@ Docs · Libraries · Branches.
   transition whose entry emits one, can be lost, refused or left behind a hold. Two
   resets settled in one tick advance the run twice, so the tick that leaves a run
   applies nothing else, and a new path to a reset is checked against that.
-- A new bus crossing whose payload names its producer's cursor or slot adds a row to
-  `crossingActors` (`internal/system/network.go`); without one, a misbound or
-  modified participant can act as another's cursor through it.
-- A crossing only the authority may make joins the list in `admissibleFromSource`,
-  and `barrierBound` when it sets shared state from one tick on; with no payload it
+- A new crossing type adds a row to `crossingRules` (`internal/system/network.go`),
+  naming its author and, where its payload names its producer's cursor or slot, the
+  reader of it: with no row every instance refuses it, its producer's own included
+  (`TestEveryCrossingASystemPushesHasItsRule`). A peer's frame is also held to the
+  tag a producer stamps, Player on a Bus type and Shared on a Stamped one, so a
+  frame a test builds by hand carries it.
+- A crossing only the authority may make is `byAuthority` there, and joins
+  `barrierBound` when it sets shared state from one tick on; with no payload it
   needs no codec (`crossSession(et, nil)`). A new event type moves the number of
   every one declared after it, so it takes the next `network.ProtocolVersion` and
   `event.JournalSchema`.
@@ -431,6 +434,9 @@ Docs · Libraries · Branches.
 - A Bus request applies on every instance, its sender's included, so what only
   the authority does with one is gated where the handler runs
   (`Scheduler.grantTransition`), never by who receives it.
+- Code that traces a refusal inside `admissibleFromSource` takes no lock of the
+  network system's: `eachRosterScheduled` calls it with `mu` held, and a tracer
+  that read `participantID` there hung a test for its whole timeout.
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks
   past that reads the reset. Wait for the condition, bounded.
@@ -785,6 +791,16 @@ Docs · Libraries · Branches.
 
 ## Glyphs and widgets
 
+- `Positions.TopGlyphAt` passes over scenery, as typing does: a check of what a
+  cell holds, a lesson's notes among it, reads `Occupants`. A glyph of type gold
+  is drawn only as a gold composite's member, so a line laid gold shows nothing.
+- The magnifier's box is twelve cells square and stands 25 cells or more from the
+  cursor: beside it, the box needs six rows above the cursor's and five below, so
+  on the tutorial's 20 rows it clears a lesson's text only at the map's right, and
+  only where that text ends by column 65 and the heading's box by column 63
+  (`TestTutorialsMagnifierStandsClearOfItsText`).
+- No default key yanks: a router test binds `y` with `vimKeys`, an input test on
+  its machine's own table.
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML must be
   one the terminal module's atlas holds (`atlas.Hack()`), and only
   `go test ./internal/asset`, a package the change never touches, catches it. A

@@ -617,14 +617,14 @@ a short `description` for scenario listings.
 
 `tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
-lesson lays its heading in the small splash face, three or four lines that explain
+lesson lays its heading in the small splash face, up to five lines that explain
 and a practice line or block, stands the cursor on it, prompts on the status bar
 and waits for the result, the cursor on a cell, an edit or a glyph typed; `s`
 skips a lesson and `S` goes back one. Its twenty-two lessons run from `h j k l`
 through the motions, counts, deletes, Insert and its entries, changes, retypes,
 `.`, the register, change undo, searches and marks to Visual, whose lesson alone
 raises the shield, and end on what a game makes of the keys its `[keymap]` gave
-back to vi: `a`, `p`, `P`, `o`, `O`, `u`, Ctrl-R and `m`
+back to vi: `a`, `p`, `P`, `o`, `O`, `u`, Ctrl-R, `m` and `y`
 ([Input §10](input-and-modes.md#10-keymap-override-files)). `s` then opens free
 practice on the scenario's own corpus: code laid in blocks, so `%` finds a
 bracket's pair across rows ([Tutorial](tutorial.md)).

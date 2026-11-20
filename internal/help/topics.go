@@ -82,7 +82,7 @@ var topics = []topicDef{
 			{Keys: "c{motion}  cc", Desc: "Delete as d{motion} and dd do, then INSERT, e.g. ce, c2w; cw stops at its word's last glyph"},
 			{Actions: []string{"special_change_to_end"}, Desc: "Delete to the end of the row, then INSERT"},
 			{Actions: []string{"special_substitute_char", "special_change_line"}, Desc: "Delete the glyph under the cursor, and the row, then INSERT"},
-			{Keys: "y{motion}  yy", Desc: "Yank over a motion, or the row, into the register; every delete fills it too"},
+			{Actions: []string{"operator_yank"}, Suffix: "{motion}", Desc: "Yank over a motion, or doubled the row, into the register; every delete fills it too"},
 			{Actions: []string{"put_after", "put_before"}, Desc: "Put the register after and before the cursor, rows below and above it; a cell already held is passed over"},
 			{Actions: []string{"char_replace"}, Suffix: "{c}", Desc: "Retype the glyph under the cursor as c, a count that many; it scores nothing"},
 			{Actions: []string{"special_toggle_case"}, Desc: "Flip the case of the glyph under the cursor and move on, a count that many"},

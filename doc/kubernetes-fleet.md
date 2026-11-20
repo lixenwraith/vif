@@ -108,10 +108,14 @@ What bounds a stranger:
   `NetworkLinkDeadAfter` (5 s) without a frame;
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
   peer can make the host reserve memory by asking;
-- `admissibleFromSource`, which refuses roster-creating crossings from anyone but
-  the coordinator, any participant's crossing or cursor sync that acts as
-  another participant's cursor, and a machine transition asked for by one that
-  holds no cursor, which `Machine.Grant` then takes only as D-20 allows;
+- `admissibleFromSource`, which applies a peer's artifact only if its type is one
+  a producer sends, tagged as it sends it (`crossingRules`, `event.Crosses`),
+  never a Shared or Local event made to look applied. It refuses a roster change,
+  a reset, a hold, a rate, a machine transition or a spawn from anyone but the
+  coordinator, a crossing or cursor sync that acts as another participant's
+  cursor, a combat hit whose owner and emitter are not its sender's cursor, and a
+  machine transition asked for by one that holds no cursor, which `Machine.Grant`
+  then takes only as D-20 allows, never a `Tick` one;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
 - fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer

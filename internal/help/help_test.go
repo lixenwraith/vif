@@ -11,7 +11,6 @@ import (
 var documentedByLiteral = map[string]string{
 	"operator_delete":     "EDITING d{motion}",
 	"operator_change":     "EDITING c{motion}",
-	"operator_yank":       "EDITING y{motion}",
 	"prefix_g":            "MOVEMENT gg and the g-prefixed motions",
 	"prefix_macro_play":   "MACROS @{a-z}",
 	"macro_record_toggle": "MACROS q{a-z}",
@@ -46,6 +45,7 @@ var unboundByDefault = map[string]string{
 	"undo_change":     "u undoes a cursor move",
 	"redo_change":     "undo_change has no key",
 	"mark_set":        "m is the middle column",
+	"operator_yank":   "no key of a game's puts what it yanks",
 	"mark_jump":       "the backtick opens the console",
 }
 

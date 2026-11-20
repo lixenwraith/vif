@@ -823,6 +823,10 @@ glyphs from a cell, left to right, as the corpus's lines are laid: cropped at th
 map's right edge, dropped whole where it meets a wall, rock or glyph, laid under a
 cursor or an effect, in `type` and `level` (dark green when unset), and
 `scenery = true` makes it part of the map that nothing types or deletes.
+`accent` names a mark the text brackets the runes it calls out with, as
+`"|dw| a word"` with `accent = "|"`: they are laid bright white and the mark takes
+no cell. A laid line is text to read, which the magnifier keeps off where it has
+room.
 `EventGlyphClearRequest { x, y, width, height }` removes the player glyphs in a
 rectangle at once and without an effect, every one for an empty rectangle, so a
 lesson leaves no dust behind: dust-all turns text into dust that orbits the cursor

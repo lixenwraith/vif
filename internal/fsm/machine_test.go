@@ -405,6 +405,7 @@ on_enter = [{ action = "EmitEvent", event = "EventStrobeRequest" }]
 transitions = [
     { trigger = "EventModeChanged", target = "C" },
     { trigger = "EventSpeciesKilled", target = "C" },
+    { trigger = "Tick", target = "C", guard = "StateTimeExceeds", guard_args = { ms = 600000 } },
 ]
 [states.C]
 `
@@ -508,11 +509,12 @@ func TestAnAuthorityGrantsOnlyALocalEventsTransitionWhereItsRegionStands(t *test
 	unknown.Region = "none"
 	for name, p := range map[string]*event.FSMTransitionRequestPayload{
 		"a state the region left":        typed,
-		"an index past the state's":      ask(b, 2, event.EventModeChanged),
+		"an index past the state's":      ask(b, 3, event.EventModeChanged),
 		"a negative index":               ask(b, -1, event.EventModeChanged),
 		"a state the graph lacks":        ask(-4, 0, event.EventModeChanged),
 		"a region that is not running":   unknown,
 		"a shared event's transition":    ask(b, 1, event.EventSpeciesKilled),
+		"a Tick transition":              ask(b, 2, event.EventNone),
 		"another trigger than its own":   ask(b, 0, event.EventCharacterTyped),
 		"a variable it does not capture": ask(b, 0, event.EventModeChanged, event.FSMVar{Name: "eaten", Value: 9}),
 	} {

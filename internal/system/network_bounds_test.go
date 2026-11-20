@@ -21,7 +21,7 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 		frames = append(frames, event.ScheduledWireFrame{
 			Frame: event.WireFrame{
 				Event:   event.EventGoldJumpRequest,
-				Domain:  core.DomainShared,
+				Domain:  core.DomainPlayer,
 				Payload: []byte(strings.Repeat("x", pad)),
 				Seq:     produced*uint64(n) + uint64(i+1), // one producer's sequences never repeat
 			},

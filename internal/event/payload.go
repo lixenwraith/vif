@@ -390,9 +390,11 @@ type SplashTextPayload struct {
 // GlyphLinePayload lays a line of glyphs from a cell, left to right, as the corpus's
 // lines are laid: cropped at the map's right edge, dropped whole where it meets a
 // wall, rock or an entity. Scenery makes it part of the map, which nothing types or
-// deletes; type and level default to dark green.
+// deletes; type and level default to dark green. Accent is a mark, taking no cell,
+// that Text brackets the runes it calls out with: those are laid bright white.
 type GlyphLinePayload struct {
 	Text    string               `toml:"text"`
+	Accent  string               `toml:"accent"`
 	X       int                  `toml:"x"`
 	Y       int                  `toml:"y"`
 	Type    component.GlyphType  `toml:"type"`
