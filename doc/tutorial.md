@@ -22,7 +22,8 @@ A lesson ends when its state's guard sees the result: the cursor at a cell
 (`EventCursorMoved` with `PayloadIntCompare` on `x` and `y`), an edit asked for
 (`EventDeleteRequest` by its range, `EventGlyphReplaceRequest` by its text,
 `EventGlyphPutRequest`), a glyph typed (`EventCharacterTyped` by its `char` and
-cell, or a count of `EventEnergyGlyphConsumed`), a mode entered
+cell: a line's last, never a count of glyphs, which one deleted another way would
+leave short for good), a mode entered
 (`EventModeChanged`), or a captured key pressed (`EventInputPressed`)
 ([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)). The map is laid
 from `map_width` and `map_height` (`ConfigToVar`, then the arithmetic actions): a

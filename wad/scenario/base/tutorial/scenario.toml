@@ -338,13 +338,11 @@ on_enter = [
     { macro = "Note", text = "Type both lines: esc, j, ^ and i again take you to the second one.", row = 11 },
     { macro = "Line", text = "type me", row = 14 },
     { macro = "Line", text = "then me", row = 15 },
-    { action = "SetVar", payload = { name = "typed", value = 0 } },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 8 of 22: i, then type both lines" },
 ]
 transitions = [
-    { trigger = "EventEnergyGlyphConsumed", internal = true, actions = [{ action = "IncrementVar", payload = { name = "typed" } }] },
-    { trigger = "Tick", target = "Append", guard = "VarCompare", guard_args = { var = "typed", op = "gte", value = 12 } },
+    { macro = "Typed", target = "Append", char = 101, x = 10, y = 15 },
     { macro = "Next", target = "Append" },
     { macro = "Back", target = "DeleteMotion" },
 ]
@@ -504,13 +502,12 @@ on_enter = [
     { macro = "Line", text = "no way", row = 14 },
     { macro = "Line", text = "no fear", row = 15 },
     { macro = "Line", text = "no pain", row = 16 },
-    { action = "SetVar", payload = { name = "typed", value = 0 } },
     { macro = "Stand", x = 4, y = 14 },
     { macro = "Say", message = "Lesson 13 of 22: I, type no, esc, then j and . for each line" },
 ]
 transitions = [
-    { trigger = "EventEnergyGlyphConsumed", internal = true, actions = [{ action = "IncrementVar", payload = { name = "typed" } }] },
-    { trigger = "Tick", target = "Yank", guard = "VarCompare", guard_args = { var = "typed", op = "gte", value = 6 } },
+    { macro = "Typed", target = "Yank", char = 111, x = 5, y = 16 },
+    { macro = "Span", target = "Yank", y = 16, from = 5, to = 6 },
     { macro = "Next", target = "Yank" },
     { macro = "Back", target = "Replace" },
 ]

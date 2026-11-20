@@ -221,6 +221,34 @@ func TestTutorialsEditLessonsEndOnTheKeysTheyAskFor(t *testing.T) {
 	}
 }
 
+// Insert and Repeat end on their last glyph, not on a count of glyphs typed, so a
+// glyph gone some other way never strands them: a typo's Space deletes the glyph
+// it missed, and a delete repeated with . clears no as a repeated I no does.
+func TestTutorialsTypingLessonsEndHoweverTheirGlyphsGo(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutorial"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("tutorial scenario not present")
+	}
+	for _, c := range []struct{ to, keys, want string }{
+		{strings.Repeat("s", 7), "itypo me\x1bj^ithen me\x1b", "Append"},
+		{strings.Repeat("s", 12), "dwj.j.", "Yank"},
+		{strings.Repeat("s", 12), "2xj.j.", "Yank"},
+	} {
+		a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		a.Tick(10)
+		tutorialKeys(t, a, c.to+c.keys)
+		var state string
+		a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.state").Load() })
+		if state != c.want {
+			t.Errorf("%q left the tutorial in %s, want %s", c.keys, state, c.want)
+		}
+		a.Close()
+	}
+}
+
 // tutorialRow reads the glyphs on row y from column 4, a gap as a space.
 func tutorialRow(a *App, y int) string {
 	w := a.World()
