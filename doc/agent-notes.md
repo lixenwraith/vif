@@ -1178,6 +1178,11 @@ Libraries · Branches.
   six seconds of a core, pays by its Krakens in steps of 50,000 and spreads
   19,000 to 20,000, unlearned or learned, so 100 rounds a side tell 90,000
   apart at over thirty standard errors.
+- A proved member's mean over a few rounds says nothing of it held out. Twelve
+  of `cave`'s whose means over 8 to 37 rounds stood 2 to 26 in 100 above their
+  titles read level or lower beside the shipped other network, one 85,159
+  under: hold a member alone, in a population file of its own, before
+  calling it promising.
 - A network's input set is read by learning from nothing on three seeds a
   scenario and by the candidates' recent mean beside what is fielded: in the
   fixed-shooter `armada` three fielded members of one set ran from 6,489 to
