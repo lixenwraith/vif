@@ -731,7 +731,8 @@ the authority like any guest. It joins on an in-process stream (`seatLink`) its
 holder serves with the handshake it holds when the seat dials: a still-guest's
 relays the join up its way to the authority, an authority's admits it as any joiner. A run in no
 session first opens one with no listener (`openSessionLocked`), which `:host` later
-serves a listener on (`SocketPort.Serve`). A seat plays in its holder's screen: a
+serves a listener on (`SocketPort.Serve`). A seat plays at the size of its
+holder's screen, its view about its own cursor: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
 holder's seats stand still while it is paused; a driven holder's step on. A hold

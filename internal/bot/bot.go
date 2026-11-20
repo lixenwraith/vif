@@ -200,8 +200,8 @@ type Instance interface {
 }
 
 // Stats reports one bot's progress. A round is a game, from its start to the new
-// game its own play brought on. Games is how many games played at once it sums,
-// zero for a driver's own.
+// game that ended it, whoever asked for that. Games is how many games played at
+// once it sums, zero for a driver's own.
 type Stats struct {
 	Games    int
 	Ticks    uint64

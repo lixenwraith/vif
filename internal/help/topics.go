@@ -204,7 +204,7 @@ var topics = []topicDef{
 			{Keys: ":takeover [on|off]", Desc: "Let a session whose host chose migrate move to this run when that host leaves; off by default. On, this run listens on a port in each session it joins from then, and the session shares its address with the other players; off, it also passes its turn in the session it is in"},
 			{Keys: ":lan [on|off]", Desc: "on announces the games this run hosts to players on the same network, off by default; alone it reports the games found there, which Menu / Multiplayer lists under Nearby games"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
-			{Keys: ":bot [add [N[:graph]|graph]|drop <slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game opens a session only they can join and still pauses. 10, A and 0xA name one slot"},
+			{Keys: ":bot [N[:graph]|graph|verb ...]", Desc: "Seat bots, one where no count is given and the scenario's own where no graph is, default where it carries none; a solo game opens a session only they can join and still pauses. drop <slot> drops one, list names the graphs and this run's bots, and create, import, export and clear keep bot files. 10, A and 0xA name one slot"},
 			{Keys: ":player [drop <slot>]", Desc: "List players and bots by slot; the host drops a player with its bots, or one bot"},
 		},
 	},

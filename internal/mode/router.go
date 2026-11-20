@@ -1716,8 +1716,8 @@ func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event
 	return event.OriginSystem, false
 }
 
-// pointerCell is the shown map cell a pointer intent names. A map cell, a bot's or a
-// script's, counts only where the viewport shows it, which is all a mouse reaches; a
+// pointerCell is the shown map cell a pointer intent names. A map cell, a bot's,
+// counts only where the viewport shows it, which is all a mouse reaches; a
 // terminal cell goes through ViewportToMap, which undoes the centring of a map
 // smaller than the viewport so the cell under the pointer is the one named.
 func (r *Router) pointerCell(intent *input.Intent) (x, y int, ok bool) {
