@@ -1,92 +1,40 @@
 package game
 
 import (
-	"cmp"
-	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/android"
+	"github.com/lixenwraith/terminal/atlas"
+	"github.com/lixenwraith/terminal/glyph"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/glyph"
-	"github.com/lixenwraith/vif/pkg/hostkey"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// eventQueue holds what the view posts while the run's loop is busy; a post never
+// eventQueue holds what the app posts while the run's loop is busy; a post never
 // waits, since the poster is Android's UI thread
 const eventQueue = 256
 
-// cellDP is a cell's height in dp until a pinch zooms it, in whole pixels at the
-// atlas's aspect and never under its own: 16x32 on a 420 dpi phone, half again as
-// much map as 9x18 dp shows.
-const cellDP = 12
-
-// stripRows is the rows the strip above the keyboard takes, the bottom row drawn
-// at twice its height (CellDrawer.stripHeight)
-const stripRows = 2
-
-// view is the activity's SurfaceView as an app.Presentation. Frames wait in the
-// embedded glyph.Frames for the drawer to take them; the grid is the cells the
-// view's pixels hold, and the drawer stretches it over them, so a touch maps in
-// proportion; touches and keys arrive as terminal events. The app draws the menu
-// itself: each snapshot goes to the listener, and its ops come back on a channel.
+// view is the activity's SurfaceView as an app.Presentation: an android.View,
+// which holds the grid, the frames the drawer takes and the touches and keys as
+// terminal events, with what is the game's. The app draws the menu itself: each
+// snapshot goes to the listener, and its ops come back on a channel.
 type view struct {
-	*glyph.Frames
-	tex          *glyph.Texture
-	density      float32 // the screen's, which the zoom scales
-	cellW, cellH int     // the pixels a cell takes at least, sized by the density and the zoom
-	listener     Listener
-
-	events  chan terminal.Event
-	away    chan bool
-	menuOps chan mode.MenuOp
-	keys    hostkey.Report
-	pointer atomic.Bool
-	covered atomic.Int32 // the pixels at the view's foot the keyboard covers, 0 while it is down
-	finger  struct {     // the cell a pressed finger last reported; the UI thread's alone
-		down bool
-		x, y int
-	}
-
-	mu         sync.Mutex
-	cols, rows int     // the grid the view's pixels hold
-	w, h       int     // those pixels
-	cell       float64 // the zoom: a cell's height in dp, 0 for cellDP
+	*android.View
+	listener Listener
+	away     chan bool
+	menuOps  chan mode.MenuOp
+	held     atomic.Bool // the drawer was handed the texture this run opened on
 }
 
 // newView opens the view at cell, a zoom vif.toml kept, 0 for none
-func newView(tex *glyph.Texture, raster bool, density float32, cell float64) *view {
-	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, cell: cell,
-		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue), menuOps: make(chan mode.MenuOp, eventQueue)}
-	v.keys.Post = v.post
-	v.setCell()
-	return v
-}
-
-// setCell sizes a cell by the density and the zoom; the UI thread's, as setGrid is
-func (v *view) setCell() {
-	v.cellW, v.cellH = v.tex.Atlas().Cell(float64(v.density), cmp.Or(v.Cell(), cellDP))
-}
-
-// zoom scales the cell by a pinch's scale, in parameter.CellStep steps within the
-// range every host shares, and never under the atlas; the UI thread's
-func (v *view) zoom(scale float64) {
-	keeps := glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep}
-	cell := keeps.Scale(v.tex.Atlas(), float64(v.density), cmp.Or(v.Cell(), cellDP), scale)
-	v.mu.Lock()
-	v.cell = cell
-	v.mu.Unlock()
-	v.setCell()
-}
-
-// Cell is the zoom the player left the view at, 0 for cellDP, which the run
-// writes back to vif.toml
-func (v *view) Cell() float64 {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.cell
+func newView(raster bool, density float32, cell float64) *view {
+	return &view{
+		View: android.NewView(android.Config{Font: atlas.Hack(), Raster: raster, Density: density, Cell: cell,
+			Zoom:    glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep},
+			BarRows: parameter.StatusRows}),
+		away: make(chan bool, eventQueue), menuOps: make(chan mode.MenuOp, eventQueue)}
 }
 
 func (v *view) Name() string           { return "android" }
@@ -95,55 +43,23 @@ func (v *view) Init() error            { return nil }
 func (v *view) Start() error           { return nil }
 func (v *view) Stop() error            { return nil }
 
-func (v *view) Surface() render.Surface       { return v }
-func (v *view) Events() <-chan terminal.Event { return v.events }
-func (v *view) Away() <-chan bool             { return v.away }
-func (v *view) MenuOps() <-chan mode.MenuOp   { return v.menuOps }
-
-// Covered is the grid's rows the keyboard hides with the strip above it, the drawer
-// stretching the grid over the view's pixels
-func (v *view) Covered() int {
-	px := int(v.covered.Load())
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if px == 0 || v.h == 0 {
-		return 0
-	}
-	return min((px*v.rows+v.h-1)/v.h+stripRows, v.rows)
-}
+func (v *view) Surface() render.Surface     { return v }
+func (v *view) Away() <-chan bool           { return v.away }
+func (v *view) MenuOps() <-chan mode.MenuOp { return v.menuOps }
 
 // Menu hands the app the menu to draw, as gomobile passes a tree: JSON in a string,
 // empty for a closed menu
 func (v *view) Menu(snapshot []byte) { v.listener.Menu(string(snapshot)) }
 
-func (v *view) CellAspect() vmath.Aspect { return v.tex.Atlas().Aspect() }
+func (v *view) CellAspect() vmath.Aspect { return vmath.Aspect(v.Aspect()) }
 
-// SetPointerMode drops touches while the run takes no pointer; a finger has no
-// motion of its own to report
-func (v *view) SetPointerMode(enabled, _ bool) { v.pointer.Store(enabled) }
-
-// SetKeyReport asks for each key's release, which a hardware key's up gives; the
-// system keyboard's text and the keys the view makes let go as they press
-func (v *view) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
-	v.keys.Ask(report, allow, true)
-	return nil
-}
-
-func (v *view) Size() (int, int) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.cols, v.rows
-}
-
-// setGrid sizes the grid to the cells the view's pixels hold, at least one each
-// way, and reports whether it changed
-func (v *view) setGrid(width, height int) bool {
-	cols, rows := max(1, width/v.cellW), max(1, height/v.cellH)
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	changed := cols != v.cols || rows != v.rows
-	v.cols, v.rows, v.w, v.h = cols, rows, max(1, width), max(1, height)
-	return changed
+// AtlasChanged hands over the texture the run opened on first, whichever strike it
+// is: the app built its drawer from Atlas before a run had sized a cell
+func (v *view) AtlasChanged() []byte {
+	if v.held.CompareAndSwap(false, true) {
+		return v.Atlas()
+	}
+	return v.View.AtlasChanged()
 }
 
 func (v *view) setAway(away bool) {
@@ -153,27 +69,21 @@ func (v *view) setAway(away bool) {
 	}
 }
 
-// post queues an event for the run; with the queue full the event is lost, which
-// a UI thread that must not wait on the game prefers
-func (v *view) post(ev terminal.Event) {
-	select {
-	case v.events <- ev:
-	default:
-	}
+// Probe is glyph.Probe over a strike of the shipped font: the oracle the
+// instrumented test checks a Java drawer against, same frame, same pixels
+type Probe struct {
+	tex   *glyph.Texture
+	probe *glyph.Probe
 }
 
-// Probe is glyph.Probe over the shipped atlas: the oracle the instrumented test
-// checks a Java drawer against, same frame, same pixels
-type Probe struct{ probe *glyph.Probe }
-
-// NewProbe lays the probe out cols cells wide
-func NewProbe(cols int32) (*Probe, error) {
-	tex, err := loadTexture()
-	if err != nil {
-		return nil, err
-	}
-	return &Probe{glyph.NewProbe(tex, int(cols))}, nil
+// NewProbe lays the probe out cols cells wide in the strike height pixels tall
+func NewProbe(cols, height int32) *Probe {
+	tex := glyph.NewTexture(atlas.Hack().Strike(int(height)))
+	return &Probe{tex, glyph.NewProbe(tex, int(cols))}
 }
+
+// Atlas is the texture the probe's frame names the slots of
+func (p *Probe) Atlas() []byte { return p.tex.Bytes() }
 
 // Frame is the probe as a whole cell frame
 func (p *Probe) Frame() []byte { return p.probe.Frame() }

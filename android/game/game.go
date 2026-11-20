@@ -14,14 +14,14 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/atlas"
+	"github.com/lixenwraith/terminal/glyph"
 	"github.com/lixenwraith/vif/internal/app"
-	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
-	"github.com/lixenwraith/vif/pkg/glyph"
 )
 
 // Speaker is the AudioTrack the mixer streams 44.1 kHz 16-bit stereo PCM to
@@ -49,14 +49,6 @@ var (
 	// zone is the device's time zone, which the first Start makes local
 	zone      string
 	localZone sync.Once
-
-	loadTexture = sync.OnceValues(func() (*glyph.Texture, error) {
-		a, err := glyph.Parse(asset.DefaultFont)
-		if err != nil {
-			return nil, err
-		}
-		return glyph.NewTexture(a), nil
-	})
 )
 
 // Zone names the device's time zone as tzdata does (TimeZone.getDefault().getID()),
@@ -74,10 +66,6 @@ func Zone(id string) {
 // date as a terminal run's are. raster paints with the software raster. away holds
 // the game behind the start screen until Resume, starting over if the grid changes.
 func Start(files, wad string, width, height int32, density float32, raster, away bool, speaker Speaker, listener Listener) error {
-	tex, err := loadTexture()
-	if err != nil {
-		return err
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	if run != nil {
@@ -106,9 +94,9 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	p := settings.Paths
 	vlog.Configure(vlog.Config{Dir: cmp.Or(p.Log, paths.DefaultLogDir()),
 		JournalDir: cmp.Or(p.Journal, paths.DefaultJournalDir()), Spawn: core.Go})
-	v := newView(tex, raster, density, settings.Presentation.Cell)
+	v := newView(raster, density, settings.Presentation.Cell)
 	v.listener = listener
-	v.setGrid(int(width), int(height))
+	v.Resize(int(width), int(height)) // the view's first grid, which posts no resize
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
@@ -177,9 +165,8 @@ func current() *view {
 
 // Resize follows the view's pixels; a grid that changes is reported to the run
 func Resize(width, height int32) {
-	if v := current(); v != nil && v.setGrid(int(width), int(height)) {
-		cols, rows := v.Size()
-		v.post(terminal.Event{Type: terminal.EventResize, Width: cols, Height: rows})
+	if v := current(); v != nil {
+		v.Resize(int(width), int(height))
 	}
 }
 
@@ -187,9 +174,7 @@ func Resize(width, height int32) {
 // pressed or released on the cell under it
 func Tap(x, y int32, down bool) {
 	if v := current(); v != nil {
-		if ev, ok := v.touch(int(x), int(y), down); ok {
-			v.post(ev)
-		}
+		v.Touch(int(x), int(y), down)
 	}
 }
 
@@ -197,9 +182,7 @@ func Tap(x, y int32, down bool) {
 // to the cell under it, once per cell
 func Drag(x, y int32) {
 	if v := current(); v != nil {
-		if ev, ok := v.drag(int(x), int(y)); ok {
-			v.post(ev)
-		}
+		v.Drag(int(x), int(y))
 	}
 }
 
@@ -208,11 +191,7 @@ func Drag(x, y int32) {
 // system keyboard
 func OnStatusBar(y int32) bool {
 	v := current()
-	if v == nil {
-		return false
-	}
-	_, cy := v.cellAt(0, int(y))
-	return v.onBar(cy)
+	return v != nil && v.OnBar(int(y))
 }
 
 // KeyDown is a key the view received going down, or repeating while held:
@@ -220,44 +199,35 @@ func OnStatusBar(y int32) bool {
 // its meta state. It reports whether the game takes the key; one it does not, a
 // volume key, is left to the system.
 func KeyDown(code, typed, meta int32, repeat bool) bool {
-	ev, ok := keyEvent(code, rune(typed), meta)
-	if v := current(); v != nil && ok {
-		v.keys.Down(uint32(code), ev, repeat)
-	}
-	return ok
+	v := current()
+	return v != nil && v.KeyDown(code, typed, meta, repeat)
 }
 
 // KeyUp is a key the view received coming up, taken as its KeyDown was
 func KeyUp(code, typed, meta int32) bool {
-	_, ok := keyEvent(code, rune(typed), meta)
-	if v := current(); v != nil && ok {
-		v.keys.Up(uint32(code))
-	}
-	return ok
+	v := current()
+	return v != nil && v.KeyUp(code, typed, meta)
 }
 
 // Key is a key pressed and let go at once, with no up of its own to come: Back, or
 // the system keyboard's delete
 func Key(code, typed, meta int32) bool {
-	ev, ok := keyEvent(code, rune(typed), meta)
-	if v := current(); v != nil && ok {
-		v.keys.Tap(ev)
-	}
-	return ok
+	v := current()
+	return v != nil && v.Key(code, typed, meta)
 }
 
 // Text is what the system keyboard committed or a paste brought, which the run types
 // a character at a time: one event carries it, so a long paste fits the queue whole
 func Text(s string) {
-	if v := current(); v != nil && s != "" {
-		v.post(terminal.Event{Type: terminal.EventPaste, Text: s})
+	if v := current(); v != nil {
+		v.Text(s)
 	}
 }
 
 // FocusLost ends every key held: the window's keys go elsewhere, their ups too
 func FocusLost() {
 	if v := current(); v != nil {
-		v.keys.Lost()
+		v.FocusLost()
 	}
 }
 
@@ -280,15 +250,9 @@ func Resume() {
 // keeps too; a grid that changes is reported as a resize, which a crop_on_resize
 // map follows, and the run keeps the cell in vif.toml for the next
 func Zoom(scale float32) {
-	v := current()
-	if v == nil {
-		return
+	if v := current(); v != nil {
+		v.Zoom(float64(scale))
 	}
-	v.zoom(float64(scale))
-	v.mu.Lock()
-	w, h := v.w, v.h
-	v.mu.Unlock()
-	Resize(int32(w), int32(h))
 }
 
 // Menu is what the player asked of the menu the app draws: an op on the node id
@@ -309,20 +273,20 @@ func Menu(op, id, arg string) {
 // view repeats above it, and the console stays above both
 func Keyboard(px int32) {
 	if v := current(); v != nil {
-		v.covered.Store(max(px, 0))
+		v.SetCovered(int(px))
 	}
 }
 
 // Quit ends the run as a terminal closing does
 func Quit() {
 	if v := current(); v != nil {
-		v.post(terminal.Event{Type: terminal.EventClosed})
+		v.Post(terminal.Event{Type: terminal.EventClosed})
 	}
 }
 
-// Frame is the newest frame since the last taken, nil when no cell changed, laid
-// out as glyph.Frames.Take describes: columns, rows, then for a cell drawer the
-// changed cells with their slot in Atlas and ARGB colors; for the raster, RGBA rows
+// Frame is the newest frame since the last taken, nil when no cell changed:
+// columns, rows, then for a cell drawer the changed cells with their slot in the
+// texture it holds and ARGB colors (glyph.Texture.Frame); for the raster, RGBA rows
 func Frame() []byte {
 	if v := current(); v != nil {
 		return v.Take()
@@ -330,13 +294,22 @@ func Frame() []byte {
 	return nil
 }
 
-// Atlas is the texture a cell drawer paints glyphs from, as glyph.NewTexture lays
-// it out: cell width, height and slot count as words, each slot's rows one below
-// the last with a byte a pixel, 255 where the glyph is set, then each slot's rune
-func Atlas() ([]byte, error) {
-	tex, err := loadTexture()
-	if err != nil {
-		return nil, err
+// Atlas is the texture a cell drawer paints glyphs from until a run hands it
+// another, the font's largest strike as glyph.NewTexture lays it out: cell width,
+// height and slot count as words, each slot's rows one below the last with a byte
+// a pixel, 255 where the glyph is set, then each slot's rune
+func Atlas() []byte {
+	strikes := atlas.Hack().Strikes()
+	return glyph.NewTexture(strikes[len(strikes)-1]).Bytes()
+}
+
+// AtlasChanged is the texture the drawer paints from now on, laid out as Atlas:
+// the one a run opened on, then the strike a zoom crossed to, each once and nil
+// otherwise. The drawer's thread asks before each Frame, and no frame is encoded
+// for a texture it was not handed.
+func AtlasChanged() []byte {
+	if v := current(); v != nil {
+		return v.AtlasChanged()
 	}
-	return tex.Bytes(), nil
+	return nil
 }

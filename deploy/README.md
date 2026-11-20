@@ -10,7 +10,7 @@
 | Path | What it is |
 |---|---|
 | `update.sh` | The node's one deploy command: diffs every component against HEAD and LogWisp's binary against upstream `main` (installed green, incoming red), gates on an empty fleet where a component needs it, and runs the helpers below in dependency order, skipping what is current. |
-| `docker/Dockerfile` | Multi-stage build: digest-pinned Go builder whose module and build caches persist in BuildKit, `scratch` final layer holding the static non-root `vif_headless` binary and nothing else. Built from the repository root by `./deploy/update.sh image` on the node, or `make image`. |
+| `docker/Dockerfile` | Multi-stage build: digest-pinned Go builder whose module and build caches persist in BuildKit, `scratch` final layer holding the static non-root `vif_headless` binary, its `NOTICES` and `LICENSE` and nothing else. Built from the repository root by `./deploy/update.sh image` on the node, or `make image`. |
 | `k3s/00-namespace.yaml` | The `vif` namespace with `restricted` Pod Security enforced, and the permissionless service account a session runs as. |
 | `k3s/05-log-volume.yaml` | The no-provisioner StorageClass, node-affine local PV, and one shared volatile PVC. Render `${NODE_NAME}` before applying. |
 | `k3s/06-log-volume-check.yaml` | A Restricted probe that binds both claims on a fresh node: it writes a record through the log claim and loads a scenario through the wad claim. Render `${IMAGE}` and `${SCENARIO}`, verify its JSONL, then delete the pod and the file. |
@@ -24,7 +24,7 @@
 | `runbook.md` | Day-to-day node operations: status, emptying the fleet before an update, the updates themselves, why a helper refused, and where to watch the stream. |
 | `guest/` | The node's identities, mounts, units and update helpers, and how to back one out. See [`guest/README.md`](guest/README.md). |
 | `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients, TRACE and `admit` records left out, and a loopback-only HTTP sink. |
-| `package/` | Distribution files: what `make install` puts outside the config root (the desktop entry, icons, purego's licence, and bash, zsh and fish completion), and the source of each release archive's README. |
+| `package/` | Distribution files: what `make install` puts outside the config root (the desktop entry, icons, and bash, zsh and fish completion), and the source of each release archive's README. |
 | `website/vif.nginx.example` | Public edge for the router API, the SSE route and the browser session Upgrade route, with the edge rate limits that route needs. Placeholders only; the probe endpoints are not published. |
 | `website/vif-log-viewer.html` / `.js` | Bounded same-origin browser reference for `/vif/api/logs`. Caps rendered rows, its pending render queue, and its duplicate fingerprint set; it reaches nothing but its own origin. The script is a separate file because a site that forbids inline script would otherwise silently not run it. |
 

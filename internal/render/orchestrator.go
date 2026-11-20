@@ -18,11 +18,7 @@ type rendererEntry struct {
 // Surface is what a finished frame is handed to: the terminal in a terminal build,
 // and all another host drawing the same cells, a window or an Android view, has to
 // provide. Flush must not wait on the host; a held frame is dropped for a newer one.
-type Surface interface {
-	ColorMode() terminal.ColorMode
-	Flush(cells []terminal.Cell, width, height int)
-	Sync() // the next frame is drawn whole
-}
+type Surface = terminal.Surface
 
 // RenderOrchestrator coordinates the render pipeline
 type RenderOrchestrator struct {

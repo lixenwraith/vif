@@ -368,7 +368,9 @@ These boundaries belong to separately maintained modules:
 - `github.com/lixenwraith/terminal`: raw/alternate-screen lifecycle, terminal
   event decoding, color-mode detection, cells, mouse modes, syncing and flushing,
   plus the `tui` form and widget layer the configuration menu, renderers and tools
-  draw with.
+  draw with, and the graphical hosts' screens: the page (`terminal.Page`), the
+  Android view's mapping (`android`), the cell font (`glyph`, `atlas`) and, a
+  module of its own, the desktop window (`window`).
 - `github.com/lixenwraith/toml`: parsing, reflection-based decoding, encoding and
   macros, used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored
   scripts, audio specs and commands.
@@ -388,9 +390,9 @@ These boundaries belong to separately maintained modules:
 - `github.com/lixenwraith/ascimage`: the dual-mode cell images a wall pattern
   loads (`.aimg`) and the quadrant fit the logo draws with.
 - `github.com/ebitengine/purego`: loading Xlib, EGL and GLES 2 at run time for the
-  desktop window (`pkg/window`), with cgo off.
+  desktop window, with cgo off; it comes with `terminal/window`.
 
-`golang.org/x/sys` serves the window's Unix calls; `golang.org/x/term`,
+`golang.org/x/sys` serves `pkg/network`'s Windows error codes; `golang.org/x/term`,
 `golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through
 `auth`, are indirect dependencies. vif has no application CGO requirement, although external
 audio executables or an OSS device are runtime dependencies when sound is
@@ -414,7 +416,7 @@ site's identity service vouches for ([Session fleet](kubernetes-fleet.md),
 no terminal or audio, but may attach the network service with `-host`/`-join`.
 
 A WASM build runs in a Worker behind the bundled page, which draws its cell
-frames on a WebGL canvas (`pkg/browser`), uses embedded FSM/content/keymap
+frames on a WebGL canvas (`terminal.Page`), uses embedded FSM/content/keymap
 assets without host-directory discovery, streams its sound to an AudioWorklet on
 the page, and omits logging. It cannot open a socket, so it joins a session over
 the same-origin route `wss://<site>/vif/ws/<session>`: the page's own WebSocket
