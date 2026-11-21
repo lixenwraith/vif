@@ -93,8 +93,13 @@ func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.
 	a.Tick(1)
 	w := a.World()
 	cursor := w.Resources.Player.Slot(0)
-	a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: 2, Y: 2}, event.OriginDebug)
-	a.Settle()
+	moveCursor := func(x, y int) {
+		a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: x, Y: y}, event.OriginDebug)
+		a.Settle()
+	}
+	// The Devourer rises from the edges, so the cursor waits for it in the open middle
+	middle := func() { moveCursor(w.Resources.Config.MapWidth/2, w.Resources.Config.MapHeight/2) }
+	moveCursor(2, 2)
 	mazeCount, mazeWalls, krakenSpawns, devourerSpawns := 0, 0, 0, 0
 	nuggetEnabled := false
 	a.SetDispatchTap(func(ev event.GameEvent) {
@@ -174,10 +179,7 @@ func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.
 		}
 		backToMain("Kraken", w.Components.Kraken.Entities()[0])
 
-		// The Devourer rises from the edges, so the cursor waits in the open middle
-		a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor,
-			X: w.Resources.Config.MapWidth / 2, Y: w.Resources.Config.MapHeight / 2}, event.OriginDebug)
-		a.Settle()
+		middle()
 		nuggetEnabled = false
 		stormKills(3)
 		a.Tick(int(1500 * time.Millisecond / parameter.GameUpdateInterval))
@@ -188,8 +190,7 @@ func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.
 			t.Fatal("Devourer region did not hold the map with glyphs and nuggets on")
 		}
 		backToMain("Devourer", w.Components.Devourer.Entities()[0])
-		a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: 2, Y: 2}, event.OriginDebug)
-		a.Settle()
+		moveCursor(2, 2)
 
 		stormKills(3)
 		if w.Components.Tower.CountEntities() != 1 || krakenSpawns != cycle+1 || devourerSpawns != cycle+1 {
@@ -199,9 +200,13 @@ func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.
 		a.Region(event.RegionResume, "main", "")
 		a.Tick(1)
 	}
+	middle()
 	a.Region(event.RegionPause, "main", "")
 	a.Region(event.RegionSpawn, "devourer", "DevourerSetup")
 	a.Tick(int(1500 * time.Millisecond / parameter.GameUpdateInterval))
+	if w.Components.Devourer.CountEntities() != 1 || w.Resources.Status.Strings.Get("fsm.devourer.state").Load() != "DevourerActive" {
+		t.Fatal("no Devourer stood for the defeat to end")
+	}
 	a.Context().PushEventOrigin(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: cursor, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()}, event.OriginDebug)
 	a.Tick(3)
 	if w.Components.Devourer.CountEntities() != 0 || w.Resources.Status.Strings.Get("fsm.devourer.state").Load() != "-" {

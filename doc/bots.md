@@ -818,6 +818,8 @@ cave          90%          220    15,049    8,341      668      600,000 ticks   
 td           0.1%       17,088   not read                                         12 rounds
 ```
 
+- The embedded row was measured when each storm escalation raised a Kraken;
+  unlearned, `default` now scores about 274,000 there (above).
 - A few long rounds carry `cave`'s means: the three medians are 832, 910 and
   610. A round of `td` runs from 83 to 48,360, and the median of its twelve is
   8,504.

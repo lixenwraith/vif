@@ -44,10 +44,10 @@ func grown(w *engine.World, s *DevourerSystem) {
 	stepDevourer(w, s, int(parameter.DevourerCreep/parameter.GameUpdateInterval)+1)
 }
 
-// TestADevourerCreepsInFromTheEdgesToABezel: it rises a band along every edge, grows
-// from its first frame, and over its creep reaches a bezel its share of the shorter
-// side thick, give or take its walls' reach, the middle left open, a member standing
-// on each cell it covers
+// TestADevourerCreepsInFromTheEdgesToABezel: it rises a band along every edge and
+// over its creep reaches a bezel its share of the shorter side thick, give or take
+// its walls' reach, the middle left open, a member on each cell it covers; on a map
+// this size each frame of its creep's first half covers more cells than the last
 func TestADevourerCreepsInFromTheEdgesToABezel(t *testing.T) {
 	w, s, e := devourerFixture(t)
 	cfg := w.Resources.Config
