@@ -248,6 +248,7 @@ transport the app attaches.
 | `Transient` | Player-domain explosion presentation, the Krakens burning away, the Devourers drawing back and the walls a maze laid fading in. |
 | `View` | Player-domain screen effects: grayout, strobe and this instance's button echo. |
 | `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
+| `DevourerShape` | The Devourer's body as its system last built it, which its renderers read for that frame instead of building it again; derived, so a snapshot never carries it. |
 | `NavigationDebug` | Per-runtime operator view of navigation internals. |
 | `Status`, `Prof` | Registered atomic metrics, closed by `Freeze` before the first tick, and the profiler. |
 | `Files` | Categorized external file capability. |

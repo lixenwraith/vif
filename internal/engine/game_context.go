@@ -441,6 +441,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	world.Resources.Transient = NewTransientResource()
 	world.Resources.View = NewViewResource()
 	world.Resources.KrakenShape = NewKrakenShapeResource()
+	world.Resources.DevourerShape = &component.DevourerShape{}
 	world.Resources.Drift = &DriftResource{}
 	world.Resources.Cave = &CaveResource{}
 	world.Resources.Scenario = &ScenarioResource{}

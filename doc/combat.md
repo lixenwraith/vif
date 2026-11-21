@@ -160,7 +160,10 @@ that mass (`profile.Reweigh`), so a heavier one is knocked back less.
 Species-authored invulnerability is the ward status and blocks every
 weapon's damage. A container header is no target at all: no finder, blast or
 request names it, so the Devourer's body, one, loses only what `DevourerSystem`
-feels its guts lose.
+feels its guts lose. A damaging hit on a unit leaves what it landed on beside the
+hit flash (`CombatComponent.HitEntity`: the unit, or the member struck, the middle
+one of an area's), which a renderer of a large body reads to light where the hit
+landed, as a gut's does; the digest compares neither.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time, a
 period and its timer, a magnitude, the crediting cursor and the family it records

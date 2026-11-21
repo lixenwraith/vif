@@ -32,6 +32,13 @@ const (
 	DevourerGutCrawl   = 2.0
 	DevourerGutBulk    = 1.25
 
+	// A hit lights a gut DevourerGutHitFlash of the way to the hit flash's color
+	// within DevourerGutHitCore column units of where it landed, fading out to
+	// DevourerGutHitReach
+	DevourerGutHitFlash = 0.85
+	DevourerGutHitCore  = 2.5
+	DevourerGutHitReach = 7.0
+
 	// An omen's core, DevourerOmenCore column units either side of its ray, rises
 	// from DevourerOmenCoreMin to DevourerOmenCoreMax of the attack color as its gut
 	// nears, beating faster; its ends glow DevourerOmenEnd round, and its halo, out
@@ -84,8 +91,11 @@ var Devourer256Tiers = [...]struct {
 	{color.RGB{R: 222, G: 104, B: 108}, '▒', ConBrightMagenta, ConMagenta},
 }
 
-// Devourer256Gut is a cut gut's fading ground, and Devourer256Omen an omen's core
+// Devourer256Gut is a cut gut's fading ground, Devourer256Omen an omen's core, and
+// Devourer256Hit over Devourer256HitRune a gut's cells where a hit just landed
 const (
-	Devourer256Gut  = ConMagenta
-	Devourer256Omen = ConRed
+	Devourer256Gut     = ConMagenta
+	Devourer256Omen    = ConRed
+	Devourer256Hit     = ConBrightYellow
+	Devourer256HitRune = '▒'
 )

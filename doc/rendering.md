@@ -228,6 +228,7 @@ Focused helpers preserve the other channel:
 | `SetBgScreen` | Screen-blend a background over the cell's, or over a caller base if none was drawn yet. |
 | `SetBgAlphaOwned` | Alpha-blend a background, blank the glyph, and let the current mask replace the cell's tags: a translucent panel. |
 | `SetWithBg` | Opaque cell replacement; the current mask replaces the cell's earlier tags. |
+| `SetRunWithBg` | `SetWithBg` for a run of cells along a row in one call, clipped once. |
 | `SetBg256` | Store a palette index in the background channel and set the palette attribute. |
 
 `BackgroundAt` supplies a caller-selected canvas color for an untouched staging
@@ -478,17 +479,37 @@ browser build, medians of five alternating runs: a tick's three frames 0.24 to
 The devourer renderer paints the flesh and the guts as an image of two samples a
 cell each way and fits each cell with `ascimage.FitQuadrant`, a quadrant glyph and
 two colors, so the walls' edge and the texture show at half a cell; a cell its
-image leaves partly open gives way to a glyph drawn under it. It paints once a
-frame of the body, the 100 ms tick ascimage's viewer animates on, and draws the
-fitted cells again until the next. Each row passes the run the open space surely
-holds (`DevourerShape.Span`). Every input is the plane's or the depth from the
-wall, never an angle, so the folds close on themselves: folds along the wall
-drifting outward, a wet lip, grain, veins and a beat, the grain and veins worked
-out once a sample as the flesh first covers it. The console has no quadrants: a
-cell half covered or more takes the `Devourer256Tiers` entry nearest its mean.
-`BenchmarkDevourer` at 200x60, a tick's three frames, medians of seven alternating
-runs on one core: 2.51 ms native with ascimage v0.1.2's fit, 1.83 ms with
-v0.1.3's, which tries the eight splits that differ.
+image leaves partly open gives way to a glyph drawn under it. A frame of the
+body, the 100 ms tick ascimage's viewer animates on, is one picture, drawn until
+the next. Its painting is a run of steps, a row of flesh, the guts, a row of cells
+fitted, and each render frame takes a third of the next frame's on
+(`devourerShade.after`), so a frame's picture stands ready as its tick comes and
+no render frame paints one whole; a frame nothing foresaw, a gut formed or cut, a
+recede, a moved view, is painted whole as it shows. A row's depths are read in
+one pass (`DevourerShape.Depths`), past the run the open space surely holds
+(`DevourerShape.Span`). Every input is the plane's or the depth from the wall,
+never an angle, so the folds close on themselves: folds along the wall drifting
+outward, a wet lip, grain, veins and a beat, a sample's texture worked out once as
+the flesh first covers it and the lip and the gloss read from tables. A gut is
+stamped in chords within `devourerGutSlack` of its centreline and shaded from a
+table over its tube. The fitted cells are kept as runs along a row, a run of whole
+cells written in one call (`SetRunWithBg`). The console has no quadrants: a cell
+half covered or more takes the `Devourer256Tiers` entry nearest its mean.
+
+A hit lights a gut where it landed. Combat names what it struck
+(`CombatComponent.HitEntity`), and while the hit flash runs the gut's cells within
+`DevourerGutHitReach` column units of it blend toward the flash's color, most
+within `DevourerGutHitCore`, whichever gut is drawn over them there; the console
+lights the core in `Devourer256Hit`. It tints the fitted cells as they are drawn,
+so a hit paints nothing anew.
+
+`BenchmarkDevourer` at 200x60 with two guts, medians of seven alternating runs on
+one core: a tick's three frames 1.74 ms with ascimage v0.1.3's fit and each frame
+painted whole as it showed, 0.61 ms now with v0.1.4's; the tick 197 to 174 µs,
+the simulation the same tick for tick. With four guts a render frame's mean went
+from 0.59 to 0.19 ms and its 99th percentile, the frame that paints, from 3.2 to
+0.57 ms. Laying the swell field's lattice planes once for the frames they serve
+would take some 40 µs of the shape's 74 µs build; not built.
 
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws typeable text in its cell, only the cell's top glyph, the one
