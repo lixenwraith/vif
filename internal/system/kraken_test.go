@@ -30,7 +30,7 @@ func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vma
 	k.RotSpeed = 0
 	s.syncMembers(e, k, 90.5, 45.5)
 	leg := vmath.Point{}
-	for _, cell := range s.cells {
+	for _, cell := range s.foot.cells {
 		if cell.Y == 45 && cell.X > leg.X {
 			leg = cell
 		}
@@ -501,7 +501,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	if !outside {
 		t.Fatal("expected unclamped tentacles beyond the map")
 	}
-	for _, cell := range s.cells {
+	for _, cell := range s.foot.cells {
 		if !w.Positions.InBounds(cell) {
 			t.Fatal("off-map tentacle got a spatial hitbox")
 		}
@@ -512,7 +512,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
 		t.Fatal("map shrink left Kraken's body out of bounds")
 	}
-	for _, cell := range s.cells {
+	for _, cell := range s.foot.cells {
 		if !w.Positions.InBounds(cell) {
 			t.Fatal("map shrink left an off-map interaction cell")
 		}
@@ -587,7 +587,7 @@ func TestKrakenMembersHoldTheirCellsWhileCovered(t *testing.T) {
 			t.Fatalf("two members stand on %+v", pos)
 		}
 		cells[pos] = true
-		if old, ok := before[member.Entity]; ok && s.covers(old.X, old.Y) {
+		if old, ok := before[member.Entity]; ok && s.foot.covers(old.X, old.Y) {
 			if old != pos {
 				t.Fatalf("member left covered cell %+v for %+v", old, pos)
 			}
@@ -596,8 +596,8 @@ func TestKrakenMembersHoldTheirCellsWhileCovered(t *testing.T) {
 			moved++
 		}
 	}
-	if len(cells) != len(s.cells) || held == 0 || moved == 0 || moved > held/4 {
-		t.Fatalf("cells=%d footprint=%d held=%d moved=%d", len(cells), len(s.cells), held, moved)
+	if len(cells) != len(s.foot.cells) || held == 0 || moved == 0 || moved > held/4 {
+		t.Fatalf("cells=%d footprint=%d held=%d moved=%d", len(cells), len(s.foot.cells), held, moved)
 	}
 }
 
@@ -609,20 +609,20 @@ func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 	k.State, k.AttackT = component.KrakenIdle, 0
 	s.syncMembers(e, k, 90.5, 45.5)
 	header, _ := w.Components.Header.GetComponent(e)
-	if len(header.MemberEntries) <= len(s.cells) {
+	if len(header.MemberEntries) <= len(s.foot.cells) {
 		t.Fatal("fixture needs spare hitbox identities after contraction")
 	}
 	positioned := 0
 	for _, member := range header.MemberEntries {
 		if pos, ok := w.Positions.GetPosition(member.Entity); ok {
 			positioned++
-			if !s.covers(pos.X, pos.Y) {
+			if !s.foot.covers(pos.X, pos.Y) {
 				t.Fatal("retracted hitbox still occupies a cell")
 			}
 		}
 	}
-	if positioned != len(s.cells) {
-		t.Fatalf("%d positioned hitboxes for %d footprint cells", positioned, len(s.cells))
+	if positioned != len(s.foot.cells) {
+		t.Fatalf("%d positioned hitboxes for %d footprint cells", positioned, len(s.foot.cells))
 	}
 	hp, _ := w.Components.Combat.GetPtr(e)
 	hp.HitPoints, hp.LastDamagedBy = 0, w.Resources.Player.Slot(0)
@@ -796,7 +796,7 @@ func TestKrakenFootprintListsCellsByFirstCoveringDisc(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 11))
 	for round := range 2000 {
 		w, h := 1+rng.IntN(90), 1+rng.IntN(50)
-		s := &KrakenSystem{gridW: w, gridH: h, grid: make([]uint8, w*h)}
+		s := &KrakenSystem{foot: footprint{gridW: w, gridH: h, grid: make([]uint8, w*h)}}
 		covered := make([]bool, w*h)
 		var want []vmath.Point
 		for range 1 + rng.IntN(60) {
@@ -822,12 +822,12 @@ func TestKrakenFootprintListsCellsByFirstCoveringDisc(t *testing.T) {
 				}
 			}
 		}
-		if !slices.Equal(s.cells, want) {
-			t.Fatalf("round %d: footprint %v, want %v", round, s.cells, want)
+		if !slices.Equal(s.foot.cells, want) {
+			t.Fatalf("round %d: footprint %v, want %v", round, s.foot.cells, want)
 		}
 		for i, c := range covered {
-			if c != (s.grid[i] == footCovered) {
-				t.Fatalf("round %d: grid cell %d covered=%v, grid %d", round, i, c, s.grid[i])
+			if c != (s.foot.grid[i] == footCovered) {
+				t.Fatalf("round %d: grid cell %d covered=%v, grid %d", round, i, c, s.foot.grid[i])
 			}
 		}
 	}
