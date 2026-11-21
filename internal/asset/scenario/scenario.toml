@@ -1,4 +1,4 @@
-description = "Survive escalating storms, lure Krakens through mazes, and defend the tower."
+description = "Survive escalating storms, lure Krakens through mazes, cut the Devourer's guts, and defend the tower."
 min_players = 1
 max_players = 16
 
@@ -20,6 +20,10 @@ enabled_systems = ["glyph"]
 
 [regions.kraken]
 file = "kraken.toml"
+enabled_systems = ["glyph", "nugget"]
+
+[regions.devourer]
+file = "devourer.toml"
 enabled_systems = ["glyph", "nugget"]
 
 [regions.monitor]

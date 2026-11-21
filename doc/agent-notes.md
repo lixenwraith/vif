@@ -898,8 +898,9 @@ Docs · Libraries · Branches.
   too, so `:system drain disable` first.
 - A campaign encounter is entered from a running game by `:emit
   EventFSMRegionRequest { op = "pause", region = "main" }`, then `{ op = "spawn",
-  region = "kraken", state = "KrakenSetup" }`. A fresh cursor stands where the
-  Kraken rises, so `:energy 900000000` first, or its strike starts a new game. A
+  region = "kraken", state = "KrakenSetup" }` (the Devourer's is `devourer` at
+  `DevourerSetup`). A fresh cursor stands where the Kraken rises, so `:energy
+  900000000` first, or its strike starts a new game. A
   capture of a 256-color run writes entries 0-15 as `30`-`37`, `90`-`97` and their
   backgrounds, not `38;5;n`: a parser reading only that form reads them as unset.
 - `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive

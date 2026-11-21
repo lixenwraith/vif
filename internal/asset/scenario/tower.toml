@@ -1,5 +1,5 @@
 # Tower region: tower defense level
-# Entry: two Kraken kills spawn this region with initial_state = "TowerSetup"
+# Entry: a cycle's third storm escalation spawns this region with initial_state = "TowerSetup"
 # Exit: victory hands over to main through the handover region, defeat fails the run
 # Spawning: gateways attached to pylons handle continuous eye spawning
 

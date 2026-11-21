@@ -257,28 +257,14 @@ to the middle as the map resizes, or a fixed map, closes it.
 
 ## Devourer
 
-The Devourer's first cut runs in the scratch `devourer` scenario alone
-([Gameplay §8](gameplay.md#8-hostile-and-structural-actors)), which goes once the
-species takes its place.
-
-### Give the Devourer its place in the campaign
-
-- Priority: P1
-- Affected files: `internal/asset/scenario/scenario.toml`, a `devourer.toml`
-  region, `wad/scenario/base/devourer`
-
-Main is to meet it, at a point of its escalation still to choose. A region in
-`kraken.toml`'s form closes it: a setup that pauses drains and sizes the map to the
-view, the spawn, the kill's decision and the return to main; the scratch scenario
-is then deleted.
-
 ### Let a bot see the Devourer
 
 - Priority: P2
 - Affected files: `internal/bot/catalogue.go`
 
 A bot's catalogue holds no kind for the Devourer, its guts or its omens, so a bot
-flies into its walls. Kinds `devourer` and `gut` by their nearest covered cell, and
+flies into its walls, which `default` meets about four minutes into every campaign
+game. Kinds `devourer` and `gut` by their nearest covered cell, and
 `landing` reading an omen's ray as it reads a Kraken's charge, would close it.
 
 ## Bots

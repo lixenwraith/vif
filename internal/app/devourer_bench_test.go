@@ -11,10 +11,10 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
-// BenchmarkDevourer measures the scratch devourer scenario at 200x60 once its bezel
-// has grown and two guts hang across it: "tick" is one simulation tick, "frames"
-// the frames of a tick its renderer draws, which paints the body once a frame of
-// it, every other tick at the default tick
+// BenchmarkDevourer measures the Devourer in the embedded scenario's devourer region
+// at 200x60 once its bezel has grown and two guts hang across it: "tick" is one
+// simulation tick, "frames" the frames of a tick its renderer draws, which paints the
+// body once a frame of it, every other tick at the default tick
 func BenchmarkDevourer(b *testing.B) {
 	for _, frames := range []bool{false, true} {
 		name := "tick"
@@ -22,16 +22,15 @@ func BenchmarkDevourer(b *testing.B) {
 			name = "frames"
 		}
 		b.Run(name, func(b *testing.B) {
-			opts := resource.Options{Dir: soakRoot, Scenario: "devourer"}
-			if _, err := resource.ScenarioPath(opts); err != nil {
-				b.Skip("devourer scenario not present")
-			}
-			a, err := NewHeadless(Config{Seed: 42, Width: 200, Height: 60, Resources: opts})
+			a, err := NewHeadless(Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Embedded: true}})
 			if err != nil {
 				b.Fatalf("headless: %v", err)
 			}
 			defer a.Close()
+			a.Tick(1)
 			w := a.World()
+			a.Region(event.RegionPause, "main", "")
+			a.Region(event.RegionSpawn, "devourer", "DevourerSetup")
 			for range 2000 {
 				// A cursor in the open space, kept alive by heat whatever a gut does to it
 				if cursor := w.Resources.Player.Slot(0); cursor != 0 {

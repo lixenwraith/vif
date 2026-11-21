@@ -1,4 +1,4 @@
-# One Kraken per maze; the second maze victory in a cycle advances to Tower.
+# One Kraken per maze; its kill hands the field back to main.
 
 [states.KrakenHold]
 parent = "Root"
@@ -45,35 +45,20 @@ transitions = [
     { trigger = "EventSpeciesKilled", target = "KrakenFade", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
 ]
 
-# The maze fades out, and the field rests half a second past the fade before any exit
+# The maze fades out, and the field rests half a second past the fade before main takes it
 [states.KrakenFade]
 parent = "KrakenHold"
 on_enter = [
     { action = "EmitEvent", event = "EventWallDespawnRequest", payload = { all = true } },
 ]
 transitions = [
-    { trigger = "Tick", target = "KrakenDecision", guard = "StateTimeExceeds", guard_args = { ms = 900 } },
-]
-
-[states.KrakenDecision]
-parent = "KrakenHold"
-transitions = [
-    { trigger = "Tick", target = "KrakenEscalateTower", guard = "StatusIntCompare", guard_args = { key = "kills.kraken", since = "kraken_mark", op = "gte", value = 2 } },
-    { trigger = "Tick", target = "KrakenVictory" },
+    { trigger = "Tick", target = "KrakenVictory", guard = "StateTimeExceeds", guard_args = { ms = 900 } },
 ]
 
 [states.KrakenWait]
 parent = "KrakenHold"
 transitions = [
     { trigger = "Tick", target = "KrakenSpawn", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
-]
-
-[states.KrakenEscalateTower]
-parent = "Root"
-on_enter = [
-    { action = "StatusToVar", payload = { key = "kills.kraken", name = "kraken_mark" } },
-    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
-    { action = "TerminateRegion", region = "kraken" },
 ]
 
 # What text the Kraken left passes to main: the maze faded, the field stays
