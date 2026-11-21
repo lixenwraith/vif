@@ -61,6 +61,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	parts := strings.Fields(command)
 	cmd := parts[0]
 	args := parts[1:]
+	if cmd == "bot" {
+		args = engine.BotWords(command[len(cmd):]) // a path it names may hold a space
+	}
 	if cmd == "r" && ctx.ReplaySeek != nil {
 		cmd = "replay" // a replay's regions are the recording's, so :r is the replay's own
 	}
@@ -1558,9 +1561,10 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 }
 
 // botFiles runs a :bot verb that keeps bot files and posts what it says, a line
-// a message: the console lists them all. A browser has no files and lists alone.
+// a message: the console lists them all. A browser has no files: it lists, and
+// clears what its page keeps of what a bot learned.
 func botFiles(ctx *engine.GameContext, words []string) error {
-	if len(words) > 0 && words[0] != "list" && !paths.ExternalFiles() {
+	if len(words) > 0 && words[0] != "list" && words[0] != "clear" && !paths.ExternalFiles() {
 		return errors.New(unavailable("Bot files"))
 	}
 	lines, err := ctx.SessionCtl.BotFiles(words)

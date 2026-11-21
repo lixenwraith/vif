@@ -179,12 +179,12 @@ func parseNetwork(name string, raw map[string]any, shared []string) (*network, e
 }
 
 // have gives the network the outputs listed, or with none listed every one that
-// is not asked, and returns their names: their units in the order of at, as its
+// need not be, and returns their names: their units in the order of at, as its
 // genes hold them, and what acts on each in the order Steer does
 func (n *network) have(listed []string) (had []string, err error) {
 	var at [len(outputs)]int
 	has := func(o int) bool {
-		return len(listed) == 0 && !outputs[o].asked || slices.Contains(listed, outputs[o].name)
+		return len(listed) == 0 && !outputs[o].listed || slices.Contains(listed, outputs[o].name)
 	}
 	for place := range outputs {
 		for o, row := range outputs {
@@ -340,7 +340,7 @@ func (n *network) pass() []float64 {
 }
 
 // ask reads the inputs and passes them once an update, however many of the
-// graph's guards and Steers ask in it, and returns the units' sums
+// graph's Steers ask in it, and returns the units' sums
 func (n *network) ask(m *mind) []float64 {
 	if n.asked != m.tick+1 {
 		n.asked = m.tick + 1
@@ -384,8 +384,7 @@ func (m *mind) frame() bool {
 	return cursor && ok
 }
 
-// pick is the network of nets a Steer or an Asks names, the graph's one where
-// it names none
+// pick is the network of nets a Steer names, the graph's one where it names none
 func pick(nets []*network, name string) (int, error) {
 	i := slices.IndexFunc(nets, func(n *network) bool { return n.name == name })
 	if name == "" && len(nets) == 1 {

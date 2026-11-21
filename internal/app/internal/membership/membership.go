@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/config"
@@ -70,6 +71,10 @@ type Membership struct {
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.RosterEntry
+
+	// botGraphs is what Control.BotGraphs last read, at botGraphsAt, under the world lock
+	botGraphs   []engine.BotGraph
+	botGraphsAt time.Time
 
 	// awayOrder is who of the roster is away, in the order they left: a full session
 	// of more than one place gives a newcomer the place of the first (yieldsPlaces).

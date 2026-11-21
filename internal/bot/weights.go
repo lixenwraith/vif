@@ -98,16 +98,19 @@ func (g *Graph) net(name string) *network {
 }
 
 // Document is g's document with w for the weights of each network w names: the
-// tables that wrote them go, and every weight not zero is written at its end, a
-// table a hidden unit and one an output's unit. Every other line stays, and what
-// the document then reads is w bit for bit, or it is not returned.
+// tables that wrote them go, and every weight not zero is written under the
+// network's own table, beside its inputs, a table a hidden unit and one an
+// output's unit. Every other line stays, and what the document then reads is w
+// bit for bit, or it is not returned.
 func (g *Graph) Document(w Weights) ([]byte, error) {
 	doc, err := toml.ParseDocument(g.text)
 	if err != nil {
 		return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 	}
-	var tables bytes.Buffer
-	for _, name := range slices.Sorted(maps.Keys(w)) {
+	names := slices.Sorted(maps.Keys(w))
+	// mark is a key set where a network's own keys end, which its tables then replace
+	mark := func(name string) string { return "weights_of_" + name }
+	for _, name := range names {
 		n := g.net(name)
 		if n == nil || len(w[name]) != n.geneCount() {
 			return nil, fmt.Errorf("bot %s: no network %s of %d weights", g.Name, name, len(w[name]))
@@ -117,11 +120,19 @@ func (g *Graph) Document(w Weights) ([]byte, error) {
 				return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 			}
 		}
-		n.spell(&tables, w[name])
+		if err := doc.Set(toml.Key{"network", name, mark(name)}, true); err != nil {
+			return nil, fmt.Errorf("bot %s: %w", g.Name, err)
+		}
 	}
 	text := doc.Bytes()
-	if tables.Len() > 0 {
-		text = slices.Concat(bytes.TrimRight(text, "\n"), []byte("\n"), tables.Bytes())
+	for _, name := range names {
+		var tables bytes.Buffer
+		g.net(name).spell(&tables, w[name])
+		line := []byte(mark(name) + " = true\n")
+		if bytes.Count(text, line) != 1 {
+			return nil, fmt.Errorf("bot %s: network %s has no place for its weights", g.Name, name)
+		}
+		text = bytes.Replace(text, line, tables.Bytes(), 1)
 	}
 	back, err := ParseGraph(g.Name, text)
 	if err != nil {

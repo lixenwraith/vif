@@ -16,7 +16,6 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/toml/macro"
-	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -46,8 +45,9 @@ type Settings struct {
 	// Inputs are the sensors every network of the graph reads ahead of its own
 	Inputs []string `toml:"inputs"`
 	// Score is what pays the bot: a source of the catalogue's and what one of it
-	// pays. A graph with none scores nothing and may not learn.
-	Score map[string]float64 `toml:"score"`
+	// pays, or an event by name with the payload field that names its owner. A
+	// graph with none scores nothing and may not learn.
+	Score map[string]any `toml:"score"`
 }
 
 // Graph is one parsed bot document: its settings, the networks it declares, in
@@ -117,6 +117,11 @@ func (g *Graph) validate() error {
 	}
 	if g.Settings.Learn && len(g.nets) == 0 {
 		return errors.New("learn needs a [network.<name>] whose weights to learn")
+	}
+	for _, n := range g.nets {
+		if slices.Contains(n.units, "fire") && g.Settings.AutoFire != engine.AutoFireWords[engine.AutoFireOff] {
+			return fmt.Errorf("[network.%s]: the output fire is for a graph whose [bot] auto_fire is off: the gun fires by itself otherwise", n.name)
+		}
 	}
 	if g.pays, g.scoredBy, err = scoring(g.Settings.Score); err != nil {
 		return fmt.Errorf("[bot] score: %w", err)
@@ -200,6 +205,16 @@ type Stats struct {
 	Learn []LearnStats
 }
 
+// Fielding says what each population behind the bot fields, a network each with
+// its member's score and the rounds behind it, "" with none
+func (st Stats) Fielding() string {
+	told := make([]string, len(st.Learn))
+	for i, l := range st.Learn {
+		told[i] = fmt.Sprintf("%s %.0f over %d", l.Network, l.Fielded, l.FieldedRounds)
+	}
+	return strings.Join(told, ", ")
+}
+
 // Driver plays one graph on one instance, a tick at a time.
 type Driver struct {
 	inst    Instance
@@ -222,25 +237,26 @@ type Driver struct {
 	pays      []paying
 	score     float64
 	observing atomic.Bool
-	// owed is what each death the bot's world predicted pays once it is proved
-	owed map[core.Entity]float64
 
-	// The round in play began at roundTick with roundScore paid; ended is how a new
-	// game was asked for since, which any dispatch may write.
+	// The round in play began at roundTick with roundScore paid, and paid is what
+	// each of pays has paid in it; ended is how a new game was asked for since,
+	// which any dispatch may write.
 	roundTick  uint64
 	roundScore float64
+	paid       []Paid
 	ended      atomic.Uint32
 
 	// Each network's learner, nil for none, has a genome play a round: a candidate
-	// while the bot plays alone, scored by its network's part of the round
+	// while the round is the bot's own, scored by its network's part of the round
 	// (parts), shared being what of score the parts have taken. alone is set on a
-	// run's games (Learn): a round of theirs that outlasts limit is one the driver
-	// asked the game to end (asked).
+	// run's games (Learn), and own holds while it has reported so since the round
+	// began. A round that outlasts limit is one the driver, alone, asked to end (asked).
 	learners []*Learner
 	kept     []LearnStats // what Field had it play, as its populations stand
 	parts    []part
 	shared   float64
 	alone    func() bool
+	own      bool
 	limit    time.Duration
 	asked    bool
 
@@ -249,9 +265,84 @@ type Driver struct {
 	game  int
 	games *games
 
-	// Round, when set, is told each round as it closes, its number and its score:
-	// in its turn among a run's games, and none that closes past the run's end
-	Round func(n uint64, score float64)
+	// Round, when set, is told each round as it closes: in its turn among a run's
+	// games, and none that closes past the run's end
+	Round func(Round)
+	// Reset asks for the new game that closes a round at the graph's limit, false
+	// where none may be asked for. Learn sets the driver's own request where a run
+	// sets none: in a session only its authority starts a game, so a run sets what
+	// reaches it.
+	Reset func() bool
+}
+
+// Round is a round as it closed: its number among its driver's, what the graph's
+// score paid in it and over how many ticks, how it ended and under which network,
+// the last to steer, each network's part of it and what each source paid.
+type Round struct {
+	N     uint64
+	Score float64
+	Ticks uint64
+	Ended Ending
+	Under string
+	Parts []Part
+	Paid  []Paid
+}
+
+// Part is a network's of a round: what the score paid in the ticks that were its own
+type Part struct {
+	Network string
+	Score   float64
+}
+
+// Paid is what one source of a graph's score paid in a round, and for how many
+type Paid struct {
+	Source string
+	Count  int
+	Score  float64
+}
+
+// Ending is how a round ended: by the game's own play, as a defeat does, at the
+// limit its graph sets, or cut by anything else, an operator's new game or a
+// session's, which scores nothing
+type Ending uint8
+
+const (
+	EndedByGame Ending = iota
+	EndedAtLimit
+	EndedCut
+)
+
+func (e Ending) String() string {
+	return [...]string{"ended by its game", "closed at its limit", "cut short"}[e]
+}
+
+// String is the round as a run that tells its rounds prints one, a line: its
+// score, its ticks, how it ended and under which network, then each network's
+// part where the graph has several, and what each source that paid did
+func (r Round) String() string {
+	line := fmt.Sprintf("Round %d scored %.0f in %d ticks, %s", r.N, r.Score, r.Ticks, r.Ended)
+	if r.Under != "" {
+		line += " under " + r.Under
+	}
+	var parts, paid []string
+	if len(r.Parts) > 1 {
+		for _, p := range r.Parts {
+			parts = append(parts, fmt.Sprintf("%s %.0f", p.Network, p.Score))
+		}
+	}
+	for _, p := range r.Paid {
+		if p.Count != 0 || p.Score != 0 {
+			paid = append(paid, fmt.Sprintf("%s %.0f over %d", p.Source, p.Score, p.Count))
+		}
+	}
+	told := strings.Join(parts, ", ")
+	if len(parts) > 0 && len(paid) > 0 {
+		told += "; "
+	}
+	if told += strings.Join(paid, ", "); told != "" {
+		line += ": " + told
+	}
+	return line
 }
 
 // part is a network's of the round in play: whether it steered in it, whether
@@ -277,8 +368,11 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 		return nil, fmt.Errorf("bot %s: %w", g.Name, err)
 	}
 	d := &Driver{inst: inst, ctx: ctx, machine: m, regions: m.DeclaredRegions(), rate: int64(g.Settings.ActionsPerSecond),
-		learners: make([]*Learner, len(g.nets)), parts: make([]part, len(g.nets)), pays: g.pays,
+		learners: make([]*Learner, len(g.nets)), parts: make([]part, len(g.nets)), pays: g.pays, paid: make([]Paid, len(g.pays)),
 		limit: time.Duration(g.Settings.RoundSeconds) * time.Second}
+	for i, p := range g.pays {
+		d.paid[i].Source = p.row.name
+	}
 	d.mind = mind{ctx: ctx, queue: &d.queue, steered: make([]bool, len(g.nets)),
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
 	for _, n := range g.nets {
@@ -310,42 +404,42 @@ func (d *Driver) observe(ev event.GameEvent) {
 	}
 }
 
-// pay adds what the score pays for an event of the bot's own cursor. A death its
-// world only predicted is weighed as it is seen, while its entity stands to be
-// read, and that held for the event that proves it, which comes once the entity
-// is gone.
+// pay adds what the score pays for an event of the bot's own cursor, to the score
+// and to its source's tally of the round. A death its world only predicted pays
+// nothing yet: it is weighed as it is seen, while its entity stands to be read
+// (mind.weigh), and paid by that at the event that proves it, the entity gone.
 func (d *Driver) pay(ev event.GameEvent) {
-	kind := ev.Type
-	if kind == event.EventSpeciesKillConfirmed {
+	kind, predicted := ev.Type, ev.Phase == event.PhasePredicted
+	kill, _ := ev.Payload.(*event.SpeciesKilledPayload)
+	switch {
+	case kind == event.EventSpeciesKillConfirmed:
 		kind = event.EventSpeciesKilled
+	case kill != nil && !predicted:
+		delete(d.mind.weighed, kill.Entity) // nothing predicted this one
 	}
-	sum, own := 0.0, false
-	for _, p := range d.pays {
+	own := false
+	for i, p := range d.pays {
 		if p.row.each != nil || p.row.event != kind || !d.mind.owns(ev.Payload, p.row.owner) {
+			continue
+		}
+		if own = true; predicted {
 			continue
 		}
 		worth := 1.0
 		if p.row.worth != nil {
 			worth = p.row.worth(&d.mind, ev.Payload)
 		}
-		sum, own = sum+p.weight*worth, true
-	}
-	if !own {
-		return
-	}
-	if kill, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
-		if held, ok := d.owed[kill.Entity]; ok && ev.Type == event.EventSpeciesKillConfirmed {
-			delete(d.owed, kill.Entity)
-			sum = held
-		} else if ev.Phase == event.PhasePredicted {
-			if d.owed == nil {
-				d.owed = make(map[core.Entity]float64)
-			}
-			d.owed[kill.Entity] = sum
+		if worth != 0 {
+			d.score += p.weight * worth
+			d.paid[i].Count, d.paid[i].Score = d.paid[i].Count+1, d.paid[i].Score+p.weight*worth
 		}
 	}
-	if ev.Phase != event.PhasePredicted {
-		d.score += sum
+	if kill != nil && own {
+		if predicted {
+			d.mind.weigh(kill)
+		} else {
+			delete(d.mind.weighed, kill.Entity)
+		}
 	}
 }
 
@@ -355,6 +449,10 @@ func (d *Driver) pay(ev event.GameEvent) {
 // the game, or the run's games have ended. Credit left idle is capped at one
 // second's worth, so a quiet bot bursts no further.
 func (d *Driver) Step() (more bool, err error) {
+	// A round another cursor shared any tick of is no longer the bot's own
+	if d.own && !d.alone() {
+		d.own = false
+	}
 	if g := d.games; g != nil {
 		if d.stats.Ticks >= g.end.Load() {
 			return false, nil
@@ -412,12 +510,19 @@ func (d *Driver) Step() (more bool, err error) {
 		d.count()
 	}
 	if how := d.ended.Swap(roundOn); how != roundOn {
-		d.closeRound(how == roundOver || d.asked)
+		ending := EndedCut
+		switch {
+		case d.asked:
+			ending = EndedAtLimit
+		case how == roundOver:
+			ending = EndedByGame
+		}
+		d.closeRound(ending)
 		d.asked = false
 	} else if over := time.Duration(d.stats.Ticks-d.roundTick) * tick; d.limit > 0 && over >= d.limit && !d.asked && d.alone != nil && d.alone() {
-		// A round of a run's games the game will not end is closed as far as it came, by a new game
-		d.asked = true
-		d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+		// A round the game will not end is closed as far as it came, by a new game the
+		// bot asks for only while alone: one it shared is closed so, and scores nothing
+		d.asked = d.Reset()
 	}
 	if early {
 		d.count()
@@ -432,9 +537,11 @@ func (d *Driver) Step() (more bool, err error) {
 // events paid into the part of each network whose ticks these are
 func (d *Driver) count() {
 	d.ctx.World.RunSafe(func() {
-		for _, p := range d.pays {
+		for i, p := range d.pays {
 			if p.row.each != nil {
-				d.score += p.weight * p.row.each(&d.mind)
+				units := p.row.each(&d.mind)
+				d.score += p.weight * units
+				d.paid[i].Count, d.paid[i].Score = d.paid[i].Count+int(units), d.paid[i].Score+p.weight*units
 			}
 		}
 		gain := d.score - d.shared
@@ -459,14 +566,14 @@ func (d *Driver) Field(k Kept) {
 	if n := d.mind.nets[i]; len(k.Fielded) == n.geneCount() {
 		n.wear(k.Fielded)
 	}
-	d.kept = append(d.kept, LearnStats{Network: k.Network, Rounds: k.Rounds, Recent: k.Recent, Fielded: k.Score, FieldedRounds: k.Proved})
+	d.kept = append(d.kept, LearnStats{Network: k.Network, Rounds: k.Rounds, Recent: k.Recent, Fielded: k.Score, FieldedRounds: k.Proved, Kept: true})
 }
 
 // Learn has drivers play as a run's games, the first the run's own, whose end is
-// theirs: their rounds close in one order and, while alone reports the bots play
-// by themselves, at the graph's limit. Each learner, of none or more, then plays
-// a candidate a round on its network, scored by the ticks that are its network's;
-// once the run has opened a session, each plays what it fields.
+// theirs: their rounds close in one order and, where alone reports the bot plays
+// by itself from a round's start to its end, at the graph's limit. Each learner,
+// of none or more, plays a candidate such a round on its network, scored by the
+// ticks that are its network's; any other round plays what it fields.
 func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
 	var order *games
 	if len(drivers) > 1 {
@@ -474,6 +581,12 @@ func Learn(alone func() bool, learners []*Learner, drivers ...*Driver) {
 	}
 	for game, d := range drivers {
 		d.alone, d.game, d.games = alone, game, order
+		if d.Reset == nil {
+			d.Reset = func() bool {
+				d.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+				return true
+			}
+		}
 		for _, l := range learners {
 			if i := slices.IndexFunc(d.mind.nets, func(n *network) bool { return n.name == l.name }); i >= 0 {
 				d.learners[i] = l
@@ -492,34 +605,47 @@ func (d *Driver) End(tick uint64) {
 	}
 }
 
-// deal hands each learner's network the genome its next round plays, which alone
-// is the candidate it has in flight until a round settles it
+// deal opens a round, the bot's own where it is alone as it opens, and hands each
+// learner's network the genome the round plays: in its own, the candidate it has
+// in flight until a round settles it
 func (d *Driver) deal() {
-	alone := d.alone()
+	d.own = d.alone()
 	for i, l := range d.learners {
 		if l != nil {
-			d.mind.nets[i].wear(l.take(d.game, alone))
+			d.mind.nets[i].wear(l.take(d.game, d.own))
 		}
 	}
 }
 
 // closeRound ends the round a new game closed. Its score is what the graph's
 // score paid in it. A learner whose network steered is scored by its part, when
-// the game or the run's limit ended the round; one whose network never did keeps
-// its candidate for the round that reaches it.
-func (d *Driver) closeRound(played bool) {
+// the round was the bot's own and the game or its limit ended it; one whose
+// network never did keeps its candidate for the round that reaches it.
+func (d *Driver) closeRound(how Ending) {
+	r := Round{N: d.stats.Rounds + 1, Ticks: d.stats.Ticks - d.roundTick, Ended: how}
 	var total float64
 	d.ctx.World.RunSafe(func() {
 		total = d.score
-		clear(d.owed) // a prediction is dropped with the game it was made in
+		clear(d.mind.weighed) // a prediction is dropped with the game it was made in
+		if d.Round != nil {
+			r.Paid = slices.Clone(d.paid)
+		}
+		for i := range d.paid {
+			d.paid[i].Count, d.paid[i].Score = 0, 0
+		}
 	})
-	score := total - d.roundScore
+	r.Score = total - d.roundScore
 	d.roundTick, d.roundScore = d.stats.Ticks, total
 	d.stats.Rounds++
+	for i, n := range d.mind.nets {
+		if r.Parts = append(r.Parts, Part{n.name, d.parts[i].score}); d.parts[i].holds {
+			r.Under = strings.TrimPrefix(r.Under+"+"+n.name, "+")
+		}
+	}
 	// A run's games close their rounds in turn, and one closed past the run's end is nobody's
 	if d.games == nil || d.games.enter(d.game, d.stats.Ticks) {
 		if d.alone != nil {
-			scored := played && d.alone()
+			scored := how != EndedCut && d.own
 			for i, l := range d.learners {
 				if l != nil && d.parts[i].steered {
 					l.settle(d.game, d.parts[i].score, scored)
@@ -528,7 +654,7 @@ func (d *Driver) closeRound(played bool) {
 			d.deal()
 		}
 		if d.Round != nil {
-			d.Round(d.stats.Rounds, score)
+			d.Round(r)
 		}
 		if d.games != nil {
 			d.games.exit()

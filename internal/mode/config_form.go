@@ -66,7 +66,7 @@ var configForms = map[string]configFormSpec{
 		description: "List the graphs this run can seat with what each has learned, or keep your own, as :bot does: " + strings.Join(botFileVerbs(), "; ") + ".",
 		fields:      []configFormField{{"Verb", "list", "A verb of :bot and what follows it.", inputText}},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
-			return botFiles(ctx, strings.Fields(f.Value(0)))
+			return botFiles(ctx, engine.BotWords(f.Value(0)))
 		},
 	},
 	"host": {
@@ -241,7 +241,7 @@ func botGraphOptions(ctx *engine.GameContext) []configNode {
 	for _, g := range graphs {
 		options = append(options, configNode{kind: kindAction, key: "seat/" + g.Name, label: "Add " + g.Name, command: "bot", read: enterValue,
 			disabled:    sessionRefusal(engine.SessionController.BotError),
-			description: fmt.Sprintf("Seat one bot playing %s (%s), which plays what your runs have taught it in this scenario, or as its graph writes. Bot files' list says what each has learned.", g.Name, g.Owner),
+			description: fmt.Sprintf("Seat one bot playing %s (%s), which plays what your runs have taught it in this scenario, or as its graph writes. Learned here: %s.", g.Name, g.Owner, cmp.Or(g.Learned, "nothing kept by this run")),
 			activate: func(r *Router) {
 				if err := r.ctx.SessionCtl.AddBot("1:" + g.Name); err != nil {
 					setCommandError(r.ctx, sentence(err))
