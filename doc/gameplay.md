@@ -299,7 +299,7 @@ what completion earns. A spawn request while a sequence runs is answered with th
 one (`EventGoldSpawned`), so a region can adopt it. In the embedded campaign a
 sequence outlives the handover between `main` and quasar in either direction, the
 monitor pays every completion heat and energy wherever it ends, and the storm,
-Kraken and tower setups cancel it. Only completion pays: a sequence a species
+Kraken, Devourer and tower setups cancel it. Only completion pays: a sequence a species
 destroys dusts every glyph in `main`, as every end of a quasar round does, which
 makes gold worth something to a player who never types it.
 
@@ -414,7 +414,7 @@ a blocked tracer drains to its stop point.
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
 | Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line that comes to hold three of a kind fires the kind's effect from `component.SquareKinds`, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
-| Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; it is too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
+| Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; its body is no target, and loses what its guts lose, no more than each had, so ten guts cut kill it. Guts are too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
 | Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` lasts, and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
@@ -587,14 +587,19 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 2. The quasar holds that owner's grayout and drains. Three quasar kills lead to a
    storm; earlier kills return to `main`.
 3. Each storm kill doubles the cycle damage multiplier on shield drains (§5);
-   the notice reads `Species Damage Up`. Three storm kills fade in a full-map
-   maze without rooms over a second, and half a second later one Kraken (§8)
-   rises at its center, which demolishes the maze as it moves.
+   the notice reads `Species Damage Up`. Every third storm kill opens the next
+   boss in turn, which `next_boss` names: the Kraken, the Devourer, then the
+   tower, and the turn starts over. For a Kraken a full-map maze without rooms
+   fades in over a second, and half a second later it rises at its center (§8),
+   demolishing the maze as it moves.
 4. A Kraken kill fades the maze out, and the field rests half a second past the
-   fade. The first then returns to `main` with the text the Kraken left in place; another three storm kills open the
-   second Kraken encounter. Its defeat starts tower defense. Thus the escalation
-   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
-   kills since the escalation before it; `kills.*` keeps the game's totals.
+   fade before `main` resumes with the text the Kraken left in place. The
+   Devourer (§8) rises a second into its region on a map held at the view's size,
+   text and nuggets on, and `main` resumes half a second past its recede; a map
+   under `DevourerMinWidth` by `DevourerMinHeight` (40x16) skips it. Thus the
+   escalation is **3 storms → Kraken → 3 storms → Devourer → 3 storms → tower**.
+   Each threshold counts kills since the escalation before it; `kills.*` keeps
+   the game's totals.
 5. Destroying the tower's pylons drops each participant a gun at the tower and
    clears the map; for four seconds text drifts down into it, easing to a rest,
    and `main` resumes with that text. Losing the tower fails the run.

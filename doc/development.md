@@ -607,8 +607,8 @@ every run simulates the same ticks of one seed and the allocation counts compare
 exactly, and compare `SnapshotSimulation` before and after a change that must not
 move the simulation. `BenchmarkKrakenRegion` beside it measures the Kraken in the
 campaign's kraken region, one `tick` and the `frames` the kraken renderer draws of
-it, and `BenchmarkDevourer` the same of the scratch `devourer` scenario once two
-guts hang. The Kraken's cost showed first in the browser build, which runs it
+it, and `BenchmarkDevourer` the same of the Devourer in its region once two guts
+hang. The Kraken's cost showed first in the browser build, which runs it
 under Node from `internal/app`:
 
 ```bash

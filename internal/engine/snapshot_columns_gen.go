@@ -3938,6 +3938,11 @@ func encodeColumnsDevourer(dst []byte, rows []StoreEntry[component.DevourerCompo
 			dst = appendUint(dst, rows[i].Value.Guts[j])
 		}
 	}
+	for i := range rows {
+		for j := range rows[i].Value.Felt {
+			dst = appendInt(dst, rows[i].Value.Felt[j])
+		}
+	}
 	return dst
 }
 
@@ -3972,6 +3977,11 @@ func decodeColumnsDevourer(r *columnReader) []StoreEntry[component.DevourerCompo
 	for i := range rows {
 		for j := range rows[i].Value.Guts {
 			readUint(&rows[i].Value.Guts[j], r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Felt {
+			readInt(&rows[i].Value.Felt[j], r)
 		}
 	}
 	return rows

@@ -1,0 +1,63 @@
+# Devourer region: the map's edges rise as a boss and hang its guts across the field;
+# its kill, or a map too small for it, hands the field back to main
+
+[states.DevourerHold]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDevourerCancelRequest" },
+    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+# The map holds the view's size for the fight, so a resize leaves its walls standing
+[states.DevourerSetup]
+parent = "DevourerHold"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } },
+    { action = "ConfigToVar", payload = { field = "viewport_height", name = "vh" } },
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
+]
+transitions = [
+    { trigger = "Tick", target = "DevourerSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+]
+
+[states.DevourerSpawn]
+parent = "DevourerHold"
+on_enter = [
+    { action = "EmitEvent", event = "EventDevourerSpawnRequest" },
+]
+transitions = [
+    { trigger = "EventSpeciesCreated", target = "DevourerActive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["devourer"] } },
+    # A map too small for it: no retry, as the map holds its size, and the tower is next
+    { trigger = "EventDevourerSpawnFailed", target = "DevourerVictory" },
+]
+
+[states.DevourerActive]
+parent = "DevourerHold"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "The Devourer Wakes" } },
+]
+transitions = [
+    { trigger = "EventSpeciesKilled", target = "DevourerRecede", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["devourer"] } },
+    { trigger = "EventDevourerSpawnFailed", target = "DevourerVictory" },
+]
+
+# It draws back to the edges over two seconds as its drops fly, and the field rests
+# half a second past that before main takes it
+[states.DevourerRecede]
+parent = "DevourerHold"
+transitions = [
+    { trigger = "Tick", target = "DevourerVictory", guard = "StateTimeExceeds", guard_args = { ms = 2500 } },
+]
+
+# What text it left passes to main, on a map that follows the view again
+[states.DevourerVictory]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, crop_on_resize = true } },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "devourer" },
+]

@@ -794,6 +794,10 @@ Docs · Libraries · Branches.
   points aside, the tick after it is made: a body that grows in from nothing stands
   its first members as it spawns, as the Devourer's first frame covers the edge
   cells (`DevourerEdge`), and a gut laid wholly under the body is reaped so.
+- No target finder or blast reads the profile matrix: they take any header with a
+  `Combat` that is no `CompositeTypeContainer` and not on the player's side, so a
+  kind dropped from `cursorDefenders` takes no damage but still draws every aimed
+  shot. A body nothing may hit is a container, as the Devourer's is.
 
 ## Glyphs and widgets
 
@@ -894,8 +898,9 @@ Docs · Libraries · Branches.
   too, so `:system drain disable` first.
 - A campaign encounter is entered from a running game by `:emit
   EventFSMRegionRequest { op = "pause", region = "main" }`, then `{ op = "spawn",
-  region = "kraken", state = "KrakenSetup" }`. A fresh cursor stands where the
-  Kraken rises, so `:energy 900000000` first, or its strike starts a new game. A
+  region = "kraken", state = "KrakenSetup" }` (the Devourer's is `devourer` at
+  `DevourerSetup`). A fresh cursor stands where the Kraken rises, so `:energy
+  900000000` first, or its strike starts a new game. A
   capture of a 256-color run writes entries 0-15 as `30`-`37`, `90`-`97` and their
   backgrounds, not `38;5;n`: a parser reading only that form reads them as unset.
 - `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive
