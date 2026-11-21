@@ -154,14 +154,15 @@ func (c *WorldCopy) LoadStreams(r *RandResource) []string {
 // domain's streams and the cells its input has in flight. A journal's opening
 // carries it beside the player world.
 type PlayerSide struct {
-	CameraX    int                    `json:"camera_x"`
-	CameraY    int                    `json:"camera_y"`
-	APM        APMState               `json:"apm"`
-	Explosions []ExplosionCenter      `json:"explosions,omitempty"`
-	Burns      []component.KrakenBurn `json:"burns,omitempty"`
-	View       ViewResource           `json:"view"`
-	Streams    []StreamState          `json:"streams,omitempty"`
-	Prediction PredictionState        `json:"prediction"`
+	CameraX    int                        `json:"camera_x"`
+	CameraY    int                        `json:"camera_y"`
+	APM        APMState                   `json:"apm"`
+	Explosions []ExplosionCenter          `json:"explosions,omitempty"`
+	Burns      []component.KrakenBurn     `json:"burns,omitempty"`
+	Recedes    []component.DevourerRecede `json:"recedes,omitempty"`
+	View       ViewResource               `json:"view"`
+	Streams    []StreamState              `json:"streams,omitempty"`
+	Prediction PredictionState            `json:"prediction"`
 }
 
 // CapturePlayerSide reads it. Caller MUST hold updateMutex.
@@ -172,6 +173,7 @@ func (w *World) CapturePlayerSide() PlayerSide {
 		APM:        r.Game.State.APM(),
 		Explosions: slices.Clone(r.Transient.ExplosionBacking[:r.Transient.ExplosionCount]),
 		Burns:      slices.Clone(r.Transient.KrakenBurns()),
+		Recedes:    slices.Clone(r.Transient.DevourerRecedes()),
 		View:       *r.View,
 		Streams:    r.Rand.SaveStreams(core.DomainPlayer),
 		Prediction: r.Player.Prediction(),
@@ -186,6 +188,7 @@ func (w *World) InstallPlayerSide(s PlayerSide) []string {
 	r.Game.State.SetAPM(s.APM)
 	r.Transient.ExplosionCount = copy(r.Transient.ExplosionBacking[:], s.Explosions)
 	r.Transient.BurnCount = copy(r.Transient.BurnBacking[:], s.Burns)
+	r.Transient.RecedeCount = copy(r.Transient.RecedeBacking[:], s.Recedes)
 	*r.View = s.View
 	r.Player.SetPrediction(s.Prediction)
 	return r.Rand.LoadStreams(core.DomainPlayer, s.Streams)

@@ -18,6 +18,7 @@ import (
 type HealthBarRenderer struct {
 	gameCtx  *engine.GameContext
 	position visual.HealthBarPosition
+	palette  bool
 
 	// Rendering strategy selected at init
 	renderBar healthBarCellRenderer
@@ -34,7 +35,7 @@ func NewHealthBarRenderer(gameCtx *engine.GameContext) *HealthBarRenderer {
 	}
 
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderBar = r.renderCell256
+		r.renderBar, r.palette = r.renderCell256, true
 	} else {
 		r.renderBar = r.renderCellTrueColor
 	}
@@ -58,15 +59,27 @@ func getOppositePosition(pos visual.HealthBarPosition) visual.HealthBarPosition 
 	}
 }
 
+// healthBarPlace is where a kind's bar stands: beside its footprint, on the side
+// the renderer prefers or the other where that leaves the view; centred on its
+// header; or pinned to the view's top row, for a body as large as the view
+type healthBarPlace uint8
+
+const (
+	barBeside healthBarPlace = iota
+	barCentered
+	barPinned
+)
+
 var healthBarSpecs = [component.CombatEntityCount]struct {
-	foot     vmath.Footprint
-	maxHP    int
-	centered bool
+	foot  vmath.Footprint
+	maxHP int
+	place healthBarPlace
 }{
-	component.CombatEntityDrain:  {component.Footprints[component.SpeciesDrain], parameter.CombatInitialHPDrain, false},
-	component.CombatEntitySwarm:  {component.Footprints[component.SpeciesSwarm], parameter.CombatInitialHPSwarm, false},
-	component.CombatEntityQuasar: {component.Footprints[component.SpeciesQuasar], parameter.CombatInitialHPQuasar, false},
-	component.CombatEntityKraken: {vmath.Footprint{Width: visual.KrakenHealthBarWidth, Height: 1}, parameter.KrakenInitialHP, true},
+	component.CombatEntityDrain:    {component.Footprints[component.SpeciesDrain], parameter.CombatInitialHPDrain, barBeside},
+	component.CombatEntitySwarm:    {component.Footprints[component.SpeciesSwarm], parameter.CombatInitialHPSwarm, barBeside},
+	component.CombatEntityQuasar:   {component.Footprints[component.SpeciesQuasar], parameter.CombatInitialHPQuasar, barBeside},
+	component.CombatEntityKraken:   {vmath.Footprint{Width: visual.KrakenHealthBarWidth, Height: 1}, parameter.KrakenInitialHP, barCentered},
+	component.CombatEntityDevourer: {vmath.Footprint{}, parameter.DevourerInitialHP, barPinned},
 }
 
 // Render draws health bars for all applicable combat entities
@@ -92,9 +105,12 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			p := &r.gameCtx.World.Resources.Behaviors[b.Program]
 			spec.foot, spec.maxHP = p.Footprint, p.HitPoints
 		}
-		// A Kraken's full bar is the hit points it rose with
+		// A Kraken's and a Devourer's full bar is the hit points it rose with
 		if k, ok := r.gameCtx.World.Components.Kraken.GetComponent(entity); ok && k.MaxHitPoints > 0 {
 			spec.maxHP = k.MaxHitPoints
+		}
+		if d, ok := r.gameCtx.World.Components.Devourer.GetComponent(entity); ok && d.MaxHitPoints > 0 {
+			spec.maxHP = d.MaxHitPoints
 		}
 		if spec.maxHP == 0 {
 			return true
@@ -114,25 +130,85 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			ratio = 0
 		}
 
-		if spec.centered {
+		switch spec.place {
+		case barPinned:
+			r.renderPinned(ctx, buf, ratio)
+			return true
+		case barCentered:
 			length := max(visual.HealthBarMinLength, int(math.Ceil(float64(spec.foot.Width)*ratio)))
-			r.renderHealthBar(ctx, buf, pos.X-length/2, pos.Y, length, ratio, visual.HealthBarAbove)
+			x, y := pos.X-length/2, pos.Y
+			if _, _, visible := ctx.MapToScreen(pos.X, pos.Y); visible {
+				x, y, length = r.slide(ctx, x, y, length, visual.HealthBarAbove)
+			}
+			r.renderHealthBar(ctx, buf, x, y, length, ratio, visual.HealthBarAbove)
 			return true
 		}
 
-		// Try primary position, fallback to opposite if OOB
+		// Try primary position, fallback to opposite if OOB; a body that shows but
+		// leaves neither side whole, as tall as the view or as wide, slides its bar in
 		body := spec.foot.At(pos.X, pos.Y)
 		position := r.position
 		barX, barY, barLength := r.calculateBar(body.X, body.Y, body.Width, body.Height, ratio, position)
 
 		if r.isBarOOB(ctx, barX, barY, barLength, position) {
-			position = getOppositePosition(position)
-			barX, barY, barLength = r.calculateBar(body.X, body.Y, body.Width, body.Height, ratio, position)
+			opposite := getOppositePosition(position)
+			x, y, length := r.calculateBar(body.X, body.Y, body.Width, body.Height, ratio, opposite)
+			switch {
+			case !r.isBarOOB(ctx, x, y, length, opposite):
+				barX, barY, barLength, position = x, y, length, opposite
+			case bodyShows(ctx, body):
+				barX, barY, barLength = r.slide(ctx, barX, barY, barLength, position)
+			}
 		}
 
 		r.renderHealthBar(ctx, buf, barX, barY, barLength, ratio, position)
 		return true
 	})
+}
+
+// bodyShows reports whether any cell of a body lies in the visible map
+func bodyShows(ctx render.RenderContext, body vmath.Area) bool {
+	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
+	return body.X <= maxX && body.X+body.Width > minX && body.Y <= maxY && body.Y+body.Height > minY
+}
+
+// slide moves a bar into the visible map, cut to its width or its height
+func (r *HealthBarRenderer) slide(ctx render.RenderContext, x, y, length int, position visual.HealthBarPosition) (int, int, int) {
+	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
+	if position == visual.HealthBarLeft || position == visual.HealthBarRight {
+		length = min(length, maxY-minY+1)
+		return min(max(x, minX), maxX), min(max(y, minY), maxY-length+1), length
+	}
+	length = min(length, maxX-minX+1)
+	return min(max(x, minX), maxX-length+1), min(max(y, minY), maxY), length
+}
+
+// renderPinned draws a bar on the view's top row, centred across a share of its
+// width, on a backing that reads over the body under it, the hit points lost dotted
+func (r *HealthBarRenderer) renderPinned(ctx render.RenderContext, buf *render.RenderBuffer, ratio float64) {
+	minX, minY, maxX, _ := ctx.VisibleMapBounds()
+	width := max(visual.HealthBarMinLength, int(float64(maxX-minX+1)*visual.HealthBarPinnedShare))
+	filled := max(visual.HealthBarMinLength, int(math.Ceil(float64(width)*ratio)))
+	x0 := minX + (maxX-minX+1-width)/2
+	for i := range width {
+		sx, sy, visible := ctx.MapToScreen(x0+i, minY)
+		if !visible {
+			continue
+		}
+		if r.palette {
+			buf.SetBg256(sx, sy, visual.ConBlack)
+		} else {
+			buf.SetBgOnly(sx, sy, color.Lerp(buf.BackgroundAt(sx, sy, visual.RgbBackground), visual.RgbBlack, visual.HealthBarPinnedBacking))
+		}
+		switch {
+		case i < filled:
+			r.renderBar(buf, sx, sy, visual.HealthBarChar, ratio)
+		case r.palette:
+			buf.SetFgOnly(sx, sy, visual.HealthBarLostChar, color.RGB{R: visual.HealthBar256Lost}, terminal.AttrFg256)
+		default:
+			buf.SetFgOnly(sx, sy, visual.HealthBarLostChar, visual.RgbHealthBarLost, terminal.AttrNone)
+		}
+	}
 }
 
 // calculateBar computes bar parameters for a given position

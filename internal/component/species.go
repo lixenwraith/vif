@@ -21,6 +21,7 @@ const (
 	SpeciesEye
 	SpeciesTower
 	SpeciesKraken
+	SpeciesDevourer
 	SpeciesCount
 )
 
@@ -37,31 +38,33 @@ type SubType uint8
 
 // SpeciesNames indexes SpeciesType for telemetry keys and display.
 var SpeciesNames = [SpeciesCount]string{
-	SpeciesNone:   "none",
-	SpeciesDrain:  "drain",
-	SpeciesSwarm:  "swarm",
-	SpeciesQuasar: "quasar",
-	SpeciesStorm:  "storm",
-	SpeciesPylon:  "pylon",
-	SpeciesSnake:  "snake",
-	SpeciesEye:    "eye",
-	SpeciesTower:  "tower",
-	SpeciesKraken: "kraken",
+	SpeciesNone:     "none",
+	SpeciesDrain:    "drain",
+	SpeciesSwarm:    "swarm",
+	SpeciesQuasar:   "quasar",
+	SpeciesStorm:    "storm",
+	SpeciesPylon:    "pylon",
+	SpeciesSnake:    "snake",
+	SpeciesEye:      "eye",
+	SpeciesTower:    "tower",
+	SpeciesKraken:   "kraken",
+	SpeciesDevourer: "devourer",
 }
 
 // SpeciesDomains are the domain each code species' bodies live in: a drain is its
 // participant's own, every other species Shared, as every data species is
 var SpeciesDomains = [SpeciesCount]core.Domain{
-	SpeciesNone:   core.DomainShared,
-	SpeciesDrain:  core.DomainPlayer,
-	SpeciesSwarm:  core.DomainShared,
-	SpeciesQuasar: core.DomainShared,
-	SpeciesStorm:  core.DomainShared,
-	SpeciesPylon:  core.DomainShared,
-	SpeciesSnake:  core.DomainShared,
-	SpeciesEye:    core.DomainShared,
-	SpeciesTower:  core.DomainShared,
-	SpeciesKraken: core.DomainShared,
+	SpeciesNone:     core.DomainShared,
+	SpeciesDrain:    core.DomainPlayer,
+	SpeciesSwarm:    core.DomainShared,
+	SpeciesQuasar:   core.DomainShared,
+	SpeciesStorm:    core.DomainShared,
+	SpeciesPylon:    core.DomainShared,
+	SpeciesSnake:    core.DomainShared,
+	SpeciesEye:      core.DomainShared,
+	SpeciesTower:    core.DomainShared,
+	SpeciesKraken:   core.DomainShared,
+	SpeciesDevourer: core.DomainShared,
 }
 
 // KillEffects are the visual each code species' kill leaves; an expiry fades the
@@ -69,22 +72,23 @@ var SpeciesDomains = [SpeciesCount]core.Domain{
 // bursts its shell as a pylon's and a tower's do, and a snake's its head's, the
 // body fading behind it. A data species names its own in its prototype.
 var KillEffects = [SpeciesCount]DeathEffect{
-	SpeciesNone:   DeathSilent,
-	SpeciesDrain:  DeathFlash,
-	SpeciesSwarm:  DeathScatter,
-	SpeciesQuasar: DeathScatter,
-	SpeciesStorm:  DeathScatter,
-	SpeciesPylon:  DeathScatter,
-	SpeciesSnake:  DeathScatter,
-	SpeciesEye:    DeathFlash,
-	SpeciesTower:  DeathScatter,
-	SpeciesKraken: DeathSilent, // its renderer burns it away
+	SpeciesNone:     DeathSilent,
+	SpeciesDrain:    DeathFlash,
+	SpeciesSwarm:    DeathScatter,
+	SpeciesQuasar:   DeathScatter,
+	SpeciesStorm:    DeathScatter,
+	SpeciesPylon:    DeathScatter,
+	SpeciesSnake:    DeathScatter,
+	SpeciesEye:      DeathFlash,
+	SpeciesTower:    DeathScatter,
+	SpeciesKraken:   DeathSilent, // its renderer burns it away
+	SpeciesDevourer: DeathSilent, // its renderer draws it back to the edges
 }
 
 // Footprints are each code species' body around its header, from its parameters: a
 // pylon's and a tower's at their default radii, which a request may change, a
 // snake's its head, a storm's one circle and a kraken's its body without its legs.
-// A data species declares its own in its prototype.
+// A devourer has none, its body the map's edges. A data species declares its own.
 var Footprints = [SpeciesCount]vmath.Footprint{
 	SpeciesNone:  {},
 	SpeciesDrain: {Width: 1, Height: 1},

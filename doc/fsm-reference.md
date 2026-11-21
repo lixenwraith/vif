@@ -854,7 +854,7 @@ events: the tutorial's `Stand` is delayed a tick for it.
 ```
 
 Passes when the payload's species is one of `names`: a code species (`drain`,
-`swarm`, `quasar`, `storm`, `pylon`, `snake`, `eye`, `tower`, `kraken`) or one of
+`swarm`, `quasar`, `storm`, `pylon`, `snake`, `eye`, `tower`, `kraken`, `devourer`) or one of
 the scenario's behavior programs, each resolved at load. A program's number moves
 with every name that sorts before it, so a guard names it; a name no species holds
 fails the load.

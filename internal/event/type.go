@@ -422,6 +422,17 @@ const (
 	// EventKrakenBurnRequest (component.KrakenBurn) [local] burns a killed Kraken away from the pose it died in
 	EventKrakenBurnRequest
 
+	// --- Devourer ---
+
+	// EventDevourerSpawnRequest (DevourerSpawnRequestPayload) [shared] creates a Devourer creeping in from the map's edges
+	EventDevourerSpawnRequest
+	// EventDevourerSpawnFailed [shared] reports a map with no room for one, or one standing already
+	EventDevourerSpawnFailed
+	// EventDevourerCancelRequest [shared] removes every Devourer and its guts
+	EventDevourerCancelRequest
+	// EventDevourerRecedeRequest (component.DevourerRecede) [local] draws a killed Devourer back to the edges from the frame it died at
+	EventDevourerRecedeRequest
+
 	// --- Behavior ---
 
 	// EventBehaviorSpawnRequest (BehaviorSpawnRequestPayload) [bus] asks for a program's species at a cell: it stands at once, or lands as its entrance's materialize ends

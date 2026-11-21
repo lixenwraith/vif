@@ -1,5 +1,7 @@
 package visual
 
+import "github.com/lixenwraith/color"
+
 // HealthBarPosition defines bar placement relative to entity
 type HealthBarPosition uint8
 
@@ -22,6 +24,19 @@ const (
 const (
 	HealthBarChar = '■' // ASCII fallback for 256-color
 )
+
+// A body as large as the view pins its bar to the view's top row, across
+// HealthBarPinnedShare of its width, on a backing HealthBarPinnedBacking darker than
+// what it stands over, the hit points lost dotted with HealthBarLostChar
+const (
+	HealthBarPinnedShare   = 1.0 / 3
+	HealthBarPinnedBacking = 0.75
+	HealthBarLostChar      = '·'
+)
+
+var RgbHealthBarLost = color.RGB{R: 90, G: 40, B: 40}
+
+const HealthBar256Lost = ConGray
 
 // Health256LUT maps health percentage segments to console colors, 0 critical to 4 full:
 // red, orange, yellow, yellow-green, green

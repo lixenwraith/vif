@@ -87,6 +87,8 @@ type SharedWorldState struct {
 	Square       []StoreEntry[component.SquareComponent]       `json:"square,omitempty"`
 	Block        []StoreEntry[component.BlockComponent]        `json:"block,omitempty"`
 	Kraken       []StoreEntry[component.KrakenComponent]       `json:"kraken,omitempty"`
+	Devourer     []StoreEntry[component.DevourerComponent]     `json:"devourer,omitempty"`
+	DevourerGut  []StoreEntry[component.DevourerGutComponent]  `json:"devourergut,omitempty"`
 	Behavior     []StoreEntry[component.BehaviorComponent]     `json:"behavior,omitempty"`
 	Header       []StoreEntry[component.HeaderComponent]       `json:"header,omitempty"`
 	Member       []StoreEntry[component.MemberComponent]       `json:"member,omitempty"`
@@ -160,6 +162,8 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Square = captureRows(w.Components.Square.dense, w.Components.Square.entities, core.DomainShared)
 	s.Block = captureRows(w.Components.Block.dense, w.Components.Block.entities, core.DomainShared)
 	s.Kraken = captureRows(w.Components.Kraken.dense, w.Components.Kraken.entities, core.DomainShared)
+	s.Devourer = captureRows(w.Components.Devourer.dense, w.Components.Devourer.entities, core.DomainShared)
+	s.DevourerGut = captureRows(w.Components.DevourerGut.dense, w.Components.DevourerGut.entities, core.DomainShared)
 	s.Behavior = captureRows(w.Components.Behavior.dense, w.Components.Behavior.entities, core.DomainShared)
 	s.Header = captureRows(w.Components.Header.dense, w.Components.Header.entities, core.DomainShared)
 	s.Member = captureRows(w.Components.Member.dense, w.Components.Member.entities, core.DomainShared)
@@ -327,6 +331,12 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	}
 	for _, en := range s.Kraken {
 		w.Components.Kraken.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.Devourer {
+		w.Components.Devourer.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.DevourerGut {
+		w.Components.DevourerGut.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Behavior {
 		w.Components.Behavior.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -543,6 +553,8 @@ type WorldOrder struct {
 	Square       []core.Entity                     `json:"square,omitempty"`
 	Block        []core.Entity                     `json:"block,omitempty"`
 	Kraken       []core.Entity                     `json:"kraken,omitempty"`
+	Devourer     []core.Entity                     `json:"devourer,omitempty"`
+	DevourerGut  []core.Entity                     `json:"devourergut,omitempty"`
 	Behavior     []core.Entity                     `json:"behavior,omitempty"`
 	Header       []core.Entity                     `json:"header,omitempty"`
 	Member       []core.Entity                     `json:"member,omitempty"`
@@ -608,6 +620,8 @@ func (w *World) CaptureOrder() WorldOrder {
 	o.Square = orderOf(w.Components.Square.entities)
 	o.Block = orderOf(w.Components.Block.entities)
 	o.Kraken = orderOf(w.Components.Kraken.entities)
+	o.Devourer = orderOf(w.Components.Devourer.entities)
+	o.DevourerGut = orderOf(w.Components.DevourerGut.entities)
 	o.Behavior = orderOf(w.Components.Behavior.entities)
 	o.Header = orderOf(w.Components.Header.entities)
 	o.Member = orderOf(w.Components.Member.entities)
@@ -774,6 +788,12 @@ func (w *World) InstallOrder(o WorldOrder) error {
 	if err := reorderStore(w.Components.Kraken, o.Kraken); err != nil {
 		return fmt.Errorf("kraken: %w", err)
 	}
+	if err := reorderStore(w.Components.Devourer, o.Devourer); err != nil {
+		return fmt.Errorf("devourer: %w", err)
+	}
+	if err := reorderStore(w.Components.DevourerGut, o.DevourerGut); err != nil {
+		return fmt.Errorf("devourergut: %w", err)
+	}
 	if err := reorderStore(w.Components.Behavior, o.Behavior); err != nil {
 		return fmt.Errorf("behavior: %w", err)
 	}
@@ -869,6 +889,8 @@ type SharedWorldDelta struct {
 	Square       StoreDelta[component.SquareComponent]       `json:"square,omitzero"`
 	Block        StoreDelta[component.BlockComponent]        `json:"block,omitzero"`
 	Kraken       StoreDelta[component.KrakenComponent]       `json:"kraken,omitzero"`
+	Devourer     StoreDelta[component.DevourerComponent]     `json:"devourer,omitzero"`
+	DevourerGut  StoreDelta[component.DevourerGutComponent]  `json:"devourergut,omitzero"`
 	Behavior     StoreDelta[component.BehaviorComponent]     `json:"behavior,omitzero"`
 	Header       StoreDelta[component.HeaderComponent]       `json:"header,omitzero"`
 	Member       StoreDelta[component.MemberComponent]       `json:"member,omitzero"`
@@ -939,6 +961,8 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Square = diffStore(base.Square, next.Square, equalSquare)
 	d.Block = diffStore(base.Block, next.Block, equalBlock)
 	d.Kraken = diffStore(base.Kraken, next.Kraken, equalKraken)
+	d.Devourer = diffStore(base.Devourer, next.Devourer, equalDevourer)
+	d.DevourerGut = diffStore(base.DevourerGut, next.DevourerGut, equalDevourerGut)
 	d.Behavior = diffStore(base.Behavior, next.Behavior, equalBehavior)
 	d.Header = diffStore(base.Header, next.Header, equalHeader)
 	d.Member = diffStore(base.Member, next.Member, equalMember)
@@ -1005,6 +1029,8 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Square = applyStore(base.Square, d.Square)
 	s.Block = applyStore(base.Block, d.Block)
 	s.Kraken = applyStore(base.Kraken, d.Kraken)
+	s.Devourer = applyStore(base.Devourer, d.Devourer)
+	s.DevourerGut = applyStore(base.DevourerGut, d.DevourerGut)
 	s.Behavior = applyStore(base.Behavior, d.Behavior)
 	s.Header = applyStore(base.Header, d.Header)
 	s.Member = applyStore(base.Member, d.Member)
@@ -1070,6 +1096,8 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Square.Entries()
 	n += d.Block.Entries()
 	n += d.Kraken.Entries()
+	n += d.Devourer.Entries()
+	n += d.DevourerGut.Entries()
 	n += d.Behavior.Entries()
 	n += d.Header.Entries()
 	n += d.Member.Entries()
@@ -1138,6 +1166,8 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Square, b.Square, touched, equalSquare)
 	w.Entries += countStoreDifference(a.Block, b.Block, touched, equalBlock)
 	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched, equalKraken)
+	w.Entries += countStoreDifference(a.Devourer, b.Devourer, touched, equalDevourer)
+	w.Entries += countStoreDifference(a.DevourerGut, b.DevourerGut, touched, equalDevourerGut)
 	w.Entries += countStoreDifference(a.Behavior, b.Behavior, touched, equalBehavior)
 	w.Entries += countStoreDifference(a.Header, b.Header, touched, equalHeader)
 	w.Entries += countStoreDifference(a.Member, b.Member, touched, equalMember)
@@ -1325,6 +1355,12 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Kraken {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Devourer {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.DevourerGut {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Behavior {
 		target[en.Entity] = struct{}{}
 	}
@@ -1421,6 +1457,8 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Square, s.Square)
 	reconcileStore(w.Components.Block, s.Block)
 	reconcileStore(w.Components.Kraken, s.Kraken)
+	reconcileStore(w.Components.Devourer, s.Devourer)
+	reconcileStore(w.Components.DevourerGut, s.DevourerGut)
 	reconcileStore(w.Components.Behavior, s.Behavior)
 	reconcileStore(w.Components.Header, s.Header)
 	reconcileStore(w.Components.Member, s.Member)
@@ -1495,6 +1533,8 @@ func (w *World) ReconcileSharedFrom(src *World, record bool) *WorldReconcile {
 	d.Square = compareStoreFrom(r, w.Components.Square, src.Components.Square, equalSquare)
 	d.Block = compareStoreFrom(r, w.Components.Block, src.Components.Block, equalBlock)
 	d.Kraken = compareStoreFrom(r, w.Components.Kraken, src.Components.Kraken, equalKraken)
+	d.Devourer = compareStoreFrom(r, w.Components.Devourer, src.Components.Devourer, equalDevourer)
+	d.DevourerGut = compareStoreFrom(r, w.Components.DevourerGut, src.Components.DevourerGut, equalDevourerGut)
 	d.Behavior = compareStoreFrom(r, w.Components.Behavior, src.Components.Behavior, equalBehavior)
 	d.Header = compareStoreFrom(r, w.Components.Header, src.Components.Header, equalHeader)
 	d.Member = compareStoreFrom(r, w.Components.Member, src.Components.Member, equalMember)
@@ -1757,6 +1797,14 @@ func equalBlock(a, b *component.BlockComponent) bool {
 
 func equalKraken(a, b *component.KrakenComponent) bool {
 	return a.MaxHitPoints == b.MaxHitPoints && a.State == b.State && a.StateRemaining == b.StateRemaining && a.IdleTurnRemaining == b.IdleTurnRemaining && a.LastAction == b.LastAction && a.ActionStreak == b.ActionStreak && a.AttackLegs == b.AttackLegs && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.TurnDir)) == math.Float64bits(float64(b.TurnDir)) && math.Float64bits(float64(a.Angle)) == math.Float64bits(float64(b.Angle)) && math.Float64bits(float64(a.Time)) == math.Float64bits(float64(b.Time)) && math.Float64bits(float64(a.RotSpeed)) == math.Float64bits(float64(b.RotSpeed)) && math.Float64bits(float64(a.MoveBlend)) == math.Float64bits(float64(b.MoveBlend)) && math.Float64bits(float64(a.AttackT)) == math.Float64bits(float64(b.AttackT))
+}
+
+func equalDevourer(a, b *component.DevourerComponent) bool {
+	return a.MaxHitPoints == b.MaxHitPoints && a.Elapsed == b.Elapsed && a.Seed == b.Seed && a.NextOmen == b.NextOmen && a.Omen.Remaining == b.Omen.Remaining && math.Float64bits(float64(a.Omen.From)) == math.Float64bits(float64(b.Omen.From)) && math.Float64bits(float64(a.Omen.To)) == math.Float64bits(float64(b.Omen.To)) && a.Guts == b.Guts
+}
+
+func equalDevourerGut(a, b *component.DevourerGutComponent) bool {
+	return a.Devourer == b.Devourer && math.Float64bits(float64(a.From)) == math.Float64bits(float64(b.From)) && math.Float64bits(float64(a.To)) == math.Float64bits(float64(b.To)) && a.Formed == b.Formed && math.Float64bits(float64(a.Phase)) == math.Float64bits(float64(b.Phase))
 }
 
 func equalBehavior(a, b *component.BehaviorComponent) bool {

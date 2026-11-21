@@ -414,12 +414,13 @@ a blocked tracer drains to its stop point.
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
 | Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line that comes to hold three of a kind fires the kind's effect from `component.SquareKinds`, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
+| Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; it is too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
 | Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` lasts, and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
 The component `SpeciesType` catalog includes drain, swarm, quasar, storm,
-pylon, snake, eye, tower, and kraken, then eight IDs for data species. Gateway
+pylon, snake, eye, tower, kraken and devourer, then eight IDs for data species. Gateway
 and bullet are mechanics/entities but not species. Species systems own
 formation-specific movement and spawning; common damage is delegated to
 `CombatSystem`, common movement math to `pkg/vmath/physics`, and path selection
@@ -434,8 +435,9 @@ attack takes off a pylon, a tower, a storm circle or a snake's body fades out
 where it stood. As the last cell of a pylon, a tower or a storm circle falls, its
 shell bursts: shards fly out from the outline its glow stood on. A killed Kraken
 burns away where it died, in a second: its legs thrash and draw in as they burn
-from tip to root, then its core glows and closes
-([ECS §7](ecs-and-events.md#death-effects)).
+from tip to root, then its core glows and closes. A killed Devourer draws back to
+the edges over two seconds, fading, its walls still moving, and its guts fade where
+they hung ([ECS §7](ecs-and-events.md#death-effects)).
 
 ## 9. Walls, maps, navigation, and environment
 
@@ -562,7 +564,7 @@ that each mechanic reads on glyphs alone.
   stands, and it drifts into rock and walls. The glyph renderer draws nothing in a
   cell that blocks spawns, since rock and walls draw first and a glyph prints over
   them, so the text passes behind them.
-- `ProtectFromSpecies`: spawn, teleport and Kraken sweeps, drains and gold pass it.
+- `ProtectFromSpecies`: spawn, teleport, Kraken and Devourer sweeps, drains and gold pass it.
 - `ProtectFromDelete` and `ProtectFromTyping`: deletes skip it, and typing, motions,
   search, markers and bots look through it.
 - Particles act on it as on any glyph: decay and blossom change its level, and so
@@ -805,7 +807,7 @@ declares for itself:
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `square`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
-| Species | `drain`, `quasar`, `swarm`, `storm`, `kraken`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
+| Species | `drain`, `quasar`, `swarm`, `storm`, `kraken`, `devourer`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
 | Particles/overlays | `flash`, `fadeout`, `marker`, `button`, `explosion`, `motion_marker`, `splash` |
 | Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
@@ -826,7 +828,7 @@ Each entry declares a domain profile and its dependencies in
 | Concern | Source of truth |
 |---|---|
 | Player and collectible constants | `internal/parameter/gameplay.go`, `player.go`, `collectible.go` |
-| Species tuning | `internal/parameter/{drain,quasar,swarm,storm,kraken,pylon,snake,eye,tower}.go` |
+| Species tuning | `internal/parameter/{drain,quasar,swarm,storm,kraken,devourer,pylon,snake,eye,tower}.go` |
 | Magic square kinds and their effects | `component.SquareKinds`, `internal/parameter/square.go` |
 | Weapons, combat matrix and profiles | `internal/component/weapon.go` (`WeaponSpecs`), `internal/profile/combat.go`, `internal/parameter/combat.go`, `player.go`, `tracer.go`, `internal/system/combat.go` |
 | Drop tables and rewards | `internal/profile/loot.go`, `internal/component/loot.go`, `internal/parameter/loot.go`, a scenario's `[loot]` and `[drops]` (`internal/behavior/loot.go`) |

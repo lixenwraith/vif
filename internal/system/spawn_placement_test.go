@@ -59,6 +59,7 @@ func TestALandRequestStandsTheCodeSpeciesItNames(t *testing.T) {
 		component.SpeciesStorm: NewStormSystem, component.SpeciesPylon: NewPylonSystem,
 		component.SpeciesSnake: NewSnakeSystem, component.SpeciesEye: NewEyeSystem,
 		component.SpeciesTower: NewTowerSystem, component.SpeciesKraken: NewKrakenSystem,
+		component.SpeciesDevourer: NewDevourerSystem,
 	}
 	for species := component.SpeciesNone + 1; species < component.SpeciesCount; species++ {
 		if component.SpeciesDomains[species] != core.DomainShared {

@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
@@ -56,6 +57,12 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 		button := world.CreateEntity(core.DomainShared)
 		world.Components.Button.SetComponent(button, component.ButtonComponent{Slot: slot, Key: '0' + rune(slot), Color: color.RGB{B: 200}})
 	}
+
+	// A Devourer lines the map's edges, its omen's ray across it
+	devourer := world.CreateEntity(core.DomainShared)
+	world.Components.Devourer.SetComponent(devourer, component.DevourerComponent{
+		Elapsed: parameter.DevourerCreep, Omen: component.DevourerOmen{Remaining: parameter.DevourerOmen / 2, From: 0.4, To: 3.6},
+	})
 
 	kraken := world.CreateEntity(core.DomainShared)
 	world.Components.Kraken.SetComponent(kraken, component.KrakenComponent{State: component.KrakenAttack, AttackT: 1})

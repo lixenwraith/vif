@@ -15,9 +15,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TransientSystem manages player-domain presentation: screen overlays,
-// short-lived spatial explosion centers, the Krakens burning away and the walls a
-// maze laid fading in.
+// TransientSystem manages player-domain presentation: screen overlays, short-lived
+// spatial explosion centers, the Krakens burning away, the Devourers drawing back
+// and the walls a maze laid fading in.
 type TransientSystem struct {
 	world *engine.World
 
@@ -71,6 +71,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
 		event.EventKrakenBurnRequest,
+		event.EventDevourerRecedeRequest,
 		event.EventWallFadeInRequest,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -136,6 +137,16 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 			transient.BurnCount++
 		}
 
+	case event.EventDevourerRecedeRequest:
+		if p, ok := ev.Payload.(*component.DevourerRecede); ok {
+			transient := s.world.Resources.Transient
+			if transient.RecedeCount == parameter.DevourerRecedeCap {
+				transient.RecedeCount = copy(transient.RecedeBacking[:], transient.RecedeBacking[1:])
+			}
+			transient.RecedeBacking[transient.RecedeCount] = *p
+			transient.RecedeCount++
+		}
+
 	case event.EventWallFadeInRequest:
 		// One maze stands at a time: a new one's walls take over the fade
 		if p, ok := ev.Payload.(*component.WallFadeIn); ok {
@@ -168,6 +179,7 @@ func (s *TransientSystem) Update() {
 	}
 	s.updateExplosions()
 	s.updateKrakenBurns()
+	s.updateDevourerRecedes()
 	if fade := &s.world.Resources.Transient.WallFadeIn; fade.Duration > 0 {
 		fade.Elapsed += s.world.Resources.Time.DeltaTime
 		if fade.Elapsed >= fade.Duration {
@@ -228,6 +240,27 @@ func (s *TransientSystem) updateKrakenBurns() {
 		}
 	}
 	transient.BurnCount = write
+}
+
+// updateDevourerRecedes draws each killed Devourer further back, its walls moving on,
+// until it is gone. An install brings a Devourer back without a word, so its return
+// ends its recede.
+func (s *TransientSystem) updateDevourerRecedes() {
+	transient := s.world.Resources.Transient
+	dt := s.world.Resources.Time.DeltaTime
+	write := 0
+	for i := range transient.RecedeCount {
+		r := &transient.RecedeBacking[i]
+		r.Devourer.Elapsed += dt
+		r.Recede += dt.Seconds() / parameter.DevourerRecede.Seconds()
+		if r.Recede < 1 && !s.world.Components.Devourer.HasEntity(r.Entity) {
+			if write != i {
+				transient.RecedeBacking[write] = *r
+			}
+			write++
+		}
+	}
+	transient.RecedeCount = write
 }
 
 // addExplosionCenter owns the visual-only merge and bounded center array. Neither
