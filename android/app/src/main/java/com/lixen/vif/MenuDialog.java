@@ -87,9 +87,12 @@ final class MenuDialog extends Dialog {
         margin.setMargins(dp(16), dp(16), dp(16), dp(16));
         outside.addView(window, margin);
 
+        // A title one line cannot hold, as on a narrow phone, takes two, the head
+        // growing past its 56 dp only when a large font scale needs it to
         FrameLayout head = new FrameLayout(c);
+        head.setMinimumHeight(dp(56));
         title = StartScreen.text(c, "Menu", 18, Color.WHITE);
-        title.setSingleLine();
+        title.setMaxLines(2);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(dp(16), 0, dp(56), 0);
         head.addView(title, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -101,7 +104,8 @@ final class MenuDialog extends Dialog {
         close.setBackground(pressable());
         close.setOnClickListener(v -> Game.menu("close", "", ""));
         head.addView(close, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER_VERTICAL | Gravity.END));
-        window.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+        window.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         search = field(c, "text");
         search.setHint("Search the menu");

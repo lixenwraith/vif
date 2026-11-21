@@ -300,7 +300,7 @@ html, body {
     flex: none;
     align-items: center;
     justify-content: space-between;
-    height: 56px;
+    min-height: 56px;
     padding-left: 16px;
 }
 
@@ -310,10 +310,14 @@ html, body {
     font: 500 18px var(--ui);
 }
 
+/* A title one line cannot hold, as on a narrow phone, takes two, which the head's
+   56px holds unless the browser scales its text up; past those it ends in an
+   ellipsis. */
 #config-head h2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
     overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
 }
 
 #help-close,
