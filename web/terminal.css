@@ -6,8 +6,7 @@
 
 /* lixen.com's dark theme, which every host's start screen wears: its page, its
    cards, hairlines, muted text, links and the two buttons, a blue fill and a blue
-   ring around a periwinkle label. The font here is Roboto, not the site's Hack: an
-   installed copy, else /fonts/ on the page's site, else fonts/ beside this file. */
+   ring around a periwinkle label, all in its font. */
 :root {
     --bg: #11111b;
     --surface: #1a1b26;
@@ -18,23 +17,28 @@
     --button: #2563eb;
     --button-hover: #5f57f5;
     --danger: #f87171;
-    --ui: Roboto, sans-serif;
+    --ui: 'Hack Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/* The site's font in its two files (fonts/LICENSE): /fonts/ on the page's site, else
+   fonts/ beside this file, never from elsewhere. As on the site, size-adjust draws it
+   at 90%, or monospace lines read oversized, and 500 falls to the 400 there is. */
 @font-face {
-    font-family: Roboto;
+    font-family: 'Hack Nerd Font';
+    font-style: normal;
     font-weight: 400;
     font-display: swap;
-    src: local('Roboto'), local('Roboto-Regular'),
-         url('/fonts/roboto-400.woff2') format('woff2'), url('fonts/roboto-400.woff2') format('woff2');
+    size-adjust: 90%;
+    src: url('/fonts/hack-400.woff2') format('woff2'), url('fonts/hack-400.woff2') format('woff2');
 }
 
 @font-face {
-    font-family: Roboto;
-    font-weight: 500;
+    font-family: 'Hack Nerd Font';
+    font-style: normal;
+    font-weight: 700;
     font-display: swap;
-    src: local('Roboto Medium'), local('Roboto-Medium'),
-         url('/fonts/roboto-500.woff2') format('woff2'), url('fonts/roboto-500.woff2') format('woff2');
+    size-adjust: 90%;
+    src: url('/fonts/hack-700.woff2') format('woff2'), url('fonts/hack-700.woff2') format('woff2');
 }
 
 html, body {
@@ -689,7 +693,7 @@ html, body {
     border: 0;
     background: none;
     color: var(--muted);
-    font: 14px/1 monospace;
+    font: 14px/1 var(--ui);
 }
 
 /* Inline, an icon would sit on the text baseline, below the middle. */
