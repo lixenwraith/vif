@@ -16,13 +16,16 @@ with others over the network: in a terminal, a desktop window, on Android or in
 the browser.
 
 It is pure Go with cgo off and few dependencies. The terminal, TOML, color and
-logging primitives are modules of their own ([terminal](https://github.com/lixenwraith/terminal),
-[toml](https://github.com/lixenwraith/toml), [color](https://github.com/lixenwraith/color),
+logging primitives are modules of their own
+([terminal](https://github.com/lixenwraith/terminal),
+[toml](https://github.com/lixenwraith/toml),
+[color](https://github.com/lixenwraith/color),
 [log](https://github.com/lixenwraith/log)), as is the [audio
 engine](https://github.com/lixenwraith/audio). The terminal repository also holds
-the desktop window, the page the browser plays in and the Go half of the Android
-view, with the font they draw cells in; vif owns the ECS, gameplay, input, compositor,
-scenarios, renderers and simulation libraries.
+the desktop window, the Go half and the scripts (`page.js`, `worker.js`) of the
+page the browser plays in, the Go half of the Android view, and the font they draw
+cells in; vif owns the ECS, gameplay, input, compositor, scenarios, renderers and
+simulation libraries.
 
 ## Highlights
 

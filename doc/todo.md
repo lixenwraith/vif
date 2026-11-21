@@ -892,11 +892,13 @@ since it spells them. What it costs, and what it does not reach:
 - Priority: P2
 - Affected files: `Makefile` (`page`), `.gitignore`
 
-`make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which only
-the release workflow's web archive carries, so a deployment of `web/` serves
-Hack's web font, inside `vif.wasm`, without its licence. Closes with `page`
-installing the terminal module's `atlas/LICENSE` as `$(PAGE_DIR)/LICENSE.font`,
-which `.gitignore` takes as it takes the page's scripts.
+`make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which, of
+the page's copies, only the release workflow's web archive carries, so a
+deployment of `web/` serves Hack's web font, inside `vif.wasm`, without its
+licence beside it: only the font's own name table holds the text. Closes with
+`page` installing the terminal module's `atlas/LICENSE` as
+`$(PAGE_DIR)/LICENSE.font`, which `.gitignore` takes as it takes the page's
+scripts.
 
 ### Wrap and scroll the About window
 
