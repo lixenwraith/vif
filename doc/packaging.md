@@ -63,8 +63,11 @@ These hold regardless of which repository is targeted first.
   module embeds; its licence is that module's `atlas/LICENSE`, below the root
   `notices` reads, so it travels beside `NOTICES` as `LICENSE.font`: `make
   release` copies it to `bin/` and `make install` stops without it, and the
-  release workflow and Gradle copy it from the module they build with.
-  The About overlay points to `NOTICES`.
+  release workflow and Gradle copy it from the module they build with. The
+  page's and the Android app's own text is lixen.com's font, Hack Nerd Font
+  (MIT, Bitstream Vera's and Nerd Fonts' OFL), whose licence lies beside its
+  files in `web/fonts/` and the APK's `assets/fonts/`, so the web archive and the
+  APK carry it. The About overlay points to `NOTICES`.
 
 ## 2. Release surface
 

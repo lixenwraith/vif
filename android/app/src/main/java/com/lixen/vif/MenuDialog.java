@@ -89,7 +89,6 @@ final class MenuDialog extends Dialog {
 
         FrameLayout head = new FrameLayout(c);
         title = StartScreen.text(c, "Menu", 18, Color.WHITE);
-        title.setTypeface(StartScreen.MEDIUM);
         title.setSingleLine();
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(dp(16), 0, dp(56), 0);
@@ -421,7 +420,6 @@ final class MenuDialog extends Dialog {
             if (page) {
                 // A page is a heading ruled off from the one above; its rows sit under it
                 // in a tinted panel behind a stripe, as the site's cards do
-                label.setTypeface(StartScreen.MEDIUM);
                 chevron = StartScreen.text(c, "", 18, StartScreen.ACCENT);
                 chevron.setPadding(dp(12), 0, 0, 0);
                 view.setPadding(dp(16), dp(14), dp(16), dp(14));
@@ -439,7 +437,6 @@ final class MenuDialog extends Dialog {
             switch (kind) {
                 case "group":
                     if (section) {
-                        label.setTypeface(StartScreen.MEDIUM);
                         label.setTextColor(StartScreen.ACCENT);
                         label.setLetterSpacing(0.08f);
                         label.setAllCaps(true);
@@ -484,12 +481,10 @@ final class MenuDialog extends Dialog {
                     break;
                 case "action":
                     label.setTextColor(StartScreen.ACCENT);
-                    label.setTypeface(StartScreen.MEDIUM);
                     value = arrow(c);
                     actable();
                     break;
                 case "form":
-                    label.setTypeface(StartScreen.MEDIUM);
                     fields(e.node);
                     if (fields.length == 1) {
                         field = field(c, inputOf(e.node, 0));
@@ -733,7 +728,7 @@ final class MenuDialog extends Dialog {
             for (String choice : choices) {
                 RadioButton b = new RadioButton(c);
                 b.setText(choice);
-                b.setTextSize(16);
+                StartScreen.font(b, 16);
                 b.setTextColor(Color.WHITE);
                 b.setButtonTintList(checked(StartScreen.BUTTON, StartScreen.MUTED));
                 b.setChecked(choice.equals(current));
@@ -828,7 +823,6 @@ final class MenuDialog extends Dialog {
             body.setBackground(StartScreen.frame(c));
             body.setPadding(dp(20), dp(16), dp(20), dp(16));
             TextView head = StartScreen.text(c, heading, 18, Color.WHITE);
-            head.setTypeface(StartScreen.MEDIUM);
             head.setPadding(0, 0, 0, dp(8));
             body.addView(head);
             ScrollView scroll = new ScrollView(c);
@@ -870,7 +864,6 @@ final class MenuDialog extends Dialog {
     // periwinkle one, either filling royal blue while pressed
     private TextView button(Context c, String text, boolean fill) {
         TextView b = StartScreen.text(c, text, 16, fill ? Color.WHITE : StartScreen.ACCENT);
-        b.setTypeface(StartScreen.MEDIUM);
         b.setGravity(Gravity.CENTER);
         b.setMinHeight(dp(44));
         b.setMinWidth(dp(96));
@@ -908,7 +901,7 @@ final class MenuDialog extends Dialog {
     // blue while focused; input picks the keyboard
     private EditText field(Context c, String input) {
         EditText f = new EditText(c);
-        f.setTextSize(16);
+        StartScreen.font(f, 16);
         f.setTextColor(Color.WHITE);
         f.setHintTextColor(StartScreen.MUTED);
         f.setSingleLine();
