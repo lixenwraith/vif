@@ -186,7 +186,10 @@ Lowest priority: Go game packages move slowly through NEW.
    `wad/content/` separately: they are Go standard-library source under the Go
    Authors' BSD licence. So is the vendored cell font,
    `vendor/github.com/lixenwraith/terminal/atlas/hack.*`, under Hack's MIT and
-   Bitstream Vera licences (its `atlas/LICENSE`).
+   Bitstream Vera licences (its `atlas/LICENSE`), and so are the page's and the
+   app's font, `web/fonts/hack-*.woff2` and
+   `android/app/src/main/assets/fonts/hack-400.ttf`, under those and Nerd Fonts'
+   OFL (the `LICENSE` beside each).
 4. Lintian may flag the size of the config tree in `/etc/vif`; the override
    goes in `debian/vif.lintian-overrides`.
 
