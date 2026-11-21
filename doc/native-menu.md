@@ -167,16 +167,15 @@ stay one mechanism. The `vif_headless` profile builds without it.
 - `android/game`: `Listener.Menu(json)`, empty for a closed menu; `Game.Menu(op, id,
   arg)` queues an op; the view implements `menuPresentation`.
 - `MenuDialog.java`: a `Dialog` nearly the screen's size, like the start screen's
-  touch controls window, in the site's dark theme and Roboto from `StartScreen`'s
-  constants. It has its own window, so `SOFT_INPUT_ADJUST_RESIZE` lifts a field
-  above the keyboard while the activity stays `adjustNothing` and the grid is never
-  cropped; `MainActivity` ignores the keyboard's insets while it is up.
+  touch controls window, in the site's dark theme and font from `StartScreen`'s
+  constants and `font`. It has its own window, so `SOFT_INPUT_ADJUST_RESIZE` lifts
+  a field above the keyboard while the activity stays `adjustNothing` and the grid
+  is never cropped; `MainActivity` ignores the keyboard's insets while it is up.
 - Layout: the title (what the game does meanwhile) and ×, then a search field; below,
-  a `ScrollView` of rows at least 48 dp tall, labels at 16 sp, values and
-  descriptions at 14 sp in the muted colour, all in sp so the system's font scale
-  applies; a page expands in place under a chevron and its sections show as titles
-  over their rows; a disabled row is dimmed and shows its reason first; the status
-  line sits at the foot.
+  a `ScrollView` of rows at least 48 dp tall, their text in sp so the system's font
+  scale applies, and drawn at 90% as the page draws the site's font; a page expands
+  in place under a chevron and its sections show as titles over their rows; a
+  disabled row is dimmed and shows its reason first; the status line sits at the foot.
 - Widgets by kind: `toggle` a `Switch`; `choice` a row showing its value, which
   opens a radio list; `step` −, the value, +; `pick` a radio row, the Start action
   under the list naming the marked one; `action` a row that acts when tapped, after

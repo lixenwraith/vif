@@ -25,7 +25,8 @@ whose flags, files and formats may change without notice.
 - `vif.exe`: the game, in a terminal
 <!-- end -->
 <!-- if web -->
-- `index.html`, with its scripts and stylesheet: the page that runs the game
+- `index.html`, with its scripts, stylesheet and `fonts/`, the font of its text
+  with that font's licence: the page that runs the game
 - `vif.wasm`: the game, which the page runs in a Worker through `wasm_exec.js`
 <!-- end -->
 - `LICENSE`: vif's licence, BSD-3-Clause
