@@ -924,6 +924,14 @@ Docs · Libraries · Branches.
   fading ground was blended to nothing, and a fade over a cell nothing painted
   (black in staging, the theme background after `finalize`) went through black:
   both showed only in the running game, read from a capture's colors, not its glyphs.
+- An effect is read frame by frame, composed as the game composes it, from a
+  scratch program under `tmp/`: a headless `App`, `manifest.BuildRenderers` on a
+  `render.NewRenderOrchestrator` whose `Surface` keeps the cells `Flush` hands it,
+  and each frame's `RenderContext` with `GameTime` a part of a tick past
+  `Resources.Time.PaceTime`. Its world draws in 256 colors until its
+  `Config.ColorMode` is set, a kill is `Combat.HitPoints = 0` on a header, on its
+  members for an ablative kind, and the cells written as HTML spans shoot as a
+  filmstrip. A dead species' loot and its scenario's strobe are in the frames too.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
   Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under

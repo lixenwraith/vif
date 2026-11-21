@@ -47,9 +47,9 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 // drawScatter draws each part once on its way out, fast at first and slowing, its
-// light going as it settles. A cell already showing a glyph keeps it: a scatter
-// passes under what is there, as the species drawn after it pass over it. The
-// blank a crosshair or a grid line leaves in a cell is no glyph.
+// light going into the background as it settles. A cell already showing a glyph
+// keeps it: a scatter passes under what is there, as the species drawn after it
+// pass over it. The blank a crosshair or a grid line leaves in a cell is no glyph.
 func drawScatter(ctx render.RenderContext, buf *render.RenderBuffer, parts []component.SpiritPart, progress float64) {
 	rest := 1 - progress
 	travelled, light := 1-rest*rest, 1-progress*progress
@@ -63,7 +63,7 @@ func drawScatter(ctx render.RenderContext, buf *render.RenderBuffer, parts []com
 		if under := buf.CellAt(screenX, screenY).Rune; under != 0 && under != ' ' {
 			continue
 		}
-		buf.SetFgOnly(screenX, screenY, part.Rune, color.Scale(part.Color, light), terminal.AttrNone)
+		buf.SetFgAlpha(screenX, screenY, part.Rune, part.Color, light, terminal.AttrNone)
 	}
 }
 

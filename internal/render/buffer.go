@@ -179,7 +179,11 @@ func (b *RenderBuffer) BackgroundAt(x, y int, fallback color.RGB) color.RGB {
 	if !b.Bounds().Contains(x, y) {
 		return fallback
 	}
-	idx := y*b.width + x
+	return b.composedBg(y*b.width+x, fallback)
+}
+
+// composedBg is the background the cell at idx shows, fallback where nothing painted it
+func (b *RenderBuffer) composedBg(idx int, fallback color.RGB) color.RGB {
 	if !b.touched[idx] {
 		return fallback
 	}
@@ -314,6 +318,27 @@ func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg color.RGB, attrs terminal.
 	dst.Rune = r
 	dst.Fg = fg
 	// Preserve bg-related attrs (AttrBg256), combine with new fg attrs
+	dst.Attrs = (dst.Attrs & terminal.AttrBg256) | attrs
+	b.masks[idx] |= b.currentMask
+}
+
+// SetFgAlpha draws a glyph at alpha over what its cell shows without it, the glyph
+// standing there or else the background, so one fading out ends in that and not
+// in black; the background stays
+func (b *RenderBuffer) SetFgAlpha(x, y int, r rune, fg color.RGB, alpha float64, attrs terminal.Attr) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	dst := &b.cells[idx]
+
+	b.resolvePalette(dst, true, false)
+	under := dst.Fg
+	if dst.Rune == 0 || dst.Rune == ' ' {
+		under = b.composedBg(idx, b.untouchedBg())
+	}
+	dst.Rune = r
+	dst.Fg = color.Blend(under, fg, alpha)
 	dst.Attrs = (dst.Attrs & terminal.AttrBg256) | attrs
 	b.masks[idx] |= b.currentMask
 }

@@ -16,9 +16,9 @@ import (
 
 // TestEffectBatchesFadeBetweenTicks: a batch's cells are drawn as far through the
 // fade as its deadline stands at the frame's moment, part of a tick past the tick
-// that aged it: a flash's glyph in the removal flash's color, a fadeout's cell in
-// its own colors over the background, its glyph alone where the cell is not solid,
-// and its ground alone under a flash's glyph, which keeps its color
+// that aged it, each fading into what its cell shows: a flash's glyph and a glyph
+// alone into the background, a ground into it under a flash's glyph, which keeps
+// its color, and a solid cell's glyph into its own ground
 func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 	w, game := glyphWorld()
 	tick := engine.SimEpoch.Add(time.Second)
@@ -50,16 +50,17 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 
 		// A frame stands a tick past its tick at most
 		opacity := 1 - float64(elapsed+min(since, 50*time.Millisecond))/float64(duration)
-		flashed, ground := color.Scale(visual.RgbRemovalFlash, opacity), color.Blend(visual.RgbBackground, color.Scale(blue, opacity), opacity)
+		over := func(under, c color.RGB) color.RGB { return color.Blend(under, c, opacity) }
+		flashed, ground := over(visual.RgbBackground, visual.RgbRemovalFlash), over(visual.RgbBackground, blue)
 		for _, want := range []struct {
 			x      int
 			r      rune
 			fg, bg color.RGB
 		}{
 			{3, 'f', flashed, color.RGB{}},
-			{5, 'w', color.Blend(color.RGB{}, color.Scale(red, opacity), opacity), ground},
+			{5, 'w', over(ground, red), ground},
 			{6, 'h', flashed, ground},
-			{7, 'g', color.Scale(green, opacity), color.RGB{}},
+			{7, 'g', over(visual.RgbBackground, green), color.RGB{}},
 		} {
 			if got := buf.CellAt(want.x, 4); got.Rune != want.r || got.Fg != want.fg || got.Bg != want.bg {
 				t.Fatalf("%v past the tick, (%d,4) drew %q fg %v bg %v, want %q fg %v bg %v",
@@ -82,8 +83,8 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 
 // TestFlightsTravelBetweenTicks: a flight's parts are drawn as far along as its
 // deadline stands at the frame's moment. A scattered part runs fast and slows,
-// dimming in its own color, crosses the blank a crosshair leaves and passes under
-// a glyph already drawn; a converging part sets off from its start cell alone and
+// dimming into the blank a crosshair leaves, which it crosses, and passes under a
+// glyph already drawn; a converging part sets off from its start cell alone and
 // is on its target as the flight ends
 func TestFlightsTravelBetweenTicks(t *testing.T) {
 	w, game := glyphWorld()
@@ -122,8 +123,8 @@ func TestFlightsTravelBetweenTicks(t *testing.T) {
 		buf := draw(since)
 		progress := float64(elapsed+since) / float64(duration)
 		x := int(2.5 + 8*(1-(1-progress)*(1-progress)))
-		if got := buf.CellAt(x, 4); got.Rune != 'a' || got.Fg != color.Scale(red, 1-progress*progress) {
-			t.Fatalf("%v past the tick, (%d,4) drew %q fg %v, want the part there, dimmed by its progress", since, x, got.Rune, got.Fg)
+		if got := buf.CellAt(x, 4); got.Rune != 'a' || got.Fg != color.Blend(visual.RgbPingLineNormal, red, 1-progress*progress) {
+			t.Fatalf("%v past the tick, (%d,4) drew %q fg %v, want the part there, dimmed into the line by its progress", since, x, got.Rune, got.Fg)
 		}
 		if got := buf.CellAt(20, 4); got.Rune != 'G' || got.Fg != green {
 			t.Fatalf("%v past the tick, the glyph a part stands over drew %q fg %v", since, got.Rune, got.Fg)

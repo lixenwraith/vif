@@ -224,6 +224,7 @@ Focused helpers preserve the other channel:
 | Operation | Semantics |
 |---|---|
 | `SetFgOnly` | Replace rune/foreground/foreground attributes and retain background. |
+| `SetFgAlpha` | Draw a glyph at alpha over the glyph its cell shows, or else over the cell's background: a fade that ends in neither black nor its own color. |
 | `SetBgOnly` | Replace only background and mark it touched. |
 | `SetBgScreen` | Screen-blend a background over the cell's, or over a caller base if none was drawn yet. |
 | `SetBgAlphaOwned` | Alpha-blend a background, blank the glyph, and let the current mask replace the cell's tags: a translucent panel. |

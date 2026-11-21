@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -21,7 +20,8 @@ func NewFadeoutRenderer(gameCtx *engine.GameContext) *FadeoutRenderer {
 	}
 }
 
-// Render draws each batch's cells in their own colors, fading as one
+// Render draws each batch's cells in their own colors, fading as one into what
+// lies under them
 func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
 	fadeouts := world.Components.Fadeout
@@ -43,16 +43,13 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			if !visible {
 				continue
 			}
-			fg, bg := color.Scale(cell.Fg, opacity), color.Scale(cell.Bg, opacity)
-			switch {
-			case !cell.Solid:
-				// A glyph alone: additive on the foreground, which keeps the cell's background
-				buf.Set(screenX, screenY, cell.Rune, fg, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
-			case cell.Rune != 0:
-				buf.Set(screenX, screenY, cell.Rune, fg, bg, render.BlendAlpha, opacity, terminal.AttrNone)
-			default:
-				// A ground alone: over the background, which keeps the cell's glyph
-				buf.Set(screenX, screenY, 0, visual.RgbBlack, bg, render.BlendAlphaBg, opacity, terminal.AttrNone)
+			// The ground over the background, which keeps the cell's glyph, then the
+			// glyph over that
+			if cell.Solid {
+				buf.Set(screenX, screenY, 0, visual.RgbBlack, cell.Bg, render.BlendAlphaBg, opacity, terminal.AttrNone)
+			}
+			if cell.Rune != 0 {
+				buf.SetFgAlpha(screenX, screenY, cell.Rune, cell.Fg, opacity, terminal.AttrNone)
 			}
 		}
 		return true

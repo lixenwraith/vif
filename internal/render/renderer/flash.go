@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -22,6 +21,7 @@ func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 }
 
 // Render draws each batch's glyphs in the removal flash's color, fading as one
+// into what their cells show
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
 	flashes := world.Components.Flash
@@ -36,12 +36,10 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !ok {
 			return true
 		}
-		// Additive on the foreground alone, which keeps the cell's background
-		flashColor := color.Scale(visual.RgbRemovalFlash, 1-progress)
 		for i := range flash.Cells {
 			cell := &flash.Cells[i]
 			if screenX, screenY, visible := ctx.MapToScreen(cell.X, cell.Y); visible {
-				buf.Set(screenX, screenY, cell.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+				buf.SetFgAlpha(screenX, screenY, cell.Rune, visual.RgbRemovalFlash, 1-progress, terminal.AttrNone)
 			}
 		}
 		return true

@@ -371,7 +371,9 @@ request and a footprint sweep all name the same way, and a document by its name:
 An effect draws the cells a death leaves, never the entities that died: each cell
 is read as a `component.EffectCell` (its cell, glyph, colors and whether it has a
 background) before the dead are destroyed, and the cells go to the effect's system
-as one pooled batch, on this instance alone. Two systems do the reading:
+as one pooled batch, on this instance alone. It outlives what raised it, so a body
+a correction brings back stands over its own effect for the half second left of
+it. Two systems do the reading:
 
 - `DeathSystem` reads an entity that draws itself (`shown`): a glyph's or a
   sigil's rune in its own color, a wall's glyph and background. Every effect but
@@ -396,8 +398,9 @@ A species' end names the effect by why it ends:
   their scatter has no glyph to throw: it bursts the shell instead
   (`burstShell`), shards of shade glyphs standing `ShellShardSpacing` apart on
   the outline the glow stood on, in the glow's color (a console's in the color
-  of the cells), 18 for a body of the default radii and 31 for a storm circle.
-  Nothing strobes: a strobe is a scenario's signal.
+  of the cells), 18 for a body of the default radii and 31 for a storm circle,
+  one mechanism for the three where a circle collapsing to a bright core was
+  weighed. Nothing strobes: a strobe is a scenario's signal.
 - A Kraken's body is hundreds of cells its renderer shades from a pose, so a
   killed one leaves that pose instead of cells. `KrakenSystem` sends it on this
   instance alone (`EventKrakenBurnRequest`), and `TransientSystem` holds it
@@ -419,8 +422,9 @@ A species' end names the effect by why it ends:
   body out, and a cancel or an integrity breach leaves nothing.
 - A member an ablative owner finds dead (a pylon's, a tower's, a storm circle's,
   a snake body's) fades out where it stood, in the color its kind goes critical
-  in, one pooled cell a member; its renderer draws it until then. A killed
-  snake's body fades the same way behind its head.
+  in and not the shade it showed, which only its renderer works out, one pooled
+  cell a member; its renderer draws it until then. A killed snake's body fades
+  the same way behind its head.
 
 - `FlashSystem` and `FadeoutSystem` hold the cells a tick sends as one Player
   entity, whose component carries them in a slice under one deadline. A batch
@@ -435,10 +439,12 @@ A species' end names the effect by why it ends:
   drifting through.
 - Their renderers draw a batch as far through its fade as the deadline stands at
   the frame's moment, the time since the tick included (`deadlineProgress`), so a
-  fade steps on every frame. A fading ground lies over the background its cell
-  would show and under the glyph a flash lights there: an alpha blend onto a cell
-  nothing painted starts from that background (`RenderBuffer.Set`), not from
-  black, and a ground alone blends the background only.
+  fade steps on every frame. A fade ends in what its cell shows without it, never
+  in black: a ground blends by its opacity over the background its cell would
+  show, the theme's where nothing painted it (`RenderBuffer.Set`), and a glyph, a
+  flash's, a fadeout's or a scattered part, over the glyph standing in its cell
+  or else that background (`RenderBuffer.SetFgAlpha`). A ground lies under the
+  glyph a flash lights there.
 - Measured by `BenchmarkDeathEffects` on a bare world, medians of five alternating
   runs against an entity a cell: a 5x3 body dying every tick costs the tick 0.5 µs
   where it cost 3.8 µs as a flash and 3.6 µs as a fadeout, and 600 cells every ten
@@ -462,15 +468,15 @@ A species' end names the effect by why it ends:
   76 µs where they cost 120 µs, 600 every ten ticks 4.8 µs from 18.7 µs and 284 µs
   from 485 µs; the frames' cost is the ten trail segments a part draws, whose
   turn and light are now worked out once a flight. A scattered 5x3 body every
-  tick costs the tick 0.7 µs and its three frames 2.9 µs, 600 cells every ten
-  ticks 1.2 µs and 9.1 µs, and a scatter allocates nothing.
+  tick costs the tick 0.7 µs and its three frames 3.4 µs, 600 cells every ten
+  ticks 1.2 µs and 10.2 µs, and a scatter allocates nothing.
 - A whole body's end, standing it left out, measured the same way: a swarm ending
   every tick costs the tick 2.9 µs with its scatter where its silent end cost
   2.4 µs, and an eye 4.0 µs with its flash and fading grounds where it cost
   2.9 µs; most of either is destroying the body's entities. Their three frames
-  cost 1.9 µs and 13.4 µs. 75 swarms ending at once every ten ticks cost a tick
-  10.8 µs where they cost 8.8 µs and three frames 9.3 µs, 40 eyes 9.4 µs from
-  7.2 µs and 44.2 µs. The read allocates nothing, where a composite's end
+  cost 2.2 µs and 10.7 µs. 75 swarms ending at once every ten ticks cost a tick
+  10.8 µs where they cost 8.8 µs and three frames 10.4 µs, 40 eyes 9.4 µs from
+  7.2 µs and 39.1 µs. The read allocates nothing, where a composite's end
   allocated its member list (64 B a swarm, 192 B an eye).
 
 ### Timers
