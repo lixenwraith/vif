@@ -20,6 +20,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -753,6 +754,52 @@ func aim(to string) (func(*behaviorCtx) (int, int, bool), error) {
 	return nil, fmt.Errorf("to %q is not one of target, stored, post", to)
 }
 
+// emitFrom reads an EmitEvent's origin, a name or { at, x, y }, into the payload
+// as it leaves counted from it: a point of the map, as a scenario's, or a cell of
+// the body's own, where it stands (self), the one it stored or its post
+func emitFrom(names *dialect.Names, et event.EventType, origin, payload any) (func(*behaviorCtx) (any, bool), error) {
+	table, _ := origin.(map[string]any)
+	if name, ok := origin.(string); ok {
+		table = map[string]any{"at": name}
+	}
+	var cell func(*behaviorCtx) (int, int, bool)
+	switch at, _ := table["at"].(string); at {
+	case "self":
+		cell = func(c *behaviorCtx) (int, int, bool) {
+			pos, ok := c.sys.world.Positions.GetPosition(c.entity)
+			return pos.X, pos.Y, ok
+		}
+	case "stored", "post":
+		cell, _ = aim(at)
+	default:
+		onMap, err := std.OriginOf(names, et, origin, payload)
+		if _, known := names.Value[event.MapAnchor](at); err != nil && at != "" && !known {
+			err = fmt.Errorf("%w, self, stored, post", err)
+		}
+		return func(c *behaviorCtx) (any, bool) {
+			config := c.sys.world.Resources.Config
+			return onMap(config.MapWidth, config.MapHeight), true
+		}, err
+	}
+
+	a, err := dialect.Decode[emitOriginArgs](table)
+	if err != nil {
+		return nil, err
+	}
+	x, y := cmp.Or(a.X, "x"), cmp.Or(a.Y, "y")
+	if _, missed := std.MoveCell(payload, x, y, 0, 0); len(missed) > 0 {
+		return nil, fmt.Errorf("event '%s' carries no number field '%s'", event.GetEventName(et), strings.Join(missed, "', '"))
+	}
+	return func(c *behaviorCtx) (any, bool) {
+		cx, cy, ok := cell(c)
+		if !ok {
+			return nil, false
+		}
+		moved, _ := std.MoveCell(payload, x, y, cx, cy)
+		return moved, true
+	}, nil
+}
+
 // mapEdges are the map's edges as AtEdge names them, in the order it tests them
 var mapEdges = [...]string{"left", "right", "top", "bottom"}
 
@@ -828,6 +875,11 @@ type (
 		LapMs     int64   `toml:"lap_ms"`
 		Clockwise bool    `toml:"clockwise"`
 		Mirror    bool    `toml:"mirror"`
+	}
+	emitOriginArgs struct {
+		At string `toml:"at"`
+		X  string `toml:"x"`
+		Y  string `toml:"y"`
 	}
 )
 
@@ -1122,7 +1174,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		}, nil
 	})
 	v.Names(event.PayloadNames)
-	v.Emit("EmitEvent", func(names *dialect.Names, name string, raw any) (func(*behaviorCtx), error) {
+	v.Emit("EmitEvent", func(names *dialect.Names, name string, raw, origin any) (func(*behaviorCtx), error) {
 		if name == "" {
 			return nil, errors.New("requires 'event' field")
 		}
@@ -1134,13 +1186,27 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		if err != nil {
 			return nil, err
 		}
+		var push func(c *behaviorCtx, payload any)
 		switch event.ClassOf(et) {
 		case event.ClassShared:
-			return func(c *behaviorCtx) { c.sys.world.PushEvent(et, payload) }, nil
+			push = func(c *behaviorCtx, payload any) { c.sys.world.PushEvent(et, payload) }
 		case event.ClassLocal:
-			return func(c *behaviorCtx) { c.sys.world.PushLocal(et, payload) }, nil
+			push = func(c *behaviorCtx, payload any) { c.sys.world.PushLocal(et, payload) }
+		default:
+			return nil, fmt.Errorf("event '%s' is %s; EmitEvent takes shared or local events", name, event.ClassOf(et))
 		}
-		return nil, fmt.Errorf("event '%s' is %s; EmitEvent takes shared or local events", name, event.ClassOf(et))
+		if origin == nil {
+			return func(c *behaviorCtx) { push(c, payload) }, nil
+		}
+		from, err := emitFrom(names, et, origin, payload)
+		if err != nil {
+			return nil, fmt.Errorf("origin: %w", err)
+		}
+		return func(c *behaviorCtx) {
+			if moved, ok := from(c); ok {
+				push(c, moved)
+			}
+		}, nil
 	})
 
 	// --- Sustained: every tick the state holds ---

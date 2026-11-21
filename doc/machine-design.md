@@ -572,7 +572,7 @@ The registry is generic, `behavior.Vocabulary[C]`, and its generic methods
 register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
-`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`),
+`Sustained[A]`, `Emit` (an effect reading `event` and `origin` beside `payload`),
 `Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
 own, built once into what each spawn applies before its machine starts, as the
 game's `mount` pushes its `EventMountRequest`), with the host's `Integrate`,
@@ -607,7 +607,10 @@ per instance:
   `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
   `SpawnSpecies` (any Shared species, a program's among them, by its land request),
   `Leave` (it marks the context, and the host ends the instance as the step
-  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`.
+  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`,
+  whose `origin` counts its payload's cell from the map, as a region's, or from
+  the body's own cell, the one it stored or its post (`emitFrom`), each by the
+  move a region's origin makes (`std.MoveCell`).
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Orbit` (the velocity
   round a cell, read off where the body stands each tick, so it keeps no phase),
   `Drag` (linear drag per second, so it holds at any tick rate) and `Freeze` (no

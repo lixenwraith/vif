@@ -2318,18 +2318,6 @@ lowers each shield its owner simulates as the command turns the system off, as
 
 ## Species
 
-### Let a program's event name its own cell
-
-- Priority: P3
-- Affected files: `internal/system/behavior.go` (`EmitEvent`),
-  `internal/fsm/std/payload.go` (`emitOrigin`)
-
-A program's `EmitEvent` payload is fixed at load, and the scenario's `origin`
-is the map's alone, so a body cannot drop loot where it stands, raise an effect
-on its post or lay a map from itself. The smallest form: an `origin` on the verb
-that also takes what `to` does (`self`, `stored`, `post`), moving the payload's
-`x` and `y` as the scenario's does, the move shared by both.
-
 ### Let a player mechanic or a program fuse composites
 
 - Priority: P3

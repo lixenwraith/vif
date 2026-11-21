@@ -302,7 +302,7 @@ func (c *compiler[C]) state(b *machine.Builder[component.BehaviorState, C], name
 		c.fail(where, errors.New("probe_args without probe"))
 	}
 	for i, q := range d.Cues {
-		do := c.effect(fmt.Sprintf("%s: cues[%d]", where, i), actionDoc{Action: q.Action, Event: q.Event, Payload: q.Payload})
+		do := c.effect(fmt.Sprintf("%s: cues[%d]", where, i), actionDoc{Action: q.Action, Event: q.Event, Payload: q.Payload, Origin: q.Origin})
 		st.Cues = append(st.Cues, machine.Cue[C]{AtPermille: q.At, Do: do})
 	}
 	b.State(id, st)
@@ -532,8 +532,10 @@ func (c *compiler[C]) action(where string, d actionDoc, kind string) func(C) {
 		c.fail(where, fmt.Errorf("action '%s' takes no event", d.Action))
 	case d.Payload != nil && !slices.Contains(vb.keys, "payload"):
 		c.fail(where, fmt.Errorf("action '%s' takes no payload", d.Action))
+	case d.Origin != nil && !slices.Contains(vb.keys, "origin"):
+		c.fail(where, fmt.Errorf("action '%s' takes no origin", d.Action))
 	default:
-		f, err := vb.apply(c.payloads, d.Event, d.Payload)
+		f, err := vb.apply(c.payloads, d)
 		if err != nil {
 			c.fail(where, fmt.Errorf("action '%s': %w", d.Action, err))
 		}

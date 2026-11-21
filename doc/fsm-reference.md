@@ -1143,9 +1143,9 @@ target = "Roam"
 - `fallback`, required when every candidate can fail: `"hold"` keeps the state,
   and `{ retry_ms = n }` restarts its entry for n ms without exit or entry;
   `behavior.<name>.transition_stalls` counts each retry and each step held.
-- An action table holds `action` and `payload` (`EmitEvent` adds `event`). An
-  effect runs on entry, exit, a cue or an edge; a sustained verb only in
-  `on_update`.
+- An action table holds `action` and `payload` (`EmitEvent` adds `event` and
+  `origin`). An effect runs on entry, exit, a cue or an edge; a sustained verb only
+  in `on_update`.
 
 A step runs the global edges, the suspend check, the clock and its cues, the
 timeout, the `Tick` edges, the state's `on_update` and its move, then the
@@ -1193,7 +1193,12 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Leave { effect }` (ends its own instance as the step returns, through its
   state's exit, leaving `none`, the default, `flash`, `fadeout` or `scatter` of
   the body: no kill, so nothing drops, and `behavior.<name>.left` counts it) and
-  `EmitEvent` (shared and local events).
+  `EmitEvent` (shared and local events; its `origin` is a region's
+  ([Event Emission](#event-emission)), a point of the map, or a cell of the body's
+  own, `self` where its header stands, `stored` or `post`, added to the payload's
+  `x` and `y` or the fields `{ at, x, y }` names, so
+  `{ action = "EmitEvent", event = "EventLootSpawnRequest", origin = "self", payload = { type = "energy" } }`
+  drops loot where the body is).
 - Sustained: `Home { to }` (steer by the prototype's physics, to the target along
   its route, or straight at the stored cell or its post, so a body a wall pushed
   off its post flies back where `Freeze` would leave it), `ChargeToStored`
