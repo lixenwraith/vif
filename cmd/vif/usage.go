@@ -351,7 +351,8 @@ the view's sides the cursor comes before the view follows it; whether the menu a
 other windows, or the command line, pause the game; and whether a game waits for
 its first press. Developer controls logging, the flight recorder and the runtime
 profiler, captures profiles, an execution trace and a telemetry snapshot, clears
-HUD pins, shows the navigation overlays and records a replay journal. Values in
+HUD pins, shows the navigation overlays and each species' machine state and
+records a replay journal. Values in
 brackets are unavailable or read only; the selected row explains why. Launch
 options explains the file or flag that sets what a running game cannot change.
 .PP

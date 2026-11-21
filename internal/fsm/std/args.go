@@ -236,6 +236,19 @@ func compileOrigin(names *dialect.Names, et event.EventType, raw any, mapped boo
 	return origin, nil
 }
 
+// OriginOf compiles a map origin for one payload as an emit's is, into the payload
+// counted from it on a map of a size; one the payload keeps itself moves nothing
+func OriginOf(names *dialect.Names, et event.EventType, origin, payload any) (func(width, height int) any, error) {
+	o, err := compileOrigin(names, et, origin, true, []any{payload})
+	if err != nil || o == nil {
+		return func(int, int) any { return payload }, err
+	}
+	return func(width, height int) any {
+		moved, _ := o.anchored(payload, width, height)
+		return moved
+	}, nil
+}
+
 // compilePick decodes the payload once per entry of the pick's list, the entry
 // written at its field, so each entry is checked as that field's value is: its
 // type, and its names where the field is an enum, and payload_vars against it

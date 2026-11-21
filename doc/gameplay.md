@@ -521,7 +521,8 @@ direction in terminal-plane radians, and duration; a later valid start replaces
 the current wind and `EventWindCancel` ends it. Each tick varies force by up to
 10% and direction by about five degrees from a deterministic Shared RNG stream,
 then applies `force / mass` to mobile species. Drains, swarm, quasar, eye, snake
-head, and storm circles (except while stunned) are affected. Cursor kinetics,
+head, storm circles (except while stunned) and a data species whose prototype has
+a `mass` are affected. Cursor kinetics,
 snake body-local deformation, pylons/towers, Kraken, weapons/projectiles/loot,
 dust, and the decay/blossom particle behaviors are not wind targets. See
 [Generic kinetic analysis](generic-kinetic.md) for the motion paths and the

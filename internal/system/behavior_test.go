@@ -450,6 +450,44 @@ transitions = [{ trigger = "Tick", target = "Wait" }]
 	}
 }
 
+// TestAProgramCountsItsStalledTransitions: a transition none of whose candidates
+// commits counts once as it retries and each step it holds, and no more once one
+// commits
+func TestAProgramCountsItsStalledTransitions(t *testing.T) {
+	for fallback, want := range map[string]int64{`{ retry_ms = 200 }`: 3, `"hold"`: 9} {
+		program := wardenHead("Wait") + `
+[states.Wait]
+duration_ms = 200
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Go", fallback = ` + fallback + ` }]
+
+[states.Go]
+probe = "ResolveTarget"
+on_update = [{ action = "Freeze" }]
+`
+		const went = component.BehaviorState(0)
+		ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY)
+		w := ctx.World
+		stalls := w.Resources.Status.Ints.Get("behavior.warden.transition_stalls")
+		aimAtCursors(w) // no target for Go's probe to resolve
+		for range 12 {
+			stepBehaviors(w, s)
+		}
+		if got := stalls.Load(); got != want {
+			t.Fatalf("fallback %s: twelve steps with no target counted %d stalls, want %d", fallback, got, want)
+		}
+
+		aimAt(w, wardenX+30, wardenY)
+		for range 8 {
+			stepBehaviors(w, s)
+		}
+		if b, _ := w.Components.Behavior.GetComponent(header); b.Machine.State != went || stalls.Load() != want {
+			t.Fatalf("fallback %s: with a target the body stands in state %d on %d stalls, want Go on %d",
+				fallback, b.Machine.State, stalls.Load(), want)
+		}
+	}
+}
+
 // TestAnInstanceItsOwnLeaveEndsIsNoKill: a body that reaches the edge it flies at
 // ends itself through its state's exit, counted as left, and nothing reports a kill
 func TestAnInstanceItsOwnLeaveEndsIsNoKill(t *testing.T) {
@@ -950,6 +988,68 @@ func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
 	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
 		t.Fatalf("a payload naming no species compiled: %v", err)
+	}
+}
+
+// TestAnEmittedPayloadsCellCountsFromItsOrigin: an EmitEvent's origin adds a cell
+// to its payload's, where the body stands, the cell it stored, its post or a point
+// of the map, to x and y or the fields it names; one naming no cell fails the compile
+func TestAnEmittedPayloadsCellCountsFromItsOrigin(t *testing.T) {
+	const drop = `{ action = "EmitEvent", event = "EventLootSpawnRequest", origin = "self", payload = { type = "energy", x = 1, y = -2 } }`
+	program := wardenHead("Wait") + `
+[states.Wait]
+transitions = [{ trigger = "Tick", target = "Drop" }]
+
+[states.Drop]
+on_update = [{ action = "Freeze" }]
+on_enter = [
+    { action = "StoreTarget" },
+    ` + drop + `,
+    { action = "EmitEvent", event = "EventLootSpawnRequest", origin = "stored", payload = { type = "energy" } },
+    { action = "EmitEvent", event = "EventLootSpawnRequest", origin = "post", payload = { type = "energy", x = 3 } },
+    { action = "EmitEvent", event = "EventLootSpawnRequest", origin = "center", payload = { type = "energy", x = -1 } },
+    { action = "EmitEvent", event = "EventSplashTextRequest", origin = { at = "self", x = "origin_x", y = "origin_y" }, payload = { text = "hit", origin_y = -1 } },
+]
+`
+	ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY+5)
+	w := ctx.World
+	// Off its post, so where it stands and its post are two cells
+	kinetic, _ := w.Components.Kinetic.GetPtr(header)
+	kinetic.PreciseX, kinetic.PreciseY = kinetic.PreciseX+6, kinetic.PreciseY+3
+	s.place(header, wardenX+6, wardenY+3)
+
+	var loot [][2]int
+	var splash *event.SplashTextPayload
+	for _, ev := range stepBehaviors(w, s) {
+		switch p := ev.Payload.(type) {
+		case *event.LootSpawnRequestPayload:
+			loot = append(loot, [2]int{p.X, p.Y})
+		case *event.SplashTextPayload:
+			splash = p
+		}
+	}
+	centerX, centerY := event.MapAnchorCenter.Cell(-1, 0, w.Resources.Config.MapWidth, w.Resources.Config.MapHeight)
+	want := [][2]int{{wardenX + 7, wardenY + 1}, {wardenX + 30, wardenY + 5}, {wardenX + 3, wardenY}, {centerX, centerY}}
+	if !slices.Equal(loot, want) {
+		t.Fatalf("loot dropped at %v, want %v: from the body, its stored cell, its post and the map's centre", loot, want)
+	}
+	if splash == nil || splash.OriginX != wardenX+6 || splash.OriginY != wardenY+2 {
+		t.Fatalf("the splash was raised at %+v, want (%d,%d) by the fields its origin names", splash, wardenX+6, wardenY+2)
+	}
+
+	for action, want := range map[string]string{
+		strings.Replace(drop, `"self"`, `"nowhere"`, 1):                                                `self, stored, post`,
+		`{ action = "EmitEvent", event = "EventSplashTextRequest", origin = "self" }`:                  `carries no number field 'x', 'y'`,
+		`{ action = "EmitEvent", event = "EventLootSpawnRequest", origin = { at = "self", z = "x" } }`: `unknown key`,
+		`{ action = "ZeroVelocity", origin = "self" }`:                                                 `takes no origin`,
+	} {
+		doc, err := toml.NewParser([]byte(strings.Replace(program, drop, action, 1))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s compiled: %v, want %q", action, err, want)
+		}
 	}
 }
 

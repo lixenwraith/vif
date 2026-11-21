@@ -261,6 +261,7 @@ var topics = []topicDef{
 			{Keys: ":system <name> enable|disable", Desc: "Toggle one registered system; unavailable live"},
 			{Keys: ":emit <Event> [{payload}]", Desc: "Emit an event with an inline TOML payload; unavailable live"},
 			{Keys: ":flow [group]  :graph [group]", Desc: "Flow field and navigation graph overlays for a target group"},
+			{Keys: ":machine [on|off]", Desc: "Label each swarm, quasar, storm circle and scenario species with the state its behavior machine is in and how far through a timed one"},
 		},
 	},
 	{

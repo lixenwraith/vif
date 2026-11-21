@@ -242,14 +242,15 @@ func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
 // range every Kinetic component, so tracers, missiles, bullets, loot, weapon
 // orbs, dust, and particle behaviors are excluded.
 func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
+	push := func(entity core.Entity, mass profile.Mass) {
+		if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
+			kinetic.AccelX = forceX / mass
+			kinetic.AccelY = forceY / mass
+		}
+	}
 	apply := func(entities []core.Entity, mass profile.Mass) {
-		accelX := forceX / mass
-		accelY := forceY / mass
 		for _, entity := range entities {
-			if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
-				kinetic.AccelX = accelX
-				kinetic.AccelY = accelY
-			}
+			push(entity, mass)
 		}
 	}
 
@@ -265,6 +266,13 @@ func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 		// Kinetic component; keeping them in the typed path makes that immobility
 		// explicit and lets a future kinetic pylon inherit wind naturally.
 		apply(s.world.Components.Pylon.Entities(), profile.MassPylon)
+		// A data species is pushed by its prototype's mass, and one with none stands
+		protos := s.world.Resources.Behaviors
+		for _, entity := range s.world.Components.Behavior.Entities() {
+			if b, ok := s.world.Components.Behavior.GetPtr(entity); ok && int(b.Program) < len(protos) && protos[b.Program].Mass > 0 {
+				push(entity, protos[b.Program].Mass)
+			}
+		}
 	})
 }
 

@@ -3,10 +3,12 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
@@ -18,6 +20,17 @@ func eachRosterSlot(w *engine.World, fn func(slot uint8, cursor core.Entity)) {
 	for i := range parameter.MaxPlayers {
 		fn(uint8(i), w.Resources.Player.Slot(uint8(i)))
 	}
+}
+
+// nameStates publishes a machine species' state names by state, which the state
+// overlay labels its instances by
+func nameStates[S ~uint8, C any](w *engine.World, species component.SpeciesType, g *machine.Graph[S, C]) {
+	var names []string
+	for _, s := range g.States() {
+		names = append(names, make([]string, int(s)+1-len(names))...)
+		names[s] = g.Name(s)
+	}
+	w.Resources.Machines[species] = names
 }
 
 // toggle is a system's FSM-driven enable flag. An entry action sets it, so a world

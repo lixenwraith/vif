@@ -61,6 +61,11 @@ func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 	w.Components.Pylon.SetComponent(pylon, component.PylonComponent{})
 	storm := addWindKinetic(w, core.DomainShared)
 	w.Components.StormCircle.SetComponent(storm, component.StormCircleComponent{})
+	// Two programs' species: one with a mass of its own, one with none
+	const raiderMass = 2.5
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Mass: raiderMass}, {}}
+	raider := addWindKinetic(w, core.DomainShared)
+	w.Components.Behavior.SetComponent(raider, component.BehaviorComponent{Program: 0})
 
 	type excluded struct {
 		name   string
@@ -77,6 +82,9 @@ func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 	}
 	addExcluded("cursor", core.DomainShared, func(e core.Entity) {
 		w.Components.Cursor.SetComponent(e, component.CursorComponent{})
+	})
+	addExcluded("massless data species", core.DomainShared, func(e core.Entity) {
+		w.Components.Behavior.SetComponent(e, component.BehaviorComponent{Program: 1})
 	})
 	addExcluded("tracer", core.DomainPlayer, func(e core.Entity) {
 		w.Components.Tracer.SetComponent(e, component.TracerComponent{})
@@ -124,6 +132,7 @@ func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 		{"snake head", snake, profile.MassSnakeHead},
 		{"quasar", quasar, profile.MassQuasar},
 		{"pylon", pylon, profile.MassPylon},
+		{"data species", raider, raiderMass},
 	} {
 		x, y := windAcceleration(w, tc.entity)
 		if got := math.Hypot(x, y) * tc.mass; math.Abs(got-wantForce) > 1e-10 {

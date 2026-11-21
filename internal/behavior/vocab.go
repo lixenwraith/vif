@@ -20,6 +20,7 @@ type Vocabulary[C any] struct {
 	signals   func(C) *uint8
 	integrate func(C)
 	entered   func(C)
+	stalled   func(C)
 	names     func(component.Declared) *dialect.Names
 }
 
@@ -32,7 +33,7 @@ type verb[C any] struct {
 	keys  []string
 	args  []dialect.Field
 	test  func(args map[string]any, site int) (func(C) bool, error)
-	apply func(names *dialect.Names, event string, payload any) (func(C), error)
+	apply func(names *dialect.Names, d actionDoc) (func(C), error)
 }
 
 func NewVocabulary[C any]() *Vocabulary[C] {
@@ -77,8 +78,8 @@ func (v *Vocabulary[C]) Effect[A any](name string, build func(*A) (func(C), erro
 // Named registers an effect whose payload names what a scenario's programs extend,
 // a species or a style: build takes the names its set's payloads take beside A
 func (v *Vocabulary[C]) Named[A any](name string, build func(names *dialect.Names, a *A) (func(C), error)) {
-	apply := func(names *dialect.Names, _ string, raw any) (func(C), error) {
-		a, err := dialect.Decode[A](raw)
+	apply := func(names *dialect.Names, d actionDoc) (func(C), error) {
+		a, err := dialect.Decode[A](d.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("payload: %w", err)
 		}
@@ -105,11 +106,14 @@ type signalArgs struct {
 // signalled is the guard a vocabulary with signals adds
 const signalled = "Signalled"
 
-// Emit registers an effect that reads its table's event beside its payload, as
-// the scenario dialect's EmitEvent does; build checks both, decoding the payload
-// as names, its set's, spell its enum fields
-func (v *Vocabulary[C]) Emit(name string, build func(names *dialect.Names, event string, payload any) (func(C), error)) {
-	v.add(name, verb[C]{kind: dialect.KindAction, keys: []string{"event", "payload"}, apply: build})
+// Emit registers an effect that reads its table's event and origin beside its
+// payload, as the scenario dialect's EmitEvent does; build checks them, decoding
+// the payload as names, its set's, spell its enum fields
+func (v *Vocabulary[C]) Emit(name string, build func(names *dialect.Names, event string, payload, origin any) (func(C), error)) {
+	apply := func(names *dialect.Names, d actionDoc) (func(C), error) {
+		return build(names, d.Event, d.Payload, d.Origin)
+	}
+	v.add(name, verb[C]{kind: dialect.KindAction, keys: []string{"event", "payload", "origin"}, apply: apply})
 }
 
 // Names sets the names a set's payloads take, given what its scenario declares: its
@@ -131,6 +135,10 @@ func (v *Vocabulary[C]) Integrate(f func(C)) { v.integrate = f }
 // Entered sets what every state's entry ends with, after its on_enter, so what the
 // entry's probe resolved serves that entry and no later one
 func (v *Vocabulary[C]) Entered(f func(C)) { v.entered = f }
+
+// Stalled sets what a transition runs as it retries or holds, none of its
+// candidates having committed, so a host counts the entries that keep failing
+func (v *Vocabulary[C]) Stalled(f func(C)) { v.stalled = f }
 
 // Entries lists the vocabulary for -schema: And, Or and Not, every verb, every flag
 func (v *Vocabulary[C]) Entries() []dialect.Entry {
@@ -169,10 +177,10 @@ func decoded[A, R any](build func(*A, int) (R, error)) func(map[string]any, int)
 	}
 }
 
-// payload adapts a build over A to an action table, which holds no event
-func payload[A, R any](build func(*A) (R, error)) func(*dialect.Names, string, any) (R, error) {
-	return func(_ *dialect.Names, _ string, raw any) (R, error) {
-		a, err := dialect.Decode[A](raw)
+// payload adapts a build over A to an action table, of which it reads the payload
+func payload[A, R any](build func(*A) (R, error)) func(*dialect.Names, actionDoc) (R, error) {
+	return func(_ *dialect.Names, d actionDoc) (R, error) {
+		a, err := dialect.Decode[A](d.Payload)
 		if err != nil {
 			var zero R
 			return zero, fmt.Errorf("payload: %w", err)

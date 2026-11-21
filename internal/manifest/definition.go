@@ -310,6 +310,7 @@ var Renderers = []RendererDef{
 
 	// --- Debug ---
 	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityFlowField"},
+	{"machine", "NewMachineRenderer", "PriorityFlowField"},
 	{"pinned_state", "NewPinnedStatsRenderer", "PriorityPinnedState"},
 	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
 }

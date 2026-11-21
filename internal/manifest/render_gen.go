@@ -62,6 +62,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "cursor", Renderer: renderer.NewCursorRenderer(ctx), Priority: render.PriorityCursor},
 		{Name: "start_screen", Renderer: renderer.NewStartScreenRenderer(ctx), Priority: render.PriorityStartScreen},
 		{Name: "flowfield", Renderer: renderer.NewFlowFieldDebugRenderer(ctx), Priority: render.PriorityFlowField},
+		{Name: "machine", Renderer: renderer.NewMachineRenderer(ctx), Priority: render.PriorityFlowField},
 		{Name: "pinned_state", Renderer: renderer.NewPinnedStatsRenderer(ctx), Priority: render.PriorityPinnedState},
 		{Name: "overlay", Renderer: renderer.NewOverlayRenderer(ctx), Priority: render.PriorityOverlay},
 	}

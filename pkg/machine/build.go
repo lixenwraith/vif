@@ -10,7 +10,7 @@ import (
 
 // Builder collects a graph's declarations; Build validates them all at once
 type Builder[S ~uint8, C any] struct {
-	observe  Observer[S]
+	observe  Observer[S, C]
 	states   []stateDecl[S, C]
 	edges    []edgeDecl[S, C]
 	suspend  func(C) bool
@@ -31,7 +31,7 @@ type edgeDecl[S ~uint8, C any] struct {
 var edgeKinds = [...]string{CauseTimeout: "timeout", CausePreTick: "pre-tick", CausePostTick: "post-tick"}
 
 // New starts a graph that reports every change to observe, which may be nil
-func New[S ~uint8, C any](observe Observer[S]) *Builder[S, C] {
+func New[S ~uint8, C any](observe Observer[S, C]) *Builder[S, C] {
 	return &Builder[S, C]{observe: observe}
 }
 

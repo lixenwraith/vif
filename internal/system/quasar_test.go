@@ -233,7 +233,7 @@ type quasarChange struct {
 func TestQuasarChargeWithoutAimFallsBackToHoming(t *testing.T) {
 	w, s, header, cursor := newQuasarWorld(t)
 	var changes []quasarChange
-	s.graph = newQuasarGraph(s, func(from, to component.QuasarState, cause machine.Cause) {
+	s.graph = newQuasarGraph(s, func(_ *quasarCtx, from, to component.QuasarState, cause machine.Cause) {
 		changes = append(changes, quasarChange{from, to, cause})
 	})
 	q, _ := w.Components.Quasar.GetPtr(header)

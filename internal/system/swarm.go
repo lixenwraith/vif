@@ -129,6 +129,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 		Timeout(component.SwarmStateArrive, edge{To: chase}).
 		Timeout(component.SwarmStateDecelerate, edge{To: chase}).
 		Build())
+	nameStates(world, component.SpeciesSwarm, s.graph)
 
 	return s
 }
@@ -158,7 +159,7 @@ func swarmHitWall(c *swarmCtx) bool { return c.hitWall }
 // observe counts the transitions a refused entry stalls: a lock with no target,
 // which retries, a lock that can neither charge nor teleport, and a teleport with
 // no room to arrive, which brake
-func (s *SwarmSystem) observe(from, to component.SwarmState, cause machine.Cause) {
+func (s *SwarmSystem) observe(_ *swarmCtx, from, to component.SwarmState, cause machine.Cause) {
 	if cause == machine.CauseRetry || (to == component.SwarmStateDecelerate &&
 		(from == component.SwarmStateLock || from == component.SwarmStateTeleport)) {
 		s.statStalls.Add(1)

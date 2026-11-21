@@ -142,7 +142,7 @@ var configPages = []configNode{
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.WaitStart.Load()) }},
 		}),
 	}},
-	{kind: kindGroup, key: "developer", label: "Developer", description: "Logging, flight recorder, profiling, telemetry, navigation overlays and the replay journal.", nodes: []configNode{
+	{kind: kindGroup, key: "developer", label: "Developer", description: "Logging, flight recorder, profiling, telemetry, navigation and species overlays and the replay journal.", nodes: []configNode{
 		section("Logging", []configNode{
 			{kind: kindToggle, key: "logging", label: "File logging", description: "Start or stop writing diagnostic logs to the configured log directory.",
 				command: "log", choices: []string{"off", "on"}, read: func(*engine.GameContext) string { return toggleWord(vlog.Enabled()) }, disabled: loggingUnavailable},
@@ -189,6 +189,11 @@ var configPages = []configNode{
 				command: "flow", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowFlow) }},
 			{kind: kindToggle, key: "graph", label: "Route graph", description: "Show composite navigation routes; the command :graph <group> selects a target group.",
 				command: "graph", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowComposite) }},
+		}),
+		section("Species", []configNode{
+			{kind: kindToggle, key: "machine", label: "Machine states", description: "Label each swarm, quasar, storm circle and scenario species with the state its behavior machine is in, and how far through a timed one.",
+				command: "machine", choices: []string{"off", "on"},
+				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayMachine.Load()) }},
 		}),
 		section("Recording", []configNode{
 			{kind: kindToggle, key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The game plays on as it was. The command :journal start <slot> records a bot of yours.",

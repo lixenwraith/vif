@@ -76,8 +76,8 @@ entity. The reads take a value, so a renderer calls them on a component copy.
 
 ```go
 type Mask uint64                       // a bit per state; MaskOf(states...)
-type Cause uint8                       // Start, Timeout, PreTick, PostTick, Global, Retry, Stop
-type Observer[S ~uint8] func(from, to S, cause Cause)
+type Cause uint8                       // Start, Timeout, PreTick, PostTick, Global, Retry, Hold, Stop
+type Observer[S ~uint8, C any] func(c C, from, to S, cause Cause)
 
 type State[C any] struct {
 	Name     string
@@ -145,8 +145,9 @@ cannot fail.
 
 When no candidate commits, the fallback applies. `Retry(d)` re-arms the current
 state in place for d, with no exit or enter, reports `CauseRetry` with from == to,
-and runs the state's cues again in the new period. `Hold` changes nothing, so an
-expired state tries its timeout again next step. In a phase, the first edge whose
+and runs the state's cues again in the new period. `Hold` changes nothing and
+reports `CauseHold`, so an expired state tries its timeout again next step and
+reports each try. In a phase, the first edge whose
 source holds the state and whose guard passes owns the phase: when its chain
 fails, its fallback applies and later edges wait for the next step.
 
@@ -158,7 +159,7 @@ that must skip its entry step tests.
 `Start` enters a state for d, or its default when d is not positive, with no exit
 and no probe; it panics on a state the graph does not define, which `Build`
 cannot see. `Stop` runs the current state's exit with no enter. Both report to
-the observer with from == to, as a retry does.
+the observer with from == to, as a retry and a hold do.
 
 ### 2.4 Validation
 
@@ -229,10 +230,17 @@ A host is the species system that steps a graph. Its contract:
   (`PatternElapsed`, held by a stun) and the quasar's speed (`SpeedElapsed`,
   advanced by movement ticks). Lifetimes and one-shot deadlines stay in
   `TimerComponent` slots ([ECS and events §7](ecs-and-events.md#timers)).
-- **Observer.** Bound when the graph is built, so a host feeds status counters
-  without the runtime importing `status`. `Graph.States` and `Graph.Name` key a
-  data species' per-state rows (§6.4); nothing reads `Graph.Flags` yet
-  ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
+- **Observer.** Bound when the graph is built and handed each step's context,
+  so a host feeds status counters without the runtime importing `status`: a code
+  graph's is its system's method, and a program's, compiled before its system
+  exists, reaches it through the context (§6.4). `Graph.States` and `Graph.Name`
+  key a data species' per-state rows and name every host's states for the state
+  overlay (`nameStates`, `Resources.Machines`), and `Graph.Flags` tells a program
+  that arms its mount.
+- **State overlay.** `:machine` labels each instance a machine steps with its
+  state's name and, in a timed entry, its progress, centred on the row above the
+  body (`MachineRenderer`), read from the component's `Machine` and the names its
+  host published; it is this instance's view alone.
 - **Footprint effects.** A host that clears the cells under a footprint names the
   effect each victim leaves, a `component.DeathEffect`
   ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
@@ -564,11 +572,11 @@ The registry is generic, `behavior.Vocabulary[C]`, and its generic methods
 register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
-`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`),
+`Sustained[A]`, `Emit` (an effect reading `event` and `origin` beside `payload`),
 `Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
 own, built once into what each spawn applies before its machine starts, as the
-game's `mount` pushes its `EventMountRequest`), with the host's `Integrate` and
-`Entered` hooks. `Entries`
+game's `mount` pushes its `EventMountRequest`), with the host's `Integrate`,
+`Entered` and `Stalled` hooks. `Entries`
 lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
 `BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
 per instance:
@@ -599,7 +607,10 @@ per instance:
   `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
   `SpawnSpecies` (any Shared species, a program's among them, by its land request),
   `Leave` (it marks the context, and the host ends the instance as the step
-  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`.
+  returns, a hook being no place to stop the machine it runs in) and `EmitEvent`,
+  whose `origin` counts its payload's cell from the map, as a region's, or from
+  the body's own cell, the one it stored or its post (`emitFrom`), each by the
+  move a region's origin makes (`std.MoveCell`).
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Orbit` (the velocity
   round a cell, read off where the body stands each tick, so it keeps no phase),
   `Drag` (linear drag per second, so it holds at any tick rate) and `Freeze` (no
@@ -662,7 +673,8 @@ smaller part of it.
   `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, with each key of the program's
-  `[prototype.physics]` replacing its value), soft-collision mass, the drop table
+  `[prototype.physics]` replacing its value), its mass in soft collision,
+  knockback and the wind, the drop table
   its kills roll (the scenario's or a code species',
   [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
   entrance (§4.4), its look and the pattern period. A mount of its own
@@ -714,12 +726,15 @@ smaller part of it.
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count`, a
-  `behavior.<program>.state.<State>` for each of its states and the
-  lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
-  `kills.<program>` in `NewMetaSystem`, all before `Freeze`
-  ([telemetry](telemetry-reference.md)). A spawn or an entrance counts at once
-  rather than at the next step, since an entrance lands its instance after the
-  step and a region reads the count.
+  `behavior.<program>.state.<State>` for each of its states,
+  `behavior.<program>.transition_stalls` and the lifecycle rows
+  (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`, `kills.<program>` in
+  `NewMetaSystem`, all before `Freeze` ([telemetry](telemetry-reference.md)). A
+  spawn or an entrance counts at once rather than at the next step, since an
+  entrance lands its instance after the step and a region reads the count. A
+  stall is a transition none of whose candidates commits, counted once as it
+  retries and each step it holds: the compiler gives every program's graph an
+  observer that calls the host's `Stalled` hook on `CauseRetry` and `CauseHold`.
 - **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each header's members
   from the look's frame at `PatternIndex`, each cell its background and its glyph
@@ -850,7 +865,8 @@ Each rule above has a test named for it, beside its code:
 - `internal/behavior`: IDs by sorted name, a compiled program stepping as its
   states say, a compile error naming program, place and key, the name rules, the
   vocabulary's entries. `internal/resource`: a program as a scenario file, and
-  `-check`. `internal/render/renderer`: the muzzle flash and a data species' frame.
+  `-check`. `internal/render/renderer`: the muzzle flash, a data species' frame
+  and the state overlay.
 
 Cost: `BenchmarkQuasarUpdate` (`internal/system`) times `QuasarSystem.Update`
 alone, and `BenchmarkQuasars` (`internal/app`) the whole tick, each over a range of

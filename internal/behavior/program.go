@@ -53,6 +53,7 @@ type actionDoc struct {
 	Action  string `toml:"action"`
 	Event   string `toml:"event"`
 	Payload any    `toml:"payload"`
+	Origin  any    `toml:"origin"`
 }
 
 // cueDoc is an effect at At thousandths of the entry's duration
@@ -61,6 +62,7 @@ type cueDoc struct {
 	Action  string `toml:"action"`
 	Event   string `toml:"event"`
 	Payload any    `toml:"payload"`
+	Origin  any    `toml:"origin"`
 }
 
 // transitionDoc is a state's edge; target is a name or a list of candidates, and

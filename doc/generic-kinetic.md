@@ -73,6 +73,7 @@ does not by itself make an entity a physical body with a known mass.
 | Snake head | 2D `Kinetic` on the Shared head header | Homing, route guidance, cornering brake, speed cap, combat impulses, wind | Acceleration-aware swept bounce against the head footprint | Stun freezes; the kinetic window suppresses steering but not integration, and a shielded head is enraged, so no knockback lands. Velocity also chooses facing; movement feeds the trail used by the body. Head members follow the header. |
 | Snake body | One 2D `Kinetic` per living body member, not on the body header | Combat impulses and a spring toward a trail-derived rest point | Displaced members use `SpringToRest` plus position-only integration | Members normally snap to rest and zero velocity. They are followers, not independent movers; head wind moves the formation, while body-local wind is intentionally deferred. |
 | Storm circle | `StormCircle.Pos3D`/`Vel3D` are authoritative; 2D `Kinetic` is a compatibility mirror | Pairwise gravity/repulsion, Z equilibrium spring, damping, speed cap, 3D collision, combat/dust/wind 2D impulses | Custom axis-separated 3D integration, bounds, wall destruction, sphere overlap/collision | Before physics, deltas written to 2D velocity are folded into `Vel3D.XY`; after physics, 3D position/velocity overwrite the 2D mirror. Stun skips physics. |
+| Data species | 2D `Kinetic` on the Shared composite header | Its program's sustained verbs (`Home`, `ChargeToStored`, `Orbit`, `Drag`); combat and soft-collision impulses and wind by its prototype's `mass`, none of the last two without one | Acceleration-aware swept bounce against its prototype's footprint (`BehaviorSystem.integrate`) | `Freeze` zeroes the velocity and skips the move, and a suspended step moves nothing. Members follow the header. |
 | Pylon | No `Kinetic` in current entities | Acts as an effectively immovable soft-collision source; `MassPylon` exists | None | A typed wind path exists, but there is nothing to update until a pylon gains `Kinetic`. |
 | Tower | No `Kinetic` and no mass profile | None; stationary target/structure | None | Remains outside generic motion until physical behavior is designed. |
 
@@ -198,7 +199,8 @@ times prevents entity count, dense-store order, or Player-domain population from
 changing the shared random sequence.
 
 Wind writes acceleration only to the ordinary mobile species: drain, swarm,
-quasar, eye, and snake head. Storm receives an equivalent per-tick velocity delta
+quasar, eye, snake head and a data species, by its prototype's `mass` and not at
+all without one. Storm receives an equivalent per-tick velocity delta
 on its 2D mirror for the 3D system to absorb. Pylon is typed but currently
 immobile. Tower, cursor, snake body members, tracer, missile, bullet, loot, weapon
 orbs, dust, and particles are not affected.
