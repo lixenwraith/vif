@@ -2330,17 +2330,6 @@ on its post or lay a map from itself. The smallest form: an `origin` on the verb
 that also takes what `to` does (`self`, `stored`, `post`), moving the payload's
 `x` and `y` as the scenario's does, the move shared by both.
 
-### Let a data species' machine arm its mount
-
-- Priority: P3
-- Affected files: `internal/system/behavior.go`, `internal/system/mount.go`
-
-A `[prototype.mount]` fires whenever a cursor is in range, a stunned or diving
-host's included, where a storm circle's fires only while its state is flagged
-`Armed` and never while held. The smallest form: an `Armed` flag in the
-vocabulary and a `trigger = "armed"` on the mount, written to `Mount.Armed` each
-step as the circles write theirs.
-
 ### Let a player mechanic or a program fuse composites
 
 - Priority: P3
