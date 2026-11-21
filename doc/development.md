@@ -92,10 +92,10 @@ make dev       # generated code + race-enabled debug build
 - `serve`: build WASM and the small HTTP server, then serve `web/`.
 - `install-config`: copy `wad/`, bot graphs, keymaps and `vif.toml` into the user
   config root, an `input/keymap.toml` or `vif.toml` already there brought up to
-  date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation));
-  `script/install.sh <goal> -purge`, for this goal or `install`, first removes what
-  an earlier install put in the root, a player's bot files, keymap and settings
-  with it.
+  date with its lines kept ([Filesystem §4](filesystem-layout.md#4-installation)).
+- `purge`: beside `install-config` or `install`, in either order, has that install
+  first remove what an earlier one put in its root, a player's bot files, keymap
+  and settings with it; alone it removes nothing.
 - `wad-archive`: pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`),
   unpacking as `vif/` into the directory that holds a config root; the release
   publishes it.
