@@ -322,6 +322,7 @@ html, body {
 
 #help-close,
 #config-close {
+    flex: none;   /* a 48px target, however long the title beside it */
     width: 48px;
     height: 48px;
     border: 0;
