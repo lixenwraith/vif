@@ -112,24 +112,28 @@ func SharedWorldEncodeStoreColumns(dst []byte, s *SharedWorldState, i int) []byt
 	case 48:
 		return encodeColumnsKraken(dst, s.Kraken)
 	case 49:
-		return encodeColumnsBehavior(dst, s.Behavior)
+		return encodeColumnsDevourer(dst, s.Devourer)
 	case 50:
-		return encodeColumnsHeader(dst, s.Header)
+		return encodeColumnsDevourerGut(dst, s.DevourerGut)
 	case 51:
-		return encodeColumnsMember(dst, s.Member)
+		return encodeColumnsBehavior(dst, s.Behavior)
 	case 52:
-		return encodeColumnsFlash(dst, s.Flash)
+		return encodeColumnsHeader(dst, s.Header)
 	case 53:
-		return encodeColumnsFadeout(dst, s.Fadeout)
+		return encodeColumnsMember(dst, s.Member)
 	case 54:
-		return encodeColumnsSplash(dst, s.Splash)
+		return encodeColumnsFlash(dst, s.Flash)
 	case 55:
-		return encodeColumnsMarker(dst, s.Marker)
+		return encodeColumnsFadeout(dst, s.Fadeout)
 	case 56:
-		return encodeColumnsButton(dst, s.Button)
+		return encodeColumnsSplash(dst, s.Splash)
 	case 57:
-		return encodeColumnsDeath(dst, s.Death)
+		return encodeColumnsMarker(dst, s.Marker)
 	case 58:
+		return encodeColumnsButton(dst, s.Button)
+	case 59:
+		return encodeColumnsDeath(dst, s.Death)
+	case 60:
 		return encodeColumnsTimer(dst, s.Timer)
 	}
 	return dst
@@ -239,24 +243,28 @@ func SharedWorldDecodeStoreColumns(s *SharedWorldState, i int, data []byte) erro
 	case 48:
 		s.Kraken = decodeColumnsKraken(r)
 	case 49:
-		s.Behavior = decodeColumnsBehavior(r)
+		s.Devourer = decodeColumnsDevourer(r)
 	case 50:
-		s.Header = decodeColumnsHeader(r)
+		s.DevourerGut = decodeColumnsDevourerGut(r)
 	case 51:
-		s.Member = decodeColumnsMember(r)
+		s.Behavior = decodeColumnsBehavior(r)
 	case 52:
-		s.Flash = decodeColumnsFlash(r)
+		s.Header = decodeColumnsHeader(r)
 	case 53:
-		s.Fadeout = decodeColumnsFadeout(r)
+		s.Member = decodeColumnsMember(r)
 	case 54:
-		s.Splash = decodeColumnsSplash(r)
+		s.Flash = decodeColumnsFlash(r)
 	case 55:
-		s.Marker = decodeColumnsMarker(r)
+		s.Fadeout = decodeColumnsFadeout(r)
 	case 56:
-		s.Button = decodeColumnsButton(r)
+		s.Splash = decodeColumnsSplash(r)
 	case 57:
-		s.Death = decodeColumnsDeath(r)
+		s.Marker = decodeColumnsMarker(r)
 	case 58:
+		s.Button = decodeColumnsButton(r)
+	case 59:
+		s.Death = decodeColumnsDeath(r)
+	case 60:
 		s.Timer = decodeColumnsTimer(r)
 	default:
 		return fmt.Errorf("store %d is not a shared store", i)
@@ -417,6 +425,12 @@ func SharedWorldEncodeDelta(dst []byte, d *SharedWorldDelta) []byte {
 	dst = encodeColumnsKraken(dst, d.Kraken.Changed)
 	dst = appendEntities(dst, d.Kraken.Removed)
 	dst = appendEntities(dst, d.Kraken.Order)
+	dst = encodeColumnsDevourer(dst, d.Devourer.Changed)
+	dst = appendEntities(dst, d.Devourer.Removed)
+	dst = appendEntities(dst, d.Devourer.Order)
+	dst = encodeColumnsDevourerGut(dst, d.DevourerGut.Changed)
+	dst = appendEntities(dst, d.DevourerGut.Removed)
+	dst = appendEntities(dst, d.DevourerGut.Order)
 	dst = encodeColumnsBehavior(dst, d.Behavior.Changed)
 	dst = appendEntities(dst, d.Behavior.Removed)
 	dst = appendEntities(dst, d.Behavior.Order)
@@ -604,6 +618,12 @@ func SharedWorldDecodeDelta(data []byte) (SharedWorldDelta, error) {
 	d.Kraken.Changed = decodeColumnsKraken(r)
 	d.Kraken.Removed = readEntities(r)
 	d.Kraken.Order = readEntities(r)
+	d.Devourer.Changed = decodeColumnsDevourer(r)
+	d.Devourer.Removed = readEntities(r)
+	d.Devourer.Order = readEntities(r)
+	d.DevourerGut.Changed = decodeColumnsDevourerGut(r)
+	d.DevourerGut.Removed = readEntities(r)
+	d.DevourerGut.Order = readEntities(r)
 	d.Behavior.Changed = decodeColumnsBehavior(r)
 	d.Behavior.Removed = readEntities(r)
 	d.Behavior.Order = readEntities(r)
@@ -3886,6 +3906,118 @@ func decodeColumnsKraken(r *columnReader) []StoreEntry[component.KrakenComponent
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.AttackT, r)
+	}
+	return rows
+}
+
+func encodeColumnsDevourer(dst []byte, rows []StoreEntry[component.DevourerComponent]) []byte {
+	dst = appendEntityColumn(dst, rows)
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.MaxHitPoints)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Elapsed)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Seed)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.NextOmen)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Omen.Remaining)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.Omen.From)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.Omen.To)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Guts {
+			dst = appendUint(dst, rows[i].Value.Guts[j])
+		}
+	}
+	return dst
+}
+
+func decodeColumnsDevourer(r *columnReader) []StoreEntry[component.DevourerComponent] {
+	n := r.rows()
+	if n == 0 {
+		return nil
+	}
+	rows := make([]StoreEntry[component.DevourerComponent], n)
+	readEntityColumn(rows, r)
+	for i := range rows {
+		readInt(&rows[i].Value.MaxHitPoints, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Elapsed, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Seed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.NextOmen, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Omen.Remaining, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.Omen.From, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.Omen.To, r)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Guts {
+			readUint(&rows[i].Value.Guts[j], r)
+		}
+	}
+	return rows
+}
+
+func encodeColumnsDevourerGut(dst []byte, rows []StoreEntry[component.DevourerGutComponent]) []byte {
+	dst = appendEntityColumn(dst, rows)
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Devourer)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.From)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.To)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Formed)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.Phase)
+	}
+	return dst
+}
+
+func decodeColumnsDevourerGut(r *columnReader) []StoreEntry[component.DevourerGutComponent] {
+	n := r.rows()
+	if n == 0 {
+		return nil
+	}
+	rows := make([]StoreEntry[component.DevourerGutComponent], n)
+	readEntityColumn(rows, r)
+	for i := range rows {
+		readUint(&rows[i].Value.Devourer, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.From, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.To, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Formed, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.Phase, r)
 	}
 	return rows
 }

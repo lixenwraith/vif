@@ -31,6 +31,7 @@ const (
 	PrioritySwarm       // After Drain
 	PriorityStorm       // After Swarm
 	PriorityKraken      // After Storm
+	PriorityDevourer    // After Kraken
 	PriorityBehavior    // After Kraken
 	PriorityPylon       // After Kraken
 	PriorityTower       // Before Eye

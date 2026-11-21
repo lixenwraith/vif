@@ -17,12 +17,14 @@ import (
 
 // LandingRenderer blinks the centre cell of the footprint an attack lands on: the
 // swarm's from its lock through its charge or teleport, a data species' while its
-// state is flagged Landing. A Kraken's charge marks where its body ends, far larger.
-// The lines show the path; this shows where to keep clear.
+// state is flagged Landing. A Kraken's charge marks where its body ends, far larger,
+// and a Devourer's omen the ray its gut forms along. The lines show the path; this
+// shows where to keep clear.
 type LandingRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell landingCellRenderer
 	palette    bool
+	shape      component.DevourerShape
 }
 
 // landingCellRenderer draws the marker at step of its colour cycle
@@ -41,7 +43,9 @@ func NewLandingRenderer(ctx *engine.GameContext) *LandingRenderer {
 func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
 	swarms, behaviors, krakens := world.Components.Swarm, world.Components.Behavior, world.Components.Kraken
-	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 && krakens.CountEntities() == 0 {
+	devourers := world.Components.Devourer
+	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 && krakens.CountEntities() == 0 &&
+		devourers.CountEntities() == 0 {
 		return
 	}
 
@@ -50,6 +54,13 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	krakens.Each(func(_ core.Entity, k *component.KrakenComponent) bool {
 		if k.State == component.KrakenSpin || k.State == component.KrakenMove {
 			r.markCharge(ctx, buf, k)
+		}
+		return true
+	})
+
+	devourers.Each(func(_ core.Entity, d *component.DevourerComponent) bool {
+		if d.Omen.Remaining > 0 {
+			r.markOmen(ctx, buf, d)
 		}
 		return true
 	})
@@ -125,6 +136,65 @@ func (r *LandingRenderer) markCharge(ctx render.RenderContext, buf *render.Rende
 			if alpha > 0 {
 				buf.Set(sx, sy, 0, visual.RgbBlack, visual.RgbKrakenAttack, render.BlendAlphaBg, alpha, terminal.AttrNone)
 			}
+		}
+	}
+}
+
+// markOmen lights the ray a Devourer's gut forms along, whole from its first tick
+// and over the open space alone: a core that rises toward the attack color as the
+// gut nears, beating faster, its ends aglow, in a faint halo. Each cell takes its
+// distance from the ray once, so no halo doubles where two of the ray's cells meet.
+func (r *LandingRenderer) markOmen(ctx render.RenderContext, buf *render.RenderBuffer, d *component.DevourerComponent) {
+	cfg := r.gameCtx.World.Resources.Config
+	r.shape.Build(d.Seed, d.Frame(), d.Grown(), cfg.MapWidth, cfg.MapHeight)
+	x0, y0 := r.shape.Wall(d.Omen.From)
+	x1, y1 := r.shape.Wall(d.Omen.To)
+	near := min(max(1-d.Omen.Remaining.Seconds()/parameter.DevourerOmen.Seconds(), 0), 1)
+	beat := 0.5 + 0.5*math.Cos(2*math.Pi*(2+3*near)*near)
+	core := (visual.DevourerOmenCoreMin + (visual.DevourerOmenCoreMax-visual.DevourerOmenCoreMin)*near) * (0.8 + 0.2*beat)
+	halo := visual.KrakenLandingGlowMin + (visual.KrakenLandingGlowMax-visual.KrakenLandingGlowMin)*near
+	reach := visual.DevourerOmenHalo
+	dx, dy := x1-x0, y1-y0
+	span := dx*dx + dy*dy
+	for row := max(0, int(math.Ceil((min(y0, y1)-reach)/2-vmath.CellCenter))); row <= min(cfg.MapHeight-1, int((max(y0, y1)+reach)/2-vmath.CellCenter)); row++ {
+		cy := 2 * (float64(row) + vmath.CellCenter)
+		// The ray's columns within reach of this row
+		ta, tb := 0.0, 1.0
+		if dy != 0 {
+			ta, tb = min(max((cy-reach-y0)/dy, 0), 1), min(max((cy+reach-y0)/dy, 0), 1)
+		}
+		xa, xb := min(x0+dx*ta, x0+dx*tb), max(x0+dx*ta, x0+dx*tb)
+		for col := max(0, int(math.Ceil(xa-reach-vmath.CellCenter))); col <= min(cfg.MapWidth-1, int(xb+reach-vmath.CellCenter)); col++ {
+			cx := float64(col) + vmath.CellCenter
+			t := 0.0
+			if span > 0 {
+				t = min(max(((cx-x0)*dx+(cy-y0)*dy)/span, 0), 1)
+			}
+			dist := math.Hypot(cx-x0-dx*t, cy-y0-dy*t)
+			end := min(math.Hypot(cx-x0, cy-y0), math.Hypot(cx-x1, cy-y1))
+			if dist > reach || r.shape.Covers(col, row) {
+				continue
+			}
+			sx, sy, visible := ctx.MapToScreen(col, row)
+			if !visible {
+				continue
+			}
+			alpha := core
+			if dist > visual.DevourerOmenCore {
+				fade := 1 - (dist-visual.DevourerOmenCore)/(reach-visual.DevourerOmenCore)
+				alpha = halo * fade * fade
+			}
+			if end < visual.DevourerOmenEnd {
+				alpha = max(alpha, core*(1-end/visual.DevourerOmenEnd))
+			}
+			if r.palette {
+				// A console cannot blend the halo, so it draws the core alone
+				if alpha >= visual.Effect256Threshold && dist <= visual.DevourerOmenCore {
+					buf.SetBg256(sx, sy, visual.Devourer256Omen)
+				}
+				continue
+			}
+			buf.Set(sx, sy, 0, visual.RgbBlack, visual.RgbDevourerOmen, render.BlendAlphaBg, alpha, terminal.AttrNone)
 		}
 	}
 }

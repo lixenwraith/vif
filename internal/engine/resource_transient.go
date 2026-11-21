@@ -10,14 +10,16 @@ import (
 )
 
 // TransientResource holds player-domain spatial presentation: explosion centers,
-// the Krakens burning away and the walls a maze laid fading in. Systems write,
-// renderers read. All fields are render-frame stable.
+// the Krakens burning away, the Devourers drawing back and the walls a maze laid
+// fading in. Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
 	BurnBacking      [parameter.KrakenBurnCap]component.KrakenBurn
 	BurnCount        int
+	RecedeBacking    [parameter.DevourerRecedeCap]component.DevourerRecede
+	RecedeCount      int
 	WallFadeIn       component.WallFadeIn // the zero run while no walls fade in
 }
 
@@ -88,8 +90,13 @@ func (r *TransientResource) KrakenBurns() []component.KrakenBurn {
 	return r.BurnBacking[:r.BurnCount]
 }
 
-// Clear drops every explosion center, every burn and the walls' fade-in
+// DevourerRecedes returns active slice view (no allocation)
+func (r *TransientResource) DevourerRecedes() []component.DevourerRecede {
+	return r.RecedeBacking[:r.RecedeCount]
+}
+
+// Clear drops every explosion center, every burn and recede and the walls' fade-in
 func (r *TransientResource) Clear() {
-	r.ExplosionCount, r.BurnCount = 0, 0
+	r.ExplosionCount, r.BurnCount, r.RecedeCount = 0, 0, 0
 	r.WallFadeIn = component.WallFadeIn{}
 }

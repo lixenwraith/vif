@@ -928,10 +928,11 @@ func (s *WallSystem) passesWalls(e core.Entity) bool {
 }
 
 func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMask {
-	if s.world.Components.Kraken.HasEntity(entity) {
-		return component.WallBlockNone
+	header := entity
+	if member, ok := s.world.Components.Member.GetPtr(entity); ok {
+		header = member.HeaderEntity
 	}
-	if member, ok := s.world.Components.Member.GetPtr(entity); ok && s.world.Components.Kraken.HasEntity(member.HeaderEntity) {
+	if h, ok := s.world.Components.Header.GetPtr(header); ok && component.BehaviorEatsWalls[h.Behavior] {
 		return component.WallBlockNone
 	}
 

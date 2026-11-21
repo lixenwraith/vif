@@ -92,6 +92,8 @@ var Components = []ComponentDef{
 	{"Square", "SquareComponent", "shared"},
 	{"Block", "BlockComponent", "shared"},
 	{"Kraken", "KrakenComponent", "shared"},
+	{"Devourer", "DevourerComponent", "shared"},
+	{"DevourerGut", "DevourerGutComponent", "shared"},
 	{"Behavior", "BehaviorComponent", "shared"},
 
 	// --- Composite ---
@@ -120,7 +122,7 @@ var Systems = []SystemDef{
 
 	// --- Core / Frame Setup ---
 	{Name: "cursor", Constructor: "NewCursorSystem", Domain: "shared"},                               // creates the shared cursor; replicated creation order (D-11); the roster is the dependency root
-	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns per-instance overlays, explosion presentation, a Kraken's burn and a maze's fade-in (D-6)
+	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns per-instance overlays, explosion presentation, a Kraken's burn, a Devourer's recede and a maze's fade-in (D-6)
 	{Name: "camera", Constructor: "NewCameraSystem", Domain: "player", Requires: []string{"cursor"}}, // per-instance view follows the local cursor
 
 	// --- Player State: owner-authored cursor components (D-13) ---
@@ -183,6 +185,8 @@ var Systems = []SystemDef{
 		Optional: []string{"navigation", "combat", "mount", "particle", "wall", "materialize"}}, // shared stream and composite species with a D-12 footprint sweep; a blue attack's swarm rides its materialize
 	{Name: "kraken", Constructor: "NewKrakenSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"combat"}},
+	{Name: "devourer", Constructor: "NewDevourerSystem", Domain: "shared", Requires: []string{"composite"},
+		Optional: []string{"combat"}}, // its footprints are derived from its frame, rebuilt as an install moves it
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "snake", Constructor: "NewSnakeSystem", Domain: "shared", Requires: []string{"composite"},
@@ -255,6 +259,7 @@ var Renderers = []RendererDef{
 	{"pulse_glow", "NewPulseGlowRenderer", "PriorityPulseGlow"},
 
 	// --- Species (back to front) ---
+	{"devourer", "NewDevourerRenderer", "PriorityDevourer"},
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
 	{"tower", "NewTowerRenderer", "PriorityTower"},
 	{"square", "NewSquareRenderer", "PrioritySquare"},

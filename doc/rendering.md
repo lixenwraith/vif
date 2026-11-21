@@ -375,7 +375,7 @@ also the visual stacking order; exact integer priorities are in
 | Environment/guidance | `wall`, `chargeline` |
 | Base entities | `sigil`, `glyph`, `gold` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it; then `pulse_glow`, a glowing pulse under the species that carries it |
-| Species/structures | `pylon`, `tower`, `square`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
+| Species/structures | `devourer` under every body that crosses it, then `pylon`, `tower`, `square`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Overlay effects | `landing`, `button`, `splash`, `marker` |
@@ -423,6 +423,20 @@ glow fades toward the centre and rises through the spin, from
 leaves. Both blend `RgbKrakenAttack` into backgrounds alone; 256-color draws the
 outline in `Kraken256Landing`, as a shield's.
 
+A Devourer's omen lights the ray its gut forms along, whole from its first tick,
+between where its walls stand at the frame: a core `DevourerOmenCore` column units
+either side of the ray, rising from `DevourerOmenCoreMin` to `DevourerOmenCoreMax`
+of the attack color and beating faster as the gut nears, its ends aglow, in a halo
+out to `DevourerOmenHalo` that rises as a charge's glow does. Each cell takes its
+distance from the ray once, over the open space alone, so no halo doubles where
+two of the ray's cells meet; 256-color draws the core in `Devourer256Omen`.
+
+Health bars stand above a body's footprint, below it where that leaves the view,
+centred on a Kraken's header, or pinned to the view's top row for a Devourer,
+across `HealthBarPinnedShare` of its width on a darkened backing with the hit
+points lost dotted. A bar its body leaves neither side for, a body as tall as the
+view or wider, slides into the view, cut to its width, while the body shows.
+
 The kraken renderer shades a pose once. A tick moves the Kraken and the frames
 until the next show the same pose, so it keeps the shaded cells while the pose,
 position and visible bounds match, and draws them again as they are. It takes the
@@ -460,6 +474,21 @@ vanish at the edges, 0.15% turn between solid and rim, 0.2% shift color by more
 than two levels and 0.25% of footprint cells change. `BenchmarkKrakenRegion` in the
 browser build, medians of five alternating runs: a tick's three frames 0.24 to
 0.15 ms, the region's tick 0.58 to 0.49 ms; native, 112 to 64 µs and 174 to 152 µs.
+
+The devourer renderer paints the flesh and the guts as an image of two samples a
+cell each way and fits each cell with `ascimage.FitQuadrant`, a quadrant glyph and
+two colors, so the walls' edge and the texture show at half a cell; a cell its
+image leaves partly open gives way to a glyph drawn under it. It paints once a
+frame of the body, the 100 ms tick ascimage's viewer animates on, and draws the
+fitted cells again until the next. Each row passes the run the open space surely
+holds (`DevourerShape.Span`). Every input is the plane's or the depth from the
+wall, never an angle, so the folds close on themselves: folds along the wall
+drifting outward, a wet lip, grain, veins and a beat, the grain and veins worked
+out once a sample as the flesh first covers it. The console has no quadrants: a
+cell half covered or more takes the `Devourer256Tiers` entry nearest its mean.
+`BenchmarkDevourer` at 200x60, a tick's three frames, medians of seven alternating
+runs on one core: 2.51 ms native with ascimage v0.1.2's fit, 1.83 ms with
+v0.1.3's, which tries the eight splits that differ.
 
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws typeable text in its cell, only the cell's top glyph, the one

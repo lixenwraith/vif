@@ -58,6 +58,8 @@ const (
 	SquareBit
 	BlockBit
 	KrakenBit
+	DevourerBit
+	DevourerGutBit
 	BehaviorBit
 	HeaderBit
 	MemberBit
@@ -122,6 +124,8 @@ type Component struct {
 	Square       *Store[component.SquareComponent]
 	Block        *Store[component.BlockComponent]
 	Kraken       *Store[component.KrakenComponent]
+	Devourer     *Store[component.DevourerComponent]
+	DevourerGut  *Store[component.DevourerGutComponent]
 	Behavior     *Store[component.BehaviorComponent]
 	Header       *Store[component.HeaderComponent]
 	Member       *Store[component.MemberComponent]
@@ -185,6 +189,8 @@ func initComponents(w *World) {
 	w.Components.Square = NewStore[component.SquareComponent](w, SquareBit)
 	w.Components.Block = NewStore[component.BlockComponent](w, BlockBit)
 	w.Components.Kraken = NewStore[component.KrakenComponent](w, KrakenBit)
+	w.Components.Devourer = NewStore[component.DevourerComponent](w, DevourerBit)
+	w.Components.DevourerGut = NewStore[component.DevourerGutComponent](w, DevourerGutBit)
 	w.Components.Behavior = NewStore[component.BehaviorComponent](w, BehaviorBit)
 	w.Components.Header = NewStore[component.HeaderComponent](w, HeaderBit)
 	w.Components.Member = NewStore[component.MemberComponent](w, MemberBit)
@@ -358,6 +364,12 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&KrakenBit != 0 {
 		w.Components.Kraken.RemoveEntity(e, true)
+	}
+	if mask&DevourerBit != 0 {
+		w.Components.Devourer.RemoveEntity(e, true)
+	}
+	if mask&DevourerGutBit != 0 {
+		w.Components.DevourerGut.RemoveEntity(e, true)
 	}
 	if mask&BehaviorBit != 0 {
 		w.Components.Behavior.RemoveEntity(e, true)
@@ -555,6 +567,12 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&KrakenBit != 0 {
 		w.Components.Kraken.RemoveBatch(entities, true)
 	}
+	if union&DevourerBit != 0 {
+		w.Components.Devourer.RemoveBatch(entities, true)
+	}
+	if union&DevourerGutBit != 0 {
+		w.Components.DevourerGut.RemoveBatch(entities, true)
+	}
 	if union&BehaviorBit != 0 {
 		w.Components.Behavior.RemoveBatch(entities, true)
 	}
@@ -645,6 +663,8 @@ func (w *World) wipeAll() {
 	w.Components.Square.ClearAllComponents()
 	w.Components.Block.ClearAllComponents()
 	w.Components.Kraken.ClearAllComponents()
+	w.Components.Devourer.ClearAllComponents()
+	w.Components.DevourerGut.ClearAllComponents()
 	w.Components.Behavior.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
@@ -711,6 +731,8 @@ type componentCopies struct {
 	Square       storeCopy[component.SquareComponent]
 	Block        storeCopy[component.BlockComponent]
 	Kraken       storeCopy[component.KrakenComponent]
+	Devourer     storeCopy[component.DevourerComponent]
+	DevourerGut  storeCopy[component.DevourerGutComponent]
 	Behavior     storeCopy[component.BehaviorComponent]
 	Header       storeCopy[component.HeaderComponent]
 	Member       storeCopy[component.MemberComponent]
@@ -774,6 +796,8 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Square = w.Components.Square.copyOut(reuse.Square)
 	c.Block = w.Components.Block.copyOut(reuse.Block)
 	c.Kraken = w.Components.Kraken.copyOut(reuse.Kraken)
+	c.Devourer = w.Components.Devourer.copyOut(reuse.Devourer)
+	c.DevourerGut = w.Components.DevourerGut.copyOut(reuse.DevourerGut)
 	c.Behavior = w.Components.Behavior.copyOut(reuse.Behavior)
 	c.Header = w.Components.Header.copyOut(reuse.Header)
 	c.Member = w.Components.Member.copyOut(reuse.Member)
@@ -838,6 +862,8 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Square.copyIn(c.Square)
 	w.Components.Block.copyIn(c.Block)
 	w.Components.Kraken.copyIn(c.Kraken)
+	w.Components.Devourer.copyIn(c.Devourer)
+	w.Components.DevourerGut.copyIn(c.DevourerGut)
 	w.Components.Behavior.copyIn(c.Behavior)
 	w.Components.Header.copyIn(c.Header)
 	w.Components.Member.copyIn(c.Member)

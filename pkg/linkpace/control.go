@@ -210,6 +210,8 @@ func (c *Controller) Plan() Plan { return c.plan }
 func (c *Controller) Update(m Metrics, s Sizes, d Demand) Plan {
 	next := c.decide(m, s, d)
 	c.plan = c.step(next, c.desired(d))
+	// A plan the step held short of the decision costs what its own schedule sends
+	c.plan.PlannedBps = rate(c.b, c.plan.CadenceTicks, c.plan.KeyframeInterval, s)
 	return c.plan
 }
 
@@ -396,7 +398,6 @@ func (c *Controller) step(next Plan, asked uint64) Plan {
 			c.b.FloorKeyframeTicks/uint64(out.KeyframeInterval))
 	}
 	if out.CadenceTicks != next.CadenceTicks || out.KeyframeInterval != next.KeyframeInterval {
-		out.PlannedBps = 0 // recomputed by the next decision; a stepped plan has no priced rate
 		out.Constrained = c.b.degraded(out, asked)
 		if out.Reason == "" || out.Reason == "nominal" {
 			out.Reason = "recovering"

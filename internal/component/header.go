@@ -16,42 +16,49 @@ const (
 	BehaviorEye
 	BehaviorTower
 	BehaviorKraken
-	BehaviorData  // a species a scenario's behavior program defines
-	BehaviorBlock // a magic square's block
+	BehaviorDevourer // its body and each of its guts
+	BehaviorData     // a species a scenario's behavior program defines
+	BehaviorBlock    // a magic square's block
 )
 
 // BehaviorNames are what a document calls each Behavior
 var BehaviorNames = [...]string{
-	BehaviorNone:   "none",
-	BehaviorGold:   "gold",
-	BehaviorQuasar: "quasar",
-	BehaviorSwarm:  "swarm",
-	BehaviorStorm:  "storm",
-	BehaviorPylon:  "pylon",
-	BehaviorSnake:  "snake",
-	BehaviorEye:    "eye",
-	BehaviorTower:  "tower",
-	BehaviorKraken: "kraken",
-	BehaviorData:   "data",
-	BehaviorBlock:  "block",
+	BehaviorNone:     "none",
+	BehaviorGold:     "gold",
+	BehaviorQuasar:   "quasar",
+	BehaviorSwarm:    "swarm",
+	BehaviorStorm:    "storm",
+	BehaviorPylon:    "pylon",
+	BehaviorSnake:    "snake",
+	BehaviorEye:      "eye",
+	BehaviorTower:    "tower",
+	BehaviorKraken:   "kraken",
+	BehaviorDevourer: "devourer",
+	BehaviorData:     "data",
+	BehaviorBlock:    "block",
 }
 
 // BehaviorSpecies is the code species whose composites each Behavior routes; a data
 // species' is its program's, which its BehaviorComponent names
 var BehaviorSpecies = [...]SpeciesType{
-	BehaviorNone:   SpeciesNone,
-	BehaviorGold:   SpeciesNone,
-	BehaviorQuasar: SpeciesQuasar,
-	BehaviorSwarm:  SpeciesSwarm,
-	BehaviorStorm:  SpeciesStorm,
-	BehaviorPylon:  SpeciesPylon,
-	BehaviorSnake:  SpeciesSnake,
-	BehaviorEye:    SpeciesEye,
-	BehaviorTower:  SpeciesTower,
-	BehaviorKraken: SpeciesKraken,
-	BehaviorData:   SpeciesNone,
-	BehaviorBlock:  SpeciesNone,
+	BehaviorNone:     SpeciesNone,
+	BehaviorGold:     SpeciesNone,
+	BehaviorQuasar:   SpeciesQuasar,
+	BehaviorSwarm:    SpeciesSwarm,
+	BehaviorStorm:    SpeciesStorm,
+	BehaviorPylon:    SpeciesPylon,
+	BehaviorSnake:    SpeciesSnake,
+	BehaviorEye:      SpeciesEye,
+	BehaviorTower:    SpeciesTower,
+	BehaviorKraken:   SpeciesKraken,
+	BehaviorDevourer: SpeciesDevourer,
+	BehaviorData:     SpeciesNone,
+	BehaviorBlock:    SpeciesNone,
 }
+
+// BehaviorEatsWalls marks a body that clears the walls it covers, so a wall never
+// displaces one of its cells
+var BehaviorEatsWalls = [len(BehaviorNames)]bool{BehaviorKraken: true, BehaviorDevourer: true}
 
 // CompositeType defines how the composite handles damage and lifecycle
 type CompositeType uint8
