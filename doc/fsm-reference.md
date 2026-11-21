@@ -1222,7 +1222,8 @@ points, lifetime, contact strikes, gold breaking and the composite's integrity
 work as for every composite species; a program does not script them. An instance
 ends by a kill, its `lifetime_ms`, a cancel or its own `Leave`. A region reads how
 many stand in each state from `behavior.<name>.state.<State>`, as it reads
-`behavior.<name>.count`.
+`behavior.<name>.count`, and `:machine` labels each instance on the map with the
+state it is in.
 
 ## Loot
 

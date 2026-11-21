@@ -234,9 +234,13 @@ A host is the species system that steps a graph. Its contract:
   so a host feeds status counters without the runtime importing `status`: a code
   graph's is its system's method, and a program's, compiled before its system
   exists, reaches it through the context (§6.4). `Graph.States` and `Graph.Name`
-  key a data species' per-state rows, and `Graph.Flags` tells a program that arms
-  its mount; an overlay of them is
-  [owed](todo.md#show-a-species-machine-state-in-a-debug-overlay).
+  key a data species' per-state rows and name every host's states for the state
+  overlay (`nameStates`, `Resources.Machines`), and `Graph.Flags` tells a program
+  that arms its mount.
+- **State overlay.** `:machine` labels each instance a machine steps with its
+  state's name and, in a timed entry, its progress, centred on the row above the
+  body (`MachineRenderer`), read from the component's `Machine` and the names its
+  host published; it is this instance's view alone.
 - **Footprint effects.** A host that clears the cells under a footprint names the
   effect each victim leaves, a `component.DeathEffect`
   ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
@@ -857,7 +861,8 @@ Each rule above has a test named for it, beside its code:
 - `internal/behavior`: IDs by sorted name, a compiled program stepping as its
   states say, a compile error naming program, place and key, the name rules, the
   vocabulary's entries. `internal/resource`: a program as a scenario file, and
-  `-check`. `internal/render/renderer`: the muzzle flash and a data species' frame.
+  `-check`. `internal/render/renderer`: the muzzle flash, a data species' frame
+  and the state overlay.
 
 Cost: `BenchmarkQuasarUpdate` (`internal/system`) times `QuasarSystem.Update`
 alone, and `BenchmarkQuasars` (`internal/app`) the whole tick, each over a range of

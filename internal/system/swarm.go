@@ -129,6 +129,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 		Timeout(component.SwarmStateArrive, edge{To: chase}).
 		Timeout(component.SwarmStateDecelerate, edge{To: chase}).
 		Build())
+	nameStates(world, component.SpeciesSwarm, s.graph)
 
 	return s
 }

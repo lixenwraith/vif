@@ -64,6 +64,10 @@ type Resource struct {
 	// The maps this scenario declares, set with Behaviors, in sorted-name order
 	Maps []component.MapLayout
 
+	// Each machine species' state names by state, as the system that steps it
+	// built its graph, for the overlay that labels its instances
+	Machines [component.SpeciesMax][]string
+
 	// Transient visual effects
 	Transient *TransientResource
 

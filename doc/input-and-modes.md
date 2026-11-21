@@ -499,6 +499,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:player [drop <slot>]` | List all players and bots. Host-only removal drops the player and its bots, or one bot alone; uses the same slot grammar. |
 | `:system <runtime-name> enable\|disable`, `:s` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
+| `:machine [on\|off]` | Label each swarm, quasar, storm circle and scenario species with the state its behavior machine is in, and how far through a timed one. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate; in a live session only the host sets it, and every participant changes at the same tick. |
 | `:step [n]`, `:st` | Pause and advance complete ticks. |
 | `:step [rate] fsm [region] [pause]` | Run until an FSM transition, optionally pausing there. |

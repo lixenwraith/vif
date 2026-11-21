@@ -49,6 +49,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "quasar")
 	s.motion = newBounceTelemetry(world.Resources.Status, "quasar")
 	s.graph = newQuasarGraph(s, nil)
+	nameStates(world, component.SpeciesQuasar, s.graph)
 
 	return s
 }

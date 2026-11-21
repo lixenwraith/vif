@@ -348,6 +348,9 @@ type GameContext struct {
 	// OverlayHUD draws pinned metric groups over the game area
 	OverlayHUD atomic.Bool
 
+	// OverlayMachine labels each instance of a machine species with its state
+	OverlayMachine atomic.Bool
+
 	// Cached status pointers
 	statFPS       *atomic.Int64
 	statFrame     *atomic.Int64

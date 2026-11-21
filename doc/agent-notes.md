@@ -932,6 +932,8 @@ Docs · Libraries · Branches.
   `Config.ColorMode` is set, a kill is `Combat.HitPoints = 0` on a header, on its
   members for an ablative kind, and the cells written as HTML spans shoot as a
   filmstrip. A dead species' loot and its scenario's strobe are in the frames too.
+  The program takes a build tag of its own: a headless build has no
+  `BuildRenderers`, so untagged it stops `go build -tags vif_headless ./...`.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
   Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under

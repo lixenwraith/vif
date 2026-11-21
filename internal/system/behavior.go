@@ -101,6 +101,7 @@ func NewBehaviorSystem(world *engine.World, set *BehaviorSet) engine.System {
 		}
 		t.standing = make([]int64, len(t.states))
 		s.programs = append(s.programs, t)
+		nameStates(world, component.SpeciesDataFirst+component.SpeciesType(i), graph)
 	}
 	return s
 }

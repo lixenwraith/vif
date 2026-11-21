@@ -383,7 +383,7 @@ also the visual stacking order; exact integer priorities are in
 | Overlay effects | `landing`, `button`, `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
-| Debug and telemetry | `flowfield`, `pinned_state`, `overlay` |
+| Debug and telemetry | `flowfield`, `machine`, `pinned_state`, `overlay` |
 
 Some rendered concepts do not have a same-named component or system. For
 example, charge/teleport lines and the landing marker are projections of species
@@ -701,8 +701,10 @@ counted on it (`(x3)`), and the renderer wraps them, and splits a count from its
 text, only when one comes or the width changes: a frame of 24 rows allocated
 9,072 bytes in 49 allocations while it split each row, and 80 in one since. Flow
 debug can show a target group's flow field or route graph and is controlled via
-`:flow [group]` and `:graph [group]`. Debug layers are part of the normal
-pipeline but are visibility-gated.
+`:flow [group]` and `:graph [group]`, and `:machine` labels each body a behavior
+machine steps with its state and progress
+([Behavior machines §3](machine-design.md#3-hosting-a-machine)). Debug layers are
+part of the normal pipeline but are visibility-gated.
 
 ## 10. Patterns and image-derived assets
 

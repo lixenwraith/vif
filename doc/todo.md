@@ -2318,18 +2318,6 @@ lowers each shield its owner simulates as the command turns the system off, as
 
 ## Species
 
-### Show a species' machine state in a debug overlay
-
-- Priority: P3
-- Affected files: `pkg/machine/machine.go` (`Graph.States`, `Graph.Flags`),
-  `internal/render/renderer`
-
-`Graph.States` lists a graph's states and `Graph.Flags` a state's flags, for an
-overlay that labels each instance of a species with its state and progress, as
-`:graph` draws a route graph. A data species' per-state rows read `States` and
-`Name` (`behavior.<program>.state.<State>`); nothing reads `Flags`: build the
-overlay, or delete that read until one is wanted.
-
 ### Let a program's event name its own cell
 
 - Priority: P3
