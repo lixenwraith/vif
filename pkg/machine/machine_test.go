@@ -19,7 +19,7 @@ const (
 
 var (
 	stNames    = [...]string{"A", "B", "C", "D", "E"}
-	causeNames = [...]string{"start", "timeout", "pre-tick", "post-tick", "global", "retry", "stop"}
+	causeNames = [...]string{"start", "timeout", "pre-tick", "post-tick", "global", "retry", "hold", "stop"}
 )
 
 // trace logs what a graph ran, naming the state the instance held at each hook
@@ -108,7 +108,7 @@ func TestAStepRunsItsPhasesInOrder(t *testing.T) {
 	}
 	withCue := hooks("B", 50*time.Millisecond, 2)
 	withCue.Cues = []Cue[*trace]{{AtPermille: 500, Do: tr.at("cue")}}
-	g := Must(New[st, *trace](func(from, to st, cause Cause) {
+	g := Must(New[st, *trace](func(tr *trace, from, to st, cause Cause) {
 		tr.log = append(tr.log, causeNames[cause]+" "+stNames[from]+">"+stNames[to])
 	}).
 		State(sA, hooks("A", 0, 1)).

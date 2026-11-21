@@ -81,16 +81,23 @@ type emitOrigin struct {
 // anchored is payload with its origin's cell counted from the anchor on a width by
 // height map, and the coordinate paths naming no number field
 func (o *emitOrigin) anchored(payload any, width, height int) (any, []string) {
+	dx, dy := o.Anchor.Cell(0, 0, width, height)
+	return MoveCell(payload, o.X, o.Y, dx, dy)
+}
+
+// MoveCell is payload with the cell its dot paths x and y name moved by dx, dy, and
+// the paths naming no number field: the move every origin makes, a scenario's from
+// the map and a behavior program's from its body
+func MoveCell(payload any, x, y string, dx, dy int) (any, []string) {
 	edit, ok := editPayload(payload)
 	if !ok {
-		return payload, []string{o.X, o.Y}
+		return payload, []string{x, y}
 	}
-	dx, dy := o.Anchor.Cell(0, 0, width, height)
 	var missed []string
 	for _, k := range [...]struct {
 		key string
 		by  int
-	}{{o.X, dx}, {o.Y, dy}} {
+	}{{x, dx}, {y, dy}} {
 		if field := edit.field(k.key); !field.CanSet() || !movePayloadField(field, int64(k.by)) {
 			missed = append(missed, k.key)
 		}

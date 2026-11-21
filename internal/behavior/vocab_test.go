@@ -12,14 +12,14 @@ import (
 // listed kind by kind and name by name
 func TestTheVocabularyListsEachNameWithItsKindKeysAndArgs(t *testing.T) {
 	v := testVocabulary()
-	v.Emit("EmitEvent", func(*dialect.Names, string, any) (func(*testCtx), error) { return nil, nil })
+	v.Emit("EmitEvent", func(*dialect.Names, string, any, any) (func(*testCtx), error) { return nil, nil })
 	var got []string
 	for _, e := range v.Entries() {
 		got = append(got, fmt.Sprintf("%s %s %v %v", e.Kind, e.Name, e.Keys, e.Args))
 	}
 	want := []string{
 		"action CancelTelegraph [] []",
-		"action EmitEvent [event payload] []",
+		"action EmitEvent [event payload origin] []",
 		"action Materialize [payload] [{spawn string}]",
 		"action StoreTarget [] []",
 		"action Telegraph [payload] [{color string}]",

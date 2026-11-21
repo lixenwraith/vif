@@ -84,7 +84,7 @@ differences are the host's:
 - **Settings**: your preferences, each saved to `[play]`. Sound, Controls,
   Display, Pause, Start.
 - **Developer**: logging, the flight recorder, profiling, telemetry, the
-  navigation overlays and the replay journal.
+  navigation and species overlays and the replay journal.
 - **Launch options**: what a running game cannot change and the file or flag
   that sets it, on a platform without a command line where its launch arguments or
   `vif.toml` go.

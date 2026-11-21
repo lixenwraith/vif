@@ -80,6 +80,7 @@ func NewStormSystem(world *engine.World) engine.System {
 	for i := range circleVariants {
 		s.graphs[i] = newCircleGraph(s, &circleVariants[i])
 	}
+	nameStates(world, component.SpeciesStorm, s.graphs[0]) // every colour's states are named alike
 
 	return s
 }

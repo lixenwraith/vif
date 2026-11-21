@@ -33,7 +33,7 @@ type CommandResult struct {
 // the switch so the two move together; TestCommandsDocumented cross-checks it
 // against internal/help.
 var commandNames = []string{
-	"flow", "graph", "l", "log", "q", "quit", "p", "pause", "n", "new", "new!", "n!",
+	"flow", "graph", "machine", "l", "log", "q", "quit", "p", "pause", "n", "new", "new!", "n!",
 	"f", "free", "a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"t", "telemetry", "hud", "d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
@@ -81,6 +81,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleFlowCommand(ctx, args)
 	case "graph":
 		return handleGraphCommand(ctx, args)
+	case "machine":
+		return applyToggle(ctx, &ctx.OverlayMachine, args, "machine", "Machine states")
 	case "l", "log":
 		return handleLogCommand(ctx, args)
 	case "q", "quit":
@@ -183,7 +185,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 // nothing, which a replay's viewer and a spectator both keep.
 func inspects(cmd string) bool {
 	switch cmd {
-	case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "binaural", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+	case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "binaural", "d", "debug", "content", "flow", "graph", "machine", "l", "log", "q", "quit":
 		return true
 	}
 	return false
