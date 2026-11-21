@@ -323,6 +323,12 @@ func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.Hea
 		}
 		return ground(visual.RgbPylonCriticalBright, visual.Pylon256Critical,
 			bodyShell{float64(pylon.RadiusX), float64(pylon.RadiusY), visual.RgbPylonGlow})
+	case component.BehaviorDevourer:
+		// A gut fades where it hung; the body draws back as its renderer recedes it
+		if !c.DevourerGut.HasEntity(headerEntity) {
+			return b, false
+		}
+		return ground(visual.RgbDevourerGut, visual.Devourer256Gut, bodyShell{})
 	case component.BehaviorBlock:
 		block, ok := c.Block.GetPtr(headerEntity)
 		if !ok || int(block.Kind) >= len(visual.SquareKinds) {

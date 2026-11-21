@@ -87,6 +87,8 @@ var cursorDefenders = [...]component.CombatEntityType{
 	component.CombatEntitySnakeBody,
 	component.CombatEntityEye,
 	component.CombatEntityKraken,
+	component.CombatEntityDevourer,
+	component.CombatEntityDevourerGut,
 }
 
 // eyeTargets lists everything an eye can self-destruct against
@@ -100,20 +102,23 @@ var eyeTargets = [...]component.CombatEntityType{
 	component.CombatEntityCursor,
 	component.CombatEntityTower,
 	component.CombatEntityKraken,
+	component.CombatEntityDevourer,
+	component.CombatEntityDevourerGut,
 }
 
 // Contact is what touching a species costs a cursor: energy through an active shield
 // the body reaches, heat to a bare cursor it covers. Applied through strikeCursor; a
 // data species' row stays zero, its prototype carrying its contact.
 var Contact = [component.SpeciesMax]component.CursorDamage{
-	component.SpeciesDrain:  {EnergyDrain: parameter.DrainShieldEnergyDrainAmount, HeatDelta: -parameter.DrainHeatReductionAmount},
-	component.SpeciesSwarm:  {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.DrainHeatReductionAmount},
-	component.SpeciesQuasar: {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.QuasarDamageHeat},
-	component.SpeciesStorm:  {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.HeatMax},
-	component.SpeciesPylon:  {EnergyDrain: parameter.PylonShieldDrain, HeatDelta: -parameter.PylonDamageHeat},
-	component.SpeciesSnake:  {EnergyDrain: parameter.SnakeShieldDrainPerTick, HeatDelta: -parameter.SnakeDamageHeat},
-	component.SpeciesEye:    {EnergyDrain: parameter.EyeShieldDrain, HeatDelta: -parameter.EyeDamageHeat},
-	component.SpeciesKraken: {EnergyDrain: parameter.KrakenShieldDrain, HeatDelta: -parameter.KrakenDamageHeat},
+	component.SpeciesDrain:    {EnergyDrain: parameter.DrainShieldEnergyDrainAmount, HeatDelta: -parameter.DrainHeatReductionAmount},
+	component.SpeciesSwarm:    {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.DrainHeatReductionAmount},
+	component.SpeciesQuasar:   {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.QuasarDamageHeat},
+	component.SpeciesStorm:    {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.HeatMax},
+	component.SpeciesPylon:    {EnergyDrain: parameter.PylonShieldDrain, HeatDelta: -parameter.PylonDamageHeat},
+	component.SpeciesSnake:    {EnergyDrain: parameter.SnakeShieldDrainPerTick, HeatDelta: -parameter.SnakeDamageHeat},
+	component.SpeciesEye:      {EnergyDrain: parameter.EyeShieldDrain, HeatDelta: -parameter.EyeDamageHeat},
+	component.SpeciesKraken:   {EnergyDrain: parameter.KrakenShieldDrain, HeatDelta: -parameter.KrakenDamageHeat},
+	component.SpeciesDevourer: {EnergyDrain: parameter.DevourerShieldDrain, HeatDelta: -parameter.DevourerDamageHeat},
 }
 
 // collisionSet maps a defender to its knockback profile for one attack family;
@@ -258,7 +263,10 @@ func init() {
 		}
 		register(&pulseProfiles[d])
 	}
-	pulseProfiles[component.CombatEntityKraken].EffectMask = 0 // too massive to stun
+	// Too massive to stun, as no collision set knocks them back
+	for _, d := range [...]component.CombatEntityType{component.CombatEntityKraken, component.CombatEntityDevourer, component.CombatEntityDevourerGut} {
+		pulseProfiles[d].EffectMask = 0
+	}
 
 	// Burn: the charged pulse's follow-up
 	for _, d := range cursorDefenders {

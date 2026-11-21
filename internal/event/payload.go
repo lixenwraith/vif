@@ -1092,6 +1092,12 @@ type KrakenSpawnRequestPayload struct {
 	HP int `toml:"hp"`
 }
 
+// DevourerSpawnRequestPayload defaults hit points of 0 or fewer to
+// parameter.DevourerInitialHP
+type DevourerSpawnRequestPayload struct {
+	HP int `toml:"hp"`
+}
+
 // --- Behavior ---
 
 // BehaviorSpawnRequestPayload names the program whose species spawns at the cell,

@@ -136,6 +136,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventQuasarSpawnRequest:              func() any { return new(QuasarSpawnRequestPayload) },
 	EventSwarmSpawnRequest:               func() any { return new(SwarmSpawnRequestPayload) },
 	EventKrakenSpawnRequest:              func() any { return new(KrakenSpawnRequestPayload) },
+	EventDevourerSpawnRequest:            func() any { return new(DevourerSpawnRequestPayload) },
 	EventBehaviorSpawnRequest:            func() any { return new(BehaviorSpawnRequestPayload) },
 	EventBehaviorCancelRequest:           func() any { return new(BehaviorCancelRequestPayload) },
 	EventBehaviorSignalRequest:           func() any { return new(BehaviorSignalRequestPayload) },
@@ -319,6 +320,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventQuasarSpawnRequest:              &codecQuasarSpawnRequestPayload,
 	EventSwarmSpawnRequest:               &codecSwarmSpawnRequestPayload,
 	EventKrakenSpawnRequest:              &codecKrakenSpawnRequestPayload,
+	EventDevourerSpawnRequest:            &codecDevourerSpawnRequestPayload,
 	EventBehaviorSpawnRequest:            &codecBehaviorSpawnRequestPayload,
 	EventBehaviorCancelRequest:           &codecBehaviorCancelRequestPayload,
 	EventBehaviorSignalRequest:           &codecBehaviorSignalRequestPayload,
@@ -1546,6 +1548,14 @@ var codecKrakenSpawnRequestPayload = structCodec{size: unsafe.Sizeof(KrakenSpawn
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.HP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *DevourerSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDevourerSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecDevourerSpawnRequestPayload = structCodec{size: unsafe.Sizeof(DevourerSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DevourerSpawnRequestPayload{}.HP), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *BehaviorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

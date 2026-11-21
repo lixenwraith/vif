@@ -20,6 +20,8 @@ const (
 	CombatEntityEye
 	CombatEntityTower
 	CombatEntityKraken
+	CombatEntityDevourer
+	CombatEntityDevourerGut
 	CombatEntityCount
 )
 
@@ -37,6 +39,8 @@ var CombatEntityNames = [CombatEntityCount]string{
 	"eye",
 	"tower",
 	"kraken",
+	"devourer",
+	"devourer_gut",
 }
 
 // Damage Types

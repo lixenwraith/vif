@@ -31,6 +31,7 @@ const (
 
 	// Background species, rendered first,
 	// Foreground species with depth, rendered last
+	PriorityDevourer // the map's edges, under every body that crosses them
 	PriorityPylon
 	PriorityTower
 	PrioritySquare

@@ -42,6 +42,12 @@ var Drops = [component.SpeciesCount][]component.DropTier{
 		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 1.0, Count: 2}}},
 		{Entries: []component.DropEntry{{Loot: component.LootHeat, BaseRate: 1.0, Count: 2}}},
 	},
+	// Heat rolls ahead of the emitter, so the emitter's fallback lands on energy alone
+	component.SpeciesDevourer: {
+		{Entries: []component.DropEntry{{Loot: component.LootHeat, BaseRate: 1.0, Count: 1}}},
+		{Unique: true, Entries: []component.DropEntry{{Loot: component.LootEmitter, BaseRate: 1.0, Count: 1, FallbackCount: 2}}},
+		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 1.0, Count: 4}}},
+	},
 }
 
 // DropTableNamed is the table name names where set is declared: the scenario's
