@@ -64,10 +64,10 @@ These hold regardless of which repository is targeted first.
   `notices` reads, so it travels beside `NOTICES` as `LICENSE.font`: `make
   release` copies it to `bin/` and `make install` stops without it, and the
   release workflow and Gradle copy it from the module they build with. The
-  page's and the Android app's own text is lixen.com's font, Hack Nerd Font
-  (MIT, Bitstream Vera's and Nerd Fonts' OFL), whose licence lies beside its
-  files in `web/fonts/` and the APK's `assets/fonts/`, so the web archive and the
-  APK carry it. The About overlay points to `NOTICES`.
+  page's and the Android app's own text is lixen.com's font, Hack Nerd Font,
+  under Hack's two licences and Nerd Fonts' OFL, whose texts lie beside its files
+  in `web/fonts/` and the APK's `assets/fonts/`, so the web archive and the APK
+  carry them. The About overlay points to `NOTICES`.
 
 ## 2. Release surface
 
@@ -78,10 +78,10 @@ Windows amd64 zip, the browser bundle, the wad, the Android APK, and
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
 neither scatters files nor hands them to the builder's uid; each carries `LICENSE`
-and its build's `NOTICES` (§1), a client archive and the browser bundle
-`LICENSE.font` as well. Each archive's `README.md` is written for its platform:
-`make release-readme` renders `deploy/package/release-readme.md`, one source
-whose blocks are tagged by target.
+and its build's `NOTICES` (§1), a client archive `LICENSE.font` as well, and the
+browser bundle `LICENSE.font` and `fonts/LICENSE`. Each archive's `README.md` is
+written for its platform: `make release-readme` renders
+`deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
   of the `nightly` prerelease, titled and described as a development build,
@@ -101,8 +101,8 @@ whose blocks are tagged by target.
   shares, unless the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets hold a release key
   ([todo](todo.md#sign-the-android-build-with-a-release-key)). Each holds
-  `LICENSE`, `LICENSE.font` and `NOTICES` as assets. A store listing is not on
-  this path.
+  `LICENSE`, `LICENSE.font`, `NOTICES` and `fonts/LICENSE` as assets. A store
+  listing is not on this path.
 
 A tag adds `vif-X.Y.Z.tar.gz`, a `git archive` of the tag and the byte-stable
 source archive a distribution hashes. It pushes no image, moves nothing, and

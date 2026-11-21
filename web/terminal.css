@@ -6,7 +6,7 @@
 
 /* lixen.com's dark theme, which every host's start screen wears: its page, its
    cards, hairlines, muted text, links and the two buttons, a blue fill and a blue
-   ring around a periwinkle label, all in its font. */
+   ring around a periwinkle label; here, in its font too. */
 :root {
     --bg: #11111b;
     --surface: #1a1b26;
@@ -101,7 +101,6 @@ html, body {
     line-height: 1.5;
     text-align: center;
     overflow-wrap: anywhere;              /* an exit reason can carry a whole URL */
-    font-variant-numeric: tabular-nums;   /* the byte counter must not reflow */
     z-index: 3;                           /* over the start screen */
 }
 
@@ -193,11 +192,12 @@ html, body {
 
 /* Under the logo the loading line is a ring while the program loads, and the blue
    button once it asks for the start, or once the start was asked for during the
-   load: Android's "Tap to start". */
+   load: Android's "Tap to start". Its sides keep a count of tens of megabytes to
+   one line on a 360px screen. */
 #start:not([hidden]) ~ #loading {
     top: calc(50% + var(--logo) / 2 + 24px);
     transform: translateX(-50%);
-    padding: 0.75em 1.75em;
+    padding: 0.75em 1.5em;
     border-radius: 0.5rem;
     box-shadow: inset 0 0 0 2px var(--button);
     color: var(--accent);
@@ -689,7 +689,7 @@ html, body {
     align-items: center;
     justify-content: center;
     min-width: 44px;
-    padding: 0 10px 1px;   /* the glyphs' descender space sits below; a pixel evens it */
+    padding: 0 10px;
     border: 0;
     background: none;
     color: var(--muted);
