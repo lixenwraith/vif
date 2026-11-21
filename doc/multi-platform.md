@@ -697,12 +697,6 @@ Build tags should remain orthogonal capabilities. Avoid an accumulating
 the host API forces it, and a capability tag where multiple platforms can share
 the same omission or adapter.
 
-### Stapes' files
-
-Stapes (formerly soundlab), the audio authoring tool, names its files by path on
-every host, Android's to come ([todo](todo.md#bring-stapes-to-android-stapes-mobile))
-included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md#paths-on-every-host) describes.
-
 ## 9. Verification and release concerns
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
