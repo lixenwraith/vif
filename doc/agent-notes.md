@@ -1072,6 +1072,10 @@ Docs · Libraries · Branches.
   `actions` and ticks of several games move by one between runs: compare the
   files, and across a change of `version` or `scored_by` with those keys cut
   (`jq -S 'del(.version, .scored_by)'`).
+- From `seed`'s weights a run of five games is mid-climb at nine million
+  ticks, its seeds fielding 73,000 to 134,000 held out, and near the limit by
+  fifteen: read an arm at nine, where it can still part from its control. The
+  bytes check of a knob-free arm needs 300,000 ticks a game, a minute.
 - A scoring rule that reads as a corner is one only once population bytes say
   so. A Kraken shot down in the tick it rose was 27 of 670 kills in a run of 1.5
   million ticks from `seed`'s weights, and paying it as a timed one moved every

@@ -505,6 +505,13 @@ on_update = [
   - List every one of a kind the scenario can field. `cave` flies three
     raiders at most, so its `raid` reads all three and their three landings:
     reading two would drop one for no reason the network can know.
+  - From nothing a lean set starts faster. `raid` on 14 inputs, the nearest
+    raider and landing with the rock at the ship and just ahead, fielded 13,484
+    and 12,563 held out after nine million ticks where its 39 fielded 7,361
+    and 7,674, as `default`'s `walk` learns faster on 17 than on 161. From
+    `seed`'s weights the 14 showed no gain over three seeds: 60,245, 59,295
+    and 133,884 against 91,237, 133,803 and 73,308. `import` fits a lean
+    model into a graph that reads its inputs and more.
   - The rock's edges are the view's own where no rock stands, as at `cave`'s
     Kraken. Loot has no input: a drop homes on its owner.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
@@ -920,6 +927,10 @@ The learner's rules:
   variance at most.
 - A separable CMA-ES in place of the archive, on `lixenwraith/genetic`'s
   stand-in game: 3,290 against 3,545.
+- A strategy in place of the archive, from nothing in `cave`: a mean stepped
+  toward the better half of each 32 rounds, every weight of a candidate drawn
+  0.12 about it. On two seeds of nine million ticks it fielded 6,809 and 7,168
+  against the archive's 7,361 and 7,674.
 
 What a round scores, and when it ends:
 

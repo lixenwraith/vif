@@ -317,14 +317,14 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - **Firing.** `default`'s one written weight asks for the special attack
   always, an action each, and no run has learned to ask less. No shipped bot
   plays with auto-fire off, so nothing has learned the output `fire`.
-- **Inputs.** `default`'s `walk` learns faster on 17 inputs than on 161.
-  `cave`'s `raid` reads 39 and `kraken` 15, and no leaner set was read there.
-  Decide whether a scenario's bot names a lean set of its own.
-- **From nothing.** With no weight written `cave`'s archive stalls in the
-  first cave: six seeds field 4,824 held out where `seed`'s weights field
-  27,614. Its members become near-copies that 24 rounds cannot tell apart. To
-  decide: judge a candidate on the 50 to 75 rounds that do, or learn by a rule
-  that averages many rounds a step.
+- **From nothing.** With no weight written `cave`'s archive stalls in its
+  caves: after nine million ticks it fields 7,517 held out where `seed`'s hand
+  weights field 27,614, its members near-copies that 24 rounds cannot tell
+  apart. A rule that averages 32 rounds a step fields no more, and a lean
+  `raid` under twice as much ([tried](bots.md#tried-and-not-built),
+  [inputs](bots.md#networks-and-learning)). Still to try: that lean start
+  widened by `import` once it reaches the Kraken, and a candidate judged on
+  the 50 to 75 rounds that do tell them apart.
 - **Scenarios.** `td` and `armada` carry no bot of their own, so `-bot` there
   seats `default`. `armada`'s waits for its design. `td`'s has its towers to
   hold, and no kind of the catalogue sights a tower: a kind `tower` first.
