@@ -212,7 +212,11 @@ opens, typed on its row; see [Bots](bots.md#a-players-bot-files).
 
 ### Settings
 
-- **Sound**: sound effects, their volume in 5% steps, music.
+- **Sound**: sound effects, their volume in 5% steps, music, and the Binaural
+  beat under it (`[play] binaural`, `:binaural`): `off`, `fixed` or `dynamic`,
+  with the Beat preset a fixed one plays (`binaural_preset`), a row live under
+  `fixed` alone. The beat needs headphones, as its row says on every host
+  ([Audio §1](audio.md#1-layered-design)).
 - **Controls**: auto-fire (`off`, `main`, `on`), mouse input, pointer following.
 - **Display**: Max FPS, the telemetry HUD, Camera edge (`[play] camera_edge`,
   `:edge`; 15% by default, 5% a step; [Rendering §2](rendering.md#2-render-context-and-coordinates)).

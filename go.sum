@@ -4,8 +4,8 @@ github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63Y
 github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
 github.com/lixenwraith/ascimage v0.1.2 h1:T0EaK2889w3J4hIYhSxalZWLDVE6VfpJyZrk5JRMiLE=
 github.com/lixenwraith/ascimage v0.1.2/go.mod h1:U6IzX4JnxTe9chzG6+mZdgWadpnMyPZd50NeHOedihA=
-github.com/lixenwraith/audio v0.35.1 h1:NYenDeBM1P2BLk8hRBiCf64wZlzBC3VcW91qzhM1m2c=
-github.com/lixenwraith/audio v0.35.1/go.mod h1:frSyfCKsq0tcLblkla8yLiH3aNBdeQj4UewobwCUQR8=
+github.com/lixenwraith/audio v0.36.0 h1:M2WlbNyG8cUcbsPPUn7aeK1o2opU8MlFyltWffbok0o=
+github.com/lixenwraith/audio v0.36.0/go.mod h1:frSyfCKsq0tcLblkla8yLiH3aNBdeQj4UewobwCUQR8=
 github.com/lixenwraith/auth v0.5.3 h1:Oo0mqVbOmQpeWhQ1w11R16Ehh3L2/g1XggioLBq/8os=
 github.com/lixenwraith/auth v0.5.3/go.mod h1:411JUqnbQgy9jgoFV+fH91TfVUEfzYA4dyPv7f4c264=
 github.com/lixenwraith/color v0.1.5 h1:GRT4PBb9R04ahXW7SGlsfDttqew8E2lgt9GGujL0jEo=

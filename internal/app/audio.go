@@ -5,8 +5,10 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -23,7 +25,11 @@ func (a *App) initAudioService() error {
 		return err
 	}
 	p := a.cfg.Play
-	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.host.Audio))
+	// a [play] no settings file checked, as a test's, starts with no bed
+	mode := max(slices.Index(parameter.BinauralModeNames[:], p.Binaural), 0)
+	preset := max(slices.Index(parameter.BinauralPresetNames(), p.BinauralPreset), 0)
+	bed := engine.PackBinaural(parameter.BinauralMode(mode), parameter.BinauralPreset(preset))
+	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, bed, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.host.Audio))
 }
 
 // audioPlay reads the channels and the sfx volume as the player left them
@@ -35,6 +41,8 @@ func (a *App) audioPlay(p *paths.Play) {
 	pref := uint8(r.Pref.Load())
 	p.Sfx, p.Music = pref&parameter.AudioChanSfx != 0, pref&parameter.AudioChanMusic != 0
 	p.SfxVolume = r.Engine.SfxVolume()
+	mode, preset := a.world.Resources.Binaural()
+	p.Binaural, p.BinauralPreset = parameter.BinauralModeNames[mode], parameter.BinauralPresets[preset].Name
 }
 
 // reportAudioSpec says in play that a malformed sounds.toml or music.toml fell back to

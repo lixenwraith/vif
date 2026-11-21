@@ -556,7 +556,8 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` and a
 `Host` of the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and hands both to
-`app.Run`. Go reads Android's local time as UTC, so the view names the device's
+`app.Run`. That track and the page's worklet each play the stream's two channels
+apart, which the binaural beat needs ([Audio §1](audio.md#1-layered-design)). Go reads Android's local time as UTC, so the view names the device's
 zone first (`game.Zone`), which the first start makes `time.Local`. The app opens
 on a start screen (`StartScreen`) over the view, in
 lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the

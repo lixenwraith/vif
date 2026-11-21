@@ -252,25 +252,25 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 	if m := configMenu(ctx); m.Page != "settings" || ctx.GetOverlaySelection() != "settings/#Sound/sfx" {
 		t.Fatalf("a press on the selected page: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
-	// Back, Sound's title and three rows, then Controls' title: auto-fire is row 6
-	press(left, row(5))
+	// Back, Sound's title and five rows, then Controls' title: auto-fire is row 8
+	press(left, row(7))
 	if got := ctx.GetOverlaySelection(); got != "settings/#Sound/sfx" {
 		t.Fatalf("a press on a section title selected %q", got)
 	}
 	auto := ctx.AutoFire.Load()
-	press(right, row(6))
+	press(right, row(8))
 	if got := ctx.AutoFire.Load(); got != auto || ctx.GetOverlaySelection() != "settings/#Controls/auto" {
 		t.Fatalf("a press on an unselected setting: auto-fire %d to %d, selection %q", auto, got, ctx.GetOverlaySelection())
 	}
-	press(right, row(6))
+	press(right, row(8))
 	if got := ctx.AutoFire.Load(); got != (auto+1)%3 {
 		t.Fatalf("the right half of a setting stepped auto-fire %d to %d", auto, got)
 	}
-	press(left, row(6))
+	press(left, row(8))
 	if got := ctx.AutoFire.Load(); got != auto {
 		t.Fatalf("the left half of a setting stepped auto-fire back to %d, want %d", got, auto)
 	}
-	press(g.X-1, row(6))
+	press(g.X-1, row(8))
 	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "settings" {
 		t.Fatalf("a press outside the window: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}

@@ -2774,59 +2774,28 @@ The conductor plays tiers, not bars. A level that wants a fixed piece would play
 a `SongDef` through the sequencer as stapes conducts one, each bar's patterns
 scheduled while the bar before plays.
 
-### Add binaural beats to the music
+### Tune the binaural beat by ear
 
 - Priority: P3
-- Affected files: `internal/parameter/music.go`, `internal/system/music.go`,
-  `internal/paths/settings.go`, `internal/mode/config_menu.go`,
-  `internal/mode/router.go`, `internal/event`, `go.mod`, `doc/audio.md`,
-  `doc/config-menu.md`, `doc/vif.6`
+- Affected files: `internal/parameter/audio.go`, `internal/parameter/music.go`
 - Guide: [Audio §2](audio.md#2-adaptive-game-conductor)
-- Prerequisite: the library's bed ([its
-  todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md#give-the-mix-a-binaural-bed))
 
-The music's tempo already follows the player's pace (100 to 200 BPM off the
-five-second APM). A binaural beat would add a sensation of that pace: a tone
-of `f − Δ/2` in the left ear and `f + Δ/2` in the right, heard as a beat at
-`Δ`, which the library is to mix under the music (`SetBinaural`), its todo
-weighing where. Off by default, as a setting with three modes:
+The binaural beat's figures were set without hearing it. Each is a constant to
+move after a session on headphones, which stapes' `binaural <carrier> <beat>
+<level>` gives over any pattern: the level (`BinauralLevel`, 0.03 of full
+scale), the carrier's octave (`BinauralCarrierFloor`: 150 Hz gives E3 under the
+conductor's E, 175 E4), the dynamic beat's lock to the tempo
+(`BinauralTempoLock`: 8 runs 13.3 to 26.7 Hz, 4 runs 6.7 to 13.3) and its glide
+(`BinauralGlide`).
 
-- **off**: today's output, byte for byte (L equal to R);
-- **fixed**: a preset's `Δ`, whatever the pace; presets in one table in
-  `internal/parameter` (a row each), first rows `relax` 10 Hz (alpha), `focus`
-  15 Hz (low beta), `hyper` 25 Hz (high beta);
-- **dynamic**: `Δ` follows the APM, by an algorithm still to choose (below).
+The dynamic mapping is one function, `parameter.BinauralBeat`. The candidates
+not taken, each a few lines there:
 
-Dynamic `Δ`, candidates, each glided at most about 0.5 Hz a second:
-
-- **follow**: `Δ` rises with the APM on the tempo's own square root, from
-  `relax` at rest to `hyper` at the ceiling. Reinforces the pace, as the tempo
-  does; it may also feed a frantic player more.
-- **tempo-locked**: `Δ = k·BPM/60`, so it inherits the conductor's curve and
-  slew with one constant; `k = 8` (a 32nd note) runs 13.3 to 26.7 Hz over 100 to
-  200 BPM, all beta, `k = 4` 6.7 to 13.3 Hz, theta to alpha. Coherent with the
-  rhythm, but it never leaves its band.
-- **by tier**: one `Δ` a tier, a row each in the preset table, through
-  `TierTracker`'s hysteresis; steps the glide smooths, five values to tune.
-- **counter**: `Δ` falls as the APM rises, steadying a busy player against the
-  rising tempo; the two may read as at odds.
-
-What it takes: `[play] binaural = "off" | "fixed" | "dynamic"` and
-`binaural_preset`, validated in `Play.check` as `auto_fire` is and saved by the
-one settings rule; a Sound row in the configuration menu (`kindChoice`) and the
-native menu's, the preset row live under fixed; a command and an event pushed
-`OriginDevice` as the mute is, so the journal carries none and a replay plays
-the viewer's setting, dynamic following the replayed APM; `MusicSystem` sends
-the target each update and `music.binaural` shows the mode and `Δ` on the music
-card. Decided with it: whether the bed rides the music bit of the audio mask and
-the `music` system's gate (simplest, no new bit) or a toggle of its own, and a
-level of its own or a fixed one under the music. The beat needs headphones:
-through speakers the ears share both tones and it becomes a quieter monaural
-beat, and a phone's single speaker loses it; the row's description says so, the
-same on every host. The evidence that a beat entrains anything is mixed: the
-manual describes it as a sound, not an effect. The dynamic mapping is tested in
-`parameter`'s music test. New terms (binaural beat, bed, carrier) go in both term
-indexes when they land.
+- **follow**: the beat rises with the APM on the tempo's square root, from
+  `relax` at rest to `hyper` at the ceiling;
+- **by tier**: one beat a tier, a row each in the preset table, through
+  `TierTracker`'s hysteresis;
+- **counter**: the beat falls as the APM rises, against the rising tempo.
 
 ## Engine
 
