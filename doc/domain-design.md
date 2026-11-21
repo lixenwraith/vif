@@ -99,7 +99,10 @@ never enters the replay suffix (D-9).
 | A transition a local event triggers, asked of the authority (D-20) | region, owning state, transition index, trigger and captured variables |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a
-crossing do not cross again (D-5).
+crossing do not cross again (D-5). An instance applies from a peer only a type a
+producer sends, tagged as its producer tags it, from one who may author it
+(`crossingRules`, `event.Crosses`): an event every instance derives, as a
+species' end, is refused when it comes over the wire.
 
 "Fully determines" includes the values a receiver cannot re-derive. A crossing
 that misses the lead is applied late by the authority, and a projection re-applies
@@ -503,8 +506,8 @@ changes nothing:
 
 - its sender plays, holding a cursor (`NetworkSystem.plays`), which every instance
   checks alike at the tick the ask applies;
-- it names a transition a local event triggers, by that trigger: any other is the
-  authority's own to judge;
+- it names a transition a local event triggers, by that trigger, never `Tick`, the
+  machine's own pulse: any other is the authority's own to judge;
 - the state owning it is one its region stands in, the region running with no
   transition in flight;
 - it sets no variable but those the transition captures (`Machine.Grant`).

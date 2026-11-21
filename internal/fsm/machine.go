@@ -518,11 +518,7 @@ func (m *Machine[T]) LocalTriggers() []string {
 	var out []string
 	for _, node := range m.nodes {
 		for i := range node.Transitions {
-			et := node.Transitions[i].Event
-			if et == event.EventNone {
-				continue // Tick, the machine's own pulse on every instance
-			}
-			if localTrigger(et) {
+			if et := node.Transitions[i].Event; localTrigger(et) {
 				out = append(out, node.Name+" on "+event.GetEventName(et))
 			}
 		}
@@ -531,8 +527,12 @@ func (m *Machine[T]) LocalTriggers() []string {
 	return slices.Compact(out)
 }
 
-// localTrigger reports an event only the instance that made it holds.
+// localTrigger reports an event only the instance that made it holds: never Tick,
+// the machine's own pulse on every instance, which carries no class.
 func localTrigger(et event.EventType) bool {
+	if et == event.EventNone {
+		return false
+	}
 	c := event.ClassOf(et)
 	return c == event.ClassLocal || c == event.ClassUnset
 }

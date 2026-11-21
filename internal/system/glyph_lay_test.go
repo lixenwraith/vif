@@ -77,6 +77,31 @@ func TestAGlyphClearTakesARectangleOrTheMap(t *testing.T) {
 	}
 }
 
+// A line's accent marks take no cell: the runes a pair brackets are laid bright
+// white where the rest take the line's type and level, and every glyph of a line a
+// scenario lays is text the magnifier keeps off.
+func TestALinesAccentCallsOutRunesAndTakesNoCell(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
+	if !glyphs.placeLineAt(&event.GlyphLinePayload{Text: "|dw| a |w|ord", Accent: "|", X: 2, Y: 10,
+		Type: component.GlyphBlue, Level: component.GlyphNormal}) {
+		t.Fatal("the line was not laid")
+	}
+	called := component.GlyphComponent{Type: component.GlyphWhite, Level: component.GlyphBright}
+	plain := component.GlyphComponent{Type: component.GlyphBlue, Level: component.GlyphNormal}
+	for x, want := range map[int]component.GlyphComponent{2: called, 3: called, 5: plain, 7: called, 8: plain, 10: plain} {
+		want.Rune = []rune("dw a word")[x-2]
+		e, _ := w.Positions.TopGlyphAt(x, 10)
+		got, _ := w.Components.Glyph.GetComponent(e)
+		if prot, _ := w.Components.Protection.GetComponent(e); got != want || prot.Mask&component.ProtectFromSplash == 0 {
+			t.Errorf("column %d holds %+v under protection %b, want %+v kept from the magnifier", x, got, prot.Mask, want)
+		}
+	}
+	if n := w.Components.Glyph.CountEntities(); n != 7 {
+		t.Fatalf("the line laid %d glyphs, want its 7 runes and no mark", n)
+	}
+}
+
 // A put lays each cell's glyph with the rune, colour and level it names, and passes
 // over a cell a glyph holds, an earlier cell of the same put included, a cell off
 // the map and a rune no glyph holds.

@@ -765,7 +765,7 @@ The protocol and the run:
 - `internal/converge/reach.go`: `Reach.admitPeerLink`.
 - `internal/converge/authority.go`: `onReport`, `takeBack`, where reports and
   handoffs are flooded and forwarded.
-- `internal/system/network.go`: `crossingActors`, `admissibleFromSource`,
+- `internal/system/network.go`: `crossingRules`, `admissibleFromSource`,
   `stateInRange`, the participant's name on arrival.
 - `internal/event/payload.go`: `ParticipantJoinedPayload` and
   `CursorSpawnRequestPayload`, which carry a participant's key and name;

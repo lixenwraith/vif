@@ -73,7 +73,7 @@ func TestAReplaysViewerKeyLeavesTheRecordedMode(t *testing.T) {
 	}
 	a.Tick(10)
 	tutorialTo(t, a, "Append")
-	tutorialKeys(t, a, "A}\x1bI{\x1bj^a>")
+	tutorialKeys(t, a, "Ad\x1bIf\x1bao")
 	a.Tick(300)
 	state, insert := tutorialState(a), a.Context().IsInsertMode()
 	a.Close()

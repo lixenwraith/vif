@@ -59,20 +59,27 @@ func BoundTick(payload any, applyTick uint64) {
 // re-derived everywhere, and an event a peer produced is never echoed.
 // By value: Push must stay allocation-free, and a pointer here escapes it.
 func OnWire(ev GameEvent) bool {
-	if ev.Origin == OriginNetwork || !ev.Own {
-		return false
-	}
-	switch ClassOf(ev.Type) {
+	return ev.Origin != OriginNetwork && ev.Own && Crosses(ev.Type, ev.Domain, ev.Payload)
+}
+
+// Crosses reports whether an artifact is one OnWire lets a producer send, which is
+// all a receiver takes from a peer: a Bus type, which its producer's push tags
+// Player, or a Stamped one whose tag, there the target's domain (D-10), is Shared,
+// and no payload its receiver derives.
+func Crosses(et EventType, domain core.Domain, payload any) bool {
+	switch ClassOf(et) {
 	case ClassBus:
+		if domain != core.DomainPlayer {
+			return false
+		}
 	case ClassStamped:
-		// Here the tag is the target's domain, not the producer's (D-10)
-		if ev.Domain != core.DomainShared {
+		if domain != core.DomainShared {
 			return false
 		}
 	default:
 		return false
 	}
-	d, ok := ev.Payload.(Derived)
+	d, ok := payload.(Derived)
 	return !ok || !d.IsDerived()
 }
 

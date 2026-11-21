@@ -432,7 +432,8 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 // calculateProximityAnchor uses spiral search to find valid magnifier position
 // Works in virtual circular space, converts back to game elliptical space
 // Searches diagonals first to avoid overlapping with ping crosshair lines, clear of
-// the boxes its caller filled
+// the boxes its caller filled and, where such a place is in reach, of the text a
+// scenario laid to be read
 func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int) (int, int) {
 	config := s.world.Resources.Config
 
@@ -443,28 +444,51 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	clear := func(topLeft position.Point, w, h int) bool {
-		return !s.collides(BBox{X: topLeft.X, Y: topLeft.Y, W: w, H: h}, -1)
-	}
-
-	topLeft, found := s.world.Positions.FindFreeFromPattern(
-		position.Point{X: cursorX, Y: cursorY},
-		splashW, splashH,
-		position.PatternDiagonalFirst,
-		parameter.SplashMinDistance,
-		parameter.SplashMinDistance*3,
-		true,
-		component.WallBlockAll,
-		clear,
-	)
-
-	if found {
-		return topLeft.X, topLeft.Y
+	// Clear of text from the cursor, then from the row nearest it that a place
+	// beside it fits the map on, a lesson's text leaving no other; then as ever
+	beside := max(splashH/2, min(cursorY, config.MapHeight-splashH+splashH/2))
+	for _, try := range [...]struct {
+		y       int
+		offText bool
+	}{{cursorY, true}, {beside, true}, {cursorY, false}} {
+		offText := try.offText
+		topLeft, found := s.world.Positions.FindFreeFromPattern(
+			position.Point{X: cursorX, Y: try.y},
+			splashW, splashH,
+			position.PatternDiagonalFirst,
+			parameter.SplashMinDistance,
+			parameter.SplashMinDistance*3,
+			true,
+			component.WallBlockAll,
+			func(topLeft position.Point, w, h int) bool {
+				box := BBox{X: topLeft.X, Y: topLeft.Y, W: w, H: h}
+				return !s.collides(box, -1) && !(offText && s.coversText(box))
+			},
+		)
+		if found {
+			return topLeft.X, topLeft.Y
+		}
 	}
 
 	anchorX := max(0, min(cursorX-splashW/2, config.MapWidth-splashW))
 	anchorY := max(0, min(cursorY-splashH/2, config.MapHeight-splashH))
 	return anchorX, anchorY
+}
+
+// coversText reports whether box holds a glyph the magnifier keeps off, scenery
+// among them, which the top glyph of a cell never is
+func (s *SplashSystem) coversText(box BBox) bool {
+	glyphs, protection := s.world.Components.Glyph, s.world.Components.Protection
+	for y := box.Y; y < box.Y+box.H; y++ {
+		for x := box.X; x < box.X+box.W; x++ {
+			for _, e := range s.world.Positions.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll) {
+				if prot, _ := protection.GetComponent(e); prot.Mask&component.ProtectFromSplash != 0 && glyphs.HasEntity(e) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // collides reports whether candidate overlaps any held box but the one at skip

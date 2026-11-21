@@ -384,12 +384,13 @@ func lineWorld(t *testing.T, text string, x int) (*engine.GameContext, func(keys
 }
 
 // vimKeys binds the vim actions no default key has to vim's own keys, as the tutorial
-// does, a, p, P, o, O, u, Ctrl-R and m, and the backtick to mark_jump, as a keymap may
+// does, a, p, P, o, O, u, Ctrl-R, m and y, and the backtick to mark_jump, as a keymap may
 func vimKeys(t *testing.T) *input.KeyTable {
 	t.Helper()
 	kt := &input.KeyTable{NormalRunes: map[rune]input.KeyEntry{}, SpecialKeys: map[terminal.Key]input.KeyEntry{}}
 	for key, action := range map[rune]string{'a': "mode_append", 'p': "put_after", 'P': "put_before",
-		'o': "mode_open_below", 'O': "mode_open_above", 'u': "undo_change", 'm': "mark_set", '`': "mark_jump"} {
+		'o': "mode_open_below", 'O': "mode_open_above", 'u': "undo_change", 'm': "mark_set", '`': "mark_jump",
+		'y': "operator_yank"} {
 		kt.NormalRunes[key], _ = input.ActionEntry(action)
 	}
 	kt.OperatorMotions = map[rune]input.KeyEntry{'`': kt.NormalRunes['`']}

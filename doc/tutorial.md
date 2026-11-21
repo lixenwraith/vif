@@ -11,10 +11,11 @@ responsive map, combat off. Each lesson is laid out the same way, top to bottom:
 
 - a heading in the small splash face (`EventSplashTextRequest`, `font = "small"`):
   the key or keys to press, as `press w`;
-- an explanation of two or three lines, laid as scenery glyph lines
-  (`EventGlyphLineRequest`, `scenery = true`), which nothing types or deletes;
-- a practice line, laid as typeable glyphs, and the cursor moved onto it
-  (`EventCursorMoveRequest`);
+- an explanation of up to five lines of 62 columns, laid as scenery glyph lines
+  (`EventGlyphLineRequest`, `scenery = true`), which nothing types or deletes,
+  each key it names called out bright (`accent`);
+- a practice line, laid as typeable glyphs with the ones its goal names bright
+  white, and the cursor moved onto it (`EventCursorMoveRequest`);
 - a status-bar prompt (`EventMetaStatusMessageRequest`, `kind = "goal"`) for what
   the lesson waits on, held under every other message until the next.
 
@@ -73,10 +74,25 @@ makes of the keys the tutorial gave back to vi. What it stands on:
 - The entry's `[keymap.normal]` and `[keymap.normal_keys]` bind, over the
   player's keymap, `a` to `mode_append`, `p` and `P` to the puts, `o` and `O` to
   `mode_open_below` and `mode_open_above`, `u` and Ctrl-R to `undo_change` and
-  `redo_change`, and `m` to `mark_set`
+  `redo_change`, `m` to `mark_set` and `y` to `operator_yank`
   ([Input §10](input-and-modes.md#10-keymap-override-files)). The vim keymap
   binds each the same, so `-k vim` plays any game on the keys taught here, and
   the last lesson says so.
+- A glyph line takes an `accent`, a mark its text brackets the runes it calls out
+  with: they are laid bright white and the mark takes no cell
+  (`GlyphLinePayload.Accent`). A note calls out its keys with it, a practice line
+  the glyphs its goal names, and a `Label` lies beside a line to say what a step
+  does there.
+- Every glyph of a line a scenario lays is text to read (`ProtectFromSplash`): the
+  magnifier takes the nearest place clear of it, from the cursor or from the row
+  nearest it that a place beside it fits the map on, and covers it only where
+  there is none (`SplashSystem.calculateProximityAnchor`). The notes keep to 62
+  columns, which leaves it the map's right on an 80 by 24 terminal.
+- A lesson on a key that enters Insert is a step a key (`Append`, `Open`): each
+  lays its own line, stands the cursor and waits for the bright glyph the key
+  lands on, then for esc, so no step is done before its turn and none waits on
+  another's keys. The `.` lesson repeats a delete, and its notes say what else
+  `.` repeats.
 
 A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every
 glyph and the heading, under a white flash; the parent's exit runs only when the
@@ -125,14 +141,12 @@ refuses a lobby that would wait for a guest forever.
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions. Below 80 columns the
-  camera cuts the notes, which reach column 78; a lesson laid from the viewport's
+  camera cuts the notes, which reach column 65; a lesson laid from the viewport's
   width would show them whole.
 - **Centring from the map's edge**: a text or line placed from the right or the
   bottom edge, or the centre (an `origin` on the request,
   [FSM reference](fsm-reference.md#event-emission)), would spare the scenario
   its arithmetic.
-- **The magnifier**: a cursor resting on a glyph shows it large some way off, which
-  a lesson could do without; the splash system has no switch for it yet.
 - **Sound**: a chime on a lesson cleared, as recall cues.
 
 ## 4. Decisions taken
@@ -154,6 +168,8 @@ refuses a lobby that would wait for a guest forever.
 - A click or tap on a lesson's goal ends it as the motion would:
   `CursorMovedPayload` carries no pointer bit, and a tap is how a phone moves the
   cursor.
+- `y` yanks only where a keymap binds it, as the tutorial's and the vim keymap
+  do: a game binds no put, so its yank would fill a register nothing reads.
 - The backtick stays the console's: the Marks lesson teaches `'` and says that
   vim's backtick returns to the marked cell itself, which the vim keymap alone
   binds (`mark_jump`).
