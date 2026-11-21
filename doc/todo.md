@@ -2706,9 +2706,10 @@ The audio library's own items are in [its todo](https://github.com/lixenwraith/a
 and those of stapes (formerly soundlab), the rip's among them, in [its
 own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
-linked from it. Stapes on Android, its live rip with it, is an app of stapes'
-own, not vif's: its items are in [stapes'
-todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android).
+linked from it. Stapes on Android, its live rip with it, is first an app of
+stapes' own, its items in [stapes'
+todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android); vif's
+app bundles it long after ([below](#bundle-stapes-in-the-android-app)).
 
 ### Render a conductor timeline offline
 
@@ -2733,6 +2734,20 @@ it and write the WAV.
 The conductor plays tiers, not bars. A level that wants a fixed piece would play
 a `SongDef` through the sequencer as stapes conducts one, each bar's patterns
 scheduled while the bar before plays.
+
+### Bundle stapes in the Android app
+
+- Priority: P3
+- Affected files: `android/game`, `android/app`, `android/go.mod`,
+  `doc/audio.md`, `doc/package-map.md`
+- Prerequisite: stapes mobile fully working on its own ([stapes'
+  todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android))
+
+A later version of the app carries stapes beside the game, its live rip with
+it, over one storage, so a pattern written or ripped on the phone plays in the
+phone's game from the user root's `audio/`. `android/go.mod` then requires
+stapes, and the root module still imports none of it. What closes it: the
+start screen offers stapes beside the game, as stapes mobile runs it.
 
 ### Add binaural beats to the music
 
