@@ -1001,13 +1001,18 @@ Docs · Libraries · Branches.
   another name (`bot.ParseGraph`) keeps its populations apart.
 - A model or a population is read held out by `vif -headless -field`, a line a
   round, under an `XDG_CONFIG_HOME` holding the population files, or an empty
-  one for the document's weights. What ended a round still takes a scratch
-  test: a driver given `App.field` and `bot.Learn` with no learner, which
-  closes its rounds at the graph's limit, `Driver.Round` giving each score. An
+  one for the document's weights. The line says what ended the round, under
+  which network, each network's part and each source's count
+  ([Bots](bots.md#learning)). What it does not say takes a scratch test: an
   `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap
-  ahead of the driver's, counts `EventKrakenSpawnRequest` for a Kraken met, its
-  `EventSpeciesKilled` for one shot down, `EventFireSpecialRequest` for a
-  special asked for and `EventHeatSpendRequest` for one spent.
+  ahead of the driver's, counts `EventFireSpecialRequest` for a special asked
+  for and `EventHeatSpendRequest` for one spent.
+- `-field` plays until it is stopped: read N rounds through a FIFO and kill the
+  run at the Nth line. Several games tell their rounds by the tick each closed
+  at, so the first N lines of `-games 5` hold the short rounds and miss the
+  long ones in flight: read `-games 1`, a process a seed, four seeds at once.
+  A half-hour `cave` round costs a core 6 s, so 100 rounds read in 3 minutes,
+  and a learning run of 15 million ticks takes 10.
 - What a population fields is played with no learner: `App.field` reads each
   network's file (`Graph.Kept`) and `Driver.Field` has the driver play its
   member. The package's TestMain points `XDG_CONFIG_HOME` at an empty
@@ -1015,8 +1020,12 @@ Docs · Libraries · Branches.
   population and says nothing.
 - A world's transport is never taken away once attached
   (`Membership.attachResourceLocked`; `:leave` opens a session of the run's
-  own), so `alone` only ever turns false, and a run in a session as it starts
-  builds no learner.
+  own), so alone is read off the cursors, not the transport
+  (`Membership.Alone`), and turns true again when the others' go. A joining
+  seat holds no cursor of its own for its first ticks, which reads as alone.
+- `timeout -s TERM` signals its child and then its whole group, so a `-serve`
+  run takes two signals, and the second ends it at once: its seats may not
+  have saved what they learned. Stop one with `timeout --foreground` or `kill`.
 - Only a learner's save writes a population this build reads: a test outside
   `internal/bot` gets one by playing a round, as
   `TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot` does.
@@ -1063,6 +1072,14 @@ Docs · Libraries · Branches.
   `actions` and ticks of several games move by one between runs: compare the
   files, and across a change of `version` or `scored_by` with those keys cut
   (`jq -S 'del(.version, .scored_by)'`).
+- From `seed`'s weights a run of five games is mid-climb at nine million
+  ticks, its seeds fielding 73,000 to 134,000 held out, and near the limit by
+  fifteen: read an arm at nine, where it can still part from its control. The
+  bytes check of a knob-free arm needs 300,000 ticks a game, a minute.
+- A scoring rule that reads as a corner is one only once population bytes say
+  so. A Kraken shot down in the tick it rose was 27 of 670 kills in a run of 1.5
+  million ticks from `seed`'s weights, and paying it as a timed one moved every
+  population from its first. An arm and its control come from one binary.
 - A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
   script that puts each fix's lines back and runs the one test of its rule,
   which must fail. A mutation that deadlocks the games' order hangs where it
@@ -1120,9 +1137,14 @@ Docs · Libraries · Branches.
   `internal/bot`: it deals and settles scripted rounds into a learner on a
   store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
   A changed repeat order moves every hash.
-- An output added to the catalogue is asked (`outputRow.asked`): given to every
-  network that lists none, `cave`'s two would grow a unit, their layouts change
-  and every population of theirs start over.
+- An output added to the catalogue is listed (`outputRow.listed`): given to
+  every network that lists none, `cave`'s two would grow a unit, their layouts
+  change and every population of theirs start over.
+- A dotted key in an inline table is a table of its own, which is how a score
+  names an event's owner field (`score = { EventGoldCompleted.entity = 25 }`).
+- What a page keeps is tested under Node with a `terminalPage` of the test's
+  own: `kept` holds the documents of an earlier visit and `post` hears each
+  `keep` (`cmd/vif/browser_test.go`).
 - A test changes a shipped graph's rate or round limit on `Graph.Settings`
   after `ParseGraph`, which `NewDriver` reads; one that hands `RunBot` a path
   replaces the key whatever its figure. No test pins a shipped layout's digest:

@@ -105,15 +105,43 @@ type SessionController interface {
 }
 
 // BotVerbs are the words after :bot and -bot that name no graph, each with what
-// follows it: add and drop seat and unseat, and the rest keep bot files.
+// follows it: add and drop seat and unseat, and the rest keep bot files. A
+// graph's networks are one or several, joined by commas, and @<scenario> reads
+// a graph and what it learned in that scenario, not the run's.
 var BotVerbs = [][2]string{
 	{"add", "[N[:graph]|graph]"},
 	{"drop", "<slot>"},
-	{"list", ""},
-	{"create", "<name> [import <graph>[.<network>]]"},
-	{"import", "<graph>[.<network>] <name>"},
-	{"export", "<graph>[.<network>] <file>"},
-	{"clear", "<graph>[.<network>]"},
+	{"list", "[<scenario>]"},
+	{"create", "<name> [import <graph>[.<networks>]]"},
+	{"import", "<graph>[.<networks>] <name>"},
+	{"export", "<graph>[@<scenario>][.<networks>] <file>"},
+	{"clear", "<graph>[@<scenario>][.<networks>]"},
+}
+
+// BotWords splits what follows :bot or -bot at its spaces. What stands between
+// double quotes is one word whatever it holds, so a path may hold a space.
+func BotWords(text string) []string {
+	var words []string
+	var word strings.Builder
+	quoted, begun := false, false
+	for _, r := range text {
+		switch {
+		case r == '"':
+			quoted, begun = !quoted, true
+		case (r == ' ' || r == '\t') && !quoted:
+			if begun {
+				words, begun = append(words, word.String()), false
+				word.Reset()
+			}
+		default:
+			word.WriteRune(r)
+			begun = true
+		}
+	}
+	if begun {
+		words = append(words, word.String())
+	}
+	return words
 }
 
 // BotVerb splits the words after :bot and -bot into a verb and what follows it:
@@ -165,9 +193,10 @@ type SessionParticipant struct {
 	Away   bool // a Wraith waits in the slot for the participant's return
 }
 
-// BotGraph is a graph a seat can play: its name and whose it is, the player's,
-// an installed one, the scenario's or the shipped
-type BotGraph struct{ Name, Owner string }
+// BotGraph is a graph a seat can play: its name, whose it is, the player's, an
+// installed one, the scenario's or the shipped, and what it has learned in the
+// run's scenario, "" on a host that keeps none
+type BotGraph struct{ Name, Owner, Learned string }
 
 type BotSeat struct {
 	ID       uint64 // Holder-local identity; roster slots and participant IDs can be reused

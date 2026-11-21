@@ -3,6 +3,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"syscall/js"
 	"testing"
@@ -67,5 +68,45 @@ func TestBrowserBringsTheKeptSettingsUpToDateOnce(t *testing.T) {
 		if doc, err := store.Load(); err != nil || len(notes) > 0 || s != (paths.Settings{}) || string(doc) != string(asset.DefaultSettings) {
 			t.Errorf("kept %q: %+v, notes %q, %v", kept, s, notes, err)
 		}
+	}
+}
+
+// TestBrowserKeepsWhatABotLearnedAsThePagesDocuments: a population is a document
+// the page keeps under its name. The page names those it held as the run began;
+// one the run stores or removes since is read from the run, and told to the page.
+func TestBrowserKeepsWhatABotLearnedAsThePagesDocuments(t *testing.T) {
+	posted := map[string]string{}
+	post := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if args[0].String() == "keep" {
+			posted[args[1].Get("name").String()] = args[1].Get("text").String()
+		}
+		return nil
+	})
+	defer post.Release()
+	js.Global().Set("terminalPage", map[string]any{"post": post,
+		"kept": map[string]any{docBots: "default.main.walk\nmine.cave.raid", docBot + "default.main.walk": "walked", docBot + "mine.cave.raid": "raided"}})
+	defer js.Global().Delete("terminalPage")
+	p := &keptPopulations{kept: map[string][]byte{}}
+	read := func(name string) string {
+		doc, err := p.Open(name).Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(doc)
+	}
+	if got := p.Names(); !slices.Equal(got, []string{"default.main.walk", "mine.cave.raid"}) || read("mine.cave.raid") != "raided" {
+		t.Fatalf("the page's populations read as %v, one %q", got, read("mine.cave.raid"))
+	}
+	if err := p.Open("mine.cave.kraken").Store([]byte("fought")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Remove("mine.cave.raid"); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Names(); !slices.Equal(got, []string{"default.main.walk", "mine.cave.kraken"}) || read("mine.cave.kraken") != "fought" || read("mine.cave.raid") != "" {
+		t.Fatalf("after a store and a remove the run reads %v, %q and %q", got, read("mine.cave.kraken"), read("mine.cave.raid"))
+	}
+	if text, told := posted[docBot+"mine.cave.raid"]; posted[docBot+"mine.cave.kraken"] != "fought" || !told || text != "" {
+		t.Fatalf("the page was told to keep %v: want the new population, and the removed one empty", posted)
 	}
 }

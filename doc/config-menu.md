@@ -195,7 +195,8 @@ wait. Slots may be reused once a departed player is dropped.
 the scenario's own bot, or the shipped `default` where the scenario carries none,
 and a name resolves as `-bot` resolves one ([Bots](bots.md#writing-a-graph)).
 Below it **Add &lt;graph&gt;** is a row for each graph a seat can play, yours,
-the installed, the scenario's and the shipped, which seats one bot playing it. Each
+the installed, the scenario's and the shipped, which seats one bot playing it and
+says what the graph has learned in this scenario, a population a network. Each
 bot occupies a player slot and leaves when its holder leaves. Both hosts and
 guests can bring bots. The rows below list this run's bots, including joining and
 leaving states: **Remove &lt;slot&gt;: &lt;graph&gt;** drops one, its hexadecimal

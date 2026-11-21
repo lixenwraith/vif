@@ -16,11 +16,9 @@ score = { typed = 1, mistyped = -1, gold = 25, kill = 5, hit_points = 12, kraken
 # walk reads where the two nearest species and the Kraken are and the bot's own
 # place, energy and heat: more inputs learn slower. What it learns is its
 # scenario's own, so the one weight written has it ask for the special attack
-# always, until a run learns when. It has the wheel while no text is left and
-# while it asks for it past a mark random genomes seldom reach: text comes first.
+# always, until a run learns when. It steers while no text is left: text comes first.
 [network.walk]
 hidden = 6
-outputs = ["special", "move", "wheel"]
 inputs = [
     "species_x", "species_y", "species_near_x", "species_near_y",
     "species2_x", "species2_y", "species2_near_x", "species2_near_y",
@@ -45,7 +43,6 @@ on_update = [{ action = "Steer", payload = { outputs = ["special"] } }]
 on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
 transitions = [
     { trigger = "Tick", target = "Flee", guard = "HasTarget", guard_args = { target = "threat", within = 3 } },
-    { trigger = "Tick", target = "Walk", guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", target = "Gold", guard = "HasTarget", guard_args = { target = "gold" } },
     { trigger = "Tick", target = "Nugget", guard = "HasTarget", guard_args = { target = "nugget", within = 12 } },
     { trigger = "Tick", target = "Type", guard = "OnTarget", guard_args = { target = "glyph" } },
@@ -56,7 +53,6 @@ transitions = [
 on_update = [{ action = "TypeGlyph" }]
 transitions = [
     { trigger = "Tick", target = "Flee", guard = "HasTarget", guard_args = { target = "threat", within = 3 } },
-    { trigger = "Tick", target = "Walk", guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", internal = true, guard = "OnTarget", guard_args = { target = "glyph" } },
     { trigger = "Tick", target = "Seek" },
 ]
@@ -77,7 +73,6 @@ on_update = [
     { action = "Steer", payload = { outputs = ["move"] } },
 ]
 transitions = [
-    { trigger = "Tick", internal = true, guard = "Asks", guard_args = { output = "wheel", above = 1 } },
     { trigger = "Tick", target = "Seek", guard = "HasTarget", guard_args = { target = "glyph" } },
     { trigger = "Tick", target = "Gold", guard = "HasTarget", guard_args = { target = "gold" } },
     { trigger = "Tick", target = "Nugget", guard = "HasTarget", guard_args = { target = "nugget" } },

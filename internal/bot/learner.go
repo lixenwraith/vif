@@ -3,6 +3,7 @@ package bot
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"math"
@@ -36,7 +37,7 @@ const (
 	// populationVersion names the document a population is kept as and the code's
 	// own rules of scoring and search, a source's worth among them: one kept under
 	// another starts over. What its bot document pays is the file's scored_by.
-	populationVersion = 4
+	populationVersion = 5
 )
 
 // Store keeps one population's document: Load returns what was kept, nothing for
@@ -99,11 +100,14 @@ type member struct {
 type Learner struct {
 	engine *genetic.StreamingEngine[[]float64, float64]
 	store  Store
+	kept   bool   // the store held this population as the learner last read or wrote it
 	name   string // the network it learns
 	layout string
 	// scoredBy spells the score of the graph, which its population is kept under
 	scoredBy string
 	seed     []float64
+	blocks   [][]int // the genes a child takes of one parent together
+	stream   uint64  // what the engine's draws are seeded from
 
 	slots   []slot         // what each game has in play
 	rng     *rand.Rand     // what a population's first genomes are drawn from
@@ -126,10 +130,15 @@ type Learner struct {
 	// Saved, when set, is told the progress each time the population is kept
 	Saved func(LearnStats)
 	// Lost, when set, is told once what keeps the population from its store: a file
-	// that cannot be read or parsed, as the first round is taken, and a save that
-	// fails, not those failing after it
+	// that cannot be read or parsed, as the first round is taken, a save that
+	// fails, not those failing after it, and a population cleared under the run
+	// (ErrCleared)
 	Lost func(error)
 }
+
+// ErrCleared is what Lost hears of a population its player cleared while the run
+// learned it: the learner starts it over, where a save would have kept it again
+var ErrCleared = errors.New("was cleared and starts over")
 
 // slot is the genome one game has in play: its evaluation, zero while it plays
 // unscored, whether this is a new candidate's first round, which only qualifies
@@ -144,7 +153,8 @@ type slot struct {
 
 // LearnStats is a learner's progress: its network, the rounds it scored this run
 // and since its population began, their recent mean, which no luck picked, and
-// the score and rounds of the member it fields, zero while none is proven.
+// the score and rounds of the member it fields, zero while none is proven. Kept
+// marks what a run that only fields read of a population, no learner behind it.
 type LearnStats struct {
 	Network       string
 	Scored        int
@@ -152,6 +162,7 @@ type LearnStats struct {
 	Recent        float64
 	Fielded       float64
 	FieldedRounds int
+	Kept          bool
 }
 
 // NewLearner builds the learner of g's network name for games games at once, its
@@ -165,9 +176,10 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 		return nil, fmt.Errorf("bot %s: no [network.%s] to learn", g.Name, name)
 	}
 	n := g.nets[i]
-	l := &Learner{store: store, name: name, layout: n.digest, scoredBy: g.scoredBy, seed: slices.Clone(n.genes),
-		slots: make([]slot, games), born: make(map[uint64]int), saved: time.Now()} // [wall] a save's spacing
-	l.rng = rand.New(rand.NewPCG(vmath.DeriveSeed(seed, "bot.learner."+name), vmath.DeriveSeed(seed, "bot.learner.draw")))
+	l := &Learner{store: store, name: name, layout: n.digest, scoredBy: g.scoredBy, seed: slices.Clone(n.genes), blocks: n.blocks(),
+		stream: vmath.DeriveSeed(seed, "bot.learner."+name), slots: make([]slot, games), born: make(map[uint64]int),
+		saved: time.Now()} // [wall] a save's spacing
+	l.rng = rand.New(rand.NewPCG(l.stream, vmath.DeriveSeed(seed, "bot.learner.draw")))
 	l.written = slices.ContainsFunc(l.seed, func(w float64) bool { return w != 0 })
 	l.seeded = !l.written
 	l.stats.Store(&LearnStats{Network: name})
@@ -183,28 +195,33 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 			l.untold = fmt.Errorf("%s population could not be parsed and starts over: %w", name, err)
 		}
 	}
-	if kept != nil {
+	if l.kept = kept != nil; l.kept {
 		l.rounds, l.recent = max(kept.Rounds, 0), kept.Recent
 		for _, m := range kept.Members {
 			l.born[genomeKey(m.Genes)] = m.Born
 		}
 	}
+	l.begin(members)
+	return l, nil
+}
 
-	bounds := make([]genetic.ParameterBounds, n.geneCount())
+// begin starts the search on members, the archive a population kept or none
+func (l *Learner) begin(members []genetic.Candidate[[]float64, float64]) {
+	bounds := make([]genetic.ParameterBounds, len(l.seed))
 	for i := range bounds {
 		bounds[i] = genetic.ParameterBounds{Min: -weightBound, Max: weightBound}
 	}
 	perturb := &genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}
 	cfg := genetic.DefaultStreamingConfig()
 	// A game holds one evaluation in flight, so the engine's table never gives one up
-	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, games)
+	cfg.PoolSize, cfg.ProposalCapacity, cfg.PendingCapacity = learnPool, 2, max(8, len(l.slots))
 	cfg.PerturbationRate, cfg.PerturbationStrength = learnRate, learnStep
-	cfg.Seed = vmath.DeriveSeed(seed, "bot.learner."+name)
+	cfg.Seed = l.stream
 	l.engine = genetic.NewStreamingEngine[[]float64, float64](
 		// The engine draws its own only while it holds under two members, which take fills first
 		func(*rand.Rand) []float64 { return l.draw() },
 		&genetic.TournamentSelector[[]float64, float64]{TournamentSize: genetic.DefaultTournamentSize},
-		&genetic.BlockCombiner[[]float64, float64, float64]{Blocks: n.blocks(), MixProbability: learnKeep},
+		&genetic.BlockCombiner[[]float64, float64, float64]{Blocks: l.blocks, MixProbability: learnKeep},
 		perturb, genetic.SliceCloner[[]float64, float64]{}, cfg)
 	l.engine.SetEqual(slices.Equal[[]float64])
 	l.engine.SetMerge(genetic.MeanScore[float64])
@@ -212,7 +229,21 @@ func NewLearner(g *Graph, name string, seed uint64, games int, store Store) (*Le
 	l.engine.SetDue(l.due)
 	l.engine.Inject(members, 0)
 	l.engine.Start()
-	return l, nil
+}
+
+// startOver drops what the learner holds of a population its player cleared: the
+// archive, its rounds and the candidates in flight, whose rounds score nothing.
+// The next round begins a new population, as a run on no file would.
+func (l *Learner) startOver() {
+	for i := range l.slots {
+		l.slots[i].id = 0
+	}
+	l.rounds, l.recent, l.drawn, l.seeded = 0, 0, 0, !l.written
+	l.born, l.kept, l.dirty, l.failed = make(map[uint64]int), false, false, nil
+	l.begin(nil)
+	l.stats.Store(&LearnStats{Network: l.name, Scored: l.scored})
+	l.untold = fmt.Errorf("%s population %w", l.name, ErrCleared)
+	l.tell()
 }
 
 // draw is a genome to start from: every weight drawn at random where the graph
@@ -457,9 +488,16 @@ func (l *Learner) rival(members []genetic.Candidate[[]float64, float64]) int {
 	return fielded
 }
 
-// save keeps the population as it stands
+// save keeps the population as it stands, unless the store that held it holds
+// nothing now: its player cleared it, and the learner starts over
 func (l *Learner) save() {
 	if l.store == nil {
+		return
+	}
+	l.saved = time.Now() // [wall]
+	there, unread := l.store.Load()
+	if unread == nil && len(there) == 0 && l.kept {
+		l.startOver()
 		return
 	}
 	doc := population{Version: populationVersion, Layout: l.layout, ScoredBy: l.scoredBy, Rounds: l.rounds, Recent: l.recent}
@@ -469,13 +507,12 @@ func (l *Learner) save() {
 		doc.Members = append(doc.Members, member{Score: c.Score, Rounds: c.Count, Born: l.born[genomeKey(c.Data)], Genes: c.Data})
 	}
 	data, err := json.Marshal(doc)
-	if err == nil {
-		err = l.ahead()
+	if err == nil && unread == nil {
+		err = l.ahead(there)
 	}
 	if err == nil {
 		err = l.store.Store(data)
 	}
-	l.saved = time.Now() // [wall]
 	if err != nil {
 		err = fmt.Errorf("%s population could not be saved: %w", l.name, err)
 		if l.failed == nil {
@@ -485,20 +522,16 @@ func (l *Learner) save() {
 		l.tell()
 		return
 	}
-	l.failed, l.dirty = nil, false
+	l.failed, l.dirty, l.kept = nil, false, true
 	if l.Saved != nil {
 		l.Saved(l.Stats())
 	}
 }
 
-// ahead is the failure of a save onto a population of this layout and score that
-// holds more rounds: another run's, further on, which keeps the file
-func (l *Learner) ahead() error {
-	data, err := l.store.Load()
-	if err != nil {
-		return nil
-	}
-	if kept, _, _ := readPopulation(data, l.layout, l.scoredBy, len(l.seed)); kept != nil && kept.Rounds > l.rounds {
+// ahead is the failure of a save onto there, a population of this layout and
+// score that holds more rounds: another run's, further on, which keeps the file
+func (l *Learner) ahead(there []byte) error {
+	if kept, _, _ := readPopulation(there, l.layout, l.scoredBy, len(l.seed)); kept != nil && kept.Rounds > l.rounds {
 		return fmt.Errorf("another run has it %d rounds further on", kept.Rounds-l.rounds)
 	}
 	return nil

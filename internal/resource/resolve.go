@@ -60,6 +60,10 @@ type Options struct {
 	// for nowhere; SaveDownloads saves there one this run is sent.
 	Downloads     string
 	SaveDownloads bool
+
+	// Populations is where a host with no user root keeps what its bots learn, as
+	// a browser's page does; nil keeps them in the user root's bot/
+	Populations Populations
 }
 
 // Validate reports conflicts between the overrides themselves.

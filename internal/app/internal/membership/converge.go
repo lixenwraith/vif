@@ -74,6 +74,26 @@ func (m *Membership) worldRosterLocked() []network.RosterEntry {
 	return out
 }
 
+// Alone reports a run whose game is its own: in no session, or in one where no
+// cursor but its own holds a place, a Wraith's counted. A bot's round is then its
+// own to learn from, since only its own defeat ends it.
+func (m *Membership) Alone() bool {
+	alone := true
+	m.world.RunSafe(func() {
+		w := m.world
+		if m.sessionTransportLocked() == nil {
+			return
+		}
+		for slot := range parameter.MaxPlayers {
+			c, ok := w.Components.Cursor.GetComponent(w.Resources.Player.Slot(uint8(slot)))
+			if ok && c.PeerID != 0 && c.PeerID != w.LocalParticipant() {
+				alone = false
+			}
+		}
+	})
+	return alone
+}
+
 func (m *Membership) Transport() engine.NetworkPort {
 	if m.dismissed.Load() {
 		return nil

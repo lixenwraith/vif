@@ -193,6 +193,41 @@
         }
     }
 
+    /* What a bot learned, a document a population, is kept in this site's storage as
+       the settings are, so a bot watched here learns on at the next visit. The names
+       kept are told beside them, as a page's documents cannot be listed. Refused,
+       what was learned lasts the run, which is said once. */
+    const BOT_KEY = 'vif.bot/';
+    let botRefused = false;
+
+    function keptBots() {
+        const kept = {};
+        const names = [];
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith(BOT_KEY)) {
+                    names.push(key.slice(BOT_KEY.length));
+                    kept['bot/' + key.slice(BOT_KEY.length)] = localStorage.getItem(key) || '';
+                }
+            }
+        } catch (err) {
+            /* none kept */
+        }
+        kept.bots = names.join('\n');
+        return kept;
+    }
+
+    function keepBot(name, text) {
+        try {
+            if (text) localStorage.setItem(BOT_KEY + name, text);
+            else localStorage.removeItem(BOT_KEY + name);
+        } catch (err) {
+            if (!botRefused) notice('What the bot learned is not saved: ' + err.message.replace(/\.$/, '') + '.');
+            botRefused = true;
+        }
+    }
+
     function showExit(code, reason) {
         if (code === 0) {
             showMessage('vif has exited.', false);
@@ -1045,7 +1080,9 @@
             worker: WORKER_PATH,
             exec: EXEC_PATH,
             argv: argv,
-            kept: claimPlaces().then(function() { return { settings: keptSettings(), places: keptPlaces() }; }),
+            kept: claimPlaces().then(function() {
+                return Object.assign({ settings: keptSettings(), places: keptPlaces() }, keptBots());
+            }),
             features: ['menu', 'audio'],
             hold: true,
             cell: CELL,
@@ -1077,6 +1114,7 @@
                 keep: function(name, text) {
                     if (name === 'settings') keepSettings(text);
                     else if (name === 'places') keepPlaces(text);
+                    else if (name.startsWith('bot/')) keepBot(name.slice(4), text);
                 },
                 gesture: arm,
                 keyboard: keyboardShown,
