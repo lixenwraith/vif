@@ -29,6 +29,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventMusicTempoChange:                func() any { return new(MusicTempoPayload) },
 	EventMusicSeedRequest:                func() any { return new(MusicSeedPayload) },
 	EventMusicSwingRequest:               func() any { return new(MusicSwingPayload) },
+	EventMusicBinauralRequest:            func() any { return new(MusicBinauralPayload) },
 	EventNetworkConnect:                  func() any { return new(NetworkConnectPayload) },
 	EventNetworkDisconnect:               func() any { return new(NetworkDisconnectPayload) },
 	EventParticipantJoined:               func() any { return new(ParticipantJoinedPayload) },
@@ -213,6 +214,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventMusicTempoChange:                &codecMusicTempoPayload,
 	EventMusicSeedRequest:                &codecMusicSeedPayload,
 	EventMusicSwingRequest:               &codecMusicSwingPayload,
+	EventMusicBinauralRequest:            &codecMusicBinauralPayload,
 	EventNetworkConnect:                  &codecNetworkConnectPayload,
 	EventNetworkDisconnect:               &codecNetworkDisconnectPayload,
 	EventParticipantJoined:               &codecParticipantJoinedPayload,
@@ -504,6 +506,15 @@ func (p *MusicSwingPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecMusicSwingPayload = structCodec{size: unsafe.Sizeof(MusicSwingPayload{}), fields: []field{
 	{off: unsafe.Offsetof(MusicSwingPayload{}.Amount), kind: kindFloat},
+}}
+
+func (p *MusicBinauralPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicBinauralPayload, unsafe.Pointer(p)
+}
+
+var codecMusicBinauralPayload = structCodec{size: unsafe.Sizeof(MusicBinauralPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicBinauralPayload{}.Mode), kind: kindUint, size: unsafe.Sizeof(parameter.BinauralMode(0))},
+	{off: unsafe.Offsetof(MusicBinauralPayload{}.Preset), kind: kindUint, size: unsafe.Sizeof(parameter.BinauralPreset(0))},
 }}
 
 func (p *NetworkConnectPayload) codec() (*structCodec, unsafe.Pointer) {

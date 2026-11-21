@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 224
+const EventTypeCount = 225
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -27,6 +27,7 @@ func InitRegistry() {
 	RegisterType("EventMusicTempoChange", EventMusicTempoChange)
 	RegisterType("EventMusicSeedRequest", EventMusicSeedRequest)
 	RegisterType("EventMusicSwingRequest", EventMusicSwingRequest)
+	RegisterType("EventMusicBinauralRequest", EventMusicBinauralRequest)
 	RegisterType("EventNetworkConnect", EventNetworkConnect)
 	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect)
 	RegisterType("EventParticipantJoined", EventParticipantJoined)
@@ -257,6 +258,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventMusicTempoChange:                ClassLocal,
 	EventMusicSeedRequest:                ClassLocal,
 	EventMusicSwingRequest:               ClassLocal,
+	EventMusicBinauralRequest:            ClassLocal,
 	EventNetworkConnect:                  ClassLocal,
 	EventNetworkDisconnect:               ClassLocal,
 	EventParticipantJoined:               ClassBus,

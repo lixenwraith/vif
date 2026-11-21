@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -110,6 +111,51 @@ func TestAHostsOpReachesTheStateAKeyDoes(t *testing.T) {
 	})
 	if configMenu(ctx) != nil || !held || r.MenuSnapshot() != nil {
 		t.Fatalf("activate on Pause: menu open %v, pause asked %v", configMenu(ctx) != nil, held)
+	}
+}
+
+// TestTheBinauralBeatIsAskedAsTheMuteIs: :binaural and the Sound rows ask the music
+// system for the beat by an event of this machine's own, which no journal takes;
+// the command's words set the mode, the preset or both and any other is refused,
+// and the preset's row waits for a fixed beat.
+func TestTheBinauralBeatIsAskedAsTheMuteIs(t *testing.T) {
+	ctx, r, _ := nativeMenu(t)
+	asked := func() *event.MusicBinauralPayload {
+		t.Helper()
+		for _, ev := range ctx.World.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.MusicBinauralPayload); ok && ev.Type == event.EventMusicBinauralRequest {
+				if ev.Origin.Journaled() {
+					t.Fatalf("the beat is asked with origin %s, which a journal takes", ev.Origin)
+				}
+				return p
+			}
+		}
+		return nil
+	}
+	asked()
+	for line, want := range map[string]event.MusicBinauralPayload{
+		"binaural fixed focus": {Mode: parameter.BinauralFixed, Preset: 1},
+		"binaural hyper":       {Preset: 2},
+		"binaural dynamic":     {Mode: parameter.BinauralDynamic},
+	} {
+		if ExecuteCommand(ctx, line); *cmp.Or(asked(), &event.MusicBinauralPayload{Mode: 255}) != want {
+			t.Errorf(":%s did not ask for %+v", line, want)
+		}
+	}
+	r.MenuOp(MenuOp{"set", "settings/#Sound/binaural", "fixed"})
+	if p := asked(); p == nil || p.Mode != parameter.BinauralFixed {
+		t.Errorf("a set on the Binaural beat row asked for %+v, want fixed", p)
+	}
+	for _, line := range []string{"binaural", "binaural loud", "binaural fixed focus dynamic"} {
+		if ExecuteCommand(ctx, line); asked() != nil {
+			t.Errorf(":%s changed the beat", line)
+		}
+	}
+	s := snapshot(t, r)
+	mode, preset := s.node("settings/#Sound/binaural"), s.node("settings/#Sound/binaural_preset")
+	if mode.Value != "off" || !slices.Equal(mode.Choices, parameter.BinauralModeNames[:]) || mode.Disabled != "" ||
+		!slices.Equal(preset.Choices, parameter.BinauralPresetNames()) || preset.Disabled == "" {
+		t.Errorf("with no beat: the mode row %+v, the preset row %+v, want it waiting for a fixed beat", mode, preset)
 	}
 }
 
@@ -274,7 +320,7 @@ func TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds(t *testing.T) {
 		request.Fields[2].Input != "number" || request.Fields[3].Input != "text" || request.Fields[0].Value != "https://lixen.com" || request.Fields[0].Help == "" {
 		t.Errorf("the request form is %+v", request)
 	}
-	if sound := s.node("settings/#Sound"); sound.Kind != "group" || sound.Label != "Sound" || len(sound.Nodes) != 3 {
+	if sound := s.node("settings/#Sound"); sound.Kind != "group" || sound.Label != "Sound" || len(sound.Nodes) != 5 {
 		t.Errorf("the Sound section is %+v", sound)
 	}
 	if len(s.Nodes) != len(configPages) || s.Nodes[0].ID != "game" || s.Title != "Menu · game running" {

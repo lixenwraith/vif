@@ -63,6 +63,7 @@ func (*unavailableMusicSystem) EventTypes() []event.EventType {
 		event.EventMusicTempoChange,
 		event.EventMusicSeedRequest,
 		event.EventMusicSwingRequest,
+		event.EventMusicBinauralRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }

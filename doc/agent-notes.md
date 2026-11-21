@@ -597,7 +597,9 @@ Docs · Libraries · Branches.
   the value it was captured with, and `livePlay` reads it off the lock. A replay's
   `player.adopt` must carry each such setting to the copy it presents (HUD, frame
   rate, camera edge), and the console's lines, or the viewer's are lost at the
-  next seek.
+  next seek. A setting only the speakers read sits on `engine.AudioResource`
+  instead (`Pref`, `Bed`), which `system.HandOverAudio` moves whole to the copy;
+  what its system last sent the engine goes over in that system's `takeOver`.
 
 ## Networking and admission
 
@@ -816,6 +818,15 @@ Docs · Libraries · Branches.
 - A glow added (`BlendAdd`) over a cell nothing painted adds onto black, a band
   darker than the theme's background: blend it with `SetBgScreen` on
   `visual.RgbBackground`, as the shield's and the square's glows do.
+- A row added to a Settings section moves two tests that hold the page by its
+  rows: `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound
+  section's, and `TestAPressDrivesTheMenu` presses rows by number down to
+  Controls' auto-fire.
+- A row whose command asks by an event, as the mute and the binaural beat do,
+  reads its new value only once the event settles. `internal/mode`'s tests are
+  tag-free on a world with no audio resource, so they read what was pushed off
+  the queue (`TestTheBinauralBeatIsAskedAsTheMuteIs`); what the setting then
+  does is held in `internal/system`'s audio-tagged tests, on a real engine.
 - `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
   a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
 - The menu's rows are built again each frame the menu shows them, and a host that
@@ -1246,6 +1257,9 @@ Docs · Libraries · Branches.
 - A renamed key or section is a drop and an add, so the player's value starts at
   the default; a renamed action keeps a player's bindings only through an alias in
   `resolveAction`, as `append` does.
+- Only a settings file goes through `Play.check`: a test's `paths.Play` built by
+  hand leaves a word key empty, so the run reads an unknown word as its first
+  (`initAudioService`'s bed, `applyPlay`'s auto-fire) rather than refusing it.
 - A changed shipped default reaches only a copy that lacks the key: a run writes
   every default into the player's own file and keeps it from then on as their
   value. A default every player must get takes a new key name, dropping the old.

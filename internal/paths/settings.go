@@ -85,6 +85,10 @@ type Play struct {
 	// CameraEdge is the percent of the screen's size the view keeps the cursor from
 	// each side (engine ConfigResource.EdgeCells)
 	CameraEdge int `toml:"camera_edge"`
+	// Binaural is the binaural bed under the music, a parameter.BinauralModeNames
+	// word, and BinauralPreset the parameter.BinauralPresets row a fixed one plays
+	Binaural       string `toml:"binaural"`
+	BinauralPreset string `toml:"binaural_preset"`
 }
 
 func (p Play) check() error {
@@ -102,7 +106,18 @@ func (p Play) check() error {
 	if p.CameraEdge < 0 || p.CameraEdge > parameter.CameraEdgeMost {
 		return fmt.Errorf("play.camera_edge %d is not between 0 and %d", p.CameraEdge, parameter.CameraEdgeMost)
 	}
+	if !slices.Contains(parameter.BinauralModeNames[:], p.Binaural) {
+		return fmt.Errorf("play.binaural %q is not %s", p.Binaural, oneOf(parameter.BinauralModeNames[:]))
+	}
+	if names := parameter.BinauralPresetNames(); !slices.Contains(names, p.BinauralPreset) {
+		return fmt.Errorf("play.binaural_preset %q is not %s", p.BinauralPreset, oneOf(names))
+	}
 	return nil
+}
+
+// oneOf lists the words a key takes as a refusal names them: a, b or c
+func oneOf(words []string) string {
+	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
 }
 
 // DefaultPlay is the embedded [play], what a Config naming none starts from.

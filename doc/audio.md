@@ -96,6 +96,24 @@ What vif sets of the engine:
   `EventAudioMuteToggle` cycles, flips or sets channels from a key, a system or
   the configuration menu, and `EventAudioMuteChanged` announces the mask
   applied. The game leaves every slot and track sounding.
+- **Binaural beat.** `[play] binaural` lays the engine's binaural bed under the
+  music (library
+  [§6](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#6-mixer-buses-mute-and-pause),
+  `SetBinaural`): a soft tone a little apart in each ear, which headphones give
+  as a beat. `off`, the default, is the stream as it is without one, byte for
+  byte; `fixed` plays the beat of `binaural_preset`, a row of
+  `parameter.BinauralPresets` (`relax` 10 Hz, `focus` 15, `hyper` 25);
+  `dynamic` follows the conductor's tempo (§2). The Sound rows Binaural beat
+  and Beat preset and `:binaural [off|fixed|dynamic] [preset]` set it through
+  `EventMusicBinauralRequest`, pushed as the mute is, this machine's own: the
+  journal carries none, so a replay plays its viewer's setting, a dynamic one
+  following the replayed pace, and each change is written back for the next
+  run. The bed has no channel of its own: it sounds while the music does,
+  under the music's bit of the mask and the `music` system's gate, at one
+  level whatever its mode (`parameter.BinauralLevel`, 0.03 of full scale, some
+  10 dB under the calm tier's music), and an sfx does not duck it; `-mw`
+  records it with the music, in stereo. Through speakers both ears hear both
+  tones and the beat is fainter, and a phone's one speaker loses it.
 - **Pause.** The game's pause is the engine's (library
   [§6](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#6-mixer-buses-mute-and-pause)), applied even if
   `AudioSystem` is disabled, and a run that ends fades the same way before the
@@ -135,6 +153,17 @@ music stream, so each run draws its own pools. The `music.*` status group (the
 telemetry HUD's music card, and the periodic stat log) names the group, tier,
 requested tempo and the pattern in each slot, and reads `-` (tempo 0) while
 music is muted, stopped or disabled.
+
+The conductor also keeps the binaural bed (§1) at what the player's setting
+asks, sending the engine its target whenever that moves. The carrier is the
+key's root in the octave from 150 Hz up (`parameter.BinauralCarrier`: E3, 165
+Hz, under the conductor's E), so it is consonant with the harmony and glides on
+a key change. A fixed bed beats at its preset's rate. A dynamic one is locked to
+the tempo, eight beats to one of the music's (`parameter.BinauralBeat`, a 32nd
+note: 13.3 Hz at 100 BPM, 26.7 at 200), and moves at most 0.5 Hz a second
+(`BinauralGlide`), so it trails a burst's tempo rather than jumping with it; a
+bed that starts dynamic starts on the tempo's beat. `music.binaural` on the
+music card names the mode and the beat, as `fixed 15.0 Hz`.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
@@ -221,7 +250,8 @@ events and keep the sequencer unaware of gameplay concepts.
   holds the mask both publish and the handover; `audio_none.go` the null systems
 - Mode and build selection, replay default: `internal/app/internal/config`,
   `internal/app/audio.go`, `audio_none.go`, `play.go`
-- Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
-  `sfx_audio.go`
+- Game policy: `internal/parameter/audio.go` (the channel mask, the binaural
+  bed's modes, presets and level), `music.go` (the conductor's curves, the
+  bed's carrier and dynamic beat), `sfx.go`, `sfx_audio.go`
 - Authoring tool: the `lixenwraith/stapes` module (§4), with its command
   `cmd/stapes`, the rip's trainer `tool/rip-train` and its documents in `doc/`

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -159,6 +160,7 @@ func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
 	to, music, dispatch := world(nil)
 	play(event.GameEvent{Type: event.EventAudioMuteToggle, Payload: &event.AudioMuteTogglePayload{Mode: event.MuteSet, Mask: parameter.AudioChanAll}})
 	play(event.GameEvent{Type: event.EventMusicStart})
+	play(event.GameEvent{Type: event.EventMusicBinauralRequest, Payload: &event.MusicBinauralPayload{Mode: parameter.BinauralFixed, Preset: 1}})
 	settle("presented world's music did not start", player.IsMusicPlaying)
 	dispatch(gate(false)) // the copy stands before a region opened the music gate
 
@@ -166,9 +168,78 @@ func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
 	if to.Resources.Audio == nil || from.Resources.Audio != nil || !player.IsMusicMuted() || mask(to) != int64(parameter.AudioChanSfx) {
 		t.Fatalf("handed over: copy mask %d, music muted %v", mask(to), player.IsMusicMuted())
 	}
+	// the viewer's binaural beat goes with the speakers, already sent
+	if mode, preset := to.Resources.Binaural(); mode != parameter.BinauralFixed || preset != 1 || music.bed.Beat != parameter.BinauralPresets[1].Beat {
+		t.Fatalf("handed over: the copy's bed is mode %d preset %d, sent as %+v", mode, preset, music.bed)
+	}
 	dispatch(gate(true))
 	settle("the copy's gate did not resume the music", func() bool {
 		music.Update()
 		return mask(to) == int64(parameter.AudioChanAll)
 	})
+}
+
+// TestTheConductorSendsTheBedThePlayersSettingAsks: the music system keeps the
+// engine's bed at what the setting asks, none while off, a preset's beat on the
+// key's root while fixed, and while dynamic the tempo's, which a bed already
+// sounding glides to; the music card says the mode and the beat.
+func TestTheConductorSendsTheBedThePlayersSettingAsks(t *testing.T) {
+	audio.ResetRegistries()
+	t.Cleanup(audio.ResetRegistries)
+	cfg := audio.DefaultAudioConfig()
+	cfg.Enabled, cfg.ForceBackend = true, audio.BackendNameNull
+	player, err := audio.NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := player.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(player.Stop)
+	w, _, _ := testCursorWorld(t)
+	w.Resources.Audio = &engine.AudioResource{Engine: player}
+	w.Resources.Time.DeltaTime = 50 * time.Millisecond
+	ready(NewAudioSystem(w))
+	m := ready(NewMusicSystem(w)).(*MusicSystem)
+	card := w.Resources.Status.Strings.Get("music.binaural")
+	set := func(mode parameter.BinauralMode) {
+		m.HandleEvent(event.GameEvent{Type: event.EventMusicBinauralRequest, Payload: &event.MusicBinauralPayload{Mode: mode, Preset: 1}})
+	}
+	m.HandleEvent(event.GameEvent{Type: event.EventMusicStart})
+	for deadline := time.Now().Add(5 * time.Second); !player.IsMusicPlaying(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the music did not start")
+		}
+	}
+	m.Update()
+	if m.bed != (audio.Binaural{}) || card.Load() != "off" {
+		t.Fatalf("with the setting off the conductor sent %+v and the card reads %q", m.bed, card.Load())
+	}
+
+	focus := parameter.BinauralPresets[1].Beat
+	set(parameter.BinauralFixed)
+	if want := (audio.Binaural{Carrier: parameter.BinauralCarrier(parameter.DefaultRootNote), Beat: focus, Level: parameter.BinauralLevel}); m.bed != want || card.Load() != "fixed 15.0 Hz" {
+		t.Fatalf("fixed on the second preset: sent %+v, want %+v; the card reads %q", m.bed, want, card.Load())
+	}
+	m.HandleEvent(event.GameEvent{Type: event.EventMelodyPatternRequest, Payload: &event.MelodyPatternRequestPayload{RootNote: 45}})
+	if m.Update(); m.bed.Carrier != parameter.BinauralCarrier(45) || m.bed.Carrier != 220 {
+		t.Fatalf("under a key of A the bed is carried at %g Hz, want 220", m.bed.Carrier)
+	}
+
+	// from a bed sounding at 15 Hz the tempo's beat is glided to, a step an update
+	tempo, step := parameter.BinauralBeat(m.bpmF), parameter.BinauralGlide*0.05
+	if set(parameter.BinauralDynamic); math.Abs(m.bed.Beat-(focus-step)) > 1e-9 || tempo >= focus-step {
+		t.Fatalf("dynamic after fixed: the beat stands at %g, want a step of %g from %g toward the tempo's %g", m.bed.Beat, step, focus, tempo)
+	}
+	for range int((focus-tempo)/step) + 2 {
+		m.Update()
+	}
+	if m.bed.Beat != tempo || card.Load() != "dynamic 13.3 Hz" {
+		t.Fatalf("the glide ended at %g Hz, the card reading %q: want the tempo's %g", m.bed.Beat, card.Load(), tempo)
+	}
+	// from no bed it starts on the tempo's
+	set(parameter.BinauralOff)
+	if set(parameter.BinauralDynamic); m.bed.Beat != tempo {
+		t.Fatalf("dynamic from off starts at %g Hz, want the tempo's %g", m.bed.Beat, tempo)
+	}
 }

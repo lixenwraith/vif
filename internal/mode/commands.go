@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "spectate", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps", "edge",
+	"host", "join", "spectate", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps", "edge", "binaural",
 	"register", "login", "logout", "console",
 }
 
@@ -112,6 +112,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleFPSCommand(ctx, args)
 	case "edge":
 		return handleEdgeCommand(ctx, args)
+	case "binaural":
+		return handleBinauralCommand(ctx, args)
 	case "d", "debug":
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
@@ -178,7 +180,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 // nothing, which a replay's viewer and a spectator both keep.
 func inspects(cmd string) bool {
 	switch cmd {
-	case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+	case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "binaural", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
 		return true
 	}
 	return false
@@ -654,6 +656,40 @@ func handleEdgeCommand(ctx *engine.GameContext, args []string) CommandResult {
 		ctx.World.FollowLocalCursor()
 	}
 	ctx.SetStatusMessage(fmt.Sprintf("Camera edge %d%%", ctx.World.CameraEdge()), parameter.StatusNotice)
+	return CommandResult{Continue: true}
+}
+
+// handleBinauralCommand reports the binaural beat under the music, or sets its
+// mode, the preset a fixed one plays, or both: this machine's own, as the mute is,
+// so no journal holds it and a replay plays its viewer's
+// Usage: :binaural [off|fixed|dynamic] [<preset>]
+func handleBinauralCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if why := audioUnavailable(ctx); why != "" {
+		setCommandError(ctx, why)
+		return CommandResult{Continue: true}
+	}
+	mode, preset := ctx.World.Resources.Binaural()
+	presets := parameter.BinauralPresetNames()
+	for _, word := range args {
+		m, p := slices.Index(parameter.BinauralModeNames[:], word), slices.Index(presets, word)
+		switch {
+		case len(args) > 2 || m < 0 && p < 0:
+			setCommandError(ctx, fmt.Sprintf("Usage: :binaural [%s] [%s]", strings.Join(parameter.BinauralModeNames[:], "|"), strings.Join(presets, "|")))
+			return CommandResult{Continue: true}
+		case m >= 0:
+			mode = parameter.BinauralMode(m)
+		default:
+			preset = parameter.BinauralPreset(p)
+		}
+	}
+	if len(args) > 0 {
+		ctx.PushLocalOrigin(event.EventMusicBinauralRequest, &event.MusicBinauralPayload{Mode: mode, Preset: preset}, event.OriginDevice)
+	}
+	message := "Binaural beat " + parameter.BinauralModeNames[mode]
+	if row := parameter.BinauralPresets[preset]; mode == parameter.BinauralFixed {
+		message += fmt.Sprintf(": %s, %g Hz", row.Name, row.Beat)
+	}
+	ctx.SetStatusMessage(message, parameter.StatusNotice)
 	return CommandResult{Continue: true}
 }
 

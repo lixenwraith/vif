@@ -4,6 +4,7 @@ package system
 
 import (
 	"cmp"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -37,12 +38,16 @@ type MusicSystem struct {
 	startPending bool // Defer startup until scenario enable/disable events settle.
 	resume       bool // Music was playing at the reset; the next Init starts it again
 
+	root int            // the key the conductor asked for, which the bed's carrier follows
+	bed  audio.Binaural // the binaural bed last sent; its beat is where a dynamic bed's glide stands
+
 	// What the sequencer sounds, for the telemetry HUD's music card; a slot's name is
 	// looked up only when its pattern changes
-	statGroup, statTier *status.AtomicString
-	statSlot            [audio.MusicSlots]*status.AtomicString
-	statBPM             *atomic.Int64
-	lastSlot            [audio.MusicSlots]audio.PatternID
+	statGroup, statTier, statBed *status.AtomicString
+	statSlot                     [audio.MusicSlots]*status.AtomicString
+	statBPM                      *atomic.Int64
+	lastSlot                     [audio.MusicSlots]audio.PatternID
+	lastBed                      int // the bed's mode and beat in tenths of a hertz as published, -1 for none
 
 	toggle
 	audioEnabled bool
@@ -59,7 +64,7 @@ func NewMusicSystem(world *engine.World) engine.System {
 	for slot, key := range [...]string{"music.rhythm", "music.melody", "music.fill", "music.bass"} {
 		s.statSlot[slot] = reg.Strings.Get(key)
 	}
-	s.statBPM = reg.Ints.Get("music.bpm")
+	s.statBPM, s.statBed = reg.Ints.Get("music.bpm"), reg.Strings.Get("music.binaural")
 	// The first update starts audible runs after scenario disable events settle.
 	s.startPending = true
 	return s
@@ -77,8 +82,11 @@ func (s *MusicSystem) Init() {
 	s.startPending, s.resume = s.resume, false
 	s.enabled = true
 	s.audioEnabled = true
+	s.root = parameter.DefaultRootNote
 	s.statGroup.Store("")
 	s.statTier.Store("")
+	s.statBed.Store("")
+	s.lastBed = -1
 	s.statBPM.Store(0)
 	for slot, stat := range s.statSlot {
 		stat.Store("")
@@ -115,6 +123,7 @@ func (s *MusicSystem) EventTypes() []event.EventType {
 		event.EventMusicTempoChange,
 		event.EventMusicSeedRequest,
 		event.EventMusicSwingRequest,
+		event.EventMusicBinauralRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -146,9 +155,17 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	// Device synchronization stays active; disabled systems can only mute the bus.
-	if ev.Type == event.EventAudioMuteChanged {
+	switch ev.Type {
+	case event.EventAudioMuteChanged:
 		if p, ok := ev.Payload.(*event.AudioMuteChangedPayload); ok {
 			s.applyMusicAudible(p.Mask&parameter.AudioChanMusic != 0)
+		}
+		return
+	case event.EventMusicBinauralRequest:
+		if p, ok := ev.Payload.(*event.MusicBinauralPayload); ok && int(p.Mode) < len(parameter.BinauralModeNames) && int(p.Preset) < len(parameter.BinauralPresets) {
+			s.world.Resources.Audio.Bed.Store(engine.PackBinaural(p.Mode, p.Preset))
+			s.syncBinaural()
+			s.publish() // a pause stops Update, not the menu
 		}
 		return
 	}
@@ -206,6 +223,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.MelodyPatternRequestPayload); ok {
 			if payload.RootNote > 0 {
 				s.player.SetHarmony(payload.RootNote, -1, nil) // keep scale/progression
+				s.root = payload.RootNote
 			}
 			s.player.SetPattern(slotMelody, payload.Pattern, s.fadeSamples(payload.TransitionTime, false), payload.Quantize)
 			s.manualTier = true
@@ -269,6 +287,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 // the world this one replaces; audible is the audio system's gated music channel.
 func (s *MusicSystem) takeOver(from *MusicSystem, audible bool) {
 	s.player, s.bpmF, s.lastBPM, s.tier = from.player, from.bpmF, from.lastBPM, from.tier
+	s.root, s.bed = from.root, from.bed
 	s.manualTier, s.arranged, s.stopped, s.startPending = from.manualTier, from.arranged, from.stopped, from.startPending
 	from.player = nil
 	s.applyMusicAudible(audible)
@@ -295,12 +314,34 @@ func (s *MusicSystem) Update() {
 	if s.startPending && s.enabled && s.audioEnabled && !s.stopped && !s.player.IsMusicMuted() {
 		s.startMusic()
 	}
+	s.syncBinaural()
 	s.publish()
 	// The sequencer is frozen while muted; a slew would queue commands it cannot play
 	if !s.enabled || !s.audioEnabled || !s.audible() {
 		return
 	}
 	s.syncToAPM()
+}
+
+// syncBinaural sends the engine the bed the player's setting asks, when it moved:
+// none, a preset's beat, or the tempo's, which a dynamic bed already sounding
+// glides to. The engine sounds it with the music, so a mute needs no word here.
+func (s *MusicSystem) syncBinaural() {
+	mode, preset := s.world.Resources.Binaural()
+	var want audio.Binaural
+	if mode != parameter.BinauralOff {
+		want = audio.Binaural{Carrier: parameter.BinauralCarrier(s.root), Beat: parameter.BinauralPresets[preset].Beat, Level: parameter.BinauralLevel}
+	}
+	if mode == parameter.BinauralDynamic {
+		want.Beat = parameter.BinauralBeat(s.bpmF)
+		if step := parameter.BinauralGlide * s.world.Resources.Time.DeltaTime.Seconds(); s.bed.Level > 0 {
+			want.Beat = min(max(want.Beat, s.bed.Beat-step), s.bed.Beat+step)
+		}
+	}
+	if want != s.bed {
+		s.player.SetBinaural(want)
+		s.bed = want
+	}
 }
 
 func (s *MusicSystem) audible() bool {
@@ -314,6 +355,8 @@ func (s *MusicSystem) publish() {
 	if !s.audible() {
 		s.statGroup.StoreIfChanged("-")
 		s.statTier.StoreIfChanged("-")
+		s.statBed.StoreIfChanged("-")
+		s.lastBed = -1
 		s.statBPM.Store(0)
 		for slot, stat := range s.statSlot {
 			stat.StoreIfChanged("-")
@@ -323,6 +366,16 @@ func (s *MusicSystem) publish() {
 	}
 	s.statGroup.StoreIfChanged(cmp.Or(s.player.MusicGroup(), "-"))
 	s.statTier.StoreIfChanged(s.tier.Tier.String())
+	// written only as its mode or its beat's tenth moves, not a tick
+	mode, _ := s.world.Resources.Binaural()
+	if key := int(mode)<<16 | int(s.bed.Beat*10+0.5); key != s.lastBed {
+		s.lastBed = key
+		word := parameter.BinauralModeNames[mode]
+		if mode != parameter.BinauralOff {
+			word = fmt.Sprintf("%s %.1f Hz", word, s.bed.Beat)
+		}
+		s.statBed.Store(word)
+	}
 	s.statBPM.Store(int64(s.lastBPM))
 	for slot, stat := range s.statSlot {
 		id := s.player.SlotPattern(slot)
@@ -366,6 +419,7 @@ func (s *MusicSystem) startMusic() {
 	}
 	s.startPending = false
 	s.player.SetHarmony(parameter.DefaultRootNote, audio.ScalePhrygian, nil)
+	s.root = parameter.DefaultRootNote
 	apm := s.world.Resources.Game.State.GetMusicAPM()
 	s.syncTempo(apm)
 	if !s.manualTier {

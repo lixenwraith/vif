@@ -91,6 +91,35 @@ func (t *TierTracker) Observe(apm uint64, dt time.Duration) bool {
 	return true
 }
 
+// The binaural bed's policy. A dynamic bed's beat is locked to the tempo,
+// BinauralTempoLock beats to one of the music's (a 32nd note: 13.3 Hz at RestBPM,
+// 26.7 at audio.MaxBPM), and moves BinauralGlide Hz a second at most; the carrier
+// is the key's root in the octave from BinauralCarrierFloor Hz up.
+const (
+	BinauralTempoLock    = 8.0
+	BinauralGlide        = 0.5
+	BinauralCarrierFloor = 150.0
+)
+
+// BinauralBeat is the beat a dynamic bed plays at a tempo, in Hz: the one mapping
+// from the conductor's pace to the beat
+func BinauralBeat(bpm float64) float64 {
+	return BinauralTempoLock * bpm / 60
+}
+
+// BinauralCarrier is the bed's carrier under a key, in Hz: an octave of its root,
+// so the bed is consonant with the harmony and glides with a key change
+func BinauralCarrier(root int) float64 {
+	hz := audio.NoteFreq(root)
+	for hz < BinauralCarrierFloor {
+		hz *= 2
+	}
+	for hz >= 2*BinauralCarrierFloor {
+		hz /= 2
+	}
+	return hz
+}
+
 // Arrangement transition presets
 // Slow must span >= 1 bar at >= 120 BPM to engage the sequencer track reveal;
 // Default is deliberately below that — falling tiers swap without a build-up
