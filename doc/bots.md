@@ -733,7 +733,7 @@ browser's storage for the site, as it keeps the settings
 the world and its captures. The file is JSON because one cut short never
 parses, where a TOML one could read as fewer members.
 
-An install asked to purge (`make install-config PURGE=1`) removes
+An install asked to purge (`make install-config purge`) removes
 the user root's `bot/` whole, a player's graphs and populations with it: copy
 them out first ([Filesystem §4](filesystem-layout.md#4-installation)).
 
