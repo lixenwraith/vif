@@ -84,6 +84,18 @@ var configPages = []configNode{
 				}, disabled: audioUnavailable},
 			{kind: kindToggle, key: "music", label: "Music", description: "Procedural music; independent of sound effects.",
 				read: audioChannelValue(parameter.AudioChanMusic), change: toggleAudioChannel(parameter.AudioChanMusic), disabled: audioUnavailable},
+			{kind: kindChoice, key: "binaural", label: "Binaural beat", description: "A soft tone under the music, a little apart in each ear, which headphones give as a beat. off: none; fixed: the beat of the preset below; dynamic: the beat follows the music's tempo. It needs headphones: speakers leave a fainter beat, and a phone's one speaker none.",
+				command: "binaural", choices: parameter.BinauralModeNames[:],
+				read: func(ctx *engine.GameContext) string {
+					mode, _ := ctx.World.Resources.Binaural()
+					return parameter.BinauralModeNames[mode]
+				}, disabled: audioUnavailable},
+			{kind: kindChoice, key: "binaural_preset", label: "Beat preset", description: "The beat a fixed binaural beat plays: " + binauralPresetList() + ".",
+				command: "binaural", choices: parameter.BinauralPresetNames(),
+				read: func(ctx *engine.GameContext) string {
+					_, preset := ctx.World.Resources.Binaural()
+					return parameter.BinauralPresets[preset].Name
+				}, disabled: binauralPresetUnavailable},
 		}),
 		section("Controls", []configNode{
 			{kind: kindChoice, key: "auto", label: "Auto-fire", description: "off: manual fire; main: main weapon only; on: both weapons.",
@@ -364,6 +376,26 @@ func audioUnavailable(ctx *engine.GameContext) string {
 		return unavailable("Audio")
 	case reg.Bools.Get("audio.silent").Load():
 		return "Audio unavailable in this run"
+	}
+	return ""
+}
+
+// binauralPresetList names each preset with its beat, as the preset row describes them
+func binauralPresetList() string {
+	rows := make([]string, len(parameter.BinauralPresets))
+	for i, p := range parameter.BinauralPresets {
+		rows[i] = fmt.Sprintf("%s %g Hz", p.Name, p.Beat)
+	}
+	return strings.Join(rows, ", ")
+}
+
+// The preset is a fixed beat's: any other mode plays none of it
+func binauralPresetUnavailable(ctx *engine.GameContext) string {
+	if why := audioUnavailable(ctx); why != "" {
+		return why
+	}
+	if mode, _ := ctx.World.Resources.Binaural(); mode != parameter.BinauralFixed {
+		return "Set Binaural beat to fixed first"
 	}
 	return ""
 }

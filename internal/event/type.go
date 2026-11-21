@@ -79,6 +79,8 @@ const (
 	EventMusicSeedRequest
 	// EventMusicSwingRequest (MusicSwingPayload) [local] sets sequencer shuffle
 	EventMusicSwingRequest
+	// EventMusicBinauralRequest (MusicBinauralPayload) [local] sets the binaural bed's mode and preset, this machine's own
+	EventMusicBinauralRequest
 
 	// --- Network ---
 

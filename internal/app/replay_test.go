@@ -1908,20 +1908,23 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	}
 }
 
-// TestAudioMuteStaysOutOfTheJournal is the rule that the speakers a run played on
-// are no part of it: whoever replays the run holds their own mute, so a recorded
-// toggle would only flip theirs from wherever it stands.
-func TestAudioMuteStaysOutOfTheJournal(t *testing.T) {
+// TestTheSpeakersStayOutOfTheJournal is the rule that the speakers a run played on
+// are no part of it: whoever replays the run holds their own mute and their own
+// binaural beat, so a recorded change would only move theirs from where it stands.
+func TestTheSpeakersStayOutOfTheJournal(t *testing.T) {
 	t.Parallel()
 	cap, _, _, _ := journalRun(t, func(t *testing.T, a *App) int {
 		r := newScriptRunner(t, a)
 		r.step(1, &input.Intent{Type: input.IntentToggleAudioCycle, Count: 1})
+		a.World().RunSafe(func() {
+			a.ctx.PushLocalOrigin(event.EventMusicBinauralRequest, &event.MusicBinauralPayload{Mode: parameter.BinauralFixed}, event.OriginDevice)
+		})
 		r.step(1, intentMotion(input.MotionRight, 1))
 		return r.done()
 	})
 	for _, rec := range cap.Records() {
-		if rec.Type == event.EventAudioMuteToggle {
-			t.Fatalf("jseq %d journals the audio mute, origin %s", rec.JSeq, rec.Origin)
+		if rec.Type == event.EventAudioMuteToggle || rec.Type == event.EventMusicBinauralRequest {
+			t.Fatalf("jseq %d journals %s, origin %s", rec.JSeq, event.GetEventName(rec.Type), rec.Origin)
 		}
 	}
 }

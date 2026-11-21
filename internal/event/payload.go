@@ -122,6 +122,13 @@ type MusicSwingPayload struct {
 	Amount float64 `toml:"amount"`
 }
 
+// MusicBinauralPayload is the binaural bed asked for: its mode, and the preset a
+// fixed one plays
+type MusicBinauralPayload struct {
+	Mode   parameter.BinauralMode   `toml:"mode"`
+	Preset parameter.BinauralPreset `toml:"preset"`
+}
+
 // --- Network ---
 
 // NetworkConnectPayload signals peer connection
