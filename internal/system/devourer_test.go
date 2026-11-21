@@ -220,8 +220,9 @@ func TestACutGutFadesAndFreesItsSlotUncounted(t *testing.T) {
 }
 
 // TestOnlyItsGutsWoundADevourer: its body is no target and no blast's, so it loses
-// what its guts lose, no more than each had, credited to the gut's attacker, and a
-// gut cut on its last hit points kills it that tick, the gut ending once
+// what its guts lose, no more than each had, credited to the gut's attacker; a gut
+// cut on its last hit points kills it that tick, the gut ending once, and the kill
+// is the cutter's though another gut is nicked in that tick
 func TestOnlyItsGutsWoundADevourer(t *testing.T) {
 	w, s, e := devourerFixture(t)
 	grown(w, s)
@@ -272,17 +273,24 @@ func TestOnlyItsGutsWoundADevourer(t *testing.T) {
 		t.Fatalf("a gut shot past nothing left the body %d, its slot %d", body.HitPoints, d.Guts[0])
 	}
 	gut = formGut(t, w, s, d)
+	formGut(t, w, s, d)
 	g, _ = w.Components.Combat.GetPtr(gut)
-	g.HitPoints = 0
-	fades, killed := 0, false
+	nicked, _ := w.Components.Combat.GetPtr(d.Guts[1])
+	g.HitPoints, g.LastDamagedBy = 0, cursor
+	nicked.HitPoints, nicked.LastDamagedBy = nicked.HitPoints-5, w.Resources.Player.Slot(1)
+	fades, killer := 0, core.Entity(0)
 	for _, ev := range stepDevourer(w, s, 1) {
-		if p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok && p.HeaderEntity == gut {
-			fades++
+		switch p := ev.Payload.(type) {
+		case *event.CompositeDestroyRequestPayload:
+			if p.HeaderEntity == gut {
+				fades++
+			}
+		case *event.SpeciesKilledPayload:
+			killer = p.KillerEntity
 		}
-		killed = killed || ev.Type == event.EventSpeciesKilled
 	}
-	if !killed || fades != 1 || body.HitPoints != 0 {
-		t.Fatalf("killed %v, the gut ended %d times, the body holds %d", killed, fades, body.HitPoints)
+	if killer != cursor || fades != 1 || body.HitPoints != 0 {
+		t.Fatalf("killed by %d, the gut ended %d times, the body holds %d", killer, fades, body.HitPoints)
 	}
 }
 

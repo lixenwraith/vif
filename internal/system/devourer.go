@@ -239,7 +239,8 @@ func (s *DevourerSystem) form(e core.Entity, d *component.DevourerComponent) {
 }
 
 // feel takes from the body what each standing gut lost since it last looked, no
-// more than the gut had, and credits the gut's last attacker; a heal refunds nothing
+// more than the gut had, crediting the attacker of each loss the body takes; a heal
+// refunds nothing
 func (s *DevourerSystem) feel(body *component.CombatComponent, d *component.DevourerComponent) {
 	for i, gut := range d.Guts {
 		c, ok := s.world.Components.Combat.GetPtr(gut)
@@ -247,8 +248,8 @@ func (s *DevourerSystem) feel(body *component.CombatComponent, d *component.Devo
 			continue
 		}
 		hp := max(c.HitPoints, 0)
-		if lost := d.Felt[i] - hp; lost > 0 {
-			body.HitPoints -= min(lost, max(body.HitPoints, 0))
+		if take := min(d.Felt[i]-hp, max(body.HitPoints, 0)); take > 0 {
+			body.HitPoints -= take
 			body.LastDamagedBy = c.LastDamagedBy
 		}
 		d.Felt[i] = hp
