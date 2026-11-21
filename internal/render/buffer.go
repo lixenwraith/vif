@@ -388,6 +388,21 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	b.masks[idx] = b.currentMask
 }
 
+// SetRunWithBg writes cells along a row from x, y rightward, each an opaque replace
+// as SetWithBg's; the cells carry no attributes
+func (b *RenderBuffer) SetRunWithBg(x, y int, cells []terminal.Cell) {
+	lo, hi := max(x, b.clip.X0), min(x+len(cells), b.clip.X1)
+	if y < b.clip.Y0 || y >= b.clip.Y1 || lo >= hi {
+		return
+	}
+	at, end := y*b.width+lo, y*b.width+hi
+	copy(b.cells[at:end], cells[lo-x:])
+	touched, coarse, masks := b.touched[at:end], b.coarse[at:end], b.masks[at:end]
+	for i := range touched {
+		touched[i], coarse[i], masks[i] = true, b.coarseBg, b.currentMask
+	}
+}
+
 // SetBg256 sets background using 256-color palette index directly
 // Preserves fg-related attrs (AttrFg256) for layered rendering
 func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {

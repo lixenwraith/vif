@@ -23,7 +23,7 @@ type DevourerSystem struct {
 	toggle
 	rng vmath.FastRand
 
-	shape component.DevourerShape
+	shape *component.DevourerShape // the world's, which its renderers read
 	body  footprint
 	guts  [parameter.DevourerGutCap]footprint
 	built devourerBuilt
@@ -51,6 +51,7 @@ func (s *DevourerSystem) Priority() int { return parameter.PriorityDevourer }
 func (s *DevourerSystem) Init() {
 	s.enabled = true
 	s.built = devourerBuilt{}
+	s.shape = s.world.Resources.DevourerShape
 }
 
 func (s *DevourerSystem) EventTypes() []event.EventType {
@@ -277,12 +278,14 @@ func (s *DevourerSystem) build(e core.Entity, d *component.DevourerComponent) {
 		s.body.reset(cfg.MapWidth, cfg.MapHeight)
 		for y := range cfg.MapHeight {
 			lo, hi := s.shape.Span(y, 0)
+			// Only a cell of the band the field can reach is asked
+			near, far := s.shape.Band(y)
 			for x := 0; x < cfg.MapWidth; x++ {
 				if x == lo && lo <= hi {
 					x = hi
 					continue
 				}
-				if s.shape.Covers(x, y) {
+				if x < near || x > far || s.shape.Covers(x, y) {
 					s.body.add(x, y)
 				}
 			}
@@ -307,16 +310,20 @@ func (s *DevourerSystem) build(e core.Entity, d *component.DevourerComponent) {
 // body leaves open, and returns the cell its middle hangs over
 func (s *DevourerSystem) layGut(f *footprint, g *component.DevourerGutComponent, frame int64) (int, int) {
 	x0, y0, x1, y1 := s.shape.GutEnds(g.From, g.To)
-	age := float64(frame-g.Formed) * parameter.DevourerFrame.Seconds()
+	line := component.NewGutLine(x0, y0, x1, y1, float64(frame-g.Formed)*parameter.DevourerFrame.Seconds(), g.Phase)
 	r := parameter.DevourerGutRadius
 	steps := max(int(math.Hypot(x1-x0, y1-y0)/(r/4)), 1)
 	for i := range steps + 1 {
-		x, y := component.GutPoint(x0, y0, x1, y1, float64(i)/float64(steps), age, g.Phase)
+		x, y := line.Point(float64(i) / float64(steps))
 		cx0, cx1 := max(0, int(math.Ceil(x-r-vmath.CellCenter))), min(f.gridW-1, int(math.Floor(x+r-vmath.CellCenter)))
 		cy0, cy1 := max(0, int(math.Ceil((y-r)/2-vmath.CellCenter))), min(f.gridH-1, int(math.Floor((y+r)/2-vmath.CellCenter)))
 		for cy := cy0; cy <= cy1; cy++ {
 			dy := 2*(float64(cy)+vmath.CellCenter) - y
 			for cx := cx0; cx <= cx1; cx++ {
+				// Most of a step's cells the step before claimed
+				if f.grid[cy*f.gridW+cx] != footNone {
+					continue
+				}
 				dx := float64(cx) + vmath.CellCenter - x
 				if dx*dx+dy*dy <= r*r && !s.body.covers(cx, cy) {
 					f.add(cx, cy)
@@ -324,7 +331,7 @@ func (s *DevourerSystem) layGut(f *footprint, g *component.DevourerGutComponent,
 			}
 		}
 	}
-	mx, my := component.GutPoint(x0, y0, x1, y1, 0.5, age, g.Phase)
+	mx, my := line.Point(0.5)
 	return min(max(int(mx), 0), f.gridW-1), min(max(int(my/2), 0), f.gridH-1)
 }
 

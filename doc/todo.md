@@ -267,6 +267,16 @@ flies into its walls, which `default` meets about four minutes into every campai
 game. Kinds `devourer` and `gut` by their nearest covered cell, and
 `landing` reading an omen's ray as it reads a Kraken's charge, would close it.
 
+### Check a composite's members only when one went
+
+- Priority: P3
+- Affected files: `internal/engine/store.go`, `internal/system/composite.go`
+
+`CompositeSystem.syncMembers` asks the member store about every member of every
+composite each tick, 35 µs a tick while a Devourer's 8,000 stand at 200x60. A
+count of removals on the store, read before the pass, would skip it on a tick
+none went.
+
 ## Bots
 
 What ships, and what was tried and not built, is in [Bots](bots.md). Decisions

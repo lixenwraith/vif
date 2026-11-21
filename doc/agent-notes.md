@@ -781,6 +781,9 @@ Docs · Libraries · Branches.
   `math.Float64bits`, negative zeros among them, before the headless digests are
   read: `v -= v*0` turns a negative zero positive, so a branch that skips a
   subtraction is not one that subtracts nothing.
+- A term hoisted out of a float sum keeps the sum's bits only in the sum's own
+  order, `(a+b)+c`: the Devourer's rebuild was rewritten against main's, tick by
+  tick, on that rule; a table or an angle identity in its place moves cells.
 
 ## Combat
 
@@ -1218,6 +1221,10 @@ Docs · Libraries · Branches.
   `snapshot.DigestWorld` and `Positions.Order()` every fifty ticks of the headless
   shapes and the outputs diff empty; the divergence harness reads the link, this
   reads the world.
+- `snapshot.DigestWorld` hashes no flash field (`RemainingHitFlash`,
+  `HitEntity`), so a branch adding one still compares with main; a region is
+  held tighter by printing its components, member tables and
+  `Rand.SaveStreams(core.DomainShared)` beside it each tick.
 - `snapshot.DigestWorld` hashes entity ids, so a change in how many Player
   entities live differs from its first tick and says nothing. Trace without ids,
   a tick at a time on the harness's host (`shapedFight`): each shared section's
@@ -1231,6 +1238,9 @@ Docs · Libraries · Branches.
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
   live, with `:d prof` under `:log on` (`prof.top` lines) or a `time.Now` probe
   round the call in a scratch build, before calling a bench gain felt.
+- A renderer that paints on some frames alone hides them in a bench's mean:
+  time each `Render` of a scratch run and read the 99th percentile, as the
+  Devourer's painted frame read 3.1 ms under a 0.57 ms mean.
 - A value kept live across a hot per-cell loop can cost more than the work it
   guards: a burn's cut held across the Kraken renderer's stamping loop slowed a
   living Kraken's frames 4% with nothing burning. Filter before the loop, keep the

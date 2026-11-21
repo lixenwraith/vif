@@ -152,6 +152,10 @@ type CombatComponent struct {
 	// RemainingHitFlash is the remaining duration of hit visual feedback
 	RemainingHitFlash time.Duration
 
+	// HitEntity is what the last damaging hit on a unit landed on: the unit, or the
+	// member struck, the middle one of an area's
+	HitEntity core.Entity
+
 	// RemainingKineticImmunity is remaining immunity time for collision knockback.
 	// It is also how every steering system asks "is this target currently
 	// displaced", so it stays the whole target's window whoever opened it.

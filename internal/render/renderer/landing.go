@@ -146,9 +146,14 @@ func (r *LandingRenderer) markCharge(ctx render.RenderContext, buf *render.Rende
 // distance from the ray once, so no halo doubles where two of the ray's cells meet.
 func (r *LandingRenderer) markOmen(ctx render.RenderContext, buf *render.RenderBuffer, d *component.DevourerComponent) {
 	cfg := r.gameCtx.World.Resources.Config
-	r.shape.Build(d.Seed, d.Frame(), d.Grown(), cfg.MapWidth, cfg.MapHeight)
-	x0, y0 := r.shape.Wall(d.Omen.From)
-	x1, y1 := r.shape.Wall(d.Omen.To)
+	// Its system built its shape this frame already, unless something moved it since
+	shape := r.gameCtx.World.Resources.DevourerShape
+	if !shape.Built(d.Seed, d.Frame(), d.Grown(), cfg.MapWidth, cfg.MapHeight) {
+		r.shape.Build(d.Seed, d.Frame(), d.Grown(), cfg.MapWidth, cfg.MapHeight)
+		shape = &r.shape
+	}
+	x0, y0 := shape.Wall(d.Omen.From)
+	x1, y1 := shape.Wall(d.Omen.To)
 	near := min(max(1-d.Omen.Remaining.Seconds()/parameter.DevourerOmen.Seconds(), 0), 1)
 	beat := 0.5 + 0.5*math.Cos(2*math.Pi*(2+3*near)*near)
 	core := (visual.DevourerOmenCoreMin + (visual.DevourerOmenCoreMax-visual.DevourerOmenCoreMin)*near) * (0.8 + 0.2*beat)
@@ -172,7 +177,7 @@ func (r *LandingRenderer) markOmen(ctx render.RenderContext, buf *render.RenderB
 			}
 			dist := math.Hypot(cx-x0-dx*t, cy-y0-dy*t)
 			end := min(math.Hypot(cx-x0, cy-y0), math.Hypot(cx-x1, cy-y1))
-			if dist > reach || r.shape.Covers(col, row) {
+			if dist > reach || shape.Covers(col, row) {
 				continue
 			}
 			sx, sy, visible := ctx.MapToScreen(col, row)

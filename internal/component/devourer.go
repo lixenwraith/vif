@@ -53,8 +53,11 @@ type DevourerRecede struct {
 func (d *DevourerComponent) Frame() int64 { return int64(d.Elapsed / parameter.DevourerFrame) }
 
 // Grown is how far in from the edges it has crept at its frame, 0 to 1
-func (d *DevourerComponent) Grown() float64 {
-	return min(1, float64(d.Frame())*float64(parameter.DevourerFrame)/float64(parameter.DevourerCreep))
+func (d *DevourerComponent) Grown() float64 { return DevourerGrown(d.Frame()) }
+
+// DevourerGrown is how far in a Devourer has crept at a frame of its own
+func DevourerGrown(frame int64) float64 {
+	return min(1, float64(frame)*float64(parameter.DevourerFrame)/float64(parameter.DevourerCreep))
 }
 
 // DevourerShape is a Devourer's body at one frame: the bezel its edges grow, the
@@ -81,11 +84,10 @@ type devourerKey struct {
 // Build lays the shape at a frame, grown in from the edges by grown, on a width by
 // height map; built already, it stands as it is
 func (s *DevourerShape) Build(seed uint64, frame int64, grown float64, width, height int) {
-	key := devourerKey{seed, frame, grown, width, height}
-	if key == s.key && s.wave != nil {
+	if s.Built(seed, frame, grown, width, height) {
 		return
 	}
-	s.key = key
+	s.key = devourerKey{seed, frame, grown, width, height}
 	wp, hp := float64(width), 2*float64(height)
 	bezel := parameter.DevourerBezel * min(wp, hp)
 	// Eased out from the edge band, so its first frames already creep in
@@ -123,9 +125,51 @@ func (s *DevourerShape) Build(seed uint64, frame int64, grown float64, width, he
 	}
 }
 
+// Built reports whether the shape stands laid from these already
+func (s *DevourerShape) Built(seed uint64, frame int64, grown float64, width, height int) bool {
+	return s.wave != nil && s.key == devourerKey{seed, frame, grown, width, height}
+}
+
 // Depth is how deep the point x, y lies in the flesh, negative in the open space:
 // past the open rectangle's rounded edge, moved by the field
 func (s *DevourerShape) Depth(x, y float64) float64 { return s.edge(x, y) + s.waveAt(x, y) }
+
+// Depths fills dst with Depth at each of its points along the row at y, the first
+// at x0 and each dx on, the field laid along the row once for them all in row,
+// the caller's scratch, which it returns
+func (s *DevourerShape) Depths(dst []float32, row []float64, x0, dx, y float64) []float64 {
+	gy := max(y/s.step, 0)
+	j := min(int(gy), len(s.wave)/s.cols-2)
+	fy := min(gy-float64(j), 1)
+	top, low := s.wave[j*s.cols:(j+1)*s.cols], s.wave[(j+1)*s.cols:(j+2)*s.cols]
+	row = slices.Grow(row[:0], s.cols)[:s.cols]
+	for i := range row {
+		row[i] = top[i] + (low[i]-top[i])*fy
+	}
+	ax, qy := s.hx-s.round, math.Abs(y-s.cy)-(s.hy-s.round)
+	for k := 0; k < len(dst); {
+		// The points between two of the field's columns read one slope of it
+		x := x0 + float64(k)*dx
+		i := min(max(int(x/s.step), 0), s.cols-2)
+		end := len(dst)
+		if next := (float64(i+1)*s.step - x0) / dx; next < float64(end) && i < s.cols-2 {
+			end = max(int(math.Ceil(next)), k+1)
+		}
+		slope := (row[i+1] - row[i]) / s.step
+		base := row[i] - slope*float64(i)*s.step - s.round
+		for ; k < end; k++ {
+			x := x0 + float64(k)*dx
+			edge := math.Abs(x-s.cx) - ax
+			if qy > 0 && edge > 0 {
+				edge = math.Sqrt(edge*edge + qy*qy)
+			} else if qy > edge {
+				edge = qy
+			}
+			dst[k] = float32(edge + base + slope*x)
+		}
+	}
+	return row
+}
 
 // Covers reports whether the cell's centre lies in the flesh; the field decides only
 // within its reach of the edge
@@ -155,6 +199,10 @@ func (s *DevourerShape) Span(y int, margin float64) (lo, hi int) {
 	half -= 1e-9 // a centre the rounding puts on the edge is tested, not passed
 	return int(math.Floor(s.cx-half-vmath.CellCenter)) + 1, int(math.Ceil(s.cx+half-vmath.CellCenter)) - 1
 }
+
+// Band is the run of row y's cells, lo through hi, past which every centre lies in
+// the flesh whatever the field does, by a column unit to spare
+func (s *DevourerShape) Band(y int) (lo, hi int) { return s.Span(y, -2*s.reach-1) }
 
 // edge is the distance past the open rectangle's rounded edge
 func (s *DevourerShape) edge(x, y float64) float64 {
@@ -199,18 +247,27 @@ func (s *DevourerShape) GutEnds(from, to float64) (x0, y0, x1, y1 float64) {
 	return x0 + math.Cos(from), y0 + math.Sin(from), x1 + math.Cos(to), y1 + math.Sin(to)
 }
 
-// GutPoint is a gut's centreline u of the way from its end at x0, y0 to its end at
-// x1, y1, age seconds after it formed: straight as it forms, easing into a sag and
-// a writhe of its own phase over its first second
-func GutPoint(x0, y0, x1, y1, u, age, phase float64) (x, y float64) {
-	dx, dy := x1-x0, y1-y0
-	length := math.Hypot(dx, dy)
-	if length == 0 {
-		return x0, y0
+// GutLine is a gut's centreline from its end at x0, y0 to its end at x1, y1, age
+// seconds after it formed: straight as it forms, easing into a sag and a writhe of
+// its own phase over its first second
+type GutLine struct {
+	x0, y0, dx, dy, nx, ny  float64
+	ease, sway, lean, phase float64
+}
+
+func NewGutLine(x0, y0, x1, y1, age, phase float64) GutLine {
+	l := GutLine{x0: x0, y0: y0, dx: x1 - x0, dy: y1 - y0, ease: min(age, 1), sway: math.Sin(0.9*age + phase), lean: 1.7 * age, phase: phase}
+	if length := math.Hypot(l.dx, l.dy); length != 0 {
+		l.nx, l.ny = l.dx/length, l.dy/length
 	}
-	sag := min(age, 1) * (parameter.DevourerGutSag*math.Sin(math.Pi*u)*math.Sin(0.9*age+phase) +
-		parameter.DevourerGutWrithe*math.Sin(3*math.Pi*u+1.7*age+phase))
-	return x0 + dx*u - dy/length*sag, y0 + dy*u + dx/length*sag
+	return l
+}
+
+// Point is the centreline u of the way along
+func (l *GutLine) Point(u float64) (x, y float64) {
+	sag := l.ease * (parameter.DevourerGutSag*math.Sin(math.Pi*u)*l.sway +
+		parameter.DevourerGutWrithe*math.Sin(3*math.Pi*u+l.lean+l.phase))
+	return l.x0 + l.dx*u - l.ny*sag, l.y0 + l.dy*u + l.nx*sag
 }
 
 // DevourerField is value noise in [-1, 1] over octaves, z its third axis, so a field
