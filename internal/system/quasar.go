@@ -77,7 +77,7 @@ type quasarCtx struct {
 // newQuasarGraph builds the quasar's machine: homing, a timed charge while the
 // cursor stays out of range, then a shielded zap until it comes back. A stun cancels
 // a charge or a zap and freezes the quasar; observe may be nil.
-func newQuasarGraph(s *QuasarSystem, observe machine.Observer[component.QuasarState]) *machine.Graph[component.QuasarState, *quasarCtx] {
+func newQuasarGraph(s *QuasarSystem, observe machine.Observer[component.QuasarState, *quasarCtx]) *machine.Graph[component.QuasarState, *quasarCtx] {
 	type edge = machine.Edge[component.QuasarState, *quasarCtx]
 	type target = machine.Target[component.QuasarState, *quasarCtx]
 	active := machine.MaskOf(component.QuasarCharging, component.QuasarZapping)

@@ -76,8 +76,8 @@ entity. The reads take a value, so a renderer calls them on a component copy.
 
 ```go
 type Mask uint64                       // a bit per state; MaskOf(states...)
-type Cause uint8                       // Start, Timeout, PreTick, PostTick, Global, Retry, Stop
-type Observer[S ~uint8] func(from, to S, cause Cause)
+type Cause uint8                       // Start, Timeout, PreTick, PostTick, Global, Retry, Hold, Stop
+type Observer[S ~uint8, C any] func(c C, from, to S, cause Cause)
 
 type State[C any] struct {
 	Name     string
@@ -145,8 +145,9 @@ cannot fail.
 
 When no candidate commits, the fallback applies. `Retry(d)` re-arms the current
 state in place for d, with no exit or enter, reports `CauseRetry` with from == to,
-and runs the state's cues again in the new period. `Hold` changes nothing, so an
-expired state tries its timeout again next step. In a phase, the first edge whose
+and runs the state's cues again in the new period. `Hold` changes nothing and
+reports `CauseHold`, so an expired state tries its timeout again next step and
+reports each try. In a phase, the first edge whose
 source holds the state and whose guard passes owns the phase: when its chain
 fails, its fallback applies and later edges wait for the next step.
 
@@ -158,7 +159,7 @@ that must skip its entry step tests.
 `Start` enters a state for d, or its default when d is not positive, with no exit
 and no probe; it panics on a state the graph does not define, which `Build`
 cannot see. `Stop` runs the current state's exit with no enter. Both report to
-the observer with from == to, as a retry does.
+the observer with from == to, as a retry and a hold do.
 
 ### 2.4 Validation
 
@@ -229,10 +230,13 @@ A host is the species system that steps a graph. Its contract:
   (`PatternElapsed`, held by a stun) and the quasar's speed (`SpeedElapsed`,
   advanced by movement ticks). Lifetimes and one-shot deadlines stay in
   `TimerComponent` slots ([ECS and events §7](ecs-and-events.md#timers)).
-- **Observer.** Bound when the graph is built, so a host feeds status counters
-  without the runtime importing `status`. `Graph.States` and `Graph.Name` key a
-  data species' per-state rows (§6.4); nothing reads `Graph.Flags` yet
-  ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
+- **Observer.** Bound when the graph is built and handed each step's context,
+  so a host feeds status counters without the runtime importing `status`: a code
+  graph's is its system's method, and a program's, compiled before its system
+  exists, reaches it through the context (§6.4). `Graph.States` and `Graph.Name`
+  key a data species' per-state rows, and `Graph.Flags` tells a program that arms
+  its mount; an overlay of them is
+  [owed](todo.md#show-a-species-machine-state-in-a-debug-overlay).
 - **Footprint effects.** A host that clears the cells under a footprint names the
   effect each victim leaves, a `component.DeathEffect`
   ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
@@ -567,8 +571,8 @@ program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
 `Sustained[A]`, `Emit` (an effect reading `event` beside `payload`),
 `Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
 own, built once into what each spawn applies before its machine starts, as the
-game's `mount` pushes its `EventMountRequest`), with the host's `Integrate` and
-`Entered` hooks. `Entries`
+game's `mount` pushes its `EventMountRequest`), with the host's `Integrate`,
+`Entered` and `Stalled` hooks. `Entries`
 lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
 `BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
 per instance:
@@ -714,12 +718,15 @@ smaller part of it.
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count`, a
-  `behavior.<program>.state.<State>` for each of its states and the
-  lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
-  `kills.<program>` in `NewMetaSystem`, all before `Freeze`
-  ([telemetry](telemetry-reference.md)). A spawn or an entrance counts at once
-  rather than at the next step, since an entrance lands its instance after the
-  step and a region reads the count.
+  `behavior.<program>.state.<State>` for each of its states,
+  `behavior.<program>.transition_stalls` and the lifecycle rows
+  (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`, `kills.<program>` in
+  `NewMetaSystem`, all before `Freeze` ([telemetry](telemetry-reference.md)). A
+  spawn or an entrance counts at once rather than at the next step, since an
+  entrance lands its instance after the step and a region reads the count. A
+  stall is a transition none of whose candidates commits, counted once as it
+  retries and each step it holds: the compiler gives every program's graph an
+  observer that calls the host's `Stalled` hook on `CauseRetry` and `CauseHold`.
 - **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each header's members
   from the look's frame at `PatternIndex`, each cell its background and its glyph

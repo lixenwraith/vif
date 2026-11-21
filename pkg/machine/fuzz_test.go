@@ -16,6 +16,7 @@ var (
 	fuzzDuration = [4]time.Duration{0, 100 * time.Millisecond, 70 * time.Millisecond, 50 * time.Millisecond}
 	fuzzRetry    = [4]time.Duration{sB: 30 * time.Millisecond, sC: 20 * time.Millisecond}
 	fuzzTimeout  = [4]bool{sB: true, sC: true, sD: true}
+	fuzzHolds    = [4]bool{sA: true, sC: true}
 	fuzzCues     = [4][]uint16{sB: {250, 1000}, sC: {500}, sD: {1000}}
 	fuzzSteps    = []time.Duration{0, 5, 10, 20, 25, 35, 50, 75}
 )
@@ -262,9 +263,9 @@ func (r *fuzzRun) cue(s st, i int) {
 }
 
 // report checks every change: at most four a step, a spawn and a death with
-// their one hook, a retry re-arming the state with no exit or enter, and a
-// transition committed after its exit and enter
-func (r *fuzzRun) report(from, to st, cause Cause) {
+// their one hook, a retry re-arming the state with no exit or enter, a hold
+// leaving the entry as it ran, and a transition committed after its exit and enter
+func (r *fuzzRun) report(_ *fuzzRun, from, to st, cause Cause) {
 	r.unfrozen()
 	in := r.in
 	var ok bool
@@ -275,6 +276,8 @@ func (r *fuzzRun) report(from, to st, cause Cause) {
 		ok = r.stopping && !r.live && from == to && r.changed
 	case CauseRetry:
 		ok = from == to && in.State == to && !r.changed && in.Elapsed == 0 && in.Duration == fuzzRetry[to] && fuzzRetry[to] > 0
+	case CauseHold:
+		ok = from == to && in.State == to && !r.changed && fuzzHolds[to]
 	default:
 		ok = r.changed && !r.exiting && r.cur == to && in == Instance[st]{State: to, Duration: fuzzDuration[to]}
 	}
@@ -282,7 +285,7 @@ func (r *fuzzRun) report(from, to st, cause Cause) {
 		r.fail("%s %s>%s reported over %+v, changed %v", causeNames[cause], stNames[from], stNames[to], in, r.changed)
 	}
 	r.changed, r.probed = false, false
-	if cause != CauseStop {
+	if cause != CauseStop && cause != CauseHold {
 		r.fired = [2]bool{}
 	}
 	if r.inStep {

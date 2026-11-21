@@ -56,12 +56,14 @@ const (
 	CausePostTick
 	CauseGlobal
 	CauseRetry
+	CauseHold
 	CauseStop
 )
 
-// Observer hears every change once it is committed; Start, Stop and a retry
+// Observer hears, with the context of its step, every change once it is committed
+// and every edge none of whose candidates did; Start, Stop, a retry and a hold
 // report from == to
-type Observer[S ~uint8] func(from, to S, cause Cause)
+type Observer[S ~uint8, C any] func(c C, from, to S, cause Cause)
 
 // State declares one state. A nil hook does nothing.
 type State[C any] struct {
@@ -128,7 +130,7 @@ type Graph[S ~uint8, C any] struct {
 	defined Mask
 	global  []Edge[S, C]
 	suspend func(C) bool
-	observe Observer[S]
+	observe Observer[S, C]
 }
 
 // node is a state with the edges leaving it; pre and post carry their source as
@@ -181,13 +183,13 @@ func (g *Graph[S, C]) Start(in *Instance[S], c C, s S, d time.Duration) {
 	}
 	*in = Instance[S]{State: s, Duration: d}
 	run(g.states[s].Enter, c)
-	g.report(s, s, CauseStart)
+	g.report(c, s, s, CauseStart)
 }
 
 // Stop runs the current state's exit with no enter: a death
 func (g *Graph[S, C]) Stop(in *Instance[S], c C) {
 	run(g.states[in.State].Exit, c)
-	g.report(in.State, in.State, CauseStop)
+	g.report(c, in.State, in.State, CauseStop)
 }
 
 func (g *Graph[S, C]) Flags(s S) uint64 { return g.states[s].Flags }
@@ -218,7 +220,8 @@ func (g *Graph[S, C]) first(in *Instance[S], c C, edges []Edge[S, C], cause Caus
 
 // take commits the first candidate whose guard and probe pass: exit, the edge's
 // action, the commit, then enter, so an enter hook reads the entry it starts.
-// With none, a retry re-arms the state in place and a hold changes nothing.
+// With none, a retry re-arms the state in place and a hold changes nothing, each
+// reported, so a host can count the transitions that stall.
 func (g *Graph[S, C]) take(in *Instance[S], c C, e *Edge[S, C], cause Cause) {
 	from := in.State
 	for _, t := range e.To {
@@ -230,20 +233,23 @@ func (g *Graph[S, C]) take(in *Instance[S], c C, e *Edge[S, C], cause Cause) {
 		run(e.Do, c)
 		*in = Instance[S]{State: t.State, Duration: t.Duration}
 		run(to.Enter, c)
-		g.report(from, t.State, cause)
+		g.report(c, from, t.State, cause)
 		return
 	}
-	if e.Fallback.kind == fallbackRetry {
+	switch e.Fallback.kind {
+	case fallbackRetry:
 		in.Elapsed, in.Duration = 0, e.Fallback.retry
-		g.report(from, from, CauseRetry)
+		g.report(c, from, from, CauseRetry)
+	case fallbackHold:
+		g.report(c, from, from, CauseHold)
 	}
 }
 
 func (g *Graph[S, C]) has(s S) bool { return g.defined&(Mask(1)<<s) != 0 }
 
-func (g *Graph[S, C]) report(from, to S, cause Cause) {
+func (g *Graph[S, C]) report(c C, from, to S, cause Cause) {
 	if g.observe != nil {
-		g.observe(from, to, cause)
+		g.observe(c, from, to, cause)
 	}
 }
 

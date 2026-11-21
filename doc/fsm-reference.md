@@ -1141,7 +1141,8 @@ target = "Roam"
   `{ state, guard, guard_args, duration_ms }`, the duration overriding the state's.
 - `actions`: effects run between the exit and the entry.
 - `fallback`, required when every candidate can fail: `"hold"` keeps the state,
-  and `{ retry_ms = n }` restarts its entry for n ms without exit or entry.
+  and `{ retry_ms = n }` restarts its entry for n ms without exit or entry;
+  `behavior.<name>.transition_stalls` counts each retry and each step held.
 - An action table holds `action` and `payload` (`EmitEvent` adds `event`). An
   effect runs on entry, exit, a cue or an edge; a sustained verb only in
   `on_update`.

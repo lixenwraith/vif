@@ -20,6 +20,7 @@ type Vocabulary[C any] struct {
 	signals   func(C) *uint8
 	integrate func(C)
 	entered   func(C)
+	stalled   func(C)
 	names     func(component.Declared) *dialect.Names
 }
 
@@ -131,6 +132,10 @@ func (v *Vocabulary[C]) Integrate(f func(C)) { v.integrate = f }
 // Entered sets what every state's entry ends with, after its on_enter, so what the
 // entry's probe resolved serves that entry and no later one
 func (v *Vocabulary[C]) Entered(f func(C)) { v.entered = f }
+
+// Stalled sets what a transition runs as it retries or holds, none of its
+// candidates having committed, so a host counts the entries that keep failing
+func (v *Vocabulary[C]) Stalled(f func(C)) { v.stalled = f }
 
 // Entries lists the vocabulary for -schema: And, Or and Not, every verb, every flag
 func (v *Vocabulary[C]) Entries() []dialect.Entry {

@@ -450,6 +450,44 @@ transitions = [{ trigger = "Tick", target = "Wait" }]
 	}
 }
 
+// TestAProgramCountsItsStalledTransitions: a transition none of whose candidates
+// commits counts once as it retries and each step it holds, and no more once one
+// commits
+func TestAProgramCountsItsStalledTransitions(t *testing.T) {
+	for fallback, want := range map[string]int64{`{ retry_ms = 200 }`: 3, `"hold"`: 9} {
+		program := wardenHead("Wait") + `
+[states.Wait]
+duration_ms = 200
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Go", fallback = ` + fallback + ` }]
+
+[states.Go]
+probe = "ResolveTarget"
+on_update = [{ action = "Freeze" }]
+`
+		const went = component.BehaviorState(0)
+		ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY)
+		w := ctx.World
+		stalls := w.Resources.Status.Ints.Get("behavior.warden.transition_stalls")
+		aimAtCursors(w) // no target for Go's probe to resolve
+		for range 12 {
+			stepBehaviors(w, s)
+		}
+		if got := stalls.Load(); got != want {
+			t.Fatalf("fallback %s: twelve steps with no target counted %d stalls, want %d", fallback, got, want)
+		}
+
+		aimAt(w, wardenX+30, wardenY)
+		for range 8 {
+			stepBehaviors(w, s)
+		}
+		if b, _ := w.Components.Behavior.GetComponent(header); b.Machine.State != went || stalls.Load() != want {
+			t.Fatalf("fallback %s: with a target the body stands in state %d on %d stalls, want Go on %d",
+				fallback, b.Machine.State, stalls.Load(), want)
+		}
+	}
+}
+
 // TestAnInstanceItsOwnLeaveEndsIsNoKill: a body that reaches the edge it flies at
 // ends itself through its state's exit, counted as left, and nothing reports a kill
 func TestAnInstanceItsOwnLeaveEndsIsNoKill(t *testing.T) {

@@ -233,7 +233,15 @@ func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (
 		c.fail("initial", c.unknownState(doc.Initial))
 	}
 
-	b := machine.New[component.BehaviorState, C](nil)
+	var observe machine.Observer[component.BehaviorState, C]
+	if stalled := c.v.stalled; stalled != nil {
+		observe = func(ctx C, _, _ component.BehaviorState, cause machine.Cause) {
+			if cause == machine.CauseRetry || cause == machine.CauseHold {
+				stalled(ctx)
+			}
+		}
+	}
+	b := machine.New[component.BehaviorState, C](observe)
 	for _, name := range names {
 		c.state(b, name, doc.States[name])
 	}

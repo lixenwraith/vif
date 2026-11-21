@@ -58,6 +58,7 @@ type BehaviorSystem struct {
 type behaviorTelemetry struct {
 	count     *atomic.Int64
 	left      *atomic.Int64   // instances its own Leave ended, no kill
+	stalls    *atomic.Int64   // transitions that retried or held, none of their candidates committing
 	states    []*atomic.Int64 // by state, instances standing in it: behavior.<program>.state.<State>
 	standing  []int64         // this tick's count toward states
 	lifecycle lifecycleTelemetry
@@ -88,6 +89,7 @@ func NewBehaviorSystem(world *engine.World, set *BehaviorSet) engine.System {
 		t := behaviorTelemetry{
 			count:     reg.Ints.Get("behavior." + name + ".count"),
 			left:      reg.Ints.Get("behavior." + name + ".left"),
+			stalls:    reg.Ints.Get("behavior." + name + ".transition_stalls"),
 			lifecycle: newLifecycleTelemetry(reg, "behavior."+name),
 		}
 		graph := set.Graph(i)
@@ -113,6 +115,7 @@ func (s *BehaviorSystem) Init() {
 	for i := range s.programs {
 		s.programs[i].count.Store(0)
 		s.programs[i].left.Store(0)
+		s.programs[i].stalls.Store(0)
 		for _, state := range s.programs[i].states {
 			state.Store(0)
 		}
@@ -1244,5 +1247,6 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Flag("Armed", behaviorArmed)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })
 	v.Entered(func(c *behaviorCtx) { c.probed = false })
+	v.Stalled(func(c *behaviorCtx) { c.sys.programs[c.behavior.Program].stalls.Add(1) })
 	return v
 }
