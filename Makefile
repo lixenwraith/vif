@@ -83,7 +83,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme notices image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config purge wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -112,9 +112,9 @@ help:
 	@echo "           cannot write /usr/local/bin gets ~/.local and the user root"
 	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
 	@echo "  install-config Install the wad, keymaps, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
-	@echo "           (both: a keymap.toml or vif.toml already there is brought up to date, its lines kept;"
-	@echo "           script/install.sh <goal> -purge first removes what an earlier install put"
-	@echo "           there, a player's bot files, keymap.toml and vif.toml with it)"
+	@echo "           (both: a keymap.toml or vif.toml already there is brought up to date, its lines kept)"
+	@echo "  purge    Beside an install goal, as make install-config purge: first remove what an earlier"
+	@echo "           install put in its root, a player's bot files, keymap.toml and vif.toml with it"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  notices  Write the licences of Go and of every module the build links as $(NOTICES), as release does"
@@ -292,11 +292,11 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 		else $(GO) run ./tool/vif-settings "$$2" || echo "keep    $$2, not brought up to date"; fi; }
 # The wad mirrors the installed layout, so a copy is the install: shipped files are
 # replaced, a player's kept, and the keymap.toml and vif.toml already there brought up
-# to this build's (tool/vif-settings). script/install.sh -purge sets VIF_PURGE,
-# which first removes the shipped categories, bot/ whole among them, and those two
-# files. A variable, as make -n runs a sub-make.
+# to this build's (tool/vif-settings). The goal purge, wherever it stands, has it
+# first remove the shipped categories, bot/ whole among them, and those two files:
+# here, so an install's own checks pass before anything goes.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
-	if [ '$(VIF_PURGE)' = 1 ]; then \
+	if [ -n '$(filter purge,$(MAKECMDGOALS))' ]; then \
 		for old in $(WAD_DIR)/*/ $(WAD_DIR)/scenario/*/ bot/ input/keymap.toml vif.toml; do \
 			old=$${old%/}; old=$${old\#$(WAD_DIR)/}; \
 			[ "$$old" = scenario ] || [ ! -e "$$root/$$old" ] || { rm -rf "$$root/$$old"; echo "remove  $$root/$$old"; }; \
@@ -312,6 +312,11 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 
 install-config:
 	@set -eu; $(INSTALL_FUNCS); root='$(VIF_CONFIG_DIR)'; $(INSTALL_ROOT)
+
+# purge itself removes nothing: INSTALL_ROOT reads it among the goals
+purge:
+	@case ' $(MAKECMDGOALS) ' in *' install '*|*' install-config '*) ;; \
+	*) echo "purge: name install or install-config beside it, as in make install-config purge" >&2; exit 1 ;; esac
 
 # wad-archive is that same install as one file, unpacking as vif/ into the
 # directory that holds a config root: ~/.config, /usr/local/etc or %AppData%. The

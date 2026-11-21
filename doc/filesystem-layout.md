@@ -82,7 +82,7 @@ downloading it again, and `-s` and the menu play it by that name; a copy the
 player edits answers no join and is never written over. Saving is off by default,
 since the host, not the player, chose what it holds, and a run that cannot write
 there plays on and says why on its status line. `make install-config` creates the
-directory empty and `-purge` (§4) leaves it.
+directory empty and `purge` (§4) leaves it.
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
@@ -235,8 +235,7 @@ make install-config                                  # the user root only
 make install-config VIF_CONFIG_DIR=/path/to/stage    # into a staging root
 make install DESTDIR=/pkg PREFIX=/usr                # distribution package, root /etc/vif
 make uninstall                                       # what install put under PREFIX
-./script/install.sh install-config -purge            # either install, its root purged first:
-sudo ./script/install.sh install -purge              #   make's own line after the script's name
+make install-config purge                            # either install, its root purged first
 ```
 
 Both copy `wad/`, the bot graphs, the keymaps and `vif.toml`. A reinstall replaces
@@ -249,10 +248,9 @@ does not parse it keeps for the player to fix, as a run refuses it too, and a
 special file or one no one may write it leaves as a run does.
 
 An install removes nothing, so a file a later build renames or stops shipping
-stays where an earlier install put it, and no install looks for one. `-purge` is
-for that: `make` takes no flag of its own, so `script/install.sh` takes it and
-hands make the rest of its line. Either install then first removes from its
-root, naming each as it goes:
+stays where an earlier install put it, and no install looks for one. The goal
+`purge` is for that: beside either install, in either order, the install first
+removes from its root, naming each as it goes:
 
 - `content/`, `image/` and `scenario/base/`, whole: what was shipped, with any
   file a player put among it;
@@ -263,8 +261,7 @@ root, naming each as it goes:
   the install then writes as shipped.
 
 It keeps `audio/`, a player's other keymaps, their own scenarios,
-`scenario/downloads/` and anything else in the root. `-n` beside it prints what
-would run and removes nothing.
+`scenario/downloads/` and anything else in the root.
 
 `install` adds the binary, licences, manual, desktop entry
 and icons, completion and documentation under `PREFIX` with the wad at

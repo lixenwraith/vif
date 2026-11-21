@@ -236,7 +236,7 @@ duplicating version strings that would become stale.
 | Area | Contents |
 |---|---|
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (`terminal/android`'s view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
-| `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), `install.sh`, make's install goals with `-purge` ([Filesystem §4](filesystem-layout.md#4-installation)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
+| `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-editor` | Edit either bitmap splash face. |
 | `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
