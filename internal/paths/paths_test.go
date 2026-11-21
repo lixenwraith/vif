@@ -179,6 +179,24 @@ func TestSettingsTakeNumbersInRange(t *testing.T) {
 	}
 }
 
+// TestSettingsTakeABinauralModeAndPreset: [play] binaural is one of the bed's modes
+// and binaural_preset a row of parameter.BinauralPresets by name, off and the first
+// row as shipped; any other word fails, so an upgrade resets it.
+func TestSettingsTakeABinauralModeAndPreset(t *testing.T) {
+	if p := DefaultPlay(); p.Binaural != parameter.BinauralModeNames[parameter.BinauralOff] || p.BinauralPreset != parameter.BinauralPresets[0].Name {
+		t.Fatalf("the shipped [play] starts a bed %q on %q, want off on the first preset", p.Binaural, p.BinauralPreset)
+	}
+	words := map[string][]string{"binaural": parameter.BinauralModeNames[:], "binaural_preset": parameter.BinauralPresetNames()}
+	for key, ok := range words {
+		for _, v := range append([]string{"", "on", "alpha"}, ok...) {
+			s, err := ParseSettings(fmt.Appendf(nil, "[play]\n%s = %q\n", key, v))
+			if read := map[string]string{"binaural": s.Play.Binaural, "binaural_preset": s.Play.BinauralPreset}[key]; (err == nil) != slices.Contains(ok, v) || err == nil && read != v {
+				t.Errorf("play.%s = %q: read %q, error %v", key, v, read, err)
+			}
+		}
+	}
+}
+
 // TestARunWritesBackOnlyThePlayersOwnSettings: the vif.toml a run read is written
 // back brought up to date when it is the player's own, and is up to date then; a
 // system root's is left as it is with no copy made, and the copy its first change

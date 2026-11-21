@@ -167,8 +167,9 @@ following, the telemetry HUD, relaying for others, taking over as host
 local network (`lan`), each game started or restarted
 waiting for its player's press, the most frames drawn a second (`max_fps`), and
 whether the menu or the command line pauses a game that can pause (`pause_menu`,
-`pause_command`), and how near the view's sides the cursor comes before the view
-follows it (`camera_edge`). It is found like any resource, from `-config-dir` down to the
+`pause_command`), how near the view's sides the cursor comes before the view
+follows it (`camera_edge`), and the binaural beat under the music (`binaural`,
+`binaural_preset`). It is found like any resource, from `-config-dir` down to the
 system roots; the first file wins whole, a key it omits keeps the embedded
 default, and the `vif.toml` inside its own `root` is not read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the

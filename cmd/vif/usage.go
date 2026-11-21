@@ -344,7 +344,8 @@ own: glyphs, nuggets, shots and loot show on that player's screen alone. Nothing
 else it types plays; :leave starts a local game. Players are not told who
 watches. A host feeds \-spectators spectators at once, and :session counts them.
 .PP
-Settings holds sound effects, their volume and music; auto-fire, mouse input and
+Settings holds sound effects, their volume, music and the binaural beat under
+it; auto-fire, mouse input and
 pointer following; the frame cap, the telemetry HUD and the camera edge, how near
 the view's sides the cursor comes before the view follows it; whether the menu and
 other windows, or the command line, pause the game; and whether a game waits for
@@ -353,6 +354,14 @@ profiler, captures profiles, an execution trace and a telemetry snapshot, clears
 HUD pins, shows the navigation overlays and records a replay journal. Values in
 brackets are unavailable or read only; the selected row explains why. Launch
 options explains the file or flag that sets what a running game cannot change.
+.PP
+The binaural beat is a sound: a soft tone under the music, a little apart in each
+ear, which headphones give as one tone beating. Off by default, it is fixed at a
+preset's beat (relax 10 Hz, focus 15 Hz, hyper 25 Hz) or dynamic, its beat
+following the music's tempo; Binaural beat and Beat preset under Sound set it, as
+:binaural [off|fixed|dynamic] [preset] does, and it sounds and falls silent with
+the music. It needs headphones: through speakers both ears hear both tones and
+the beat is fainter, and a phone's one speaker loses it.
 .PP
 Settings, Relay for others, Take over as host and Visible on this network are
 vif.toml's [play]: a run writes each back as it changes, so the next run starts as

@@ -21,17 +21,19 @@ type AudioService struct {
 
 	sfx, music  bool    // the channels open at start
 	sfxVolume   float64 // the sfx volume at start
+	bed         uint32  // the binaural bed at start, as engine.PackBinaural packs it
 	initBackend string
 	initBuffer  time.Duration
 	src         AudioSource
 	sink        io.WriteCloser // the host's speakers; nil finds a backend by name
 }
 
-func NewAudioService(sfx, music bool, sfxVolume float64, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
+func NewAudioService(sfx, music bool, sfxVolume float64, bed uint32, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
 	return &AudioService{
 		sfx:         sfx,
 		music:       music,
 		sfxVolume:   sfxVolume,
+		bed:         bed,
 		initBackend: forceBackend,
 		initBuffer:  buffer,
 		src:         src,
@@ -124,4 +126,5 @@ func (s *AudioService) Contribute(r *engine.Resource) {
 		return
 	}
 	r.Audio = &engine.AudioResource{Engine: s.audioEngine}
+	r.Audio.Bed.Store(s.bed)
 }

@@ -56,8 +56,9 @@ tmux_frame_cap = true
 # 0 is three a tick, 60 at the default, and 24 inside tmux or screen, which drop
 # what a terminal sends them faster), and whether a game that may pause (solo, or
 # hosting only your own bots) pauses while the menu or another window is open
-# (pause_menu) and while the command line is open (pause_command), and the camera's
-# edge (camera_edge, below).
+# (pause_menu) and while the command line is open (pause_command), the camera's
+# edge (camera_edge, below) and the binaural beat under the music (binaural and
+# binaural_preset, below).
 # A run writes this file when it is in the user root or the
 # -config-dir root, and otherwise the user root's, made from this one at the first
 # change. A flag naming one of these, -mute for both channels or -nw for the wait,
@@ -81,6 +82,13 @@ pause_command = true
 # moved it: a percent of the screen's size, 0 to 50, as far from every side. 0
 # follows once the cursor is on the edge row or column, 50 on every move.
 camera_edge = 15
+# The binaural beat under the music: "off", "fixed" at binaural_preset's beat, or
+# "dynamic", its beat following the music's tempo. A soft tone a little apart in
+# each ear, which headphones give as a beat; through speakers it is fainter.
+binaural = "off"
+# The beat a fixed binaural beat plays: "relax" 10 Hz, "focus" 15 Hz or "hyper"
+# 25 Hz.
+binaural_preset = "relax"
 
 # Whether a run keeps the places it holds in its sessions past the process, so a
 # restart, a crash or a reboot comes back to the place its Wraith kept for it: the
