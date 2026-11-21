@@ -155,7 +155,7 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, a Kraken's
-burn, a maze's fade-in, a cursor's pulses, particles (dust, decay and blossom),
+burn, a Devourer's recede, a maze's fade-in, a cursor's pulses, particles (dust, decay and blossom),
 orbs, bullets, missiles, and loot are Player-domain; a materialize takes its
 requester's domain (§3). Encounter level clears explicitly preserve loot; run resets clear it. Shared
 corrections retain each receiver's drops and ownership, and loot revalidates its
@@ -172,7 +172,8 @@ spawn, so the system carrying it raises the effect again. A gold sequence an
 install brings gets its countdown splash for the time it has left, and an install
 that replaces a sequence's header cancels the old header's countdown, since the
 install may have given that id to another composite. An effect a death raises
-ends the other way: a dead Kraken's burn ends when its Kraken stands again.
+ends the other way: a dead Kraken's burn ends when its Kraken stands again, and a
+dead Devourer's recede when its Devourer does.
 
 Player-domain does not mean that only one participant sees an effect. A shared FSM
 may raise a local effect on every instance. Effects intended for one participant
@@ -618,7 +619,7 @@ is the Shared placement gate.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, data species, tower, gateway, wall, gold, marker, button, FSM, time |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, devourer, data species, tower, gateway, wall, gold, marker, button, FSM, time |
 | **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | materialise, spirit; domain is resolved per request |
 

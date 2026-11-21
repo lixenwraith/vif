@@ -188,9 +188,10 @@ while it holds.
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields
 first. Species contact costs `profile.Contact` through `strikeCursor`, a data
-species' its prototype's contact:
-`strikeContacts` for composites, with the shield's impact crossing, and Kraken's
-own footprint test for its hundreds of cells.
+species' its prototype's contact: `strikeContacts` for composites, with the
+shield's impact crossing, and a footprint test (`footprint.touches`) for the
+hundreds of cells of a Kraken and the thousands of a Devourer, which strikes a
+cursor once a tick however much of its body and guts touch it.
 
 | Cursor weapon hit | Artifact |
 |---|---|

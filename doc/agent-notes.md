@@ -788,6 +788,10 @@ Docs · Libraries · Branches.
   square's `strike` and `hold` do.
 - A target group holds `parameter.MaxTargetsPerGroup` (8) anchors and drops the rest
   in store order, saying nothing: a ninth anchor is no target until one goes.
+- `CompositeSystem.Update` destroys a header holding no member, one at zero hit
+  points aside, the tick after it is made: a body that grows in from nothing stands
+  its first members as it spawns, as the Devourer's first frame covers the edge
+  cells (`DevourerEdge`), and a gut laid wholly under the body is reaped so.
 
 ## Glyphs and widgets
 

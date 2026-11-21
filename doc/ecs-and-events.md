@@ -195,7 +195,7 @@ place in the shared-world capture.
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
 | General behavior | `Particle`, `Tracer`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Ray`, `Spirit`, `Materialize` |
-| Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower`, `Square`, `Block`, `Kraken`, `Behavior` (every data species) |
+| Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower`, `Square`, `Block`, `Kraken`, `Devourer`, `DevourerGut`, `Behavior` (every data species) |
 | Composite entities | `Header`, `Member` |
 | Transient effects and overlays | `Flash`, `Fadeout`, `Splash`, `Marker`, `Button` |
 | Lifecycle | `Death`, `Timer` |
@@ -245,7 +245,7 @@ transport the app attaches.
 | `Pursuit` | Navigation's field toward each cursor, published every tick and read for what one cursor owns (loot); a field is computed at its first read, which leaves the shared throttle phase alone (D-17). |
 | `Adaptation` | Per-gateway route-selection learner weights and pre-sampled route pools. |
 | `Genetics` | Population registry spawners sample genotypes from. |
-| `Transient` | Player-domain explosion presentation, the Krakens burning away and the walls a maze laid fading in. |
+| `Transient` | Player-domain explosion presentation, the Krakens burning away, the Devourers drawing back and the walls a maze laid fading in. |
 | `View` | Player-domain screen effects: grayout, strobe and this instance's button echo. |
 | `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
 | `NavigationDebug` | Per-runtime operator view of navigation internals. |
@@ -290,7 +290,7 @@ Composite types define where damage and ownership live:
 
 | Type | Damage/lifecycle meaning | Examples |
 |---|---|---|
-| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, snake head, data species. |
+| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, the Devourer and each of its guts, snake head, data species. |
 | `CompositeTypeAblative` | Members take damage and can be destroyed independently. | Storm circles, player towers, pylons, snake body. |
 | `CompositeTypeContainer` | Header groups members and takes no combat damage. | Storm and snake roots, gold sequences. |
 
@@ -382,7 +382,8 @@ as one pooled batch, on this instance alone. Two systems do the reading:
   ground. A flash or a scatter takes the glyphs while the grounds under them fade
   out; a fadeout takes each cell whole. The members then die silently. A wall's
   and a gold's members are glyphs of their own, which go to `DeathSystem` with
-  the effect, and a Kraken's body is its renderer's, which burns it away.
+  the effect, and a Kraken's body and a Devourer's are their renderers', which
+  burn the one away and draw the other back; a Devourer's gut is one ground.
 
 A species' end names the effect by why it ends:
 
@@ -407,6 +408,12 @@ A species' end names the effect by why it ends:
   past a cut running from tip to root and glowing in the attack color behind
   it, the void glowing as they reach it and closing over the last quarter. A
   Kraken an install brings back ends its own burn.
+- A Devourer's body is the map's edges, so a killed one leaves its frame the same
+  way (`EventDevourerRecedeRequest`, `component.DevourerRecede`), which
+  `TransientSystem` draws back over `DevourerRecede`, its walls moving on: the
+  devourer renderer shades the bezel grown in a frame less each frame and fades
+  it, and a Devourer an install brings back ends its own recede. Its guts fade
+  out where they hung, as a cut gut does.
 - An expiry (a swarm's charges or lifetime, a data species' lifetime) fades the
   body out, and a cancel or an integrity breach leaves nothing.
 - A member an ablative owner finds dead (a pylon's, a tower's, a storm circle's,
