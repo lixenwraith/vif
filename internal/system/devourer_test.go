@@ -43,16 +43,27 @@ func grown(w *engine.World, s *DevourerSystem) {
 	stepDevourer(w, s, int(parameter.DevourerCreep/parameter.GameUpdateInterval)+1)
 }
 
-// TestADevourerCreepsInFromTheEdgesToABezel: it rises a band along every edge and
-// grows over its creep to a bezel its share of the shorter side thick, give or take
-// its walls' reach, the middle left open, a member standing on each cell it covers
+// TestADevourerCreepsInFromTheEdgesToABezel: it rises a band along every edge, grows
+// from its first frame, and over its creep reaches a bezel its share of the shorter
+// side thick, give or take its walls' reach, the middle left open, a member standing
+// on each cell it covers
 func TestADevourerCreepsInFromTheEdgesToABezel(t *testing.T) {
 	w, s, e := devourerFixture(t)
 	cfg := w.Resources.Config
 	if !s.body.covers(0, cfg.MapHeight/2) || !s.body.covers(cfg.MapWidth/2, 0) || s.body.covers(5, cfg.MapHeight/2) {
 		t.Fatal("it did not rise as a band along the edges")
 	}
-	grown(w, s)
+	d, _ := w.Components.Devourer.GetPtr(e)
+	for covered, frame := len(s.body.cells), d.Frame(); d.Grown() < 1; {
+		if stepDevourer(w, s, 1); d.Frame() == frame {
+			continue
+		}
+		if d.Grown() <= 0.5 && len(s.body.cells) <= covered {
+			t.Fatalf("frame %d covers %d cells, the one before %d", d.Frame(), len(s.body.cells), covered)
+		}
+		covered, frame = len(s.body.cells), d.Frame()
+	}
+	stepDevourer(w, s, 1)
 	bezel := parameter.DevourerBezel * min(float64(cfg.MapWidth), 2*float64(cfg.MapHeight))
 	reach := parameter.DevourerSwell + parameter.DevourerBreath
 	for _, r := range parameter.DevourerRipples {
