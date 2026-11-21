@@ -1800,7 +1800,7 @@ func equalKraken(a, b *component.KrakenComponent) bool {
 }
 
 func equalDevourer(a, b *component.DevourerComponent) bool {
-	return a.MaxHitPoints == b.MaxHitPoints && a.Elapsed == b.Elapsed && a.Seed == b.Seed && a.NextOmen == b.NextOmen && a.Omen.Remaining == b.Omen.Remaining && math.Float64bits(float64(a.Omen.From)) == math.Float64bits(float64(b.Omen.From)) && math.Float64bits(float64(a.Omen.To)) == math.Float64bits(float64(b.Omen.To)) && a.Guts == b.Guts
+	return a.MaxHitPoints == b.MaxHitPoints && a.Elapsed == b.Elapsed && a.Seed == b.Seed && a.NextOmen == b.NextOmen && a.Omen.Remaining == b.Omen.Remaining && math.Float64bits(float64(a.Omen.From)) == math.Float64bits(float64(b.Omen.From)) && math.Float64bits(float64(a.Omen.To)) == math.Float64bits(float64(b.Omen.To)) && a.Guts == b.Guts && a.Felt == b.Felt
 }
 
 func equalDevourerGut(a, b *component.DevourerGutComponent) bool {

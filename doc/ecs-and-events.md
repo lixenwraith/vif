@@ -290,9 +290,9 @@ Composite types define where damage and ownership live:
 
 | Type | Damage/lifecycle meaning | Examples |
 |---|---|---|
-| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, the Devourer and each of its guts, snake head, data species. |
+| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, the Devourer's guts, snake head, data species. |
 | `CompositeTypeAblative` | Members take damage and can be destroyed independently. | Storm circles, player towers, pylons, snake body. |
-| `CompositeTypeContainer` | Header groups members and takes no combat damage. | Storm and snake roots, gold sequences. |
+| `CompositeTypeContainer` | Header groups members and takes no combat damage. | Storm and snake roots, gold sequences, the Devourer's body. |
 
 `CompositeSystem` moves each member to its header offset unless the header sets
 `SkipPositionSync` (its owner places members itself), destroys a member the

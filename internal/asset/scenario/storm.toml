@@ -1,4 +1,5 @@
-# Storm region: escalation to the Kraken maze
+# Storm region: every third storm kill opens the next boss, the Kraken, the
+# Devourer and then the tower
 
 [states.StormHold]
 parent = "Root"
@@ -12,7 +13,7 @@ on_exit = [
 [states.StormSetup]
 parent = "StormHold"
 on_enter = [
-    # Storm, Kraken and tower have no gold of their own; each setup ends a carried one
+    # Storm, Kraken, Devourer and tower have no gold of their own; each setup ends a carried one
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
@@ -43,16 +44,22 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "StormEscalateKraken", guard = "StatusIntCompare", guard_args = { key = "kills.storm", since = "storm_mark", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "StormEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.storm", since = "storm_mark", op = "gte", value = 3 } },
     { trigger = "Tick", target = "StormVictory" },
 ]
 
-[states.StormEscalateKraken]
+# next_boss, unset in a new game, names the boss this escalation opens: the Kraken,
+# the Devourer, then the tower, after which the cycle starts over
+[states.StormEscalate]
 parent = "Root"
 on_enter = [
     { action = "StatusToVar", payload = { key = "kills.storm", name = "storm_mark" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "SpawnRegion", region = "kraken", initial_state = "KrakenSetup" },
+    { action = "SpawnRegion", region = "kraken", initial_state = "KrakenSetup", guard = "VarEquals", guard_args = { var = "next_boss", value = 0 } },
+    { action = "SpawnRegion", region = "devourer", initial_state = "DevourerSetup", guard = "VarEquals", guard_args = { var = "next_boss", value = 1 } },
+    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup", guard = "VarEquals", guard_args = { var = "next_boss", value = 2 } },
+    { action = "IncrementVar", payload = { name = "next_boss" } },
+    { action = "ModuloVar", payload = { name = "next_boss", delta = 3 } },
     { action = "TerminateRegion", region = "storm" },
 ]
 

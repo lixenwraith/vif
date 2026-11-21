@@ -124,7 +124,7 @@ and the room the site has: `sessions_max`, the fleet's size, `doors` and
   "spectators_max": 256,
   "scenarios": ["main", "blank", "recall", "td"],
   "scenario_descriptions": {
-    "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
+    "main": "Survive escalating storms, lure Krakens through mazes, cut the Devourer's guts, and defend the tower.",
     "blank": "An empty arena for experimenting with commands and building scenarios.",
     "recall": "Recall: repeat the sequence with keys 1-4 or by clicking the buttons; each level adds a step.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."

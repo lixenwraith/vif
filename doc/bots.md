@@ -589,8 +589,8 @@ between the networks by who steered.
     rounds, and a host nobody plays closes its seat's. A guest's bot alone in
     another's session plays each round to the game's own end.
 - Every shipped bot closes a round at half an hour. The limit must span what
-  pays: the embedded scenario pays by its Krakens, about twelve in half an
-  hour, and a run closing rounds every five minutes learned nothing there.
+  pays: the embedded scenario pays by its Krakens, about five in half an hour,
+  and a run closing rounds every five minutes learned nothing there.
 
 **How the search goes.** Each learner drives the `StreamingEngine` of
 `lixenwraith/genetic` ([AI §3](ai-physics-and-evolution.md#3-genetic-library)):
@@ -837,7 +837,8 @@ round. A half-hour round pays by its Krakens, 374,000 for nine, 217,000 for
 eight and 130,000 for seven, and none has shot down ten: the model is near what
 the limit allows, and a bot document's `round_seconds` is its own to raise.
 
-In the embedded scenario: 100 rounds of half an hour, seeds 201 to 204.
+In the embedded scenario, when each storm escalation raised a Kraken: 100 rounds
+of half an hour, seeds 201 to 204.
 
 ```
 bot                            mean     median   Krakens met in most rounds
@@ -849,7 +850,10 @@ No model ships for this scenario. The second row is a `walk` a run learned
 there from nothing in six minutes, 29 weights; a player's runs learn their own.
 
 Nearly all of that is Kraken bounty, 50,000 each: 97 in 100 of what `default`
-earns. A `default` that never fires the special attack scores 402,940.
+earns. A `default` that never fires the special attack scores 402,940. With the
+Devourer and the tower taking two escalations in three, `default` as shipped meets
+five Krakens a round, kills four Devourers, defends four towers and loses no round,
+at about 274,000 a round (seeds 201 and 202, 90 fielded rounds each).
 
 `default` in the other scenarios: the mean score of a held-out round, unlearned
 and with a `walk` learned from nothing on three seeds. `walking` is the share
@@ -863,6 +867,8 @@ cave          90%          220    15,049    8,341      668      600,000 ticks   
 td           0.1%       17,088   not read                                         12 rounds
 ```
 
+- The embedded row was measured when each storm escalation raised a Kraken;
+  unlearned, `default` now scores about 274,000 there (above).
 - A few long rounds carry `cave`'s means: the three medians are 832, 910 and
   610. A round of `td` runs from 83 to 48,360, and the median of its twelve is
   8,504.

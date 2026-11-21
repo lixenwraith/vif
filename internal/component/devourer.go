@@ -19,6 +19,7 @@ type DevourerComponent struct {
 	NextOmen     time.Duration // until the next omen, counted while a gut's slot stands empty
 	Omen         DevourerOmen
 	Guts         [parameter.DevourerGutCap]core.Entity // each standing gut, zero for an empty slot
+	Felt         [parameter.DevourerGutCap]int         // each gut's hit points as the body last felt them
 }
 
 // DevourerOmen is the ray lit where a gut forms once Remaining runs out, between the
@@ -87,8 +88,9 @@ func (s *DevourerShape) Build(seed uint64, frame int64, grown float64, width, he
 	s.key = key
 	wp, hp := float64(width), 2*float64(height)
 	bezel := parameter.DevourerBezel * min(wp, hp)
-	eased := grown * grown * (3 - 2*grown)
-	thick := max(parameter.DevourerEdge, bezel*eased)
+	// Eased out from the edge band, so its first frames already creep in
+	eased := math.Sin(grown * math.Pi / 2)
+	thick := parameter.DevourerEdge + max(bezel-parameter.DevourerEdge, 0)*eased
 	s.cx, s.cy = wp/2, hp/2
 	s.hx, s.hy = max(s.cx-thick, 0), max(s.cy-thick, 0)
 	s.round = min(parameter.DevourerRound*thick, s.hx, s.hy)

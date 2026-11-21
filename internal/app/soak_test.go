@@ -65,6 +65,7 @@ var towerRegions = []journal.FuzzRegion{
 	{Name: "quasar", State: "QuasarFuse"},
 	{Name: "storm", State: "StormSetup"},
 	{Name: "kraken", State: "KrakenSetup"},
+	{Name: "devourer", State: "DevourerSetup"},
 	{Name: "monitor", State: "MonitorActive"},
 	{Name: "tower", State: "TowerSetup"},
 }
@@ -83,7 +84,7 @@ func towerScenario(t *testing.T, seed uint64) Config {
 	return cfg
 }
 
-func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T) {
+func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.T) {
 	a, err := NewHeadless(towerScenario(t, fixtureSeed))
 	if err != nil {
 		t.Fatal(err)
@@ -92,9 +93,14 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 	a.Tick(1)
 	w := a.World()
 	cursor := w.Resources.Player.Slot(0)
-	a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: 2, Y: 2}, event.OriginDebug)
-	a.Settle()
-	mazeCount, mazeWalls, krakenSpawns := 0, 0, 0
+	moveCursor := func(x, y int) {
+		a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: x, Y: y}, event.OriginDebug)
+		a.Settle()
+	}
+	// The Devourer rises from the edges, so the cursor waits for it in the open middle
+	middle := func() { moveCursor(w.Resources.Config.MapWidth/2, w.Resources.Config.MapHeight/2) }
+	moveCursor(2, 2)
+	mazeCount, mazeWalls, krakenSpawns, devourerSpawns := 0, 0, 0, 0
 	nuggetEnabled := false
 	a.SetDispatchTap(func(ev event.GameEvent) {
 		switch p := ev.Payload.(type) {
@@ -112,7 +118,8 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 				nuggetEnabled = p.Enabled
 			}
 		case *event.SpeciesCreatedPayload:
-			if p.Species == component.SpeciesKraken {
+			switch p.Species {
+			case component.SpeciesKraken:
 				krakenSpawns++
 				if mazeWalls == 0 || p.X != w.Resources.Config.MapWidth/2 || p.Y != w.Resources.Config.MapHeight/2 {
 					t.Error("Kraken did not spawn at the center after maze construction")
@@ -120,21 +127,13 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 				if w.Resources.Transient.WallFadeIn != (component.WallFadeIn{}) {
 					t.Error("Kraken rose before its maze had faded in")
 				}
+			case component.SpeciesDevourer:
+				devourerSpawns++
 			}
 		}
 	})
-	// The maze fades in before the Kraken rises, and the tick after it breaks walls
-	untilKraken := func(spawns int) {
-		for range int(2 * time.Second / parameter.GameUpdateInterval) {
-			if krakenSpawns == spawns {
-				break
-			}
-			a.Tick(1)
-		}
-		a.Tick(1)
-	}
-	for round := 1; round <= 2; round++ {
-		for killed := 1; killed <= 3; killed++ {
+	stormKills := func(n int) {
+		for range n {
 			a.Region(event.RegionPause, "main", "")
 			a.Region(event.RegionSpawn, "storm", "StormSetup")
 			if w.Components.Storm.CountEntities() != 1 {
@@ -147,12 +146,28 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 				return true
 			})
 			a.Tick(3)
-			if killed < 3 && (w.Components.Kraken.CountEntities() != 0 || w.Components.Tower.CountEntities() != 0) {
-				t.Fatal("Storm escalated before the third kill")
-			}
 		}
-		untilKraken(round)
-		if krakenSpawns != round || mazeCount != round || (round == 1 && w.Components.Wall.CountEntities() >= mazeWalls) {
+	}
+	bosses := func() int {
+		return w.Components.Kraken.CountEntities() + w.Components.Devourer.CountEntities() + w.Components.Tower.CountEntities()
+	}
+	// A boss's kill, its fade or recede and the rest after it, then main again
+	backToMain := func(what string, e core.Entity) {
+		hp, _ := w.Components.Combat.GetPtr(e)
+		hp.HitPoints, hp.LastDamagedBy = 0, cursor
+		a.Tick(int(3 * time.Second / parameter.GameUpdateInterval))
+		if bosses() != 0 || w.Resources.Status.Bools.Get("fsm.main.paused").Load() || !w.Resources.Config.CropOnResize {
+			t.Fatalf("%s kill did not return to main on a map following the view", what)
+		}
+	}
+	for cycle := range 2 {
+		stormKills(2)
+		if bosses() != 0 {
+			t.Fatal("Storm escalated before the third kill")
+		}
+		stormKills(1)
+		a.Tick(int(2 * time.Second / parameter.GameUpdateInterval))
+		if krakenSpawns != cycle+1 || cycle == 0 && (mazeCount != 1 || w.Components.Wall.CountEntities() >= mazeWalls) {
 			t.Fatal("third Storm kill did not spawn Kraken into a destructible maze")
 		}
 		cfg := w.Resources.Config
@@ -162,32 +177,40 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 		if !statBoolOf(a, "glyph.enabled") || !nuggetEnabled {
 			t.Fatal("Kraken region did not enable glyphs and nuggets")
 		}
-		if w.Components.Kraken.CountEntities() != 1 {
-			t.Fatal("Kraken was not available for this cycle")
+		backToMain("Kraken", w.Components.Kraken.Entities()[0])
+
+		middle()
+		nuggetEnabled = false
+		stormKills(3)
+		a.Tick(int(1500 * time.Millisecond / parameter.GameUpdateInterval))
+		if devourerSpawns != cycle+1 || w.Components.Devourer.CountEntities() != 1 || krakenSpawns != cycle+1 {
+			t.Fatal("the next three Storm kills did not raise the Devourer")
 		}
-		e := w.Components.Kraken.Entities()[0]
-		hp, _ := w.Components.Combat.GetPtr(e)
-		hp.HitPoints, hp.LastDamagedBy = 0, cursor
-		// The kill fades the maze and rests, under a second, before the region moves on
-		a.Tick(int(time.Second / parameter.GameUpdateInterval))
-		if round == 1 {
-			a.Tick(60)
-			if w.Components.Tower.CountEntities() != 0 || w.Components.Kraken.CountEntities() != 0 ||
-				w.Resources.Status.Bools.Get("fsm.main.paused").Load() {
-				t.Fatal("first Kraken kill did not return to main between storm cycles")
-			}
+		if w.Resources.Config.CropOnResize || !statBoolOf(a, "glyph.enabled") || !nuggetEnabled {
+			t.Fatal("Devourer region did not hold the map with glyphs and nuggets on")
 		}
+		backToMain("Devourer", w.Components.Devourer.Entities()[0])
+		moveCursor(2, 2)
+
+		stormKills(3)
+		if w.Components.Tower.CountEntities() != 1 || krakenSpawns != cycle+1 || devourerSpawns != cycle+1 {
+			t.Fatal("the third escalation did not hand off to Tower")
+		}
+		a.Region(event.RegionTerminate, "tower", "")
+		a.Region(event.RegionResume, "main", "")
+		a.Tick(1)
 	}
-	if krakenSpawns != 2 || w.Components.Tower.CountEntities() != 1 || w.Components.Kraken.CountEntities() != 0 {
-		t.Fatal("second Kraken kill did not hand off to Tower")
+	middle()
+	a.Region(event.RegionPause, "main", "")
+	a.Region(event.RegionSpawn, "devourer", "DevourerSetup")
+	a.Tick(int(1500 * time.Millisecond / parameter.GameUpdateInterval))
+	if w.Components.Devourer.CountEntities() != 1 || w.Resources.Status.Strings.Get("fsm.devourer.state").Load() != "DevourerActive" {
+		t.Fatal("no Devourer stood for the defeat to end")
 	}
-	a.Region(event.RegionTerminate, "tower", "")
-	a.Region(event.RegionSpawn, "kraken", "KrakenSetup")
-	untilKraken(3)
 	a.Context().PushEventOrigin(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: cursor, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()}, event.OriginDebug)
 	a.Tick(3)
-	if w.Components.Kraken.CountEntities() != 0 || w.Resources.Status.Strings.Get("fsm.kraken.state").Load() != "-" {
-		t.Fatal("global defeat left the Kraken region or its entity alive")
+	if w.Components.Devourer.CountEntities() != 0 || w.Resources.Status.Strings.Get("fsm.devourer.state").Load() != "-" {
+		t.Fatal("global defeat left the Devourer region or its entity alive")
 	}
 }
 

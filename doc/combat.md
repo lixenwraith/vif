@@ -158,7 +158,9 @@ family dealing the damage and leaving the stun and knockback its prototype's
 `attacks` name. One with a mass of its own is pushed as its row's profile pushes
 that mass (`profile.Reweigh`), so a heavier one is knocked back less.
 Species-authored invulnerability is the ward status and blocks every
-weapon's damage.
+weapon's damage. A container header is no target at all: no finder, blast or
+request names it, so the Devourer's body, one, loses only what `DevourerSystem`
+feels its guts lose.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time, a
 period and its timer, a magnitude, the crediting cursor and the family it records

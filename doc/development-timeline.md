@@ -237,4 +237,4 @@ until its rename to vif in September 2026.
 - Roster across new games; unheard players retired
 - Go 1.27.4
 - Magic: a magic square held against a swarm
-- Devourer: the map's edges as a boss, in a scratch scenario
+- Devourer: the map's edges as a boss, between the Kraken and the tower
