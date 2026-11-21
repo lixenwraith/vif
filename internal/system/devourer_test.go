@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // devourerFixture is a Devourer risen on a 120 by 40 map, its cursors parked in the
@@ -215,6 +216,73 @@ func TestACutGutFadesAndFreesItsSlotUncounted(t *testing.T) {
 	}
 	if !faded || d.Guts[0] != 0 {
 		t.Fatalf("a cut gut faded %v, its slot holds %d", faded, d.Guts[0])
+	}
+}
+
+// TestOnlyItsGutsWoundADevourer: its body is no target and no blast's, so it loses
+// what its guts lose, no more than each had, credited to the gut's attacker, and a
+// gut cut on its last hit points kills it that tick, the gut ending once
+func TestOnlyItsGutsWoundADevourer(t *testing.T) {
+	w, s, e := devourerFixture(t)
+	grown(w, s)
+	d, _ := w.Components.Devourer.GetPtr(e)
+	gut := formGut(t, w, s, d)
+	cursor := w.Resources.Player.Slot(0)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
+	body, _ := w.Components.Combat.GetPtr(e)
+	if _, _, ok := CombatTargetAt(w, 0, w.Resources.Config.MapHeight/2, position.ScopeAll, 0, cursor); ok {
+		t.Fatal("a body cell is a target")
+	}
+	for _, a := range FindNearestTargets(w, 60.5, 20.5, 4, position.ScopeAll, cursor) {
+		if a.Target != gut {
+			t.Fatalf("nearest target %d, want the gut %d", a.Target, gut)
+		}
+	}
+	explosion.HandleEvent(event.GameEvent{Type: event.EventExplosionRequest, Payload: &event.ExplosionRequestPayload{
+		Entity: cursor, X: 2, Y: 2, Radius: 6, Attack: component.CombatAttackExplosion,
+	}})
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && p.TargetEntity == e {
+			t.Fatal("a blast named the body")
+		}
+		combat.HandleEvent(ev)
+	}
+	if body.HitPoints != parameter.DevourerInitialHP {
+		t.Fatalf("the body took %d", parameter.DevourerInitialHP-body.HitPoints)
+	}
+
+	header, _ := w.Components.Header.GetComponent(gut)
+	var hits []core.Entity
+	for _, m := range header.MemberEntries[:10] {
+		hits = append(hits, m.Entity)
+	}
+	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+		AttackType: component.CombatAttackExplosion, OriginEntity: cursor, OwnerEntity: cursor, TargetEntity: gut, HitEntities: hits,
+	})
+	g, _ := w.Components.Combat.GetPtr(gut)
+	lost := parameter.DevourerGutHP - g.HitPoints
+	stepDevourer(w, s, 1)
+	if lost <= 0 || body.HitPoints != parameter.DevourerInitialHP-lost || body.LastDamagedBy != cursor {
+		t.Fatalf("the gut lost %d, the body %d, credited to %d", lost, parameter.DevourerInitialHP-body.HitPoints, body.LastDamagedBy)
+	}
+
+	body.HitPoints, g.HitPoints = g.HitPoints+100, -500
+	if stepDevourer(w, s, 1); body.HitPoints != 100 || d.Guts[0] != 0 {
+		t.Fatalf("a gut shot past nothing left the body %d, its slot %d", body.HitPoints, d.Guts[0])
+	}
+	gut = formGut(t, w, s, d)
+	g, _ = w.Components.Combat.GetPtr(gut)
+	g.HitPoints = 0
+	fades, killed := 0, false
+	for _, ev := range stepDevourer(w, s, 1) {
+		if p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok && p.HeaderEntity == gut {
+			fades++
+		}
+		killed = killed || ev.Type == event.EventSpeciesKilled
+	}
+	if !killed || fades != 1 || body.HitPoints != 0 {
+		t.Fatalf("killed %v, the gut ended %d times, the body holds %d", killed, fades, body.HitPoints)
 	}
 }
 

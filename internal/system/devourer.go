@@ -103,8 +103,9 @@ func (s *DevourerSystem) spawn(hp int) {
 	s.world.Components.Combat.SetComponent(e, component.CombatComponent{
 		OwnerEntity: e, CombatEntityType: component.CombatEntityDevourer, HitPoints: hp,
 	})
+	// A container is no target: the body loses only what its guts lose, as it feels
 	s.world.Components.Header.SetComponent(e, component.HeaderComponent{
-		Behavior: component.BehaviorDevourer, Type: component.CompositeTypeUnit, SkipPositionSync: true,
+		Behavior: component.BehaviorDevourer, Type: component.CompositeTypeContainer, SkipPositionSync: true,
 	})
 	s.seed(e)
 	s.world.Components.Devourer.SetComponent(e, component.DevourerComponent{
@@ -129,6 +130,7 @@ func (s *DevourerSystem) Update() {
 			continue
 		}
 		cfg := s.world.Resources.Config
+		s.feel(combat, d)
 		if combat.HitPoints <= 0 {
 			// Its drops burst from the open space, where its killer stands
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
@@ -233,7 +235,24 @@ func (s *DevourerSystem) form(e core.Entity, d *component.DevourerComponent) {
 	s.world.Components.DevourerGut.SetComponent(g, component.DevourerGutComponent{
 		Devourer: e, From: d.Omen.From, To: d.Omen.To, Formed: d.Frame(), Phase: s.rng.Float64() * 2 * math.Pi,
 	})
-	d.Guts[slot] = g
+	d.Guts[slot], d.Felt[slot] = g, parameter.DevourerGutHP
+}
+
+// feel takes from the body what each standing gut lost since it last looked, no
+// more than the gut had, and credits the gut's last attacker; a heal refunds nothing
+func (s *DevourerSystem) feel(body *component.CombatComponent, d *component.DevourerComponent) {
+	for i, gut := range d.Guts {
+		c, ok := s.world.Components.Combat.GetPtr(gut)
+		if gut == 0 || !ok {
+			continue
+		}
+		hp := max(c.HitPoints, 0)
+		if lost := d.Felt[i] - hp; lost > 0 {
+			body.HitPoints -= min(lost, max(body.HitPoints, 0))
+			body.LastDamagedBy = c.LastDamagedBy
+		}
+		d.Felt[i] = hp
+	}
 }
 
 // build stands the body and each gut on the frame the Devourer stands at, unless

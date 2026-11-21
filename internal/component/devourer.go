@@ -19,6 +19,7 @@ type DevourerComponent struct {
 	NextOmen     time.Duration // until the next omen, counted while a gut's slot stands empty
 	Omen         DevourerOmen
 	Guts         [parameter.DevourerGutCap]core.Entity // each standing gut, zero for an empty slot
+	Felt         [parameter.DevourerGutCap]int         // each gut's hit points as the body last felt them
 }
 
 // DevourerOmen is the ray lit where a gut forms once Remaining runs out, between the

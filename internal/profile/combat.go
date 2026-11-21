@@ -87,7 +87,6 @@ var cursorDefenders = [...]component.CombatEntityType{
 	component.CombatEntitySnakeBody,
 	component.CombatEntityEye,
 	component.CombatEntityKraken,
-	component.CombatEntityDevourer,
 	component.CombatEntityDevourerGut,
 }
 
@@ -102,7 +101,6 @@ var eyeTargets = [...]component.CombatEntityType{
 	component.CombatEntityCursor,
 	component.CombatEntityTower,
 	component.CombatEntityKraken,
-	component.CombatEntityDevourer,
 	component.CombatEntityDevourerGut,
 }
 
@@ -264,7 +262,7 @@ func init() {
 		register(&pulseProfiles[d])
 	}
 	// Too massive to stun, as no collision set knocks them back
-	for _, d := range [...]component.CombatEntityType{component.CombatEntityKraken, component.CombatEntityDevourer, component.CombatEntityDevourerGut} {
+	for _, d := range [...]component.CombatEntityType{component.CombatEntityKraken, component.CombatEntityDevourerGut} {
 		pulseProfiles[d].EffectMask = 0
 	}
 

@@ -68,7 +68,7 @@ const (
 	CompositeTypeUnit CompositeType = iota
 	// CompositeTypeAblative: Damage applied to individual Members. Header is anchor. (e.g. Storm Circle)
 	CompositeTypeAblative
-	// CompositeTypeContainer: Logic grouper only. No direct combat interaction. (e.g. Storm Root)
+	// CompositeTypeContainer: Logic grouper only. No direct combat interaction. (e.g. Storm Root, the Devourer's body)
 	CompositeTypeContainer
 )
 

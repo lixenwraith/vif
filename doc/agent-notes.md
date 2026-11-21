@@ -794,6 +794,10 @@ Docs · Libraries · Branches.
   points aside, the tick after it is made: a body that grows in from nothing stands
   its first members as it spawns, as the Devourer's first frame covers the edge
   cells (`DevourerEdge`), and a gut laid wholly under the body is reaped so.
+- No target finder or blast reads the profile matrix: they take any header with a
+  `Combat` that is no `CompositeTypeContainer` and not on the player's side, so a
+  kind dropped from `cursorDefenders` takes no damage but still draws every aimed
+  shot. A body nothing may hit is a container, as the Devourer's is.
 
 ## Glyphs and widgets
 
