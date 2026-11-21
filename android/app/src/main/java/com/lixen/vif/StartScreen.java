@@ -23,7 +23,7 @@ import android.widget.TextView;
  * screen before it does: the logo as large and where the splash showed it, "Tap to
  * start" under it on a button and a ? in the corner that opens the touch controls. The
  * run waits behind it, paused, until a tap anywhere else. A touch browser shows the
- * same screen (web/index.html); both wear lixen.com's dark theme in Roboto.
+ * same screen (web/index.html); both wear lixen.com's dark theme and font.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is each platform's own.
@@ -50,7 +50,11 @@ final class StartScreen extends FrameLayout {
             HOVER = 0xFF5F57F5, ACCENT = 0xFF8EA2FF, DANGER = 0xFFF87171;
     // The buttons' fade in after the splash, which showed the logo alone while the app loaded
     private static final long FADE_MS = 150;
-    static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    // The site's font, Hack Nerd Font, at the share of each size it draws it at, its
+    // size-adjust (web/terminal.css): at full size monospace lines read oversized
+    private static final String FONT = "fonts/hack-400.ttf";
+    private static final float FONT_SCALE = 0.9f;
+    private static Typeface font;
 
     private final int logoSide;
     private final TextView prompt;
@@ -69,7 +73,6 @@ final class StartScreen extends FrameLayout {
         logoSide = getResources().getDimensionPixelSize(R.dimen.logo);
         addView(logo, new LayoutParams(logoSide, logoSide, Gravity.CENTER));
         prompt = text("Tap to start", 18, Color.WHITE);
-        prompt.setTypeface(MEDIUM);
         prompt.setPadding(dp(28), dp(12), dp(28), dp(12));
         GradientDrawable fill = new GradientDrawable();
         fill.setColor(BUTTON);
@@ -78,7 +81,6 @@ final class StartScreen extends FrameLayout {
         addView(prompt, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.CENTER_HORIZONTAL));
         help = text("?", 24, ACCENT);
-        help.setTypeface(MEDIUM);
         help.setGravity(Gravity.CENTER);
         help.setContentDescription("Touch controls");
         GradientDrawable ring = new GradientDrawable();
@@ -128,7 +130,6 @@ final class StartScreen extends FrameLayout {
 
         FrameLayout head = new FrameLayout(c);
         TextView title = text("Touch controls", 18, Color.WHITE);
-        title.setTypeface(MEDIUM);
         title.setPadding(dp(16), 0, dp(56), 0);
         head.addView(title, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_VERTICAL | Gravity.START));
@@ -144,7 +145,6 @@ final class StartScreen extends FrameLayout {
         rows.setPadding(dp(16), dp(4), dp(16), dp(16));
         controls(rows, CONTROLS);
         TextView bar = text(BAR_TITLE, 12, ACCENT);
-        bar.setTypeface(MEDIUM);
         bar.setAllCaps(true);
         bar.setLetterSpacing(0.08f);
         bar.setPadding(0, dp(8), 0, dp(4));
@@ -172,7 +172,6 @@ final class StartScreen extends FrameLayout {
     private void controls(LinearLayout rows, String[][] controls) {
         for (String[] control : controls) {
             TextView gesture = text(control[0], 15, Color.WHITE);
-            gesture.setTypeface(MEDIUM);
             rows.addView(gesture);
             TextView does = text(control[1], 15, MUTED);
             does.setPadding(dp(16), dp(2), 0, dp(14));
@@ -184,14 +183,22 @@ final class StartScreen extends FrameLayout {
         return text(getContext(), s, sp, color);
     }
 
-    /** A line of the start screen's or the menu's text: Roboto at sp, in color. */
+    /** A line of the start screen's or the menu's text, in the site's font at sp, in color. */
     static TextView text(Context c, String s, float sp, int color) {
         TextView t = new TextView(c);
         t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        font(t, sp);
         t.setTextColor(color);
-        t.setTypeface(Typeface.SANS_SERIF);
         return t;
+    }
+
+    /** Sets t's text in the site's font at sp, as the page sizes it. */
+    static void font(TextView t, float sp) {
+        if (font == null) {
+            font = Typeface.createFromAsset(t.getContext().getAssets(), FONT);
+        }
+        t.setTypeface(font);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp * FONT_SCALE);
     }
 
     /** A window's frame: the page inside a hairline, its corners rounded. */
