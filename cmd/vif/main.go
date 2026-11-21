@@ -264,7 +264,7 @@ func main() {
 			sayNotice()
 			botNotice(cfg, graph)
 			if *flagField {
-				cfg.Round = func(n uint64, score float64) { fmt.Printf("Round %d scored %.0f\n", n, score) }
+				cfg.Round = func(r bot.Round) { fmt.Println(r) }
 			}
 		}
 		var st bot.Stats
@@ -275,9 +275,13 @@ func main() {
 			}
 			fmt.Printf("Bot stopped: %s%d ticks, %d actions, %d rounds, score %.0f\n", games, st.Ticks, st.Injected, st.Rounds, st.Score)
 			for _, l := range st.Learn {
-				if l.Scored > 0 {
+				switch {
+				case l.Scored > 0:
 					fmt.Printf("Bot learned %s: rounds %d of %d, recent %.0f, fielding %.0f over %d\n",
 						l.Network, l.Scored, l.Rounds, l.Recent, l.Fielded, l.FieldedRounds)
+				case l.Kept:
+					fmt.Printf("Bot fielded %s: rounds %d, recent %.0f, fielding %.0f over %d\n",
+						l.Network, l.Rounds, l.Recent, l.Fielded, l.FieldedRounds)
 				}
 			}
 		}
@@ -505,8 +509,9 @@ func logRuntimeReport(r core.RuntimeReport) {
 // platformHost is the build's platform host, empty on the terminal. openWindow
 // makes it the desktop window, nil without one; windowByDefault opens it unless
 // -g=false, windowMaximized and windowFullscreen the state it opens in. pageSettings
-// is where a browser, which has no vif.toml, reads and writes its settings, and
-// pagePlaces where it keeps the places its runs return to, across a reload.
+// is where a browser, which has no vif.toml, reads and writes its settings,
+// pagePlaces where it keeps the places its runs return to, across a reload, and
+// pagePopulations where it keeps what its bots learn.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
@@ -514,6 +519,7 @@ var (
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
 	pagePlaces                        app.PlaceStore
+	pagePopulations                   resource.Populations
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
 )
@@ -537,6 +543,7 @@ func buildConfig() app.Config {
 			Participants: flagSession.players,
 		},
 	}
+	cfg.Resources.Populations = pagePopulations
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
 	// joiner has no -name of its own. A spectator dials as a joiner does.
@@ -1013,15 +1020,16 @@ func (f sessionFlags) botCount() int {
 	return len(bots)
 }
 
-// botVerb is -bot's verb and what follows it, as :bot reads them (engine.BotVerb):
-// no verb where the flag is absent, and add's graph whole, since a path may hold
-// a space.
+// botVerb is -bot's verb and what follows it, as :bot reads them (engine.BotVerb,
+// engine.BotWords): no verb where the flag is absent, and a graph given with no
+// verb whole, since its path may hold a space.
 func (f sessionFlags) botVerb() (string, []string) {
-	if f.bot == "" {
+	words := engine.BotWords(f.bot)
+	if len(words) == 0 {
 		return "", nil
 	}
-	verb, rest := engine.BotVerb(strings.Fields(f.bot))
-	if first, _, _ := strings.Cut(f.bot, " "); verb == "add" && first != verb {
+	verb, rest := engine.BotVerb(words)
+	if verb == "add" && words[0] != verb && len(rest) > 1 {
 		rest = []string{f.bot}
 	}
 	return verb, rest
@@ -1077,9 +1085,14 @@ func botArgs(fs *flag.FlagSet, args []string) []string {
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++
 				spec = args[i]
+				// A verb's words stay apart, one that holds a space between quotes (engine.BotWords)
 				for engine.BotUsage(spec[:strings.IndexAny(spec+" ", " ")]) != "" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 					i++
-					spec += " " + args[i]
+					if word := args[i]; word == "" || strings.ContainsAny(word, " \t") {
+						spec += ` "` + word + `"`
+					} else {
+						spec += " " + word
+					}
 				}
 			}
 			out = append(out, "-"+name+"="+spec)

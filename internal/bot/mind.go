@@ -23,12 +23,13 @@ type mind struct {
 	rng   *vmath.FastRand
 	queue *intentQueue
 	// nets are the graph's policies, which Steer runs by index, and steered which of
-	// them have since the driver last took it. tick is the driver's, and special the
-	// tick from which a network may ask for the special attack again.
+	// them have since the driver last took it. tick is the driver's, and special and
+	// fire the ticks from which a network may ask for each attack again.
 	nets    []*network
 	steered []bool
 	tick    uint64
 	special uint64
+	fire    uint64
 
 	// room is how many more intents this step releases before its tick. An action
 	// that reads the world acts only when all it queues fits, or it would land on a
@@ -40,6 +41,10 @@ type mind struct {
 	seen  [targetCount]hunt
 	fresh [targetCount]bool
 	view  view
+
+	// weighed is what each kill the bot's world only predicted weighed as it was
+	// seen, kept for the event that proves it
+	weighed map[core.Entity]weight
 }
 
 // parseTarget resolves a graph's target name, refusing those its user can't take
@@ -338,11 +343,6 @@ type (
 	ownArgs struct {
 		Field string `toml:"field"`
 	}
-	asksArgs struct {
-		Network string  `toml:"network"`
-		Output  string  `toml:"output"`
-		Above   float64 `toml:"above"`
-	}
 )
 
 // register installs std's generic vocabulary, its status guards reading the bot's
@@ -421,24 +421,6 @@ func register(m *fsm.Machine[*mind], nets []*network) {
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			return m.ctx.GetMode() == core.GameMode(mode)
-		}, nil
-	})
-	// Asks holds while a network's one-unit output reads above a.Above: how a graph
-	// has its states hand over to what the network asks for, the wheel among them. A
-	// network with no weight asks nothing
-	m.RegisterGuard("Asks", func(a *asksArgs) (fsm.GuardFunc[*mind], error) {
-		i, err := pick(nets, a.Network)
-		if err != nil {
-			return nil, err
-		}
-		o := slices.IndexFunc(outputs[:], func(row outputRow) bool { return row.name == a.Output })
-		if o < 0 || len(outputs[o].units) != 1 || !slices.Contains(nets[i].units, outputs[o].units[0]) {
-			return nil, fmt.Errorf("output %q is no output of one unit that network %s has", a.Output, nets[i].name)
-		}
-		unit := slices.Index(nets[i].units, outputs[o].units[0])
-		return func(m *mind, _ *fsm.RegionState, _ any) bool {
-			n := m.nets[i]
-			return !n.blank && m.frame() && n.ask(m)[unit] > a.Above
 		}, nil
 	})
 	m.RegisterGuard("Chance", func(a *chanceArgs) (fsm.GuardFunc[*mind], error) {

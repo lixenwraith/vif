@@ -48,7 +48,7 @@ complete -c vif -o tick -x -d 'Game time one tick advances, 10ms to 100ms; a hos
 complete -c vif -o script -r -F -d 'Run an authored deterministic TOML tick script'
 complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal\'s digests unattended'
 complete -c vif -o games -x -d 'With -headless, how many games a bot alone whose graph learns plays at once, all teaching its learners, or with -field only fielding (default one more than the cores)'
-complete -c vif -o field -d 'With -watch or -headless, a bot alone whose graph learns plays what its populations field and teaches them nothing: no round is scored and no population written, each round still ends at the graph\'s round_seconds, and a headless run prints each round\'s score'
+complete -c vif -o field -d 'With -watch or -headless, a bot alone whose graph learns plays what its populations field and teaches them nothing: no round is scored and no population written, each round still ends at the graph\'s round_seconds, and a headless run prints each round\'s score, how it ended and what paid'
 complete -c vif -o watch -d 'Watch the first bot or a script on this terminal, with no human player'
 complete -c vif -o r -o replay -r -F -d 'Replay a recorded journal instead of playing'
 complete -c vif -o check -d 'Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit'

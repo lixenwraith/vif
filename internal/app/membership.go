@@ -127,7 +127,10 @@ func (r membershipRun) SeatScreenLocked() (int, int) {
 // was seated on, and the seat follows this run's screen (seatScreen). While it plays
 // the run is one of this run's seatRuns.
 func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membership.Membership, d *bot.Driver) (slot int)) (finished bool, err error) {
-	var played *seatRun
+	var (
+		played   *seatRun
+		learners []*bot.Learner
+	)
 	cfg := runConfig{Config: p.Config, wiring: wiring{log: p.Log, membership: p.Wiring}}
 	cfg.Play = botPlay(cfg.Play, p.Graph)
 	finished, err = drive(cfg, "bot", p.Graph.Name, p.Stop, p.Hold, func(b *App) (pacedSource, error) {
@@ -135,8 +138,12 @@ func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membersh
 		if err != nil {
 			return nil, err
 		}
-		// A seat is in its holder's session: it never learns, and plays what it could read
-		_ = b.field(p.Graph, d)
+		// A seat learns as any bot does, where no cursor shares its session: its
+		// holder is then a host nobody plays, which alone may close its round
+		if learners, err = b.learn(p.Graph, d); err != nil {
+			return nil, err
+		}
+		d.Reset = r.a.newGame
 		played = &seatRun{run: b, slot: seated(&b.membership, d), stop: p.Stop, number: p.Number}
 		r.a.addSeatRun(played)
 		return &seatSource{botSource: botSource{d}, ends: seatEnds(p.Mode, r.a.world, b.world), screen: &r.a.seatScreen,
@@ -148,6 +155,9 @@ func (r membershipRun) PlaySeat(p membership.SeatPlay, seated func(run *membersh
 		r.a.seatRuns = slices.DeleteFunc(r.a.seatRuns, func(s *seatRun) bool { return s == played })
 		r.a.seatRunsMu.Unlock()
 		r.a.seatJournalLeft(played)
+	}
+	for _, l := range learners {
+		err = errors.Join(err, l.Close())
 	}
 	return finished, err
 }

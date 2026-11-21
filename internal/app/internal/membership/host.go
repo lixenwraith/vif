@@ -60,8 +60,14 @@ func (c Control) BotFiles(words []string) ([]string, error) {
 	}
 	return lines, err
 }
+
+// BotGraphs reads each graph's populations at most once a second: the menu asks
+// each frame it shows them
 func (c Control) BotGraphs() []engine.BotGraph {
-	return resource.BotGraphs(c.m.run.Resources(), *c.m.scenario)
+	if now := time.Now(); now.Sub(c.m.botGraphsAt) >= time.Second { // [wall] a menu's refresh
+		c.m.botGraphs, c.m.botGraphsAt = resource.BotGraphs(c.m.run.Resources(), *c.m.scenario), now
+	}
+	return c.m.botGraphs
 }
 func (c Control) HostError() error  { return c.m.hostErrorLocked() }
 func (c Control) JoinError() error  { return c.m.joinErrorLocked() }

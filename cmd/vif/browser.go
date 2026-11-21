@@ -5,6 +5,9 @@ package main
 import (
 	"errors"
 	"io"
+	"slices"
+	"strings"
+	"sync"
 	"syscall/js"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 	"github.com/lixenwraith/terminal/atlas"
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -21,13 +25,16 @@ import (
 
 // What crosses the page's bridge that is vif's own, as web/vif.js names it: the
 // menu's snapshot out and its ops back, the mixer's PCM out, the player leaving for
-// the start screen and returning, and the two documents the page keeps
+// the start screen and returning, and the documents the page keeps: the settings,
+// the places, and under docBot each population, which docBots names, a line each
 const (
 	kindMenu    = "menu"
 	kindAudio   = "audio"
 	kindAway    = "away"
 	docSettings = "settings"
 	docPlaces   = "places"
+	docBots     = "bots"
+	docBot      = "bot/"
 )
 
 // pageQueue bounds what the page's own messages queue for the run: a post never
@@ -44,6 +51,7 @@ func init() {
 		return keptSettings(terminal.PageKept(docSettings), s)
 	}
 	pagePlaces = tabPlaces{}
+	pagePopulations = &keptPopulations{kept: map[string][]byte{}}
 }
 
 // keptSettings reads doc, the settings document the page kept from an earlier visit,
@@ -93,6 +101,59 @@ func (tabPlaces) Load() ([]byte, error) { return terminal.PageKept(docPlaces), n
 
 func (tabPlaces) Store(doc []byte) error {
 	terminal.PageKeep(docPlaces, doc)
+	return nil
+}
+
+// keptPopulations is what the page keeps of what bots learned, a document a
+// population, in the browser's storage for this site, as it keeps the settings.
+// The page names those it held as the run started; kept is what the run stored
+// or removed since, a removed one empty.
+type keptPopulations struct {
+	mu   sync.Mutex
+	kept map[string][]byte
+}
+
+func (p *keptPopulations) Names() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var names []string
+	for _, name := range strings.Fields(string(terminal.PageKept(docBots))) {
+		if _, since := p.kept[name]; !since {
+			names = append(names, name)
+		}
+	}
+	for name, doc := range p.kept {
+		if len(doc) > 0 {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func (p *keptPopulations) Open(name string) bot.Store { return keptPopulation{p, name} }
+func (p *keptPopulations) Remove(name string) error   { return keptPopulation{p, name}.Store(nil) }
+
+// keptPopulation is one population of the page's
+type keptPopulation struct {
+	of   *keptPopulations
+	name string
+}
+
+func (k keptPopulation) Load() ([]byte, error) {
+	k.of.mu.Lock()
+	defer k.of.mu.Unlock()
+	if doc, since := k.of.kept[k.name]; since {
+		return doc, nil
+	}
+	return terminal.PageKept(docBot + k.name), nil
+}
+
+func (k keptPopulation) Store(doc []byte) error {
+	k.of.mu.Lock()
+	defer k.of.mu.Unlock()
+	k.of.kept[k.name] = doc
+	terminal.PageKeep(docBot+k.name, doc)
 	return nil
 }
 

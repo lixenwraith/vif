@@ -111,7 +111,7 @@ func (s *menuSession) DropBot(slot int) error {
 }
 func (s *menuSession) BotGraphs() []engine.BotGraph { return s.graphs }
 func (s *menuSession) BotFiles(words []string) ([]string, error) {
-	s.calls = append(s.calls, "files "+strings.Join(words, " "))
+	s.calls = append(s.calls, "files "+strings.Join(words, "|"))
 	return []string{"first", "last"}, nil
 }
 
@@ -464,7 +464,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		want      string
 	}{
 		{"multiplayer", "multiplayer/#Bots/add", []string{"2", "default"}, "add 2:default"},
-		{"multiplayer", "multiplayer/#Bots/files", []string{"create mine import cave"}, "files create mine import cave"},
+		{"multiplayer", "multiplayer/#Bots/files", []string{"create mine import cave"}, "files create|mine|import|cave"},
 		{"multiplayer", "multiplayer/#Session/host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
 		{"multiplayer", "multiplayer/#Session/join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
 		{"multiplayer", "multiplayer/#Session/spectate", []string{"vif://example.test:4242/run"}, "spectate vif://example.test:4242/run 0"},
@@ -510,14 +510,16 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 
 // TestTheBotCommandReadsOneGrammar: a count or a graph alone seats bots as add
 // does, and no word one of the scenario's own; drop unseats, and any other verb
-// keeps bot files, each line it says a message of its own.
+// keeps bot files, what stands between quotes one word of it, each line it says
+// a message of its own.
 func TestTheBotCommandReadsOneGrammar(t *testing.T) {
 	ctx := engine.NewGameContext(engine.NewWorld(), 80, 24)
 	session := &menuSession{}
 	ctx.SessionCtl = session
 	for _, tt := range [][2]string{
 		{"bot", "add "}, {"bot 2", "add 2"}, {"bot add 2:cave", "add 2:cave"}, {"bot cave", "add cave"}, {"bot drop A", "drop 10"},
-		{"bot list", "files list"}, {"bot create mine import cave.kraken", "files create mine import cave.kraken"},
+		{"bot list", "files list"}, {"bot create mine import cave.kraken", "files create|mine|import|cave.kraken"},
+		{`bot export cave "my model.toml"`, "files export|cave|my model.toml"},
 	} {
 		if ExecuteCommand(ctx, tt[0]); len(session.calls) == 0 || session.calls[len(session.calls)-1] != tt[1] {
 			t.Fatalf(":%s asked the session for %v; want %q", tt[0], session.calls, tt[1])
@@ -528,19 +530,21 @@ func TestTheBotCommandReadsOneGrammar(t *testing.T) {
 		t.Fatalf("a verb's lines were posted as %+v", lines)
 	}
 	for _, refused := range []string{"bot add 1 2", "bot drop"} {
-		if ExecuteCommand(ctx, refused); len(session.calls) != 7 || !strings.HasPrefix(ctx.GetStatusMessage(), "Usage: :bot ") {
+		if ExecuteCommand(ctx, refused); len(session.calls) != 8 || !strings.HasPrefix(ctx.GetStatusMessage(), "Usage: :bot ") {
 			t.Fatalf(":%s was taken: %v, %q", refused, session.calls, ctx.GetStatusMessage())
 		}
 	}
 }
 
 // TestABotIsSeatedFromItsGraphsRow: the Multiplayer page lists each graph a seat of
-// the run can play, the player's, the scenario's and the shipped, and a graph's
-// row seats one bot playing it and leaves the menu.
+// the run can play, the player's, the scenario's and the shipped, with what it
+// has learned in the run's scenario, and a graph's row seats one bot playing it
+// and leaves the menu.
 func TestABotIsSeatedFromItsGraphsRow(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
-	session := &menuSession{graphs: []engine.BotGraph{{Name: "mine", Owner: "yours"}, {Name: "cave", Owner: "scenario cave's"}, {Name: "default", Owner: "shipped"}}}
+	const learned = "raid 814 rounds, recent 51440, fields 140138 over 12"
+	session := &menuSession{graphs: []engine.BotGraph{{Name: "mine", Owner: "yours"}, {Name: "cave", Owner: "scenario cave's", Learned: learned}, {Name: "default", Owner: "shipped"}}}
 	ctx.SessionCtl = session
 	r := NewRouter(ctx, input.NewMachine())
 	r.handleConfigMenu()
@@ -549,6 +553,9 @@ func TestABotIsSeatedFromItsGraphsRow(t *testing.T) {
 		if row := menuRow(ctx, "multiplayer/#Bots/seat/"+name); row.Label != "Add "+name || row.Disabled != "" {
 			t.Fatalf("the graph %s reads %q, disabled %q", name, row.Label, row.Disabled)
 		}
+	}
+	if row := menuRow(ctx, "multiplayer/#Bots/seat/cave"); !strings.Contains(row.Description, "Learned here: "+learned) {
+		t.Fatalf("cave's row says %q, want what it has learned", row.Description)
 	}
 	ctx.SetOverlaySelection("multiplayer/#Bots/seat/cave")
 	r.handleOverlayActivate()

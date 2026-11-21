@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
@@ -165,10 +166,10 @@ type Config struct {
 	Games int
 
 	// Field has a bot's run play what its graph's populations field and teach them
-	// nothing; Round, when set, hears each round the run closes, its count and its
-	// score
+	// nothing; Round, when set, hears each round the run closes, numbered across
+	// its games
 	Field bool
-	Round func(n uint64, score float64)
+	Round func(bot.Round)
 
 	// Session is the RNG session a run reproduces rather than counts to: the seed
 	// names the family of streams, this names the game in it. Zero counts from one;

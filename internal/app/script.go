@@ -156,7 +156,7 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "games", games, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
-		"rounds", stats.Rounds, "score", stats.Score,
+		"rounds", stats.Rounds, "score", stats.Score, "fielding", stats.Fielding(),
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
 }
@@ -298,26 +298,30 @@ func botPlay(play paths.Play, g *bot.Graph) paths.Play {
 }
 
 // learn has drivers, this run's own first, each play a game of g, and where g
-// learns and the run starts in no session, learn on from what this player's runs
-// taught it, a population a network in the user root. Any other run only fields
-// (field), as one told to does (Config.Field): a session's rounds are not its
-// bot's alone, and a run in one stays in one, so its learners could never score.
+// learns, learn on from what this player's runs taught it, a population a network
+// where the run keeps them: a round teaches where the run is alone from its start
+// to its end (Membership.Alone), and any other plays what is fielded. A graph that
+// does not learn only fields (field), as a run told to does (Config.Field).
 func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error) {
+	drivers[0].Reset = a.newGame
 	if d := drivers[0]; g.Settings.Learn && a.cfg.Mode.Presents() {
 		// A run somebody watches says what each round came to as it closes
-		d.Round = func(n uint64, score float64) {
-			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", n, score, learnLine(d.Stats())), parameter.StatusNotice)
+		d.Round = func(r bot.Round) {
+			a.ctx.SetStatusMessage(fmt.Sprintf("Round %d scored %.0f%s", r.N, r.Score, learnLine(d.Stats())), parameter.StatusNotice)
 		}
 	} else if g.Settings.Learn && a.cfg.Round != nil {
 		// One nobody watches tells Config.Round, its rounds numbered across its games
 		var rounds atomic.Uint64
 		for _, d := range drivers {
-			d.Round = func(_ uint64, score float64) { a.cfg.Round(rounds.Add(1), score) }
+			d.Round = func(r bot.Round) {
+				r.N = rounds.Add(1)
+				a.cfg.Round(r)
+			}
 		}
 	}
 	// Games beside its own are played only by a run alone, which a headless one stays
-	alone := func() bool { return len(drivers) > 1 || a.membership.SessionTransport() == nil }
-	if !g.Settings.Learn || a.cfg.Field || !alone() {
+	alone := func() bool { return len(drivers) > 1 || a.membership.Alone() }
+	if !g.Settings.Learn || a.cfg.Field {
 		if err := a.field(g, drivers...); err != nil && a.cfg.Field {
 			return nil, err // told to read a model, it plays no other
 		}
@@ -328,11 +332,7 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 	}
 	var learners []*bot.Learner
 	for _, network := range g.Networks() {
-		var store bot.Store
-		if file := resource.PopulationFile(g.Name, a.scenario.Shown(), network); file != "" {
-			store = paths.PlaceFile{Path: file}
-		}
-		l, err := bot.NewLearner(g, network, a.Seed(), len(drivers), store)
+		l, err := bot.NewLearner(g, network, a.Seed(), len(drivers), a.cfg.Resources.Population(g.Name, a.scenario.Shown(), network))
 		if err != nil {
 			return nil, err
 		}
@@ -341,6 +341,11 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 				"rounds", st.Rounds, "recent", st.Recent, "fielded", st.Fielded, "fielded_rounds", st.FieldedRounds)
 		}
 		l.Lost = func(err error) {
+			if errors.Is(err, bot.ErrCleared) {
+				a.log.Info("app", "msg", "bot population cleared", "name", g.Name, "network", network)
+				a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusNotice)
+				return
+			}
 			a.log.Warn("app", "msg", "bot population not kept", "name", g.Name, "error", err.Error())
 			a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusAlert)
 		}
@@ -350,6 +355,24 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 	return learners, nil
 }
 
+// newGame asks for the new game that closes a bot's round at its limit, false
+// where this run may not: in a live session only the authority starts one
+func (a *App) newGame() (asked bool) {
+	a.world.RunSafe(func() {
+		reset := &event.GameResetPayload{}
+		switch {
+		case !a.world.LiveSession():
+			a.ctx.PushEventOrigin(event.EventGameResetRequest, reset, event.OriginDebug)
+		case a.world.IsSessionCoordinator():
+			a.ctx.PushEventFull(event.EventGameResetRequest, reset, event.OriginDebug, core.DomainPlayer)
+		default:
+			return
+		}
+		asked = true
+	})
+	return asked
+}
+
 // field has drivers play what this player's runs taught g in this run's
 // scenario: of each network the member its population fields (bot.Graph.Kept),
 // read once, and what g writes where none is proved. It builds no learner and
@@ -357,11 +380,11 @@ func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error
 // returned, which ends a run told to field.
 func (a *App) field(g *bot.Graph, drivers ...*bot.Driver) (unread error) {
 	for _, network := range g.Networks() {
-		file := resource.PopulationFile(g.Name, a.scenario.Shown(), network)
-		if file == "" {
+		store := a.cfg.Resources.Population(g.Name, a.scenario.Shown(), network)
+		if store == nil {
 			return nil
 		}
-		k, ok, err := g.Kept(network, paths.PlaceFile{Path: file})
+		k, ok, err := g.Kept(network, store)
 		if err != nil {
 			a.log.Warn("app", "msg", "bot population not read", "name", g.Name, "error", err.Error())
 			a.ctx.SetStatusMessage("Bot "+g.Name+": "+err.Error(), parameter.StatusAlert)

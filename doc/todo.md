@@ -308,70 +308,48 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - Guide: [Bots: Learning](bots.md#learning),
   [what was tried](bots.md#tried-and-not-built)
 
-- **A network's score.** `raid`'s own score does not say what its member is
-  worth beside `kraken`. Twelve members whose own means stood above their
-  title's were each held out over 100 rounds beside the shipped other network:
-  eleven scored under the shipped pair, by up to 85,159, and one level. It may
-  be a question of credit between a graph's networks. Owed before any rule of
-  the title is read again: a score for `raid` that a held-out pair confirms.
-- **The wheel.** It may take `default` off text to walk, and no run has
-  learned a use for it. Give it one or remove it.
-- **Firing.** An ask for the special attack costs an action. `default`'s one
-  written weight asks always, and no run has learned to ask less. Main fire as
-  an output, for a bot whose auto-fire is off, is built nowhere.
-- **Inputs.** `default`'s `walk` learns faster on 17 inputs than on 161.
-  `cave`'s `raid` reads 39 and `kraken` 15, and no leaner set was read there.
-  Decide whether a scenario's bot names a lean set of its own.
-- **From nothing.** With no weight written `cave`'s archive stalls in the
-  first cave: six seeds field 4,824 held out where `seed`'s weights field
-  27,614. Its members become near-copies that 24 rounds cannot tell apart. To
-  decide: judge a candidate on the 50 to 75 rounds that do, or learn by a rule
-  that averages many rounds a step.
+- **A member's stale mean.** A proved member that is neither fielded nor its
+  rival is never flown again, so its mean stays that of the partners it once
+  flew beside: one of `raid`'s held 83 rounds at 38,437 where its title held
+  53,245, and the two held out level
+  ([the read](bots.md#learning)). Owed: a repeat that reaches every proved
+  member in turn, or a mean over a member's latest rounds, read as an arm.
+- **Firing.** `default`'s one written weight asks for the special attack
+  always, an action each, and no run has learned to ask less. No shipped bot
+  plays with auto-fire off, so nothing has learned the output `fire`.
+- **From nothing.** With no weight written `cave`'s archive stalls in its
+  caves: after nine million ticks it fields 7,517 held out where `seed`'s hand
+  weights field 27,614, its members near-copies that 24 rounds cannot tell
+  apart. A rule that averages 32 rounds a step fields no more, and a lean
+  `raid` under twice as much ([tried](bots.md#tried-and-not-built),
+  [inputs](bots.md#networks-and-learning)). Still to try: that lean start
+  widened by `import` once it reaches the Kraken, and a candidate judged on
+  the 50 to 75 rounds that do tell them apart.
 - **Scenarios.** `td` and `armada` carry no bot of their own, so `-bot` there
-  seats `default`. `armada`'s waits for its design.
-- **Two rules as built.** Once a ninth member is proved, the next newcomer
-  enters on one round whatever it scored. A child's parents are picked by plain
-  mean, where the archive ranks by trusted mean. Each is owed a read as an arm
-  before it is changed.
-
-### Finish the bot verbs' edges
-
-- Priority: P2
-- Affected files: `internal/resource/bots.go`, `internal/bot/weights.go`
-- Guide: [Bots: A player's bot files](bots.md#a-players-bot-files)
-
-- `export` writes a network's weights at the document's end, not beside its
-  inputs.
-- A word after a verb is split at spaces, so a path holding one is not taken.
-- An address names one network or all, so two of three take two commands.
-- A population of another scenario is reached by `-s` alone, and the menu's
-  Bots page names populations only through its Bot files row.
-- `clear` in a run learning that population is undone by the run's next save.
+  seats `default`. `armada`'s waits for its design. `td`'s has its towers to
+  hold, and no kind of the catalogue sights a tower: a kind `tower` first.
+- **An entry as built.** Once a ninth member is proved, the next newcomer
+  enters on one round whatever it scored. It is one place of probation a
+  proof, under what a run's fielded pair can show: owed a read as an arm by
+  who enters and who leaves, off the learner's own events, before it is changed.
 
 ### Close what learning leaves open outside a solo run
 
 - Priority: P3
-- Affected files: `internal/app/script.go` (`learn`), `internal/bot/learner.go`
-- Guide: [Bots: The population file](bots.md#the-population-file)
+- Affected files: `internal/app/script.go` (`learn`, `newGame`),
+  `internal/bot/catalogue.go` (`weight`)
+- Guide: [Bots: Learning](bots.md#learning)
 
-- A browser keeps no population. `bot.Store` is a document's bytes, so the
-  page's storage can hold one as it holds settings (`terminal.PageKeep`).
-- A run in a session does not learn. The first widening is a session only the
-  bot occupies, the fleet's standing one
-  ([there](#keep-a-standing-session-for-the-lobby)): `App.learn`'s `alone`
-  decides who builds learners and who scores, a seat fields without asking it
-  (`PlaySeat`), and a store needs one writer.
-- A watched run's viewer may turn auto-fire or the pointer off under the bot,
-  and its rounds then score that.
-- `-field` prints a round's score and not what ended it: Krakens met and shot
-  down take a scratch test's tap ([agent notes](agent-notes.md#measuring)).
-- A headless run that only fields says nothing of what it read: `Bot stopped`
-  and a seat's `bot left` record carry no `fielding S over C`.
+- A bot learns in a session only its cursor holds. Two bots or more in one
+  do not: a round there ends at the first defeat. Nor does a guest's bot, alone
+  in another's session, close a round at its limit, since only the host starts
+  a game: it would have to ask its host, as a guest's machine asks for a
+  transition.
 - The source `kill` pays a code species' kill flat, whatever its hit points.
-  It also pays a Kraken whose fight could not be timed, shot down in the tick
-  it rose: 5 for the shipped bots, where its bounty is thousands.
-- A score names sources of the catalogue only. An event by name, with the field
-  that names its owner, would let a scenario pay for one without Go.
+  Paid by the hit points its body is made with, at `default`'s 12 a point, a
+  round of the embedded scenario pays five times as much for kills as for its
+  Krakens ([measured](bots.md#tried-and-not-built)): a source of its own with
+  a weight of its own, and `default`'s read again under it.
 
 ### Let a scenario expose values of its own to a bot
 
@@ -1113,12 +1091,10 @@ the next, while visitors spectate it through the router at a copy's cost each
 What stands: a dedicated host's session that its own bots alone occupy starts and
 plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
 ./deploy/k3s/session.sh create <id>` makes that pod beside the router, whatever
-`bots_max` offers a visitor. What it needs:
+`bots_max` offers a visitor. The one seat of such a host learns, its rounds
+closed at its graph's limit by the host, at the host's one rate, 1x
+([Bots](bots.md#learning)). What it needs:
 
-- **The learner on a seat.** It learns on a solo run's driver, and a seat fields
-  what that kept; here the bot is the seat of a host nobody plays, in a session
-  of one, at a dedicated host's one rate, 1x: 300 to 500 rounds an hour by that
-  item's reading.
 - **Its graph in the pod.** The pod's `-bot` names a count, which plays `default`:
   the learner's is named there (`N:graph`), embedded or served from the node's
   volume, which carries `scenario` and `image` alone (`wadCategories`).
@@ -1137,8 +1113,8 @@ plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
   session with no spectator past its linger (`audiences`), and a pod its idle hub
   (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
   wants the rounds nobody watches, so decide which it is.
-- Whether a visitor may also take a seat in it, whose defeat then resets the
-  learner's round, or only watches: a roster its bots fill is still shown to a
+- Whether a visitor may also take a seat in it, whose cursor has the learner
+  field and score nothing until its place is given up, or only watches: a roster its bots fill is still shown to a
   spectator, and the script and the router both keep a seat free
   (`bots` ≤ `players` − 1).
 - The lobby showing it first, with Watch as what its row offers

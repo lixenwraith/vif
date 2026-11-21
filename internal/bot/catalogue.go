@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -656,33 +657,40 @@ var sensors = func() (rows []sensor) {
 }()
 
 type outputRow struct {
-	name  string
-	at    int
-	units []string
-	doc   string
-	act   func(m *mind, out []float64) bool
-	asked bool
+	name   string
+	at     int
+	units  []string
+	doc    string
+	act    func(m *mind, out []float64) bool
+	listed bool
 }
 
 // outputs is what a network asks for, in the order Steer acts on it: a key ahead
 // of the move, as a hand presses one on its way. units names the tables a graph
 // writes an output's weights in, a unit each, which a network's weights hold in
 // the order of at, and act reports whether the step has room for more. One that
-// is asked has only the networks that list it; one listing none has the rest.
+// is listed has only the networks that list it; one listing none has the rest.
 var outputs = [...]outputRow{
-	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would", (*mind).askSpecial, false},
+	{"special", 1, []string{"special"}, "asks for the special attack while it is positive, ahead of the move and as often as auto-fire would",
+		func(m *mind, out []float64) bool { return m.ask(out, &m.special, specialIntent) }, false},
+	{"fire", 2, []string{"fire"}, "asks for main fire while it is positive, ahead of the move and as often as auto-fire would. A network has it only by listing it, in a graph whose auto-fire is off",
+		func(m *mind, out []float64) bool { return m.ask(out, &m.fire, fireIntent) }, true},
 	{"move", 0, []string{"x", "y"}, "points at a cell: x and y are its offset from the cursor in view widths and heights, kept to the cells the view shows", (*mind).point, false},
-	{"wheel", 2, []string{"wheel"}, "asks its graph for the wheel: Steer does nothing with it, and the guard Asks holds while it is above what the guard names. A network has it only by listing it",
-		func(*mind, []float64) bool { return true }, true},
 }
 
-// specialIntent is how a network asks for the special attack, as a key does
-var specialIntent, _ = input.IntentFor("fire_special", 1, "")
+// specialIntent and fireIntent are how a network asks for the special attack
+// and for main fire, as a key does
+var (
+	specialIntent, _ = input.IntentFor("fire_special", 1, "")
+	fireIntent, _    = input.IntentFor("fire_main", 1, "")
+)
 
-func (m *mind) askSpecial(out []float64) bool {
-	if out[0] > 0 && m.tick >= m.special {
-		m.special = m.tick + uint64(max(parameter.AutoFireInterval/m.ctx.World.TickInterval(), 1))
-		m.push(specialIntent)
+// ask queues intent where out asks for it and since allows, the tick from which
+// it may be asked for again: as often as auto-fire would
+func (m *mind) ask(out []float64, since *uint64, intent input.Intent) bool {
+	if out[0] > 0 && m.tick >= *since {
+		*since = m.tick + uint64(max(parameter.AutoFireInterval/m.ctx.World.TickInterval(), 1))
+		m.push(intent)
 	}
 	return m.room >= 1
 }
@@ -718,7 +726,7 @@ var sources = [...]source{
 	{name: "typed", doc: "a character typed right", event: event.EventBoostReward, owner: "entity"},
 	{name: "mistyped", doc: "a typing error", event: event.EventBoostDeactivate, owner: "entity"},
 	{name: "gold", doc: "a gold sequence completed", event: event.EventGoldCompleted, owner: "entity"},
-	{name: "kill", doc: "a kill neither hit_points nor kraken measures: of a species the game's own code flies, or of a Kraken whose fight could not be timed",
+	{name: "kill", doc: "a kill neither hit_points nor kraken measures: of a species the game's own code flies, or of a Kraken already gone as it is weighed",
 		event: event.EventSpeciesKilled, owner: "killer_entity", worth: killed(killPlain)},
 	{name: "hit_points", doc: "a kill of a species a scenario declares, by the hit points its program gives it",
 		event: event.EventSpeciesKilled, owner: "killer_entity", worth: killed(killDeclared)},
@@ -742,30 +750,56 @@ const (
 	bountyFloor = 0.25
 )
 
-// kill is a kill's class and what one of it is worth: a declared species' the hit
-// points its program gives it, a Kraken's the ticks its hit points take at
-// krakenPar, so a fight at that pace earns its own time, by the share that pace
-// is of the one it died at, and any other's 1.
-func (m *mind) kill(payload any) (class int, worth float64) {
+// weight is a kill's class and what one of it is worth
+type weight struct {
+	class int
+	worth float64
+}
+
+// kill is how a kill weighs: as it was weighed when only predicted, or as it
+// stands (weight)
+func (m *mind) kill(payload any) weight {
 	p, ok := payload.(*event.SpeciesKilledPayload)
 	if !ok {
-		return killPlain, 1
+		return weight{killPlain, 1}
 	}
+	if w, ok := m.weighed[p.Entity]; ok {
+		return w
+	}
+	return m.weight(p)
+}
+
+// weigh keeps a predicted kill's weight for the event that proves it
+func (m *mind) weigh(p *event.SpeciesKilledPayload) {
+	if m.weighed == nil {
+		m.weighed = make(map[core.Entity]weight)
+	}
+	m.weighed[p.Entity] = m.weight(p)
+}
+
+// weight weighs a kill whose entity stands: a declared species' is the hit points
+// its program gives it, a Kraken's the ticks its hit points take at krakenPar, so
+// a fight at that pace earns its own time, by the share that pace is of the one
+// it died at, all of it where it fell before its clock ran, and any other's 1.
+func (m *mind) weight(p *event.SpeciesKilledPayload) weight {
 	if i := int(p.Species - component.SpeciesDataFirst); p.Species >= component.SpeciesDataFirst && i < len(m.ctx.World.Resources.Behaviors) {
-		return killDeclared, float64(m.ctx.World.Resources.Behaviors[i].HitPoints)
+		return weight{killDeclared, float64(m.ctx.World.Resources.Behaviors[i].HitPoints)}
 	}
-	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken && k.Time > 0 {
-		par := float64(k.MaxHitPoints) / krakenPar
-		return killKraken, float64(int64(par / m.ctx.World.TickInterval().Seconds() * min(max(par/k.Time, bountyFloor), 1)))
+	if k, ok := m.ctx.World.Components.Kraken.GetPtr(p.Entity); ok && p.Species == component.SpeciesKraken {
+		par, pace := float64(k.MaxHitPoints)/krakenPar, 1.0
+		if k.Time > 0 {
+			pace = min(max(par/k.Time, bountyFloor), 1)
+		}
+		return weight{killKraken, float64(int64(par / m.ctx.World.TickInterval().Seconds() * pace))}
 	}
-	return killPlain, 1
+	return weight{killPlain, 1}
 }
 
 // killed is the worth of a kill of class, nothing for one of another
 func killed(class int) func(*mind, any) float64 {
 	return func(m *mind, payload any) float64 {
-		if of, worth := m.kill(payload); of == class {
-			return worth
+		if w := m.kill(payload); w.class == class {
+			return w.worth
 		}
 		return 0
 	}
@@ -777,26 +811,56 @@ type paying struct {
 	weight float64
 }
 
-// scoring is what a declared score pays, in sources' order so a sum takes one
-// order every run, and its spelling, which a population is kept under
-func scoring(declared map[string]float64) (pays []paying, spelt string, err error) {
-	names := slices.Sorted(maps.Keys(declared))
-	for i, name := range names {
-		w := declared[name]
-		if !slices.ContainsFunc(sources[:], func(s source) bool { return s.name == name }) {
-			return nil, "", fmt.Errorf("%q is no source of the catalogue's", name)
+// scoring is what a declared score pays and its spelling, which a population is
+// kept under: each name a source of the catalogue's with what one pays, or an
+// event's with a table, the payload field that names its owner and what one
+// pays. The catalogue's come first, in its order, then the events by name, so a
+// sum takes one order every run.
+func scoring(declared map[string]any) (pays []paying, spelt string, err error) {
+	var events []paying
+	var names []string
+	weigh := func(name string, raw any) (float64, error) {
+		w, ok := floatValue(raw)
+		if !ok || w == 0 || w != w {
+			return 0, fmt.Errorf("%s = %v: a source pays a number other than zero", name, raw)
 		}
-		if w == 0 {
-			return nil, "", fmt.Errorf("%s = %v: a source pays a number other than zero", name, w)
+		names = append(names, name+"="+strconv.FormatFloat(w, 'g', -1, 64))
+		return w, nil
+	}
+	paid := make(map[string]float64, len(declared))
+	for _, name := range slices.Sorted(maps.Keys(declared)) {
+		owners, byEvent := declared[name].(map[string]any)
+		if !byEvent {
+			if !slices.ContainsFunc(sources[:], func(s source) bool { return s.name == name }) {
+				return nil, "", fmt.Errorf("%q is no source of the catalogue's", name)
+			}
+			if paid[name], err = weigh(name, declared[name]); err != nil {
+				return nil, "", err
+			}
+			continue
 		}
-		names[i] = name + "=" + strconv.FormatFloat(w, 'g', -1, 64)
+		et, ok := event.GetEventType(name)
+		if !ok || len(owners) == 0 {
+			return nil, "", fmt.Errorf("%q is no event with the field that names its owner: %s.<field>", name, name)
+		}
+		for _, field := range slices.Sorted(maps.Keys(owners)) {
+			if _, ok := std.ExtractIntField(event.NewPayloadStruct(et), field); !ok {
+				return nil, "", fmt.Errorf("event %s carries no number field %q to name its owner", name, field)
+			}
+			row := &source{name: name + "." + field, event: et, owner: field}
+			w, err := weigh(row.name, owners[field])
+			if err != nil {
+				return nil, "", err
+			}
+			events = append(events, paying{row, w})
+		}
 	}
 	for i := range sources {
-		if w, ok := declared[sources[i].name]; ok {
+		if w, ok := paid[sources[i].name]; ok {
 			pays = append(pays, paying{&sources[i], w})
 		}
 	}
-	return pays, strings.Join(names, " "), nil
+	return append(pays, events...), strings.Join(names, " "), nil
 }
 
 // Input is one name a network's inputs take and Output one thing it may ask for;

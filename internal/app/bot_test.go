@@ -448,9 +448,10 @@ func TestALearningRoundTheGameDoesNotEndIsClosedAtItsLimit(t *testing.T) {
 	bot.Learn(func() bool { return true }, []*bot.Learner{raid}, d)
 	const rounds = 3
 	played := uint64(0)
-	d.Round = func(n uint64, score float64) {
-		if score != float64(played) {
-			t.Errorf("round %d scored %g, want the %d columns of the ticks its game played", n, score, played)
+	d.Round = func(r bot.Round) {
+		if r.Score != float64(played) || r.Ended != bot.EndedAtLimit || r.Under != "raid" {
+			t.Errorf("round %d scored %g, %s under %q: want the %d columns of the ticks its game played, closed at its limit under raid",
+				r.N, r.Score, r.Ended, r.Under, played)
 		}
 	}
 	for d.Stats().Rounds < rounds {
@@ -597,9 +598,9 @@ func TestARunToldToFieldTellsEachRoundAndKeepsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	told := uint64(0)
-	st, err := RunBot(Config{Seed: fixtureSeed, Games: games, Field: true, Resources: opts, Round: func(n uint64, _ float64) {
-		if told++; n != told {
-			t.Errorf("round %d was told as round %d", told, n)
+	st, err := RunBot(Config{Seed: fixtureSeed, Games: games, Field: true, Resources: opts, Round: func(r bot.Round) {
+		if told++; r.N != told {
+			t.Errorf("round %d was told as round %d", told, r.N)
 		}
 	}}, Host{}, path)
 	if err != nil {
@@ -609,6 +610,93 @@ func TestARunToldToFieldTellsEachRoundAndKeepsNothing(t *testing.T) {
 	if st.Games != games || told != games*rounds || st.Rounds < told || len(st.Learn) != 0 || len(kept) != 0 {
 		t.Fatalf("%d games told %d of %d rounds, report learners %+v and kept %v: want the %d each game closed at its limit by the run's end, no round scored and no file",
 			st.Games, told, st.Rounds, st.Learn, kept, rounds)
+	}
+}
+
+// populations keeps what a test's bots learn where no directory is, as a page does
+type populations struct {
+	mu   sync.Mutex
+	docs map[string][]byte
+}
+
+func (p *populations) Names() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Sorted(maps.Keys(p.docs))
+}
+func (p *populations) Open(name string) bot.Store { return population{p, name} }
+func (p *populations) Remove(name string) error   { return population{p, name}.Store(nil) }
+
+type population struct {
+	of   *populations
+	name string
+}
+
+func (k population) Load() ([]byte, error) {
+	k.of.mu.Lock()
+	defer k.of.mu.Unlock()
+	return k.of.docs[k.name], nil
+}
+
+func (k population) Store(doc []byte) error {
+	k.of.mu.Lock()
+	defer k.of.mu.Unlock()
+	if k.of.docs[k.name] = doc; len(doc) == 0 {
+		delete(k.of.docs, k.name)
+	}
+	return nil
+}
+
+// TestABotLearnsInASessionOnlyItsCursorHolds: the one seat of a host nobody plays
+// is alone in its session, so its rounds are its own: its learners score them,
+// the host closing each at the graph's limit, and keep their populations as the
+// seat leaves. A seat beside its holder's cursor is not alone.
+func TestABotLearnsInASessionOnlyItsCursorHolds(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("cave scenario not present")
+	}
+	path := filepath.Join(t.TempDir(), "cave.toml")
+	if err := os.WriteFile(path, []byte(quitting(t, time.Second, time.Hour)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	kept := &populations{docs: map[string][]byte{}}
+	opts.Populations = kept
+	seatOf := func(holder *App) (seat *App) {
+		waitUntil(t, func() bool {
+			if s := seatRunOf(holder); s != nil {
+				seat = s.run
+			}
+			return seat != nil
+		}, "the bot to be seated")
+		return seat
+	}
+
+	host, _, gate := lobbyHost(t, Config{Mode: ModeServer, Seed: 0x6E05, Resources: opts, Membership: Membership{Bots: []string{path}}})
+	if err := <-gate; err != nil {
+		t.Fatal(err)
+	}
+	host.membership.ActivateNetworkSession()
+	host.ctx.TimeCtl.SetPaused(false)
+	host.scheduler.Prepare()
+	stop := tickInBackground(host)
+	seat := seatOf(host)
+	waitUntil(t, func() bool { return seat.Position().Run >= 2 }, "two of the seat's rounds to close at its limit")
+	if !seat.membership.Alone() {
+		t.Error("the one seat of a host nobody plays is not alone in its session")
+	}
+	stop()
+	host.membership.CloseSeats(false)
+	var doc struct{ Rounds int }
+	if err := json.Unmarshal(kept.docs["cave.cave.raid"], &doc); err != nil || doc.Rounds == 0 {
+		t.Fatalf("the seat kept %v, %d rounds, %v: want raid's population with the rounds it scored", kept.Names(), doc.Rounds, err)
+	}
+
+	holder, _ := driveBot(t, Config{Resources: opts, Membership: Membership{Bots: []string{path}}}, path, nil)
+	waitForCursors(t, holder, 2)
+	if beside := seatOf(holder); beside.membership.Alone() {
+		t.Error("a seat beside its holder's cursor is alone in its session")
 	}
 }
 
