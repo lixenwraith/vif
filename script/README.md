@@ -43,11 +43,3 @@ These print what they measured and are not part of `all`.
 that play a fixed host or guest against a person, or against each other headless;
 [Development](../doc/development.md#a-scripted-participant) has the commands.
 `go test ./internal/journal` compiles every `script/*.toml`.
-
-## install.sh
-
-`install.sh` is `make` with the one flag make cannot take: `-purge`, anywhere on
-the line, has an install goal first remove what an earlier install put in its
-config root, a player's bot files, keymap and settings with it
-([Filesystem §4](../doc/filesystem-layout.md#4-installation)). `-n` beside it
-prints what would run.
