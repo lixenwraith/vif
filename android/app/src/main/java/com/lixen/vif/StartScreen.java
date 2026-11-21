@@ -184,7 +184,7 @@ final class StartScreen extends FrameLayout {
         return text(getContext(), s, sp, color);
     }
 
-    /** A line of the start screen's text: Roboto at sp, in color. */
+    /** A line of the start screen's or the menu's text: Roboto at sp, in color. */
     static TextView text(Context c, String s, float sp, int color) {
         TextView t = new TextView(c);
         t.setText(s);
