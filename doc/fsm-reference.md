@@ -1047,7 +1047,7 @@ height = 2
 header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row its own starts from: swarm or quasar
-mass = 2.0                          # Soft collision, flocking, knockback; 0: the row's knockback only (optional)
+mass = 2.0                          # Soft collision, flocking, knockback, wind; 0: the row's knockback only (optional)
 drops = "raider"                    # Drop table its kills roll, the scenario's or a code species' (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)

@@ -2341,16 +2341,6 @@ host's included, where a storm circle's fires only while its state is flagged
 vocabulary and a `trigger = "armed"` on the mount, written to `Mount.Armed` each
 step as the circles write theirs.
 
-### Push a data species with the wind
-
-- Priority: P3
-- Affected files: `internal/system/environment.go` (`applyPlanarWind`)
-
-`applyPlanarWind` accelerates each mobile species by its profile mass, and a data
-species is none of them, so a wind leaves a raider where it stands though its
-prototype has a `mass`. The smallest fix ranges the `Behavior` store in the Shared
-pass with each prototype's mass from `Resources.Behaviors`, skipping a massless one.
-
 ### Let a player mechanic or a program fuse composites
 
 - Priority: P3

@@ -53,7 +53,7 @@ type BehaviorPrototype struct {
 	Attacks          [CombatAttackTypeCount]AttackRow // what each attack family does to it
 	Homing           physics.HomingProfile            // what its homing steers by
 	Restitution      float64                          // velocity it keeps on a wall or boundary bounce
-	Mass             float64                          // soft-collision mass; 0 takes no soft collision or flocking
+	Mass             float64                          // in soft collision, knockback and wind; 0 takes no soft collision, flocking or wind
 	Drops            string                           // the drop table its kills roll, by name; "" drops nothing
 	Contact          CursorDamage                     // what touching it costs a cursor
 	Lifetime         time.Duration                    // 0 = lives until killed or cancelled

@@ -670,7 +670,8 @@ smaller part of it.
   `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, with each key of the program's
-  `[prototype.physics]` replacing its value), soft-collision mass, the drop table
+  `[prototype.physics]` replacing its value), its mass in soft collision,
+  knockback and the wind, the drop table
   its kills roll (the scenario's or a code species',
   [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
   entrance (§4.4), its look and the pattern period. A mount of its own
