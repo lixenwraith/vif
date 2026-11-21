@@ -215,8 +215,8 @@ terminal module's `atlas` embed:
   window and Android draw cells with (`atlas.Hack()`), and as a web font for a
   browser (`atlas.HackWeb()`); linked only by the builds with a graphical host, so
   by no `vif_headless` build, no Linux or FreeBSD `vif_nogui` one and no Windows
-  one. `internal/asset`'s test holds
-  every rune the code and the shipped scenarios draw to it.
+  one. `internal/asset`'s test holds every rune the code and the shipped
+  scenarios draw to it.
 
 The embedded filesystems are narrowed with `fs.Sub`, so their runtime root is
 the category directory rather than `internal/asset/...`. Missing embedded

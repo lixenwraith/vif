@@ -27,7 +27,6 @@ page the browser plays in, the Go half of the Android view, and the font they dr
 cells in; vif owns the ECS, gameplay, input, compositor, scenarios, renderers and
 simulation libraries.
 
-
 ## Highlights
 
 - vi-style Normal, Insert, Visual, Search and Command modes as the controls:

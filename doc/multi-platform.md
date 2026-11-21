@@ -346,7 +346,6 @@ Roboto: the stylesheet takes a copy installed on the player's system, then
 holds with its licence, so no deployment fetches a font from elsewhere, and one
 that serves neither shows the system's sans-serif where Roboto is not installed.
 
-
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
 editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js`,
