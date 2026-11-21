@@ -220,9 +220,10 @@ func TestACutGutFadesAndFreesItsSlotUncounted(t *testing.T) {
 }
 
 // TestOnlyItsGutsWoundADevourer: its body is no target and no blast's, so it loses
-// what its guts lose, no more than each had, credited to the gut's attacker; a gut
-// cut on its last hit points kills it that tick, the gut ending once, and the kill
-// is the cutter's though another gut is nicked in that tick
+// what its guts lose, no more than each had, credited to the gut's attacker, a blast
+// on a gut naming its middle member struck; a gut cut on its last hit points kills
+// it that tick, the gut ending once, and the kill is the cutter's though another gut
+// is nicked in that tick
 func TestOnlyItsGutsWoundADevourer(t *testing.T) {
 	w, s, e := devourerFixture(t)
 	grown(w, s)
@@ -264,8 +265,8 @@ func TestOnlyItsGutsWoundADevourer(t *testing.T) {
 	g, _ := w.Components.Combat.GetPtr(gut)
 	lost := parameter.DevourerGutHP - g.HitPoints
 	stepDevourer(w, s, 1)
-	if lost <= 0 || body.HitPoints != parameter.DevourerInitialHP-lost || body.LastDamagedBy != cursor {
-		t.Fatalf("the gut lost %d, the body %d, credited to %d", lost, parameter.DevourerInitialHP-body.HitPoints, body.LastDamagedBy)
+	if lost <= 0 || body.HitPoints != parameter.DevourerInitialHP-lost || body.LastDamagedBy != cursor || g.HitEntity != hits[len(hits)/2] {
+		t.Fatalf("the gut lost %d at %d, the body %d, credited to %d", lost, g.HitEntity, parameter.DevourerInitialHP-body.HitPoints, body.LastDamagedBy)
 	}
 
 	body.HitPoints, g.HitPoints = g.HitPoints+100, -500

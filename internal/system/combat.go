@@ -500,7 +500,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				resolved = true
 
-				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+				targetCombatComp.RemainingHitFlash, targetCombatComp.HitEntity = parameter.CombatHitFlashDuration, hitEntity
 				spendDamageImmunity(targetCombatComp, attacker, weapon, parameter.CombatDamageImmunityDuration)
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = targetCombatComp.HitPoints == 0
@@ -673,15 +673,19 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			// Zero-damage area profile (shield); effects below still apply
 		} else {
 			validHitCount := 0
-			for _, hitEntity := range hits {
-				if hitEntity == targetEntity {
-					validHitCount++
-					continue
-				}
-				if isComposite {
-					if member, ok := s.world.Components.Member.GetPtr(hitEntity); ok && member.HeaderEntity == targetEntity {
-						validHitCount++
+			var struck core.Entity
+			for i, hitEntity := range hits {
+				if hitEntity != targetEntity {
+					if !isComposite {
+						continue
 					}
+					if member, ok := s.world.Components.Member.GetPtr(hitEntity); !ok || member.HeaderEntity != targetEntity {
+						continue
+					}
+				}
+				validHitCount++
+				if struck == 0 || i <= len(hits)/2 {
+					struck = hitEntity
 				}
 			}
 			damageValue := perHit * validHitCount
@@ -692,7 +696,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				dealt := min(targetCombatComp.HitPoints, damageValue)
 				targetCombatComp.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
-				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+				targetCombatComp.RemainingHitFlash, targetCombatComp.HitEntity = parameter.CombatHitFlashDuration, struck
 				spendDamageImmunity(targetCombatComp, attacker, weapon, parameter.CombatDamageImmunityDuration)
 				damageApplied = true
 				resolved = true

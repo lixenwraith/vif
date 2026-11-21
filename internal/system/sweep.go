@@ -94,8 +94,10 @@ func (f *footprint) stand(w *engine.World, e core.Entity, ox, oy int) {
 	positioned := len(f.spare)
 	f.spare = append(f.spare, f.idle...)
 	next := 0
+	// One probe of the map spares a probe a cell where no wall stands on it
+	walled := w.Positions.BlocksArea(vmath.Area{Width: f.gridW, Height: f.gridH}, 0)
 	for _, cell := range f.cells {
-		if w.Positions.Blocks(cell, 0) {
+		if walled && w.Positions.Blocks(cell, 0) {
 			w.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
 				X: cell.X, Y: cell.Y, Width: 1, Height: 1,
 			})

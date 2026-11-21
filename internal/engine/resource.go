@@ -70,6 +70,9 @@ type Resource struct {
 	// Tentacle samples the Kraken system built this tick, for its renderer
 	KrakenShape *KrakenShapeResource
 
+	// The Devourer's body as its system last built it, for its renderers at that frame
+	DevourerShape *component.DevourerShape
+
 	// The drift's layers as this tick left them, for the glyph spawner and renderer
 	Drift *DriftResource
 
