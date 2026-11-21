@@ -847,7 +847,8 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	alone := true
 	Learn(func() bool { return alone }, []*Learner{l}, d)
 	// A round is three ticks: the network steers in the first, between is told
-	// ahead of the second, and the game ends the third
+	// ahead of the second, whose genome mid is, and the game ends the third
+	var mid []float64
 	round := func(origin event.Origin, between func()) []float64 {
 		rec.dispatch = []event.GameEvent{{}, {}, {Type: event.EventGameResetRequest, Payload: &event.GameResetPayload{}, Origin: origin}}
 		for i := range 3 {
@@ -858,7 +859,7 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 				t.Fatal(err)
 			}
 			if i == 1 && between != nil {
-				alone = true
+				mid, alone = d.mind.nets[0].genes, true
 			}
 		}
 		return d.mind.nets[0].genes
@@ -872,8 +873,8 @@ func TestALearnerScoresTheRoundsItsBotPlayedOutAlone(t *testing.T) {
 	if round(event.OriginCommand, nil); scored() != 1 {
 		t.Fatalf("a round an operator ended left %d genomes scored, want it to score nothing", scored())
 	}
-	if round(event.OriginSystem, func() { alone = false }); scored() != 1 {
-		t.Fatalf("a round another shared a tick of left %d genomes scored, want it to score nothing though the bot ended it alone", scored())
+	if round(event.OriginSystem, func() { alone = false }); scored() != 1 || !slices.Equal(mid, written) {
+		t.Fatalf("a round another shared a tick of left %d genomes scored and played %v from that tick: want it to score nothing, though the bot ended it alone, and the genome fielded played", scored(), mid)
 	}
 	alone = false
 	if next := round(event.OriginSystem, nil); scored() != 1 || !slices.Equal(next, written) {

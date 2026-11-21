@@ -822,19 +822,19 @@ to 104, each closed at half an hour, 36,000 ticks.
 bot                    mean     median   rounds that reach the Kraken
 cave, no weight         159        146                              0
 seed                 27,614     33,174                             73
-cave                341,701    373,798                             97
+cave                326,973    373,818                             97
 ```
 
-`cave` closes 90 of the 100 rounds at the limit and shoots down 8.5 Krakens a
-round. A half-hour round pays by its Krakens, 375,000 for nine, 214,000 for
-eight and 132,000 for seven, and none has shot down ten: the model is near what
+`cave` closes 91 of the 100 rounds at the limit and shoots down 8.4 Krakens a
+round. A half-hour round pays by its Krakens, 374,000 for nine, 217,000 for
+eight and 130,000 for seven, and none has shot down ten: the model is near what
 the limit allows, and a bot document's `round_seconds` is its own to raise.
 
 In the embedded scenario: 100 rounds of half an hour, seeds 201 to 204.
 
 ```
 bot                            mean     median   Krakens met in most rounds
-default, as shipped         622,467    620,447   twelve, in 84 rounds
+default, as shipped         626,701    620,235   twelve, in 87 rounds
 default, a walk learned     718,430    721,430   fourteen, in 92 rounds
 ```
 
@@ -892,6 +892,10 @@ The learner's rules:
   eight rounds or more in three million ticks from `seed`'s weights.
 - Entry on a candidate's first round, with no second: fielded 48,109 against
   64,839 from `seed`'s weights.
+- A child's parents picked by trusted mean, as the archive ranks, in place of
+  the plain mean: on three seeds of nine million ticks from `seed`'s weights
+  fielded 113,788, 95,047 and 95,212 against 91,237, 133,803 and 73,308, and
+  the candidates' recent means moved both ways.
 - Eight places of probation in place of 24: fielded the same pair of members
   on four starts of five.
 - A step schedule, `AdaptiveStrength` between 0.03 and 0.2. It stood at 0.03

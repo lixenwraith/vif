@@ -1072,6 +1072,10 @@ Docs · Libraries · Branches.
   `actions` and ticks of several games move by one between runs: compare the
   files, and across a change of `version` or `scored_by` with those keys cut
   (`jq -S 'del(.version, .scored_by)'`).
+- A scoring rule that reads as a corner is one only once population bytes say
+  so. A Kraken shot down in the tick it rose was 27 of 670 kills in a run of 1.5
+  million ticks from `seed`'s weights, and paying it as a timed one moved every
+  population from its first. An arm and its control come from one binary.
 - A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
   script that puts each fix's lines back and runs the one test of its rule,
   which must fail. A mutation that deadlocks the games' order hangs where it

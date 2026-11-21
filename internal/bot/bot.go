@@ -449,9 +449,11 @@ func (d *Driver) pay(ev event.GameEvent) {
 // the game, or the run's games have ended. Credit left idle is capped at one
 // second's worth, so a quiet bot bursts no further.
 func (d *Driver) Step() (more bool, err error) {
-	// A round another cursor shared any tick of is no longer the bot's own
+	// A round another cursor shared any tick of is no longer the bot's own: from
+	// here it plays what its learners field
 	if d.own && !d.alone() {
 		d.own = false
+		d.wear()
 	}
 	if g := d.games; g != nil {
 		if d.stats.Ticks >= g.end.Load() {
@@ -605,11 +607,16 @@ func (d *Driver) End(tick uint64) {
 	}
 }
 
-// deal opens a round, the bot's own where it is alone as it opens, and hands each
-// learner's network the genome the round plays: in its own, the candidate it has
-// in flight until a round settles it
+// deal opens a round, the bot's own where it is alone as it opens
 func (d *Driver) deal() {
 	d.own = d.alone()
+	d.wear()
+}
+
+// wear hands each learner's network the genome the round plays: in a round of
+// the bot's own the candidate it has in flight until a round settles it, in any
+// other the member fielded
+func (d *Driver) wear() {
 	for i, l := range d.learners {
 		if l != nil {
 			d.mind.nets[i].wear(l.take(d.game, d.own))

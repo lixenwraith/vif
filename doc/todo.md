@@ -328,10 +328,10 @@ of Lixen's that bind, as they stood on 2026-11-20:
 - **Scenarios.** `td` and `armada` carry no bot of their own, so `-bot` there
   seats `default`. `armada`'s waits for its design. `td`'s has its towers to
   hold, and no kind of the catalogue sights a tower: a kind `tower` first.
-- **Two rules as built.** Once a ninth member is proved, the next newcomer
-  enters on one round whatever it scored. A child's parents are picked by plain
-  mean, where the archive ranks by trusted mean. Each is owed a read as an arm
-  before it is changed.
+- **An entry as built.** Once a ninth member is proved, the next newcomer
+  enters on one round whatever it scored. It is one place of probation a
+  proof, under what a run's fielded pair can show: owed a read as an arm by
+  who enters and who leaves, off the learner's own events, before it is changed.
 
 ### Close what learning leaves open outside a solo run
 

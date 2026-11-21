@@ -299,9 +299,9 @@ func botPlay(play paths.Play, g *bot.Graph) paths.Play {
 
 // learn has drivers, this run's own first, each play a game of g, and where g
 // learns, learn on from what this player's runs taught it, a population a network
-// in the user root: a round teaches where the run is alone from its start to its
-// end (Membership.Alone), and any other plays what is fielded. A graph that does
-// not learn only fields (field), as a run told to does (Config.Field).
+// where the run keeps them: a round teaches where the run is alone from its start
+// to its end (Membership.Alone), and any other plays what is fielded. A graph that
+// does not learn only fields (field), as a run told to does (Config.Field).
 func (a *App) learn(g *bot.Graph, drivers ...*bot.Driver) ([]*bot.Learner, error) {
 	drivers[0].Reset = a.newGame
 	if d := drivers[0]; g.Settings.Learn && a.cfg.Mode.Presents() {
