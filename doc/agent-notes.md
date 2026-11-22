@@ -1268,6 +1268,12 @@ Docs · Libraries · Branches.
   a frame does, or `KeepExact`'s rects pile up as bytes with no allocation behind
   them. A bare `engine.NewWorld` draws as an emulator in 256 colors, `ColorMode`'s
   zero value.
+- What a layer costs the terminal is its bytes, which no CPU bench shows: a scratch
+  test in `internal/app` hands each frame of an orchestrator holding that layer alone
+  to `terminal.NewWithBackend` over a backend that counts what it is written, waiting
+  for each write as `sandbox/termbench`'s sink does. The Devourer read 2.38 MB/s so,
+  99% of the game's output, while its renderer took 2% of a core. A layer's frames
+  without its `SetCoarseBg` are read under `go test -overlay` of a copy without it.
 - Navigation's cost in `cave` depends on how the ship is flown: one that keeps
   still keeps sight of the raiders and shows little of it. Measure as a player
   flies, headless under `:god` with auto-fire, the ship sweeping between the map's

@@ -26,6 +26,7 @@ type DevourerRenderer struct {
 	palette bool
 
 	shown, ahead devourerPicture          // what is drawn, and what is being painted
+	walk         int                      // the run of shown that ahead's fitting has reached
 	shape        *component.DevourerShape // the body being painted: the world's, or own
 	own          component.DevourerShape
 	field        devourerField
@@ -47,8 +48,12 @@ type devourerPicture struct {
 	shade   devourerShade
 	painted int
 	cells   []terminal.Cell
+	looks   []devourerLook // each cell's, in truecolor
 	runs    []devourerRun
 }
+
+// devourerLook is a fitted cell's background and glyph colors in CIELAB
+type devourerLook [2][3]float32
 
 // The lip and the gloss are tabled over the depth the lip reaches, and a gut's
 // tube over its radius and its segment's swell. A gut's centreline is stamped in
@@ -321,7 +326,8 @@ func (r *DevourerRenderer) begin(shade devourerShade) {
 		r.rows[i] = devourerRow{open: 0, shut: int32(w), from: int32(w), to: -1}
 	}
 	p := &r.ahead
-	p.shade, p.painted, p.cells, p.runs = shade, 0, slices.Grow(p.cells[:0], h*w), p.runs[:0]
+	p.shade, p.painted, p.cells, p.looks, p.runs = shade, 0, slices.Grow(p.cells[:0], h*w), p.looks[:0], p.runs[:0]
+	r.walk = 0
 }
 
 // paint takes ahead's painting n steps on. A body's shape is the world's where
@@ -566,7 +572,8 @@ func (r *DevourerRenderer) fitRow(p *devourerPicture, cy int) {
 }
 
 // fitRun fits the cells from through to-1 of the visible row cy that hold a
-// painted sample, each joining the run before it where it stands beside it alike
+// painted sample, each joining the run before it where it stands beside it alike.
+// A truecolor cell keeps the one shown there while its look stays near it.
 func (r *DevourerRenderer) fitRun(p *devourerPicture, cy, from, to int) {
 	shade := &p.shade
 	w := shade.maxX - shade.minX + 1
@@ -601,11 +608,59 @@ func (r *DevourerRenderer) fitRun(p *devourerPicture, cy, from, to int) {
 		run.n++
 		if r.palette {
 			p.cells = append(p.cells, devourerTier(px))
-		} else {
-			rn, fg, bg := ascimage.FitQuadrant(px)
-			p.cells = append(p.cells, terminal.Cell{Rune: rn, Fg: fg, Bg: bg})
+			continue
+		}
+		rn, fg, bg := ascimage.FitQuadrant(px)
+		cell := terminal.Cell{Rune: rn, Fg: fg, Bg: bg}
+		look := devourerLookOf(&cell)
+		if at, ok := r.drawn(run.x+run.n-1, run.y); ok && devourerNear(&cell, &r.shown.cells[at], &look, &r.shown.looks[at]) {
+			cell, look = r.shown.cells[at], r.shown.looks[at]
+		}
+		p.cells, p.looks = append(p.cells, cell), append(p.looks, look)
+	}
+}
+
+// drawn is where shown keeps the cell it draws at the map cell x, y. Rows are fitted
+// in order, so the walk through its runs only moves on.
+func (r *DevourerRenderer) drawn(x, y int32) (int32, bool) {
+	runs := r.shown.runs
+	for r.walk < len(runs) && (runs[r.walk].y < y || runs[r.walk].y == y && runs[r.walk].x+runs[r.walk].n <= x) {
+		r.walk++
+	}
+	if r.walk == len(runs) || runs[r.walk].y != y || runs[r.walk].x > x {
+		return 0, false
+	}
+	return runs[r.walk].at + x - runs[r.walk].x, true
+}
+
+func devourerLookOf(c *terminal.Cell) (look devourerLook) {
+	b := render.Lab(c.Bg)
+	look[0] = [3]float32{float32(b[0]), float32(b[1]), float32(b[2])}
+	if c.Rune != ' ' {
+		f := render.Lab(c.Fg)
+		look[1] = [3]float32{float32(f[0]), float32(f[1]), float32(f[2])}
+	}
+	return look
+}
+
+// devourerNear is whether two fitted cells show each quadrant within
+// visual.DevourerHold of each other; alike glyphs pair their colors as they are
+func devourerNear(a, b *terminal.Cell, la, lb *devourerLook) bool {
+	if a.Rune == b.Rune {
+		return devourerClose(&la[0], &lb[0]) && (a.Rune == ' ' || devourerClose(&la[1], &lb[1]))
+	}
+	qa, qb := slices.Index(ascimage.QuadrantChars[:], a.Rune), slices.Index(ascimage.QuadrantChars[:], b.Rune)
+	for q := range 4 {
+		if !devourerClose(&la[max(qa, 0)>>q&1], &lb[max(qb, 0)>>q&1]) {
+			return false
 		}
 	}
+	return true
+}
+
+func devourerClose(x, y *[3]float32) bool {
+	d0, d1, d2 := x[0]-y[0], x[1]-y[1], x[2]-y[2]
+	return d0*d0+d1*d1+d2*d2 < visual.DevourerHold*visual.DevourerHold
 }
 
 // devourerTier is the console cell whose tier stands nearest the samples' mean
