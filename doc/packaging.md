@@ -64,10 +64,10 @@ These hold regardless of which repository is targeted first.
   `notices` reads, so it travels beside `NOTICES` as `LICENSE.font`: `make
   release` copies it to `bin/` and `make install` stops without it, and the
   release workflow and Gradle copy it from the module they build with. The
-  page's and the Android app's own text is lixen.com's font, Hack Nerd Font,
-  under Hack's two licences and Nerd Fonts' OFL, whose texts lie beside its files
-  in `web/fonts/` and the APK's `assets/fonts/`, so the web archive and the APK
-  carry them. The About overlay points to `NOTICES`.
+  page's own text is lixen.com's Hack Proportional and the Android app's Hack
+  Nerd Font, both under Hack's two licences and Nerd Fonts' OFL, whose texts lie
+  beside their files in `web/fonts/` and the APK's `assets/fonts/`, so the web
+  archive and the APK carry them. The About overlay points to `NOTICES`.
 
 ## 2. Release surface
 
@@ -187,7 +187,7 @@ Lowest priority: Go game packages move slowly through NEW.
    Authors' BSD licence. So is the vendored cell font,
    `vendor/github.com/lixenwraith/terminal/atlas/hack.*`, under Hack's MIT and
    Bitstream Vera licences (its `atlas/LICENSE`), and so are the page's and the
-   app's font, `web/fonts/hack-*.woff2` and
+   app's font, `web/fonts/hack-proportional-*.woff2` and
    `android/app/src/main/assets/fonts/hack-400.ttf`, under those and Nerd Fonts'
    OFL (the `LICENSE` beside each).
 4. Lintian may flag the size of the config tree in `/etc/vif`; the override

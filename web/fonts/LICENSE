@@ -1,14 +1,18 @@
 The page's fonts and their licences.
 
-hack-400.woff2 and hack-700.woff2 are lixen.com's /fonts/ files, byte for
-byte: Hack Nerd Font Regular and Bold, from the Nerd Fonts v3.5.1 release
-(Hack 3.003). Hack is under the MIT License, and the Bitstream Vera glyphs it
-derives from under the Bitstream Vera License; Nerd Fonts' patched fonts are
+hack-proportional-400.woff2 and hack-proportional-700.woff2 are lixen.com's
+/fonts/ files, byte for byte: Hack Proportional, the site's text face. They are
+Hack Nerd Font Regular and Bold, from the Nerd Fonts v3.5.1 release (Hack
+3.003), with Hack's outlines unchanged, each glyph given a width fitted to its
+shape and the pairs kerned by the site's script/hack-proportional.py; as a
+modified font they carry a new name, which the Bitstream Vera License requires
+and the OFL allows. Hack is under the MIT License, and the Bitstream Vera glyphs
+it derives from under the Bitstream Vera License; Nerd Fonts' patched fonts are
 under the SIL Open Font License 1.1. All three texts are below. No Nerd Fonts
 icon glyph is kept, so the icon sets' own licences do not apply.
 
-Both are subsets of HackNerdFont-Regular.ttf and HackNerdFont-Bold.ttf, made
-with fonttools:
+The script respaces subsets of HackNerdFont-Regular.ttf and
+HackNerdFont-Bold.ttf, made with fonttools:
 
   pyftsubset FONT.ttf --flavor=woff2 --no-hinting --desubroutinize \
     --name-IDs=0,1,2,3,4,5,6,7,13,14 \
