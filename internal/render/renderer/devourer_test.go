@@ -2,8 +2,10 @@ package renderer
 
 import (
 	"math"
+	"slices"
 	"testing"
 
+	"github.com/lixenwraith/ascimage"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -62,5 +64,72 @@ func TestAHitLightsAGutWhereItLanded(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestACellHoldsTillItsLookMovesPastTheHold: from one frame of the body to the next a
+// truecolor cell keeps the cell drawn there while each of its quadrants stays within
+// DevourerHold of the new fit, and shows the new fit once one moves further
+func TestACellHoldsTillItsLookMovesPastTheHold(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 120, 44, engine.NewManualClock())
+	cfg := w.Resources.Config
+	cfg.ColorMode = terminal.ColorModeTrueColor
+	width, height := cfg.MapWidth, cfg.MapHeight
+	devourer := w.CreateEntity(core.DomainShared)
+	w.Components.Devourer.SetComponent(devourer, component.DevourerComponent{Elapsed: parameter.DevourerCreep, Seed: 7})
+	ctx := render.RenderContext{MapWidth: width, MapHeight: height, ViewportWidth: width, ViewportHeight: height}
+	r := NewDevourerRenderer(game)
+	was := render.NewRenderBuffer(terminal.ColorModeTrueColor, width, height)
+	r.Render(ctx, was)
+	d, _ := w.Components.Devourer.GetPtr(devourer)
+	d.Elapsed += parameter.DevourerFrame
+	is, fit := render.NewRenderBuffer(terminal.ColorModeTrueColor, width, height), render.NewRenderBuffer(terminal.ColorModeTrueColor, width, height)
+	r.Render(ctx, is)
+	NewDevourerRenderer(game).Render(ctx, fit)
+
+	// How far apart two cells look: the largest CIELAB distance between their quadrants
+	apart := func(a, b terminal.Cell) float64 {
+		qa, qb := slices.Index(ascimage.QuadrantChars[:], a.Rune), slices.Index(ascimage.QuadrantChars[:], b.Rune)
+		far := 0.0
+		for q := range 4 {
+			ca, cb := a.Bg, b.Bg
+			if qa>>q&1 == 1 {
+				ca = a.Fg
+			}
+			if qb>>q&1 == 1 {
+				cb = b.Fg
+			}
+			la, lb := render.Lab(ca), render.Lab(cb)
+			far = max(far, math.Sqrt((la[0]-lb[0])*(la[0]-lb[0])+(la[1]-lb[1])*(la[1]-lb[1])+(la[2]-lb[2])*(la[2]-lb[2])))
+		}
+		return far
+	}
+	held, moved := 0, 0
+	for y := range height {
+		for x := range width {
+			a, b, f := was.CellAt(x, y), is.CellAt(x, y), fit.CellAt(x, y)
+			if f.Rune == 0 {
+				continue
+			}
+			far := math.Inf(1)
+			if a.Rune != 0 {
+				far = apart(a, f)
+			}
+			switch {
+			case math.Abs(far-visual.DevourerHold) < 1e-3: // float32 and float64 may part at the hold
+			case far < visual.DevourerHold && b != a:
+				t.Fatalf("cell %d,%d, %.2f from its fit, shows %+v, not %+v held", x, y, far, b, a)
+			case far >= visual.DevourerHold && b != f:
+				t.Fatalf("cell %d,%d, %.2f from its fit, shows %+v, not the fit %+v", x, y, far, b, f)
+			case far < visual.DevourerHold && a != f:
+				held++
+			case far >= visual.DevourerHold:
+				moved++
+			}
+		}
+	}
+	if held == 0 || moved == 0 {
+		t.Fatalf("%d cells held and %d moved: a frame both holds and redraws", held, moved)
 	}
 }

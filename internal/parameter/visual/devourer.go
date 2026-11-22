@@ -18,6 +18,11 @@ const (
 	DevourerPulseRate = 0.7
 	DevourerPulse     = 0.06
 
+	// A truecolor cell is drawn anew only once a quadrant's color moves DevourerHold
+	// (CIELAB distance) from the cell drawn there: the folds' and the beat's smaller
+	// drifts each frame would otherwise rewrite most of the screen
+	DevourerHold = 3.0
+
 	// The texture's fields in cycles a column unit, warp, grain and veins, the vein's
 	// crest narrowed by DevourerVeinSharp
 	DevourerWarpScale  = 0.05

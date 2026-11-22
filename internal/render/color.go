@@ -26,11 +26,11 @@ func init() {
 var coarseIndex = sync.OnceValue(func() *[consoleLUTSize]uint8 {
 	var xterm [240][3]float64
 	for i := range xterm {
-		xterm[i] = labOf(visual.Palette256RGB(uint8(16 + i)))
+		xterm[i] = Lab(visual.Palette256RGB(uint8(16 + i)))
 	}
 	t := new([consoleLUTSize]uint8)
 	for key := range t {
-		l, bestD := labOf(lutColor(key)), float64(visual.CoarseBgPaletteDE)
+		l, bestD := Lab(lutColor(key)), float64(visual.CoarseBgPaletteDE)
 		for i := range xterm {
 			if d := labDistance(l, xterm[i]); d < bestD {
 				t[key], bestD = uint8(16+i), d

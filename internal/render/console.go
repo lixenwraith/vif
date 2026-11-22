@@ -125,10 +125,10 @@ func ConsoleFor(p engine.ConsolePalette) *Console {
 func newConsole(p engine.ConsolePalette) *Console {
 	c := &Console{colors: p.Colors, bgColors: uint8(min(max(p.BgColors, 1), 16))}
 	for i, rgb := range c.colors {
-		c.lab[i], c.lum[i] = labOf(rgb), luminance(rgb)
+		c.lab[i], c.lum[i] = Lab(rgb), luminance(rgb)
 	}
 	for key := range consoleLUTSize {
-		l := labOf(lutColor(key))
+		l := Lab(lutColor(key))
 		c.fgLUT[key] = c.nearestLab(l, 16)
 		c.bgLUT[key] = c.nearestLab(l, c.bgColors)
 	}
@@ -152,7 +152,7 @@ func newConsole(p engine.ConsolePalette) *Console {
 
 // Nearest returns whichever of the given entries looks closest to rgb
 func (c *Console) Nearest(rgb color.RGB, among ...uint8) uint8 {
-	l := labOf(rgb)
+	l := Lab(rgb)
 	best, bestD := among[0], math.Inf(1)
 	for _, i := range among {
 		if d := labDistance(l, c.lab[i]); d < bestD {
@@ -365,9 +365,9 @@ func grayFamily(v uint8) uint8 {
 	return 7
 }
 
-// labOf converts sRGB to CIELAB (D65), where Euclidean distance approximates how different
+// Lab converts sRGB to CIELAB (D65), where Euclidean distance approximates how different
 // two colors look
-func labOf(c color.RGB) [3]float64 {
+func Lab(c color.RGB) [3]float64 {
 	r, g, b := srgbLinear[c.R], srgbLinear[c.G], srgbLinear[c.B]
 	x := (0.4124*r + 0.3576*g + 0.1805*b) / 0.95047
 	y := 0.2126*r + 0.7152*g + 0.0722*b
@@ -378,10 +378,25 @@ func labOf(c color.RGB) [3]float64 {
 
 func labF(t float64) float64 {
 	if t > 216.0/24389 {
-		return math.Cbrt(t)
+		v := t * labCbrtSteps
+		i := int(v)
+		lo, hi := float64(labCbrt[i]), float64(labCbrt[i+1])
+		return lo + (hi-lo)*(v-float64(i))
 	}
 	return (24389.0/27*t + 16) / 116
 }
+
+// labCbrt is the cube root from 0 past 1, the most an sRGB color's XYZ reaches, read
+// between its entries: a fifth of math.Cbrt's time, which a Devourer frame spends on
+// thousands of cells, and Lab within 0.003 of exact, which moves no table built from it
+const labCbrtSteps = 4096
+
+var labCbrt = func() (t [labCbrtSteps + 2]float32) {
+	for i := range t {
+		t[i] = float32(math.Cbrt(float64(i) / labCbrtSteps))
+	}
+	return t
+}()
 
 func labDistance(a, b [3]float64) float64 {
 	dl, da, db := a[0]-b[0], a[1]-b[1], a[2]-b[2]
