@@ -17,28 +17,28 @@
     --button: #2563eb;
     --button-hover: #5f57f5;
     --danger: #f87171;
-    --ui: 'Hack Nerd Font', ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --ui: 'Hack Proportional', system-ui, sans-serif;
 }
 
-/* The site's font in its two files (fonts/LICENSE): /fonts/ on the page's site, else
-   fonts/ beside this file, never from elsewhere. As on the site, size-adjust draws it
-   at 90%, or monospace lines read oversized, and 500 falls to the 400 there is. */
+/* The site's text face in its two files (fonts/LICENSE): /fonts/ on the page's site,
+   else fonts/ beside this file, never from elsewhere. As on the site, size-adjust draws
+   it at 90%, and 500 falls to the 400 there is. */
 @font-face {
-    font-family: 'Hack Nerd Font';
+    font-family: 'Hack Proportional';
     font-style: normal;
     font-weight: 400;
     font-display: swap;
     size-adjust: 90%;
-    src: url('/fonts/hack-400.woff2') format('woff2'), url('fonts/hack-400.woff2') format('woff2');
+    src: url('/fonts/hack-proportional-400.woff2') format('woff2'), url('fonts/hack-proportional-400.woff2') format('woff2');
 }
 
 @font-face {
-    font-family: 'Hack Nerd Font';
+    font-family: 'Hack Proportional';
     font-style: normal;
     font-weight: 700;
     font-display: swap;
     size-adjust: 90%;
-    src: url('/fonts/hack-700.woff2') format('woff2'), url('fonts/hack-700.woff2') format('woff2');
+    src: url('/fonts/hack-proportional-700.woff2') format('woff2'), url('fonts/hack-proportional-700.woff2') format('woff2');
 }
 
 html, body {
