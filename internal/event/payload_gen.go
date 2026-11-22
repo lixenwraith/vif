@@ -1549,6 +1549,7 @@ var codecSwarmSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SwarmSpawnRe
 	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.Gateway), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 func (p *KrakenSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -2184,6 +2185,7 @@ func (p *GatewayHoldRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecGatewayHoldRequestPayload = structCodec{size: unsafe.Sizeof(GatewayHoldRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(GatewayHoldRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewayHoldRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 func (p *SquareSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

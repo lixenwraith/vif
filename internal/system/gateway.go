@@ -92,7 +92,9 @@ func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GatewayHoldRequestPayload); ok {
 			d := time.Duration(payload.DurationMs) * time.Millisecond
 			s.world.Components.Gateway.Each(func(_ core.Entity, gw *component.GatewayComponent) bool {
-				gw.Held = max(gw.Held, d)
+				if payload.AnchorEntity == 0 || gw.AnchorEntity == payload.AnchorEntity {
+					gw.Held = max(gw.Held, d)
+				}
 				return true
 			})
 		}
@@ -241,7 +243,7 @@ func (s *GatewaySystem) Update() {
 			spawnX := anchorPos.X + gw.OffsetX
 			spawnY := anchorPos.Y + gw.OffsetY
 
-			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
+			s.emitSpawnEvent(gwEntity, gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
 		}
 
 		activeCount++
@@ -253,7 +255,7 @@ func (s *GatewaySystem) Update() {
 
 // emitSpawnEvent routes to the appropriate species spawn request event
 // routeDistID enables per-route assignment from bandit pool
-func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
+func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
 	switch species {
 	case component.SpeciesEye:
 		// Sample GA if available
@@ -304,6 +306,7 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 			X:             x,
 			Y:             y,
 			TargetGroupID: groupID,
+			Gateway:       gateway,
 		})
 	}
 }

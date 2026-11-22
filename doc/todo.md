@@ -231,10 +231,24 @@ built to be play tested; its numbers and rules are what the play test settles.
   `internal/parameter/square.go`, `internal/component/square.go` (`SquareKinds`)
 
 To settle: the cells' hit points and the contact damage, each kind's duration and
-recharge, the gateways' pace; whether a line fires only as it forms or again while
-it holds; and whether one turn may align all three kinds at once, as the Lo Shu
-rows, each a turn of the others, allow by row turns alone, or the layout mixes them.
-Re-forming the alignment every 8 s lost no block in 200 s.
+cooldown, the gateways' pace; and whether one turn may align all three kinds at
+once, as the Lo Shu rows, each a turn of the others, allow by row turns alone, or
+the layout mixes them. The columns aligned once and left lost the square in 208 s
+of play, against 34 s untouched.
+
+### Give the square's shield a direction
+
+- Priority: P2
+- Affected files: `internal/system/square.go` (`shove`, `ward`),
+  `internal/component/square.go` (`SquareKinds`, `ShieldRadii`),
+  `internal/render/renderer/square.go` (`shield`)
+
+Attack and hold land on the gateways a line faces, but the shield still wards every
+block and pushes off all its ellipse covers, held to 1 s in every 2 so it is not the
+one kind worth aligning. It owes the same direction: block entry and knock back only
+in the slice of the ellipse the line faces. A slice test where the shield's push
+takes the whole circle closes it; what it means for the cursor shield, which shares
+the push, is for that session.
 
 ### Let a target group anchor more than eight
 
