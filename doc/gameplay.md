@@ -412,10 +412,10 @@ a blocked tracer drains to its stop point.
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; evolution picks which of the seven types in `parameter.EyeTypeTable` a gateway spawns. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
-| Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line that comes to hold three of a kind fires the kind's effect from `component.SquareKinds`, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
+| Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line holding three of a kind fires the kind's effect from `component.SquareKinds` each time its cooldown runs out, on the gateways it faces and their swarms or, for the shield, over the square, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
 | Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, lights where a hit lands, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; its body is no target, and loses what its guts lose, no more than each had, so ten guts cut kill it. Guts are too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
-| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` lasts, and disappears when its anchor is gone. |
+| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
@@ -783,22 +783,30 @@ defense, one of each along every row and column. The scenario captures 1-9 and h
 k and l: a digit selects its block for the pressing slot, h and l turn the block's
 row a place left and right, the last block round to the first (9 5 1 turned right
 is 1 9 5), and k and j its column up and down; the selection follows its block. A
-line that comes to hold three of a kind fires the kind once, if it is ready, and the
-kind recharges after its effect ends: attack strikes every swarm dead, a bolt flying
-from the line's middle block to each, then recharges for 8 s; hold stuns every swarm
-and holds every gateway's spawns for 5 s, recharging for 10; defense wards every
-cell and pushes off the swarms its shield, an ellipse a margin past the square's
-corners, covers, for 6 s, recharging for 10. A legend under the square counts each
-kind's seconds. Since a row turn keeps the row's kinds, and the square's rows are
-turns of one another, aligning one column by row turns aligns all three. Eight
-pylons on the corners and the edges' middles each carry a gateway of swarms homing
-on target group 1, each on an interval of its own, faster by a tenth every 20 s down
-to one in 3 s. The cell of each standing block nearest its middle holds the group's
-anchor, so a swarm wears a block down to its last cell; a group holds eight, so
-while all nine stand the middle block, which the others ring, holds none. A swarm's
-body costs each block cell it covers a hit point a damage window (the `contact`
-family). A block with no cell left falls, still turning and aligning; the game is
-lost with the last, and starts over four seconds later.
+line holding three of a kind fires the kind at once, and again each time its
+cooldown, 2 s from its last fire, runs out while the line holds. Attack and hold
+land on the gateways the line faces and the swarms they sent, a swarm keeping its
+gateway: the edges of the middle block, run on across the map, cut it in thirds,
+and a line faces the gateways in its own, the right column the three on the right,
+the middle row those at the left and right. Attack strikes those swarms dead, a red
+bolt flying to each and to each gateway from the line's block nearest it; hold
+stuns them and holds those gateways' spawns for 1 s, its bolts gold. Defense covers
+the whole square, warding every cell and pushing off the swarms its shield, an
+ellipse a margin past the square's corners, covers, for 1 s: left aligned, it holds
+half the time. A firing line's blocks flash in the kind's glow, and a legend under
+the square gives each kind its name, lit while a line holds it, and a meter that
+fills as its cooldown runs, in the glow while the effect holds. Since a row turn
+keeps the row's kinds, and the square's rows are turns of one another, aligning
+one column by row turns aligns all three. Eight pylons on the corners and the
+edges' middles each carry a gateway of swarms homing on target group 1, each on an
+interval of its own, faster by a tenth every 20 s down to one in 3 s. The cell of
+each standing block nearest its middle holds the group's anchor, so a swarm wears
+a block down to its last cell; a group holds eight, so while all nine stand the
+middle block, which the others ring, holds none. A swarm's body costs each block
+cell it covers a hit point a damage window (the `contact` family). A block with no
+cell left falls, still turning and aligning; the game is lost with the last, under
+a red strobe as long as main's, and starts over on "The square has fallen", the
+keys told 2 s in.
 
 ## 11. System inventory
 

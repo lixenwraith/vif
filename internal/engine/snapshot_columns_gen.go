@@ -3054,6 +3054,9 @@ func encodeColumnsSwarm(dst []byte, rows []StoreEntry[component.SwarmComponent])
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.ChargesCompleted)
 	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Gateway)
+	}
 	return dst
 }
 
@@ -3105,6 +3108,9 @@ func decodeColumnsSwarm(r *columnReader) []StoreEntry[component.SwarmComponent] 
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.ChargesCompleted, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Gateway, r)
 	}
 	return rows
 }
@@ -3689,7 +3695,7 @@ func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent
 	}
 	for i := range rows {
 		for j := range rows[i].Value.Effects {
-			dst = appendInt(dst, rows[i].Value.Effects[j].Recharge)
+			dst = appendInt(dst, rows[i].Value.Effects[j].Cooldown)
 		}
 	}
 	for i := range rows {
@@ -3739,7 +3745,7 @@ func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent
 	}
 	for i := range rows {
 		for j := range rows[i].Value.Effects {
-			readInt(&rows[i].Value.Effects[j].Recharge, r)
+			readInt(&rows[i].Value.Effects[j].Cooldown, r)
 		}
 	}
 	for i := range rows {

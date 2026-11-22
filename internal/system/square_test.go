@@ -3,12 +3,14 @@ package system
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // newSquare lays the Lo Shu square in the middle of an 80 by 40 world
@@ -114,36 +116,28 @@ func TestATurnTurnsTheSelectedBlocksLineAPlace(t *testing.T) {
 	}
 }
 
-// TestAnAlignmentFiresItsKindOnceUntilItRecharges: 1 turned right and 3 left stand
-// the kinds down the columns, each firing once: the strike and the stun land on a
-// swarm, the hold halts the gateways and the shield wards every cell and pushes the
-// swarm it covers. Turned away and back while they recharge, nothing fires.
-func TestAnAlignmentFiresItsKindOnceUntilItRecharges(t *testing.T) {
+// squareFired reads the kinds a step's events fired, in order
+func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
+	for _, ev := range events {
+		if p, ok := ev.Payload.(*event.SquareAlignedPayload); ok {
+			kinds = append(kinds, p.Kind)
+		}
+	}
+	return kinds
+}
+
+// TestALineFiresItsKindAgainEachCooldownWhileItHolds: 1 turned right and 3 left
+// stand the kinds down the columns, each firing at once and again as its cooldown
+// runs out, a turn away and back inside it firing nothing. The shield wards every
+// cell for its duration and pushes the swarm it covers only while it holds.
+func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 	w, s, sq := newSquare(t)
 	width, _ := sq.Size()
 	swarm := standSwarm(w, sq.X+width/2, sq.Y-2)
 	pressSquare(s, "1", "l", "3", "h")
-
-	events := w.Resources.Event.Queue.Consume()
-	var fired, landed []int
-	for _, ev := range events {
-		switch p := ev.Payload.(type) {
-		case *event.SquareAlignedPayload:
-			fired = append(fired, int(p.Kind))
-		case *event.CombatAttackAreaRequestPayload:
-			if p.TargetEntity == swarm {
-				landed = append(landed, int(p.AttackType))
-			}
-		}
-	}
-	if want := []int{int(component.SquareAttack), int(component.SquareDefense), int(component.SquareHold)}; !slices.Equal(fired, want) {
-		t.Fatalf("fired %v, want %v down the columns", fired, want)
-	}
-	if want := []int{int(component.CombatAttackStrike), int(component.CombatAttackHold)}; !slices.Equal(landed, want) {
-		t.Fatalf("landed %v on the swarm, want %v", landed, want)
-	}
-	if countEvents(events, event.EventGatewayHoldRequest) != 1 || countEvents(events, event.EventLightningSpawnRequest) != 1 {
-		t.Fatal("the hold halts no gateway or the strike draws no bolt")
+	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareHold}
+	if got := squareFired(w.Resources.Event.Queue.Consume()); !slices.Equal(got, down) {
+		t.Fatalf("fired %v, want %v down the columns", got, down)
 	}
 	for _, block := range sq.Places {
 		header, _ := w.Components.Header.GetPtr(block)
@@ -153,21 +147,152 @@ func TestAnAlignmentFiresItsKindOnceUntilItRecharges(t *testing.T) {
 			}
 		}
 	}
+	pressSquare(s, "l", "h")
+	if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {
+		t.Fatalf("%v fired again inside the cooldown", got)
+	}
 
-	pushed := false
-	for _, ev := range stepSquare(w, s) {
-		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && p.TargetEntity == swarm {
-			pushed = pushed || p.AttackType == component.CombatAttackShield
+	ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
+	var again [component.SquareKindCount]int
+	last, pushes := 0, 0
+	for _, spec := range component.SquareKinds {
+		last = max(last, ticks(spec.Cooldown))
+	}
+	for tick := 1; tick <= last; tick++ {
+		events := stepSquare(w, s)
+		for _, kind := range squareFired(events) {
+			if again[kind] == 0 {
+				again[kind] = tick
+			}
+		}
+		for _, ev := range events {
+			p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload)
+			if ok && p.TargetEntity == swarm && p.AttackType == component.CombatAttackShield && tick <= ticks(parameter.SquareShieldCooldown) {
+				pushes++
+			}
 		}
 	}
-	if !pushed {
-		t.Fatal("the shield does not push the swarm it covers")
+	for kind, spec := range component.SquareKinds {
+		if again[kind] != ticks(spec.Cooldown) {
+			t.Errorf("%s fired again at tick %d, want %d", spec.Name, again[kind], ticks(spec.Cooldown))
+		}
+	}
+	if pushes != ticks(parameter.SquareShieldDuration) {
+		t.Fatalf("the shield pushed %d ticks of its cooldown, want %d", pushes, ticks(parameter.SquareShieldDuration))
+	}
+}
+
+// TestALineFacesItsThirdOfTheMap: the edges of the middle block run on across the
+// map cut it in thirds, each line facing the gateways in its own: a side's row or
+// column the three along that side, the middle row and column the two at its ends
+func TestALineFacesItsThirdOfTheMap(t *testing.T) {
+	w, _, sq := newSquare(t)
+	right, bottom := w.Resources.Config.MapWidth-1, w.Resources.Config.MapHeight-1
+	width, height := sq.Size()
+	cx, cy := sq.X+width/2, sq.Y+height/2
+	for _, c := range []struct {
+		name  string
+		x, y  int
+		lines []int
+	}{
+		{"top left", 0, 0, []int{0, 3}}, {"top", cx, 0, []int{0, 4}}, {"top right", right, 0, []int{0, 5}},
+		{"right", right, cy, []int{1, 5}}, {"bottom right", right, bottom, []int{2, 5}},
+		{"bottom", cx, bottom, []int{2, 4}}, {"bottom left", 0, bottom, []int{2, 3}}, {"left", 0, cy, []int{1, 3}},
+	} {
+		var got []int
+		for l := range component.SquareLines {
+			if sq.Faces(l, c.x, c.y) {
+				got = append(got, l)
+			}
+		}
+		if !slices.Equal(got, c.lines) {
+			t.Errorf("the %s gateway is faced by lines %v, want %v", c.name, got, c.lines)
+		}
+	}
+}
+
+// TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent: gateways at the top left,
+// the top and the right each send a swarm, which keeps its gateway. With the kinds
+// down the columns, attack in the left column strikes the top left's swarm alone and
+// hold in the right column stuns the right's alone and holds that gateway alone, a
+// bolt in the kind's color flying to each gateway and swarm it lands on.
+func TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent(t *testing.T) {
+	w, s, sq := newSquare(t)
+	gateways := ready(NewGatewaySystem(w)).(*GatewaySystem)
+	swarms := ready(NewSwarmSystem(w)).(*SwarmSystem)
+	width, height := sq.Size()
+	var anchors [3]core.Entity
+	for i, at := range [3]vmath.Point{{X: 4, Y: 1}, {X: sq.X + width/2, Y: 1}, {X: w.Resources.Config.MapWidth - 4, Y: sq.Y + height/2}} {
+		anchors[i] = w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(anchors[i], component.PositionComponent{X: at.X, Y: at.Y})
+		gateways.HandleEvent(event.GameEvent{Type: event.EventGatewaySpawnRequest, Payload: &event.GatewaySpawnRequestPayload{
+			AnchorEntity: anchors[i], Species: component.SpeciesSwarm, GroupID: 1, BaseIntervalMs: 1,
+		}})
+	}
+	w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
+		engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
+	gateways.Update()
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		swarms.HandleEvent(ev)
+	}
+	var sent [3]core.Entity
+	w.Components.Swarm.Each(func(swarm core.Entity, sw *component.SwarmComponent) bool {
+		if g, ok := w.Components.Gateway.GetPtr(sw.Gateway); ok {
+			sent[slices.Index(anchors[:], g.AnchorEntity)] = swarm
+		}
+		return true
+	})
+	if slices.Contains(sent[:], 0) {
+		t.Fatalf("the gateways sent %v, want a swarm each that keeps its gateway", sent)
+	}
+	w.Resources.Event.Queue.Consume()
+
+	pressSquare(s, "1", "l", "3", "h")
+	events := slices.Clone(w.Resources.Event.Queue.Consume())
+	var struck, stunned, held []core.Entity
+	type bolt struct {
+		tint component.LightningColorType
+		x, y int
+	}
+	var bolts []bolt
+	for _, ev := range events {
+		switch p := ev.Payload.(type) {
+		case *event.CombatAttackAreaRequestPayload:
+			if p.AttackType == component.CombatAttackStrike {
+				struck = append(struck, p.TargetEntity)
+			} else if p.AttackType == component.CombatAttackHold {
+				stunned = append(stunned, p.TargetEntity)
+			}
+		case *event.GatewayHoldRequestPayload:
+			held = append(held, p.AnchorEntity)
+		case *event.LightningSpawnRequestPayload:
+			bolts = append(bolts, bolt{p.ColorType, p.TargetX, p.TargetY})
+		}
+	}
+	if !slices.Equal(struck, sent[:1]) || !slices.Equal(stunned, sent[2:]) || !slices.Equal(held, anchors[2:]) {
+		t.Fatalf("struck %v, stunned %v, held %v: want %v, %v and %v", struck, stunned, held, sent[:1], sent[2:], anchors[2:])
+	}
+	var want []bolt
+	for _, b := range []struct {
+		tint component.LightningColorType
+		e    core.Entity
+	}{{component.LightningRed, anchors[0]}, {component.LightningRed, sent[0]}, {component.LightningGold, anchors[2]}, {component.LightningGold, sent[2]}} {
+		at, _ := w.Positions.GetPosition(b.e)
+		want = append(want, bolt{b.tint, at.X, at.Y})
+	}
+	if !slices.Equal(bolts, want) {
+		t.Fatalf("bolts %v, want %v", bolts, want)
 	}
 
-	pressSquare(s, "l", "h")
-	if n := countEvents(w.Resources.Event.Queue.Consume(), event.EventSquareAligned); n != 0 {
-		t.Fatalf("%d kinds fired again while recharging", n)
+	for _, ev := range events {
+		gateways.HandleEvent(ev)
 	}
+	w.Components.Gateway.Each(func(_ core.Entity, g *component.GatewayComponent) bool {
+		if (g.Held > 0) != (g.AnchorEntity == anchors[2]) {
+			t.Fatalf("the gateway on %d holds for %v", g.AnchorEntity, g.Held)
+		}
+		return true
+	})
 }
 
 // TestAFallenBlockStillAlignsButHoldsNoAnchor: nine standing blocks fill a target

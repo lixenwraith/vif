@@ -212,7 +212,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	x, y, group, spawn := s.spawnAt(ev)
+	at, spawn := s.spawnAt(ev)
 	if !s.enabled {
 		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
@@ -220,7 +220,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 	if spawn {
-		s.spawnSwarm(x, y, group)
+		s.spawnSwarm(at)
 		return
 	}
 
@@ -339,23 +339,22 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
-// spawnAt reads a request for a swarm at a cell and the target group it homes on:
-// its own spawn request, or a land request naming it, which its carrier sent as it
-// ended and which homes on the cursors
-func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, uint8, bool) {
+// spawnAt reads a request for a swarm: its own spawn request, or a land request
+// naming it, which its carrier sent as it ended and which homes on the cursors
+func (s *SwarmSystem) spawnAt(ev event.GameEvent) (event.SwarmSpawnRequestPayload, bool) {
 	switch p := ev.Payload.(type) {
 	case *event.SwarmSpawnRequestPayload:
-		return p.X, p.Y, p.TargetGroupID, true
+		return *p, true
 	case *event.SpeciesLandRequestPayload:
-		return p.X, p.Y, 0, p.Species == component.SpeciesSwarm
+		return event.SwarmSpawnRequestPayload{X: p.X, Y: p.Y}, p.Species == component.SpeciesSwarm
 	}
-	return 0, 0, 0, false
+	return event.SwarmSpawnRequestPayload{}, false
 }
 
-// spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
-// the map, or on the nearest footprint free of walls a spawn is kept from
-func (s *SwarmSystem) spawnSwarm(targetX, targetY int, group uint8) {
-	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: targetX, Y: targetY}, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
+// spawnSwarm stands a swarm with its header at the asked cell, its footprint pulled
+// inside the map, or on the nearest footprint free of walls a spawn is kept from
+func (s *SwarmSystem) spawnSwarm(at event.SwarmSpawnRequestPayload) {
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: at.X, Y: at.Y}, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
@@ -368,9 +367,9 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int, group uint8) {
 
 	// createSwarmComposite publishes EventSpeciesCreated only after every
 	// component and member is installed.
-	header := s.createSwarmComposite(headerX, headerY)
-	if group != 0 {
-		s.world.Components.Target.SetComponent(header, component.TargetComponent{GroupID: group})
+	header := s.createSwarmComposite(headerX, headerY, at.Gateway)
+	if at.TargetGroupID != 0 {
+		s.world.Components.Target.SetComponent(header, component.TargetComponent{GroupID: at.TargetGroupID})
 	}
 	s.lifecycle.spawned.Add(1)
 }
@@ -392,7 +391,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 }
 
 // createSwarmComposite builds the 4×2 swarm entity structure
-func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
+func (s *SwarmSystem) createSwarmComposite(headerX, headerY int, gateway core.Entity) core.Entity {
 	topLeftX := headerX - parameter.SwarmHeaderOffsetX
 	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
@@ -405,7 +404,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
-	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{})
+	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{Gateway: gateway})
 
 	// Initialize kinetic with cell-centered position
 	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
