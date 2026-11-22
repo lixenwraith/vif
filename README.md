@@ -5,7 +5,7 @@
   <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.27.4-00ADD8?style=flat&logo=go" alt="Go"></a>
   <a href="https://opensource.org/licenses/BSD-3-Clause"><img src="https://img.shields.io/badge/License-BSD_3--Clause-blue.svg" alt="License"></a>
   <a href="doc/kubernetes-fleet.md"><img src="https://img.shields.io/badge/k8s%20|%20k3s-1.29+-326ce5?style=flat&logo=kubernetes" alt="Kubernetes"></a>
-  <img src="https://img.shields.io/badge/Platform-Linux%20|%20FreeBSD%20|%20Android%20|%20WASM-lightgrey" alt="Platforms">
+  <img src="https://img.shields.io/badge/Platform-Linux%20|%20FreeBSD%20|%20Android%20|%20WASM-lightgray" alt="Platforms">
   <a href="doc/"><img src="https://img.shields.io/badge/Docs-Available-green.svg" alt="Documentation"></a>
 </p>
 

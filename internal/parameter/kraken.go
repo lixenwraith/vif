@@ -54,8 +54,8 @@ const (
 	KrakenBurnCap      = 4
 )
 
-// A tentacle samples a disc every KrakenSampleStep from its root, and within each
-// Reach of the root, where it is thickest, only every Stride-th: discs that wide
+// A tentacle samples a disk every KrakenSampleStep from its root, and within each
+// Reach of the root, where it is thickest, only every Stride-th: disks that wide
 // overlap so far that the ones skipped cover next to nothing of their own.
 const KrakenSampleStep = 0.35
 

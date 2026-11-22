@@ -75,7 +75,7 @@ type selectiveState struct {
 
 	// Guest: the newest manifest that has arrived and not been answered, the
 	// baselines whose repairs are outstanding, the repair arriving in chunks and
-	// those that have arrived, and the cannot-serve answers a relaying neighbour
+	// those that have arrived, and the cannot-serve answers a relaying neighbor
 	// returned instead of one.
 	manifests [][]byte
 	shards    link.SnapshotAssembly
@@ -111,7 +111,7 @@ type selectiveState struct {
 
 	// source is the participant this receiver's manifests arrive from, which is
 	// where its answers go. It is the authority on a direct link and the relaying
-	// neighbour otherwise — a receiver answers whoever asked it, and the protocol
+	// neighbor otherwise — a receiver answers whoever asked it, and the protocol
 	// stays honest about not knowing the topology.
 	source uint32
 }
@@ -965,7 +965,7 @@ func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 }
 
 // selectiveSource is the participant a receiver answers: the peer its manifests
-// arrive from, which is the authority or the neighbour relaying for it.
+// arrive from, which is the authority or the neighbor relaying for it.
 func (c *Corrections) selectiveSource() uint32 {
 	c.selectiveMu.Lock()
 	defer c.selectiveMu.Unlock()

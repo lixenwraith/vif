@@ -357,7 +357,7 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 		{"partition disagrees with its section", func(s *snapshot.CorrectionShardSet) {
 			s.Shards[0].Pages++
 		}, "partitions into"},
-		{"unsummarised section", func(s *snapshot.CorrectionShardSet) { s.Shards[0].Section = "w.nowhere" }, "does not summarise"},
+		{"unsummarized section", func(s *snapshot.CorrectionShardSet) { s.Shards[0].Section = "w.nowhere" }, "does not summarize"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			set := cloneShardSet(t, good)
@@ -802,7 +802,7 @@ func raiseStorm(t *testing.T, a *App) {
 	a.Settle()
 }
 
-// stormPeak memoises the high-water walk. Four cost gates read the same curve and
+// stormPeak memoizes the high-water walk. Four cost gates read the same curve and
 // each walk is 600 ticks of a full world for one number.
 var stormPeak struct {
 	once  sync.Once

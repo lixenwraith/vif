@@ -80,12 +80,12 @@ func NewStormSystem(world *engine.World) engine.System {
 	for i := range circleVariants {
 		s.graphs[i] = newCircleGraph(s, &circleVariants[i])
 	}
-	nameStates(world, component.SpeciesStorm, s.graphs[0]) // every colour's states are named alike
+	nameStates(world, component.SpeciesStorm, s.graphs[0]) // every color's states are named alike
 
 	return s
 }
 
-// circleVariant is one circle colour's attack cycle: a circle waits out its
+// circleVariant is one circle color's attack cycle: a circle waits out its
 // cooldown, then attacks once it is convex, and the row times both and names what
 // the attack runs
 type circleVariant struct {
@@ -146,7 +146,7 @@ func circleHeld(c *circleCtx) bool { return !c.hasCursor || c.stunned }
 
 func circleConvex(c *circleCtx) bool { return !concave(c.circle) }
 
-// newCircleGraph builds one colour's machine: a timed cooldown that ends in the
+// newCircleGraph builds one color's machine: a timed cooldown that ends in the
 // attack once the circle is convex, and the attack, which re-enters the cooldown
 // with the repeat duration. The spawn enters the cooldown with the initial one.
 func newCircleGraph(s *StormSystem, v *circleVariant) *machine.Graph[component.StormCircleState, *circleCtx] {
@@ -374,7 +374,7 @@ func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 }
 
 // spawnAt reads a request for a storm at a cell: its own spawn request, at the map's
-// centre, or a land request naming it
+// center, or a land request naming it
 func (s *StormSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
 	if ev.Type == event.EventStormSpawnRequest {
 		return s.world.Resources.Config.MapWidth / 2, s.world.Resources.Config.MapHeight / 2, true
@@ -499,7 +499,7 @@ func (s *StormSystem) spawnStorm(centerX, centerY int) {
 	s.lifecycle.spawned.Add(1)
 }
 
-// findCirclePosition finds the centre nearest the target, the target first, whose
+// findCirclePosition finds the center nearest the target, the target first, whose
 // elliptical footprint lies inside the map clear of walls a spawn is kept from
 func (s *StormSystem) findCirclePosition(targetX, targetY int) (int, int, bool) {
 	center, found := s.world.Positions.SpiralSearch(vmath.Point{X: targetX, Y: targetY}, 0, s.isCirclePositionValid)
@@ -598,7 +598,7 @@ func (s *StormSystem) createCircleHeader(
 		HeaderEntity: parentEntity,
 	})
 
-	// The machine starts in the colour's first cooldown once the circle is built
+	// The machine starts in the color's first cooldown once the circle is built
 	circleComp, _ := s.world.Components.StormCircle.GetPtr(circleEntity)
 	s.ctx = circleCtx{entity: circleEntity, circle: circleComp}
 	s.graphs[index].Start(&circleComp.Machine, &s.ctx, component.StormCircleCooldown, circleVariants[index].initial)

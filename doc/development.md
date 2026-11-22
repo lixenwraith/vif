@@ -60,7 +60,7 @@ make dev       # generated code + race-enabled debug build
   and, on Linux and FreeBSD, the desktop window `-g` opens. Where purego, which the
   window links, does not build (Termux), `release`, `nolog` and `gui` stop before
   compiling and name `make cli` and `TAGS=vif_nogui`. It writes `bin/NOTICES`
-  (`notices`) and copies the cell font's licence, the terminal module's
+  (`notices`) and copies the cell font's license, the terminal module's
   `atlas/LICENSE`, to `bin/LICENSE.font`. Only `dev`, `test` and `verify`
   regenerate: the binary targets build the committed generated files, as a
   packager does.
@@ -101,13 +101,13 @@ make dev       # generated code + race-enabled debug build
   publishes it.
 - `release-readme`: print the README of one release archive (`RELEASE_TARGET`,
   `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`.
-- `notices`: write `bin/NOTICES` (`NOTICES`): the licences of Go and of every module
+- `notices`: write `bin/NOTICES` (`NOTICES`): the licenses of Go and of every module
   the build links, the host's release or the one `GOOS`, `GOARCH` and `TAGS` name,
   from the module cache or `vendor/`; `NOTICES_OF=android` is the Android
   library's. `release` runs it, `wasm` writes the page's beside `vif.wasm`, and
   `install` stops without the file.
 - `install`: install the binary, manual, desktop entry, icons, shell completion,
-  licences and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who
+  licenses and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who
   cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles
   nothing: `make release install` builds first.
 - `uninstall`: remove what `install` put under `PREFIX`, keeping the config root.
@@ -251,7 +251,7 @@ and the audio buffer; a flag on the command line wins
 
 | Flag | Purpose |
 |---|---|
-| `-color auto\|256\|true` | Colour depth. `auto` (the default) detects the terminal; `256` draws for a text console's sixteen colours; `true` forces truecolor. |
+| `-color auto\|256\|true` | Color depth. `auto` (the default) detects the terminal; `256` draws for a text console's sixteen colors; `true` forces truecolor. |
 | `-g`, `-gui[=false]` | Open the game in a desktop window (Xlib, EGL and GLES 2 loaded at run time; Linux and FreeBSD) instead of the terminal. The default of a `vif-gui` build or with `vif.toml`'s `[presentation] window = true`, which `-g=false` turns off; a `vif_nogui` build refuses it. |
 | `-cli` | Play in the terminal whatever `vif.toml` or a `vif-gui` build says; wins over `-g`. |
 | `-maximized[=false]`, `-fullscreen[=false]` | The state the desktop window opens in, asked of the window manager (`_NET_WM_STATE`); `vif.toml`'s `[presentation] maximized` and `fullscreen` set the default, and a terminal run ignores both. |
@@ -483,7 +483,7 @@ example above holds at most four guests but plays as soon as one arrives. An
 interactive `-host` plays from its first tick and opens its port once the clock
 runs. Only a driven host (`-script`, or a `-headless`/`-watch` bot) that names
 `-players` waits in its lobby for that whole party before releasing tick zero
-(`lobbyQuorum`, `internal/app/internal/membership/session.go`). A dialling host is
+(`lobbyQuorum`, `internal/app/internal/membership/session.go`). A dialing host is
 admitted at most `parameter.NetworkAdmitBurst` times per `NetworkAdmitWindow`,
 because the admission that follows a handshake reads and sends a whole world and a
 peer cycling through it would otherwise spend one connect per capture. A run's own
@@ -536,7 +536,7 @@ responsiveness and rendering.
 `jseq`, but `-r` passes one path, so positional paths after it are not a
 multi-file form. A replay takes seed, config, content, timing and geometry from its
 anchor (`ConfigFromAnchor`); the viewer's flags supply only the `-config-dir` root
-the anchor's scenario resolves in, audio, colour and `-mw` (`internal/app/play.go`).
+the anchor's scenario resolves in, audio, color and `-mw` (`internal/app/play.go`).
 Logging and `-dev` apply as usual; `-j` does not journal a replay. `-headless -r`
 replays flat out without presenting and fails on the first digest it does not
 reproduce.

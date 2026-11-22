@@ -78,7 +78,7 @@ mount = "${mount}"
 [macros.Ship.body.states.Hold]
 on_update = [{ action = "Freeze" }]
 transitions = [
-    { trigger = "Tick", target = "Aim", fallback = "hold", guard = "Signalled", guard_args = { name = "dive" } },
+    { trigger = "Tick", target = "Aim", fallback = "hold", guard = "Signaled", guard_args = { name = "dive" } },
     { trigger = "Tick", target = "Aim", fallback = "hold", guard = "Chance", guard_args = { mean_ms = "${hold_ms}" } },
 ]
 
@@ -315,7 +315,7 @@ on_update = [{ action = "Orbit", payload = { to = "stored", radius = "${radius}"
 transitions = [{ trigger = "Timeout", target = [{ state = "Peel", guard = "Chance", guard_args = { percent = 34 } }, "Climb"] }]
 
 # Cells index the palette as the ranks' do, the bomber's 3 its bay. Squadrons fly in
-# colours the ranks do not: amber wasps, silver raptors, steel-blue bombers.
+# colors the ranks do not: amber wasps, silver raptors, steel-blue bombers.
 
 # The wasp: a small, quick fighter flying in lines of six, its gun slow
 [behaviors.wasp]

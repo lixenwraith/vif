@@ -22,7 +22,7 @@ func TestFingerprintIsStableAcrossProcesses(t *testing.T) {
 		}
 	}
 
-	// A second process is the real test: map ordering is randomised per process,
+	// A second process is the real test: map ordering is randomized per process,
 	// so a repeat inside this one would agree with itself regardless.
 	out, err := exec.Command("go", "run", "./testdata/fingerprint").CombinedOutput()
 	if err != nil {

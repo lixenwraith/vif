@@ -1,6 +1,6 @@
 # The skull: its teeth chattering. One of the cracked cave's third-rank raiders:
 # RaiderRank3 in ../../macros.toml gives its stats and cycle and the cave its
-# colours.
+# colors.
 macro = "RaiderRank3"
 theme = "Cracked"
 width = 5

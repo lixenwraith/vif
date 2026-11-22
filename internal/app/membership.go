@@ -258,7 +258,7 @@ func (a *App) seatJournalLeft(s *seatRun) {
 }
 
 // reportSeatJournal tells this run's player how a seat's journal start or stop went.
-// It runs on the seat's goroutine, or the holder's for a start a stop cancelled; the
+// It runs on the seat's goroutine, or the holder's for a start a stop canceled; the
 // status line and the log take either.
 func (a *App) reportSeatJournal(slot int, start bool, path string, err error) {
 	switch {
@@ -353,7 +353,7 @@ func newHostingApp(cfg runConfig) (*App, error) {
 // newJoiningApp builds the App on a dial of its session: the one its wiring carries
 // from a :join or a redial, or one made now.
 func newJoiningApp(cfg runConfig) (*App, error) {
-	d := cfg.wiring.dialled
+	d := cfg.wiring.dialed
 	if d == nil {
 		var err error
 		if d, err = membership.DialJoin(cfg.Membership, cfg.wiring.membership, cfg); err != nil {
@@ -377,7 +377,7 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 
 	// Bound before the reply that declares it (internal/converge/reach.go), only
 	// where authorship can move and this run's player lets it move here: the session
-	// shares what is declared with every player. A browser is never dialled. A guest
+	// shares what is declared with every player. A browser is never dialed. A guest
 	// that joined through a relay could not reach the host, so it is a leaf unless
 	// -listen names an address the session can reach it at.
 	var listener net.Listener
@@ -393,7 +393,7 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 		// no port, so it dials no peer and declares no door a session could move to.
 		cfg.wiring.networkConfig = link.DefaultConfig()
 	} else {
-		// On this run's gate, whichever run dialled: a :join or a redial hands its dial
+		// On this run's gate, whichever run dialed: a :join or a redial hands its dial
 		// to the run built on it, whose reach is the one that holds the roster's keys.
 		cfg.wiring.networkConfig.ConnectPeer = network.PeerDialer(membership.IdentityFromAnchor(offer.Anchor),
 			gate, cfg.wiring.networkConfig.ConnectTimeout)

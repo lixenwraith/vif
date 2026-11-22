@@ -7,7 +7,7 @@ import (
 )
 
 // cells returns the columns' occupied extents, in placement order, so an
-// overlap or a gutter that eats its neighbour shows up as a failing bound.
+// overlap or a gutter that eats its neighbor shows up as a failing bound.
 func extents(c colLayout) [][2]int {
 	out := [][2]int{{c.pinX, 2}}
 	if c.srcW > 0 {

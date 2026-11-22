@@ -153,7 +153,7 @@ type ParticipantJoinedPayload struct {
 
 // ParticipantDepartedPayload names the roster slot a departed participant held. It
 // is the crossing that makes a departure shared state: a link disconnect is observed
-// only by a direct neighbour and at a moment of that neighbour's own choosing, so the
+// only by a direct neighbor and at a moment of that neighbor's own choosing, so the
 // removal has to travel as an artifact with an apply tick, like any other outcome
 // every instance must reach together.
 type ParticipantDepartedPayload struct {
@@ -381,7 +381,7 @@ type SplashTimerCancelPayload struct {
 }
 
 // SplashTextPayload writes text at its origin cell, the top left of its first glyph,
-// in place of the text standing there; empty text clears it. A zero colour is the
+// in place of the text standing there; empty text clears it. A zero color is the
 // splash white, and a duration past zero ends the text on its own.
 type SplashTextPayload struct {
 	Text     string               `toml:"text"`
@@ -420,7 +420,7 @@ type GlyphClearPayload struct {
 }
 
 // GlyphCell is one glyph as a yank reads it and a put lays it: its cell, rune,
-// colour and level
+// color and level
 type GlyphCell struct {
 	X     int                  `toml:"x"`
 	Y     int                  `toml:"y"`
@@ -429,7 +429,7 @@ type GlyphCell struct {
 	Level component.GlyphLevel `toml:"level"`
 }
 
-// Drawable reports a cell whose rune, colour and level a glyph can hold
+// Drawable reports a cell whose rune, color and level a glyph can hold
 func (c *GlyphCell) Drawable() bool {
 	return component.GlyphRune(c.Rune) && c.Type >= 0 && int(c.Type) < len(component.GlyphTypeNames) &&
 		c.Level >= 0 && int(c.Level) < len(component.GlyphLevelNames)
@@ -842,7 +842,7 @@ type ParticleSpawnPayload struct {
 	X             int                        `toml:"x"`
 	Y             int                        `toml:"y"`
 	Char          rune                       `toml:"char"`
-	Level         component.GlyphLevel       `toml:"level"`           // Dust lifetime and colour; falling behaviors ignore it
+	Level         component.GlyphLevel       `toml:"level"`           // Dust lifetime and color; falling behaviors ignore it
 	SkipStartCell bool                       `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
 }
 
@@ -1135,7 +1135,7 @@ func (p *BehaviorSpawnRequestPayload) Cell(width, height int) (int, int) {
 }
 
 // MapAnchor is the point of the map a cell counts from: a corner, the middle of an
-// edge or the centre, the top left where none is named. Its values are a 3x3 grid in
+// edge or the center, the top left where none is named. Its values are a 3x3 grid in
 // reading order, which Cell reads an axis at a time.
 type MapAnchor uint8
 
@@ -1224,7 +1224,7 @@ func alongEdge(v, inset, n int) int {
 	return lo + (v%span+span)%span
 }
 
-// BehaviorCancelRequestPayload names the program cancelled; empty names every program
+// BehaviorCancelRequestPayload names the program canceled; empty names every program
 type BehaviorCancelRequestPayload struct {
 	Program string `toml:"program"`
 }
@@ -1264,7 +1264,7 @@ type WindStartPayload struct {
 
 // DriftStartPayload sets loose glyphs drifting along Direction (radians, as for
 // wind) at Speed cells/second, each level at its own parallax fraction and rows
-// scaled for the cell aspect. DurationMs 0 drifts until cancelled. Scenery makes
+// scaled for the cell aspect. DurationMs 0 drifts until canceled. Scenery makes
 // the text placed while it drifts scenery (ProtectScenery) for life. EaseMs eases
 // each layer from how it drifts now, at rest when no drift runs, at once when 0.
 type DriftStartPayload struct {
@@ -1511,7 +1511,7 @@ type MarkerSpawnRequestPayload struct {
 
 // --- Button ---
 
-// ButtonSpawnRequestPayload names a button's key, one printable character, its colour
+// ButtonSpawnRequestPayload names a button's key, one printable character, its color
 // and the sound bank name it plays
 type ButtonSpawnRequestPayload struct {
 	Key   string    `toml:"key"`
@@ -1706,7 +1706,7 @@ type CavePacePayload struct {
 }
 
 // CaveOpenPayload widens the cave from the first column past the map's right edge,
-// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (no rock at
+// over Ramp columns (the cave's own ramp when 0), to Gap open rows centered (no rock at
 // all when 0), and holds it open; EventCaveOpened follows once the opening fills the
 // map. A cave opens once.
 type CaveOpenPayload struct {
@@ -1834,7 +1834,7 @@ type GatewayDespawnedPayload struct {
 
 // --- Square ---
 
-// SquareSpawnRequestPayload lays a magic square centred on a cell: Layout names the
+// SquareSpawnRequestPayload lays a magic square centered on a cell: Layout names the
 // digit of each place row by row, Groups the digits of each kind in SquareKind
 // order. A zero block size or hit points takes the default.
 type SquareSpawnRequestPayload struct {

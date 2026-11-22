@@ -1,6 +1,6 @@
 # The wraith: a crowned spirit whose face shifts as it drifts. One of the cracked
 # cave's fourth-rank raiders: RaiderRank4 in ../../macros.toml gives its stats and
-# cycle and the cave its colours.
+# cycle and the cave its colors.
 macro = "RaiderRank4"
 theme = "Cracked"
 width = 5

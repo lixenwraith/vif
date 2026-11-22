@@ -11,5 +11,5 @@ const (
 	TeleportRecede  = 1.0 - TeleportHoldEnd
 )
 
-// LandingBlinkStep is how long the landing marker holds each colour of its cycle
+// LandingBlinkStep is how long the landing marker holds each color of its cycle
 const LandingBlinkStep = 100 * time.Millisecond

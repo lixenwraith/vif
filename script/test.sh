@@ -52,7 +52,7 @@ own_ports() {
 }
 
 # pty_ok reports whether this machine has a script(1) that can give vif a terminal.
-# The two flavours take their arguments in opposite orders; a machine with neither
+# The two flavors take their arguments in opposite orders; a machine with neither
 # is missing the harness rather than the game, so its checks skip.
 pty_ok() {
 	script -qec true /dev/null >/dev/null 2>&1 && return 0

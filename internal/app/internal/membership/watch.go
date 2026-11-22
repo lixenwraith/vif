@@ -357,7 +357,7 @@ func (m *Membership) awaitHead(port *link.FeedPort, signals <-chan os.Signal) ([
 		case <-timeout.C:
 			return nil, fmt.Errorf("spectate: the session sent no world within %s", parameter.FeedHeadTimeout)
 		case <-signals:
-			return nil, ErrSessionSignalled
+			return nil, ErrSessionSignaled
 		case ev := <-m.run.LobbyEvents():
 			if m.run.LobbyEventCancels(ev) {
 				return nil, ErrSessionCanceled

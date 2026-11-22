@@ -22,7 +22,7 @@ const SnapshotChunkBody = MaxPayloadSize - SnapshotChunkHeader
 // holds — MaxMapCells walled, which is more than any scenario builds — measures
 // 1.1 MiB here, so this keeps four times that as headroom for a world that grows.
 //
-// The defence is snapshotReserve below: a receiver allocates for the bytes that
+// The defense is snapshotReserve below: a receiver allocates for the bytes that
 // have arrived rather than for the bytes a sender says are coming, so the memory
 // one peer can make a receiver hold is bounded by what that peer actually sends.
 const MaxSnapshotBytes = 4 << 20
@@ -121,7 +121,7 @@ func (s *SnapshotAssembly) Add(frame []byte) (done bool, err error) {
 //
 // The first return is what a relay forwards on. It is the same termination argument
 // the artifact flood uses: a node forwards only what it admitted, a second copy
-// arriving by another path is recognised and neither taken nor forwarded again, so
+// arriving by another path is recognized and neither taken nor forwarded again, so
 // each node handles each chunk exactly once whatever the topology.
 func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err error) {
 	if len(frame) < SnapshotChunkHeader {

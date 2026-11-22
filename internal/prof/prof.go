@@ -124,7 +124,7 @@ func (s Span) End() {
 		t.region.End()
 		t.region = nil
 	}
-	if t.leaf && labelling.Load() {
+	if t.leaf && labeling.Load() {
 		pprof.SetGoroutineLabels(context.Background())
 	}
 }
@@ -204,7 +204,7 @@ func (p *Profiler) Timer(kind Kind, name string) *Timer {
 // On reports whether timed calls are measured: profiling, or a capture that
 // labels them with the module that ran
 func (p *Profiler) On() bool {
-	return p != nil && (p.on.Load() || labelling.Load() || trace.IsEnabled())
+	return p != nil && (p.on.Load() || labeling.Load() || trace.IsEnabled())
 }
 
 // Profiling reports whether windows are being published
@@ -215,7 +215,7 @@ func (p *Profiler) Begin(t *Timer) Span {
 	if t == nil || !p.On() {
 		return Span{}
 	}
-	if t.leaf && labelling.Load() {
+	if t.leaf && labeling.Load() {
 		pprof.SetGoroutineLabels(t.labels)
 	}
 	if trace.IsEnabled() {

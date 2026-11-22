@@ -31,7 +31,7 @@ author may replace that progression entirely with external TOML configuration.
 ## 2. Cursor and player state
 
 The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
-boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
+boot state requests a cursor (the campaign, `blank` and `td` at the map center,
 `recall` below its buttons, `armada` on the bottom row but one), and a joining
 participant's lands where that request placed its own; `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
@@ -90,7 +90,7 @@ A correct character:
 - adds one heat, or two if boost was already active before the key;
 - changes energy according to the glyph color and current heat;
 - increments correct-input and streak metrics;
-- blinks the energy meter in the glyph's colour, removes the glyph, and moves the
+- blinks the energy meter in the glyph's color, removes the glyph, and moves the
   cursor one cell right when the map edge permits.
 
 A typing error, including a key on a cell with no glyph or only scenery, flashes the
@@ -116,10 +116,10 @@ player's and unprotected (`Position.EditableGlyphAt`).
 
 - **Retype.** `r` and `~` retype a row's glyphs as the text a request names
   (`EventGlyphReplaceRequest`), a space leaving its cell as it is.
-- **Yank and put.** A yank reads each glyph's rune, colour and level, and a put
+- **Yank and put.** A yank reads each glyph's rune, color and level, and a put
   lays them as they were (`EventGlyphPutRequest`) in each cell that holds no
   typeable glyph, wall or rock. A put glyph is an ordinary one: typing it scores
-  as its colour and level do, so a put can copy text worth energy; no default
+  as its color and level do, so a put can copy text worth energy; no default
   key puts ([Input §3](input-and-modes.md#3-normal-mode-grammar)).
 - **Undo.** A change taken back is the same requests the other way: a delete
   undone is a put of what it took, a put undone a delete of what it laid, a
@@ -135,7 +135,7 @@ its block; a block no slot holds is passed over, and drifting glyphs enter line 
 line. It spawns only blue and green: each block takes the
 type and level (dark, normal, bright) least represented on the map, ties drawn at
 random. Red comes from decay, and gold marks gold members. A glyph's energy
-depends on its colour and the typist's heat; its level sets its brightness, its
+depends on its color and the typist's heat; its level sets its brightness, its
 drift layer (§9) and its dust lifetime.
 
 Spawn pacing adapts to screen occupancy: sparse maps receive text faster while dense
@@ -275,7 +275,7 @@ still varies by attacker through combat/species profiles.
 Each participant has at most one personal nugget, which only its own cursor
 collects or jumps to. When absent, `NuggetSystem` attempts a random free-cell
 spawn away from that cursor after the one-second spawn interval. A beacon
-periodically converges materialize beams on it, in the nugget's colour and
+periodically converges materialize beams on it, in the nugget's color and
 shorter than a spawn's.
 
 A nugget is collected by exact cursor overlap or by entering the active
@@ -338,7 +338,7 @@ where it is.
 | Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
 Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray,
-tracer. A scenario adds kinds of its own, each a rune with its colour and its
+tracer. A scenario adds kinds of its own, each a rune with its color and its
 shield's and a reward, one charge of a weapon or an amount of heat or energy, and
 tables naming them ([FSM reference: Loot](fsm-reference.md#loot)). The exact tier
 rates are gameplay balance data in `internal/profile/loot.go`; documentation does
@@ -349,7 +349,7 @@ A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above unless `still` keeps it at its cell;
 `return_ms` brings one collected back to its cell that long after, a countdown in
-its colour standing by the cell meanwhile, so a cursor still on it collects it
+its color standing by the cell meanwhile, so a cursor still on it collects it
 again. No species drops the gun; the campaign's tower victory drops one at the
 tower. Like any FSM entry action, the drop does not replay on an instance a
 correction moves past the state raising it.
@@ -375,10 +375,10 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Gun | Innate. One tracer from the cursor per cardinal of its aim, all four unless the scenario's `EventGunAimRequest` narrows it; direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. A scenario can set an upgrade path instead (`EventGunAimRequest`'s `path`): each level names the lanes, up to three, along each cardinal, a gun of n charges fires level n, and it holds a charge per level. |
+| Gun | Innate. One tracer from the cursor per cardinal of its aim, all four unless the scenario's `EventGunAimRequest` narrows it; direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the center back; a gun drop adds a charge. A scenario can set an upgrade path instead (`EventGunAimRequest`'s `path`): each level names the lanes, up to three, along each cardinal, a gun of n charges fires level n, and it holds a charge per level. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
-| Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
+| Disruptor | Stun pulse centered on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
 | Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage; at the cap it streams single bullets between waves. |
 | Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges fire longer and hit harder, and at the cap the ray stays lit for as long as main fire is held. |
 
@@ -430,7 +430,7 @@ A killed species leaves a visual of its body where it stood, on each player's ow
 screen. A swarm, a quasar, a snake's head and a data species scatter: their glyphs
 fly out from the body's middle and fade, under whatever else stands there. An eye
 and a drain flash. A body whose time ran out (a swarm's charges or lifetime, a
-data species' lifetime) fades out, a cancelled one leaves nothing, and a cell an
+data species' lifetime) fades out, a canceled one leaves nothing, and a cell an
 attack takes off a pylon, a tower, a storm circle or a snake's body fades out
 where it stood. As the last cell of a pylon, a tower or a storm circle falls, its
 shell bursts: shards fly out from the outline its glow stood on. A killed Kraken
@@ -462,7 +462,7 @@ uses either flow fields toward a target or precomputed multi-route graphs
 each column its ceiling and floor rows from the seed in integer arithmetic, so every
 instance and platform lays the same rock: walls of at least `min_wall` rows under
 `detail` rows of rough rock, never fewer than `min_gap` open rows, closing in over
-`ramp` columns from a centred mouth, or from `mouth` columns of open map, no rock at
+`ramp` columns from a centered mouth, or from `mouth` columns of open map, no rock at
 all, when set. A snaking cave's gap wanders up to `max_gap`, its channel at most
 `swing` rows off the middle with knots every `wavelength` columns.
 A jagged cave, one with `octaves` set, snakes a band of `max_gap` rows, or all the
@@ -477,7 +477,7 @@ columns wide or less stands. The rock is a field of ceiling and floor rows per
 column, not wall entities, which every wall query reads. It draws in `visual`, or
 in the stone art preset `art` names (`none` for bare stone, `strata`, `cracked`,
 `moss`, `crystal`, `masonry`); the `cave` scenario picks one per cave by its seed,
-with `EmitEvent`'s `pick`. A cell's glyph and colours follow from the preset, the
+with `EmitEvent`'s `pick`. A cell's glyph and colors follow from the preset, the
 seed, its profile column and row, and how deep it lies from the nearest opening on
 which side, so the stone moves with the rock and reads on a text console. The cave
 scrolls at `speed` columns a second, at most the soft cap `CaveMaxSpeed`, as an
@@ -508,7 +508,7 @@ The pace changes by event, each at once or easing linearly over `ease_ms`.
 `EventCaveStop` brings the scroll to rest and leaves the rock where it stands, and
 `EventCavePace` sets a new `speed`, resuming a halted cave. `EventCaveOpen` widens
 the cave from the first column past the right edge, so no rock in view changes,
-over `ramp` columns, the cave's own when 0, to `gap` open rows centred, at most all
+over `ramp` columns, the cave's own when 0, to `gap` open rows centered, at most all
 the walls leave, or to no rock at all when 0, and holds it open from there; a cave
 opens once.
 `EventCaveOpened` announces the opening filling the map, the cue a boss encounter
@@ -654,13 +654,13 @@ Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
 `dummy`, the Target Dummy, is a range for trying weapons alone or together at any
 charge, for one player on a map of at least 120 by 40. The cursor starts at the
-centre with no weapon, so nothing fires before a pickup, auto-fire or not, and every
+center with no weapon, so nothing fires before a pickup, auto-fire or not, and every
 loot kind lies still to its left, `H L M P` over `E B R T`, 12 columns and 13 rows
 apart: walked over, each gives its charge, heat or energy and lies back on its cell
 three seconds later under a countdown, so the cursor has time to step off, and one
 stood on gives again. The `T` gives the gun a charge, and `:w` sets any weapon's
 charges, the gun's 0 included. The dummy, a pylon of one hit point a member that
-drops nothing, stands 20 columns right of the centre, out of reach of the cursor's
+drops nothing, stands 20 columns right of the center, out of reach of the cursor's
 shield at the start. Behind it a green `+` and a red `-` pad, each a framed sign,
 add or take a hit point, from 1 to 999, while the cursor stands on one, and again
 every three seconds under a countdown below the pad; the status bar reads the count,
@@ -668,7 +668,7 @@ and a standing dummy takes it at once, whole again. A dummy shot down, the statu
 bar saying so, rises on its spot once the cursor has stood there and walked back out
 of its shield's reach of the dummy, beyond 16 columns or 8 rows, since one risen
 around the cursor would burn its heat or drain its shield. Whenever the cursor's
-energy is 0, an energy drop homes on it from the dummy's centre. Drains, nuggets,
+energy is 0, an energy drop homes on it from the dummy's center. Drains, nuggets,
 gold, the fuse and music are off, and `:n` lays the range again.
 
 The `cave` scenario's cave (§9) scrolls left past the cursor at twenty columns a
@@ -726,7 +726,7 @@ rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white ha
 in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith, demon),
 orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx)
 and orchid constructs among the crystals (drone, shard; saucer, trooper; jelly,
-squid; djinn, robot), each one colour on a console. A raider lives until killed, and
+squid; djinn, robot), each one color on a console. A raider lives until killed, and
 the rock pushes it as it pushes the cursor. Every type rolls the scenario's raider
 drop table, so one a player shoots down rolls it for every player where it
 fell, each tier on its own: heat at 1%, a `U`, its own loot kind, at 50%, and energy
@@ -753,7 +753,7 @@ of one row laid from the map's middle column (`EventMapLayRequest`): two of dart
 lancers over them from the third wave and wardens over those from the fifth. A ship
 holds its slot until a roll sends it down, one in 28 seconds for a dart, whatever
 the tick (`Chance { mean_ms }`), or a salvo does, one to three darts and from the
-third wave a lancer signalled every four seconds; it marks the cell its target
+third wave a lancer signaled every four seconds; it marks the cell its target
 stands on with the charge line and the landing marker, dives there and flies back to
 its post (`FindLanding { to = "post" }`), so a slot shot empty stays empty. A rank
 up has more hit points (4, 10, 24), a costlier touch and a slower dive on a longer

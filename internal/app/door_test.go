@@ -257,7 +257,7 @@ func TestARestartKeepsThePassphraseItsPlayerTyped(t *testing.T) {
 	ex(guest, "join "+host.HostAddr()+" "+doorPhrase)
 	waitUntil(t, func() bool { return guest.restart.Load() != nil }, "the join admitted; status "+guest.Context().GetStatusMessage())
 	joined := guest.restart.Load()
-	defer joined.Dialled.Abandon(errors.New("the test is over"))
+	defer joined.Dialed.Abandon(errors.New("the test is over"))
 	if next, _ := line.restarted(joined); next.Membership.Passphrase != doorPhrase {
 		t.Fatalf("the run that joined shows %q at its next dial; want the phrase its player typed", next.Membership.Passphrase)
 	}

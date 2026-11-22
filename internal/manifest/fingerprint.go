@@ -23,7 +23,7 @@ import (
 // is newer, and nothing should try to order two of them.
 var Fingerprint = sync.OnceValue(computeFingerprint)
 
-// computeFingerprint is Fingerprint without the memoisation, so a test can watch
+// computeFingerprint is Fingerprint without the memoization, so a test can watch
 // it react to a changed definition list.
 func computeFingerprint() uint64 {
 	h := vmath.FNVOffset64
@@ -45,7 +45,7 @@ func computeFingerprint() uint64 {
 	}
 	// Order is part of the identity: ActiveSystems() preserves it, and construction
 	// order decides which system observes which within one tick. A slice rather
-	// than a map, because Go randomises map iteration and a fingerprint that
+	// than a map, because Go randomizes map iteration and a fingerprint that
 	// changed every process start would refuse every session.
 	for _, set := range []struct {
 		label   string

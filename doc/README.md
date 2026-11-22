@@ -57,7 +57,7 @@ Focused references:
 
 - [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
-- [Bots: Catalogue](bots.md#catalogue) lists what a bot graph targets and what
+- [Bots: Catalog](bots.md#catalog) lists what a bot graph targets and what
   its networks read and ask for, rendered from the code's tables.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the prioritized running work list for every area.
@@ -103,7 +103,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | the audio module's `bank/*.toml` ([`lixenwraith/audio/bank`](https://github.com/lixenwraith/audio/tree/main/bank)) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
-| Bot targets, a network's inputs and outputs, a score's sources | the tables in `internal/bot/catalogue.go` | `bot.Catalogue` for `-schema`, the Catalogue section of `doc/bots.md` |
+| Bot targets, a network's inputs and outputs, a score's sources | the tables in `internal/bot/catalog.go` | `bot.Catalog` for `-schema`, the Catalog section of `doc/bots.md` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |
@@ -111,7 +111,7 @@ changing a subsystem, update the source that actually owns its shape.
 Run `make generate` after changing a manifest or generator input,
 `VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated` after changing a flag or
 the manual's prose, and `VIF_WRITE_GENERATED=1 go test ./internal/bot -run
-Reference` after changing a row of the bot catalogue.
+Reference` after changing a row of the bot catalog.
 Do not edit a generated file, or that section, by hand.
 
 ## Accuracy conventions

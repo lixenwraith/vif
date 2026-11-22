@@ -134,7 +134,7 @@ func TestAreaRandomPointSingleCellPreservesRNG(t *testing.T) {
 }
 
 // TestAVolumeOneLayerDeepIsItsFlatMap: on one layer a cell, an area and a body of
-// the volume are the flat map's: the same centre and cell-of, the same cells
+// the volume are the flat map's: the same center and cell-of, the same cells
 // held, the same draws from one stream, the same fit and cover.
 func TestAVolumeOneLayerDeepIsItsFlatMap(t *testing.T) {
 	rng, twin := NewFastRand(0x3d), NewFastRand(0x3d)
@@ -143,7 +143,7 @@ func TestAVolumeOneLayerDeepIsItsFlatMap(t *testing.T) {
 		twin.SetState(rng.State())
 		px, py := p.Center()
 		if c := p.Layer(z).Center(); c != (Vec3{px, py, float64(z) + CellCenter}) || PointAt3(c) != p.Layer(z) || p.Layer(z).Flat() != p {
-			t.Fatalf("cell %v on layer %d centres on %v", p, z, c)
+			t.Fatalf("cell %v on layer %d centers on %v", p, z, c)
 		}
 		a := Area{X: p.X, Y: p.Y, Width: 1 + rng.Intn(6), Height: 1 + rng.Intn(6)}
 		b := a.Layer(z)
@@ -190,7 +190,7 @@ func TestABoxHoldsEachOfItsCellsOnce(t *testing.T) {
 		}
 	}
 	if c := b.Center(); c != (Point3{X: 7, Y: -8, Z: 4}) {
-		t.Fatalf("box %+v centres on %v", b, c)
+		t.Fatalf("box %+v centers on %v", b, c)
 	}
 	for range 2000 {
 		if p := b.RandomPoint(rng); !b.ContainsPoint(p) {

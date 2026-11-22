@@ -22,7 +22,7 @@ import (
 // PlayJournal replays a recorded run on the terminal; several paths reassemble a
 // rotated set. The anchor decides everything simulated; viewer supplies what is the
 // watcher's: where the scenario it names is found, as the run's -config-dir did,
-// the speakers, colour and music recording, and what its start changed (Notice).
+// the speakers, color and music recording, and what its start changed (Notice).
 func PlayJournal(viewer Config, paths ...string) error {
 	set, cfg, err := loadJournal(viewer, paths)
 	if err != nil {
@@ -630,8 +630,8 @@ func (p *player) frame() {
 }
 
 // viewAxis places the viewer's view on one axis as the game would at its size: a
-// map the view holds is centred and does not scroll; a larger one is shown from the
-// recorded view's centre, moved by pan and stopped at the map's edges. The pan kept
+// map the view holds is centered and does not scroll; a larger one is shown from the
+// recorded view's center, moved by pan and stopped at the map's edges. The pan kept
 // is what the edges allowed, so a key back the other way moves the view at once.
 func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) {
 	if mapSize <= size {

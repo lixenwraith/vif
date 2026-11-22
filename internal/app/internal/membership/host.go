@@ -340,12 +340,12 @@ func (m *Membership) hostingNotice(bound string) string {
 	return "Hosting on " + bound + "; " + m.oneSeat() + ", so others can only spectate"
 }
 
-// BotError is why AddBot refuses whatever it is asked: a join being dialled, a run
+// BotError is why AddBot refuses whatever it is asked: a join being dialed, a run
 // that spectates or a scenario seating one player, which the menu's rows say too
 func (c Control) BotError() error {
 	switch {
-	case c.m.dialling.Load():
-		return errors.New("a join is already being dialled")
+	case c.m.dialing.Load():
+		return errors.New("a join is already being dialed")
 	case c.m.world.Watches():
 		return errors.New("a run that spectates holds no place a bot could play from")
 	}
@@ -551,8 +551,8 @@ func (m *Membership) joinErrorLocked() error {
 	if why := sessionRoles[m.sessionRoleLocked()].join; why != "" {
 		return errors.New(why)
 	}
-	if m.dialling.Load() {
-		return errors.New("a join is already being dialled")
+	if m.dialing.Load() {
+		return errors.New("a join is already being dialed")
 	}
 	return nil
 }
@@ -586,8 +586,8 @@ func (m *Membership) joinSessionLocked(target string, players, bots int, scenari
 	if err != nil {
 		return err
 	}
-	if !m.dialling.CompareAndSwap(false, true) {
-		return errors.New("a join is already being dialled")
+	if !m.dialing.CompareAndSwap(false, true) {
+		return errors.New("a join is already being dialed")
 	}
 	// Progress rather than a notice: a site answers once its session's pod is up.
 	if site.Scheme == link.SchemeSite {
@@ -597,7 +597,7 @@ func (m *Membership) joinSessionLocked(target string, players, bots int, scenari
 	}
 	m.log.Info("session", "msg", "join requested", "target", target, "watch", watch != nil)
 	core.Go(func() {
-		defer m.dialling.Store(false)
+		defer m.dialing.Store(false)
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
 			var fingerprint string
@@ -617,13 +617,13 @@ func (m *Membership) joinSessionLocked(target string, players, bots int, scenari
 		if err == nil {
 			d, err = DialJoin(next, wire, base)
 		}
-		ask.Join, ask.Dialled = door, d
+		ask.Join, ask.Dialed = door, d
 		switch {
 		case err != nil:
 			m.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			m.ctx.SetStatusMessage(failed+err.Error(), parameter.StatusAlert)
 		case !m.run.ReplaceWith(&ask):
-			d.Abandon(errors.New("the run that dialled is being replaced"))
+			d.Abandon(errors.New("the run that dialed is being replaced"))
 		}
 	})
 	return nil
@@ -649,8 +649,8 @@ func (m *Membership) hostErrorLocked() error {
 	if !config.SocketNetwork {
 		return config.ErrBrowserHosting
 	}
-	if m.dialling.Load() {
-		return errors.New("host: a join is already being dialled")
+	if m.dialing.Load() {
+		return errors.New("host: a join is already being dialed")
 	}
 	// A session this run opened without a door holds only its bots: :host opens
 	// that one to others rather than a second.
@@ -902,8 +902,8 @@ func (m *Membership) leaveErrorLocked() error {
 		return errors.New(why)
 	}
 	switch {
-	case m.dialling.Load():
-		return errors.New("a join is already being dialled")
+	case m.dialing.Load():
+		return errors.New("a join is already being dialed")
 	case m.leaving.Load():
 		return errors.New("this run is already leaving its session")
 	case m.dismissed.Load() || m.run.Replacing():
@@ -1175,7 +1175,7 @@ func (m *Membership) sessionSummaryLocked() string {
 	peers := m.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := m.world.LocalParticipant()
 	// A guest that took the term over hosts at the address it declared, which its
-	// session dials, not the one it dialled. A harness binds no address, so the word
+	// session dials, not the one it dialed. A harness binds no address, so the word
 	// stands alone rather than trailing a blank.
 	where, addr := "hosting", cmp.Or(m.cfg.HostAddress, m.reach.DeclaredAddr())
 	if m.sessionRoleLocked().joined() {

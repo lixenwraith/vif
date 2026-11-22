@@ -554,7 +554,7 @@ func (s *NavigationSystem) Update() {
 		}
 
 		// The body as it is, from its header: a wider or taller one flies no
-		// straighter, and a centred box is not where the body stands
+		// straighter, and a centered box is not where the body stands
 		foot := bodyOf(navComp)
 		if bodyHasLineOfSight(s.world, gridX, gridY, targetX, targetY, foot) {
 			navComp.HasDirectPath = true

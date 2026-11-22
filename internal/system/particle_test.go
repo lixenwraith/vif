@@ -368,7 +368,7 @@ func TestParticleLifetimeFollowsProfile(t *testing.T) {
 	w.Resources.Time.DeltaTime = 0
 	particles.Update()
 	if sigil, _ := w.Components.Sigil.GetComponent(dust); sigil.Color != visual.RgbDustNormal {
-		t.Fatalf("dust colour = %+v, want the normal level once below its lifetime", sigil.Color)
+		t.Fatalf("dust color = %+v, want the normal level once below its lifetime", sigil.Color)
 	}
 }
 

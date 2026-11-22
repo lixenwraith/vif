@@ -63,9 +63,9 @@ type wiring struct {
 	// networkConfig is the transport the host or join negotiation prepared.
 	networkConfig *link.Config
 
-	// dialled is a :join its session already answered, dialled while the run it
+	// dialed is a :join its session already answered, dialed while the run it
 	// replaces played on.
-	dialled *membership.JoinDial
+	dialed *membership.JoinDial
 
 	// startScreen says this run is the launch on a host without a start screen of its
 	// own, which waits behind the game's (App.startScreen)
@@ -119,9 +119,9 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 		local.Resources.Scenario = fromAnchor.Resources.Scenario
 	}
 	// The map latch travels with identity rather than being adopted afterwards: the
-	// FSM boots inside New and spawns cursor slot zero at the centre of whatever map
+	// FSM boots inside New and spawns cursor slot zero at the center of whatever map
 	// it finds, so a latch applied later leaves that shared cursor on this
-	// terminal's centre instead of the session's (D-14, D-11).
+	// terminal's center instead of the session's (D-14, D-11).
 	local.MapWidth = fromAnchor.MapWidth
 	local.MapHeight = fromAnchor.MapHeight
 	local.CropOnResize = fromAnchor.CropOnResize
@@ -138,7 +138,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 }
 
 // ValidateWith checks this configuration with s as its session half: a join's,
-// before anything is dialled.
+// before anything is dialed.
 func (c runConfig) ValidateWith(s Membership) error {
 	c.Membership, c.Journal = s, c.Journal && !s.Watch // the journal ends with the run a viewer's replaces
 	return c.Validate()
@@ -174,7 +174,7 @@ func JoinNotice(notice, line string) string {
 // resumes after the clock rather than before it: the next run is not waiting for a
 // lobby, it is reopening a door its guests are already at.
 func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
-	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Notice, c.wiring.dialed, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.wiring.membership.BotsCarried = c.wiring.membership.BotsCarried || next.Seated
 	c.Membership.Passphrase, c.wiring.membership.Door = next.Passphrase, next.Door
 	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
@@ -199,15 +199,15 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 			c.Membership.Follow = next.Follow
 			return c, c.alone() // no place waits for a viewer whose session stays away
 		}
-	case next.Join == "" && next.Dialled != nil:
+	case next.Join == "" && next.Dialed != nil:
 		solo := c.alone()
-		c.wiring.dialled = next.Dialled
+		c.wiring.dialed = next.Dialed
 		return c, solo
 	case next.Join != "":
 		solo := c.alone()
 		joined, err := membership.Joining(c.Membership, next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
-			next.Dialled.Abandon(err)
+			next.Dialed.Abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
 			return *solo, nil
 		}
@@ -216,7 +216,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 			// run it replaces end with that run
 			joined, c.Journal = membership.Watching(joined, next.Follow), false
 		}
-		c.Membership, c.wiring.dialled = joined, next.Dialled
+		c.Membership, c.wiring.dialed = joined, next.Dialed
 		return c, solo
 	default:
 		// Not following anyone: a run that led its session, one that inherited it

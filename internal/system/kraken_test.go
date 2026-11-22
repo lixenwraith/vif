@@ -790,9 +790,9 @@ func TestKrakenSharesItsSamplesWithTheRenderer(t *testing.T) {
 	}
 }
 
-// The footprint lists each cell under the first disc covering it, discs in their
-// order and each disc's cells row by row, which is the order members take them in.
-func TestKrakenFootprintListsCellsByFirstCoveringDisc(t *testing.T) {
+// The footprint lists each cell under the first disk covering it, disks in their
+// order and each disk's cells row by row, which is the order members take them in.
+func TestKrakenFootprintListsCellsByFirstCoveringDisk(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 11))
 	for round := range 2000 {
 		w, h := 1+rng.IntN(90), 1+rng.IntN(50)
@@ -811,7 +811,7 @@ func TestKrakenFootprintListsCellsByFirstCoveringDisc(t *testing.T) {
 			default:
 				x, y, radius = rng.Float64()*float64(w), rng.Float64()*float64(h), rng.Float64()*parameter.KrakenLegThickness
 			}
-			s.addDisc(x, y, radius)
+			s.addDisk(x, y, radius)
 			for cy := max(0, int(y-radius)-2); cy < min(h, int(y+radius)+3); cy++ {
 				for cx := max(0, int(x-radius)-2); cx < min(w, int(x+radius)+3); cx++ {
 					dx, dy := float64(cx)+vmath.CellCenter-x, (float64(cy)+vmath.CellCenter-y)*parameter.KrakenRowSquash

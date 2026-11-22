@@ -137,7 +137,7 @@ background = true
 # hidden, and each step carries those no anchor holds a column left with it, so
 # blossom rises, decay falls and dust wanders in the cave's frame. It wears one of
 # four stone arts; every rock cell draws a glyph, so it reads on a text console's
-# sixteen colours too. The glyphs drift past at one, two and four times the rock's
+# sixteen colors too. The glyphs drift past at one, two and four times the rock's
 # pace by layer, 20, 40 and 80 cells a second at first, fast enough for each layer
 # to read as moving and the depths to come apart; the rock and each layer step whole
 # cells a tick, which the renderer spreads over the frames between. The glyphs are

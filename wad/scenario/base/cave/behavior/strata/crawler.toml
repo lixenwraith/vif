@@ -1,6 +1,6 @@
 # The crawler: a mite scuttling on its legs. One of the strata's first-rank raiders:
 # RaiderRank1 in ../../macros.toml gives its stats and cycle and the cave its
-# colours.
+# colors.
 macro = "RaiderRank1"
 theme = "Strata"
 width = 4

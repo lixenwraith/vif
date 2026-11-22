@@ -158,11 +158,11 @@ func BotVerb(words []string) (string, []string) {
 func BotUsage(verb string) string {
 	var all []string
 	for _, v := range BotVerbs {
-		spelt := strings.TrimSpace(v[0] + " " + v[1])
+		spelled := strings.TrimSpace(v[0] + " " + v[1])
 		if v[0] == verb {
-			return spelt
+			return spelled
 		}
-		all = append(all, spelt)
+		all = append(all, spelled)
 	}
 	if verb != "" {
 		return ""
@@ -738,7 +738,7 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 // overlay HUD and pins, standing breakpoints, the mode with its lines and overlay —
 // and survives EventGameResetRequest; anything else is world state. Logging is
 // process configuration and is excluded; pending step requests name what a reset
-// destroys and are cancelled.
+// destroys and are canceled.
 
 // ResetSessionState returns the operator's state to its startup values: the HUD,
 // pins, overlay content and standing breakpoints cleared, free mouse, auto-fire and

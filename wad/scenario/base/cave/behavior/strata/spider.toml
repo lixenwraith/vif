@@ -1,6 +1,6 @@
 # The spider: its eight legs flexing about its face. One of the strata's third-rank
 # raiders: RaiderRank3 in ../../macros.toml gives its stats and cycle and the cave
-# its colours.
+# its colors.
 macro = "RaiderRank3"
 theme = "Strata"
 width = 5

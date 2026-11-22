@@ -134,7 +134,7 @@ const (
 	// taking or giving up a place writes at once. Wall time: a restart is.
 	PlaceStoreInterval = time.Second
 
-	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialling
+	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialing
 	// the coordinator that told it the session is rebuilding on another scenario. The
 	// window covers a world build, so it is generous; the interval is what a refused
 	// dial costs. Wall time: neither run has a clock while this is measured.
@@ -210,20 +210,20 @@ const (
 
 	// SnapshotCorrectionTicks is the nominal correction cadence, in ticks: 5 Hz at the
 	// 50 ms tick. It is low because both instances run the same deterministic
-	// simulation, so a correction repairs what an unmodelled input changed. Each peer's
+	// simulation, so a correction repairs what an unmodeled input changed. Each peer's
 	// cadence follows its link and demand within SnapshotCadenceMinTicks and
 	// SnapshotCadenceMaxTicks, never past the convergence floor.
 	SnapshotCorrectionTicks = 4
 
 	// SnapshotCadenceMinTicks is the fastest a correction may be published to one
-	// peer — 10 Hz — and the freshness a participant with a busy neighbourhood or a
+	// peer — 10 Hz — and the freshness a participant with a busy neighborhood or a
 	// drifting prediction is given when its link can carry it.
 	SnapshotCadenceMinTicks = 2
 
 	// SnapshotCadenceMaxTicks is the slowest adaptation may go. It equals the
 	// convergence floor deliberately: at the very bottom the schedule *is* the
 	// floor — one whole authoritative world per floor window and nothing else —
-	// and a cadence slower than that could not honour the floor at any keyframe
+	// and a cadence slower than that could not honor the floor at any keyframe
 	// interval.
 	SnapshotCadenceMaxTicks = SnapshotFloorKeyframeTicks
 
@@ -256,7 +256,7 @@ const (
 	SnapshotKeyframeCorrections = 10
 
 	// SnapshotKeyframeMinCorrections is one: every correction a whole capture.
-	// That is not a degenerate case but the cheapest schedule that honours the
+	// That is not a degenerate case but the cheapest schedule that honors the
 	// floor, and it is where a link at the very bottom of its range sits.
 	SnapshotKeyframeMinCorrections = 1
 
@@ -272,11 +272,11 @@ const (
 	// the nominal keyframe period, the room adaptation needs.
 	SnapshotFloorKeyframeTicks = 60
 
-	// SnapshotLinkUtilisation is the share of measured link capacity the
+	// SnapshotLinkUtilization is the share of measured link capacity the
 	// correction cadence may spend. The rest is headroom for the crossing epochs and
 	// the owner-authored syncs, which travel on the same link and are not in the
 	// controller's cost model.
-	SnapshotLinkUtilisation = 0.75
+	SnapshotLinkUtilization = 0.75
 
 	// SnapshotBulkQueue is how long a link's undelivered bytes may take to drain,
 	// past the round trip and probe interval every backlog reading includes, before
@@ -424,7 +424,7 @@ const (
 	// through another participant's link, for a link of its own. Each waits twice as
 	// long as the last from NetworkRejoinPassInterval, so a host the chain names at an
 	// address unreachable from here is tried for about half a minute and then
-	// followed as it was, rather than dialled for the rest of the session.
+	// followed as it was, rather than dialed for the rest of the session.
 	NetworkHostDialAttempts = 5
 
 	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after
@@ -451,10 +451,10 @@ const (
 	NetworkScheduledPerSource = NetworkScheduledMax / MaxPlayers
 
 	// NetworkAdmitWindow, NetworkAdmitBurst and NetworkAdmitTracked bound how often
-	// one dialling address may be admitted: each join costs the session a whole world
+	// one dialing address may be admitted: each join costs the session a whole world
 	// for one connect. Keyed by address, since an identity is released when the
 	// connection drops; one NAT is one key, so the burst is generous. Tracked bounds
-	// the limiter itself, so the defence cannot become the leak.
+	// the limiter itself, so the defense cannot become the leak.
 	NetworkAdmitWindow  = time.Minute
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024
@@ -501,7 +501,7 @@ const (
 	NetworkEpochWindow = 64
 
 	// NetworkSequenceWindow is how far behind a source's newest crossing sequence
-	// a receiver still recognises one it took, and how far behind its newest epoch
+	// a receiver still recognizes one it took, and how far behind its newest epoch
 	// returned committed a producer still knows one was. A handoff resends the
 	// retained suffix, whose records this covers at any input rate.
 	NetworkSequenceWindow = 512

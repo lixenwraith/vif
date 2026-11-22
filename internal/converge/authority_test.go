@@ -86,7 +86,7 @@ func TestLossReportsCannotReplaceALinkedAuthority(t *testing.T) {
 	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
 	guest.u.Receive(uint8(network.MsgAuthorityReport), 2, signed(network.AuthorityReport{Term: network.FirstTerm, From: 2, Lost: 1}))
 	if guest.u.Migrating() || guest.u.Term() != network.FirstTerm {
-		t.Fatal("a neighbour's loss report displaced the connected authority")
+		t.Fatal("a neighbor's loss report displaced the connected authority")
 	}
 }
 
@@ -328,12 +328,12 @@ func TestAPinnedRelayedPersonFollowsItsRelay(t *testing.T) {
 	gone.world.cut, gone.world.redial = true, true
 	gone.u.drive() // ends the follow, the relay unlinked
 	gone.u.drive() // cut off, so it redials the relay
-	if !lostHost(gone) || !strings.Contains(gone.u.Summary(), "redialling its relay") {
-		t.Fatalf("redialling its relay, the person does not read as having lost a pinned host: %q", gone.u.Summary())
+	if !lostHost(gone) || !strings.Contains(gone.u.Summary(), "redialing its relay") {
+		t.Fatalf("redialing its relay, the person does not read as having lost a pinned host: %q", gone.u.Summary())
 	}
 	gone.u.onReport(2, notice) // the notice again, as a frame the relay sent first is read late
 	if gone.u.State().Fork || !slices.Equal(gone.world.redials, []link.PeerID{2}) || !gone.u.Redialing(2) {
-		t.Fatalf("its relay unlinked: fork %v, redials %v, redialling %v; want the relay redialled and no fork",
+		t.Fatalf("its relay unlinked: fork %v, redials %v, redialing %v; want the relay redialed and no fork",
 			gone.u.State().Fork, gone.world.redials, gone.u.Redialing(2))
 	}
 	if !gone.u.RedialAdmitted(2) || !gone.u.State().Fork || strings.Contains(gone.u.Summary(), "its relay") {
@@ -351,11 +351,11 @@ func TestAPinnedRelayedPersonFollowsItsRelay(t *testing.T) {
 		early.u.onReport(2, notice)
 		early.u.drive()
 		if early.u.State().Fork || !slices.Equal(early.world.redials, []link.PeerID{2}) || !early.u.Redialing(2) {
-			t.Fatalf("its relay gone before the notice (cut off first %v): fork %v, redials %v; want the relay redialled once and no fork",
+			t.Fatalf("its relay gone before the notice (cut off first %v): fork %v, redials %v; want the relay redialed once and no fork",
 				cutFirst, early.u.State().Fork, early.world.redials)
 		}
 		if !early.world.frozen || !lostHost(early) {
-			t.Fatalf("redialling the relay it lost first (cut off first %v), the person played on or did not read the host lost", cutFirst)
+			t.Fatalf("redialing the relay it lost first (cut off first %v), the person played on or did not read the host lost", cutFirst)
 		}
 		if !early.u.RedialAdmitted(2) {
 			t.Fatalf("admitted back through its relay's door (cut off first %v), the run was not left to the one admitted", cutFirst)
@@ -540,7 +540,7 @@ func TestAWalkingSurvivorIsTakenBackThroughACandidate(t *testing.T) {
 	r.world.redial = true
 	r.u.beginSuccession(1)
 	if targets, open := r.u.Rejoins(1); open || targets != nil {
-		t.Fatalf("redialling, rejoins through %v (open %t); want nobody until the walk", targets, open)
+		t.Fatalf("redialing, rejoins through %v (open %t); want nobody until the walk", targets, open)
 	}
 	r.u.RedialRefused(1)
 	if targets, open := r.u.Rejoins(1); !open || !slices.Equal(targets, []link.PeerID{2}) {
@@ -850,7 +850,7 @@ func (d *dialingNode) setDown(down bool) {
 
 // waitDials waits for the n-th dial, which runs off the loop that decided on it, and
 // for every dial in flight to end, so the next decision is not held back by one. It
-// returns the addresses dialled: the log is read only once no dial is writing it.
+// returns the addresses dialed: the log is read only once no dial is writing it.
 func waitDials(t *testing.T, r *run, d *dialingNode, n int) []string {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
@@ -907,7 +907,7 @@ func followThroughRelay(t *testing.T) (*run, *dialingNode) {
 	}
 	deliver(survivors, 4)
 	if dialed := waitDials(t, runs[3], far, 0); !runs[3].u.Migrating() || slices.ContainsFunc(dialed, func(a string) bool { return a != "2" }) {
-		t.Fatalf("the far survivor dialled %v and migrating is %t; want the first candidate alone, refused, and a walk", dialed, runs[3].u.Migrating())
+		t.Fatalf("the far survivor dialed %v and migrating is %t; want the first candidate alone, refused, and a walk", dialed, runs[3].u.Migrating())
 	}
 	runs[2].world.relaying = true
 	runs[3].u.sendReport()
@@ -926,7 +926,7 @@ func followThroughRelay(t *testing.T) (*run, *dialingNode) {
 
 // TestAFollowerThroughARelayDialsItsHost: a survivor that follows the host through
 // a participant relaying for it dials the host at its chain address and, linked,
-// holds that link as its own; a host it cannot reach is dialled a bounded number
+// holds that link as its own; a host it cannot reach is dialed a bounded number
 // of times, each after a longer wait, and followed as it was.
 func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 	t.Parallel()
@@ -937,7 +937,7 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 		node.setDown(false)
 		far.u.drive()
 		if dialed := waitDials(t, far, node, base+1); !node.Connected(2) || dialed[base] != "2" {
-			t.Fatalf("dialled %v and linked to the host is %t; want the host's chain address, linked", dialed[base:], node.Connected(2))
+			t.Fatalf("dialed %v and linked to the host is %t; want the host's chain address, linked", dialed[base:], node.Connected(2))
 		}
 		far.u.drive()
 		far.u.mu.Lock()
@@ -994,12 +994,12 @@ func TestABotDialsNobody(t *testing.T) {
 		Chain: network.SuccessionChain{{ID: 2, Addr: "2"}, {ID: 3, Addr: "3"}}}, 4)
 	bot.u.drive()
 	if dialed := waitDials(t, bot, node, 0); len(dialed) != 0 {
-		t.Fatalf("the bot dialled %v; want nobody", dialed)
+		t.Fatalf("the bot dialed %v; want nobody", dialed)
 	}
 }
 
 // TestTheSuccessorDialIsPaced: a participant keeps a link to the first candidate
-// warm; one its connect does not reach is dialled after a growing wait and then left,
+// warm; one its connect does not reach is dialed after a growing wait and then left,
 // as a followed host is, and another successor, or a link to it that stood and
 // dropped, starts the attempts over.
 func TestTheSuccessorDialIsPaced(t *testing.T) {
@@ -1051,7 +1051,7 @@ func TestTheSuccessorDialIsPaced(t *testing.T) {
 	far.u.drive()
 	dialed := waitDials(t, far, node, parameter.NetworkHostDialAttempts+1)
 	if last := dialed[len(dialed)-1]; last != "3" {
-		t.Fatalf("another successor was dialled at %q, want its own address", last)
+		t.Fatalf("another successor was dialed at %q, want its own address", last)
 	}
 
 	node.setDown(false)
@@ -1111,7 +1111,7 @@ func TestACutOffPersonRedialsItsRelayFirst(t *testing.T) {
 		r.world.cut, r.world.redial = true, true
 		r.u.drive()
 		if targets := r.u.walkTargets(time.Now()); !slices.Equal(r.world.redials, []link.PeerID{2}) || targets != nil {
-			t.Fatalf("cut off, redials %v and dials %v; want the relay redialled and the walk waiting", r.world.redials, targets)
+			t.Fatalf("cut off, redials %v and dials %v; want the relay redialed and the walk waiting", r.world.redials, targets)
 		}
 		return r
 	}
@@ -1166,7 +1166,7 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	}
 }
 
-// TestCrossedPeerDialsKeepTheLowerIdentitysLink: two participants dialling each
+// TestCrossedPeerDialsKeepTheLowerIdentitysLink: two participants dialing each
 // other at once keep one link, the lower identity's, which a new host and a survivor
 // walking to it do: the lower refuses the other's while its own dial is out, and
 // neither dials one whose link it admitted until that link had a pass to land.
@@ -1176,24 +1176,24 @@ func TestCrossedPeerDialsKeepTheLowerIdentitysLink(t *testing.T) {
 	low, high := runs[1], runs[2]
 	low.r.dialing[3], high.r.dialing[2] = true, true
 	if err := low.r.admitPeerLink(3); !errors.Is(err, link.ErrLinkStands) {
-		t.Fatalf("dialling participant 3, participant 2 admitted its crossed dial (%v)", err)
+		t.Fatalf("dialing participant 3, participant 2 admitted its crossed dial (%v)", err)
 	}
 	if err := high.r.admitPeerLink(2); err != nil {
-		t.Fatalf("dialling participant 2, participant 3 refused its crossed dial: %v", err)
+		t.Fatalf("dialing participant 2, participant 3 refused its crossed dial: %v", err)
 	}
 	delete(high.r.dialing, 2)
 	mesh := network.NewMesh()
 	d := &dialingNode{MeshPort: mesh.Node(3), mesh: mesh}
 	high.r.dial(d, 2, "2")
 	if dialed := waitDials(t, high, d, 0); len(dialed) != 0 {
-		t.Fatalf("participant 3 dialled %v just after admitting participant 2's link", dialed)
+		t.Fatalf("participant 3 dialed %v just after admitting participant 2's link", dialed)
 	}
 	high.r.mu.Lock()
 	high.r.admitted[2] = high.r.admitted[2].Add(-parameter.NetworkRejoinPassInterval)
 	high.r.mu.Unlock()
 	high.r.dial(d, 2, "2")
 	if dialed := waitDials(t, high, d, 1); !slices.Equal(dialed, []string{"2"}) {
-		t.Fatalf("a pass after admitting participant 2's link, participant 3 dialled %v", dialed)
+		t.Fatalf("a pass after admitting participant 2's link, participant 3 dialed %v", dialed)
 	}
 }
 

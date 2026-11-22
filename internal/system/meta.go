@@ -741,7 +741,7 @@ func (s *MetaSystem) handleAboutRequest() {
 			{Key: "source", Value: "github.com/lixenwraith/vif"},
 			{Key: "website", Value: "lixen.com/vif"},
 			{Key: "author", Value: "Lixen Wraith"},
-			{Key: "licence", Value: "BSD-3-Clause"},
+			{Key: "license", Value: "BSD-3-Clause"},
 			// The file's name first: the window cuts a value at its column
 			{Key: "notices", Value: "NOTICES, with this build"},
 		},

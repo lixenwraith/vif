@@ -178,7 +178,7 @@ func cells(dx, dy int) int { return abs(dx) + 2*abs(dy) }
 
 // AdmitAction counts one gesture for a dispatch pass: a keyed input, zero for none,
 // or the pointer, for a reversal since the last pass or for APMPointerSweep columns
-// travelled one way since it last counted. A smooth drift reads as little, a dodge
+// traveled one way since it last counted. A smooth drift reads as little, a dodge
 // as much as a mashed key; the pointer fills at most APMPointerPerSecond of a
 // bucket, so the top tiers ask for keys or fire too.
 func (gs *GameState) AdmitAction(key uint64) {

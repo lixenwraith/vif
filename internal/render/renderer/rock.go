@@ -19,9 +19,9 @@ const stoneGroupWidth = math.MaxInt32
 // there brings a cell's face nearer
 var stoneSealed = engine.RockColumn{Ceil: math.MaxInt, Floor: math.MaxInt}
 
-// stoneNeighbourhood is a column and those within pattern.FaceReach either side of it,
+// stoneNeighborhood is a column and those within pattern.FaceReach either side of it,
 // all a rock cell's depth and face are read from
-type stoneNeighbourhood [2*pattern.FaceReach + 1]engine.RockColumn
+type stoneNeighborhood [2*pattern.FaceReach + 1]engine.RockColumn
 
 // stoneCell is one cell as its stone art draws it; a zero rune is open
 type stoneCell struct {
@@ -29,16 +29,16 @@ type stoneCell struct {
 	fg, bg color.RGB
 }
 
-// stoneColumns keeps each profile column's stone with the neighbourhood it was read
-// from. A column's art is a function of its profile index and that neighbourhood, so a
-// scrolling field draws a column once it has its neighbours and then keeps it: a frame
+// stoneColumns keeps each profile column's stone with the neighborhood it was read
+// from. A column's art is a function of its profile index and that neighborhood, so a
+// scrolling field draws a column once it has its neighbors and then keeps it: a frame
 // draws only what entered since the last, a few columns at the field's right edge.
 type stoneColumns struct {
 	look     engine.RockLook
 	height   int
 	index256 bool    // cells hold pattern.Art256's indices, as the 256 tier draws them
 	tags     []int64 // the profile column each slot holds, or -1
-	around   []stoneNeighbourhood
+	around   []stoneNeighborhood
 	cells    []stoneCell // height cells a slot
 }
 
@@ -113,10 +113,10 @@ func (s *stoneColumns) fit(look engine.RockLook, width, height int) {
 }
 
 // column returns map column x's stone, drawing it again where its profile column is
-// not the slot's or its neighbourhood moved, as a column entering at the edge gains
-// its neighbours
+// not the slot's or its neighborhood moved, as a column entering at the edge gains
+// its neighbors
 func (s *stoneColumns) column(cols []engine.RockColumn, x int, origin int64) []stoneCell {
-	var around stoneNeighbourhood
+	var around stoneNeighborhood
 	for i := range around {
 		if nx := x + i - pattern.FaceReach; nx >= 0 && nx < len(cols) {
 			around[i] = cols[nx]
@@ -148,10 +148,10 @@ func (s *stoneColumns) column(cols []engine.RockColumn, x int, origin int64) []s
 	return cells
 }
 
-// stoneDepth is how deep row y of the neighbourhood's own column lies in its rock and
+// stoneDepth is how deep row y of the neighborhood's own column lies in its rock and
 // the side its nearest opening lies on: below a ceiling, above a floor, or along the
 // row where a column within reach opens nearer
-func stoneDepth(around *stoneNeighbourhood, y int) (int, pattern.Face) {
+func stoneDepth(around *stoneNeighborhood, y int) (int, pattern.Face) {
 	c := around[pattern.FaceReach]
 	depth, face := c.Ceil-1-y, pattern.FaceDown
 	if y >= c.Floor {

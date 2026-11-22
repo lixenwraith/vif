@@ -154,7 +154,7 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 	before, before256 := drawRock(game, kept), drawRock(game, indexed)
 	cols := w.Positions.Rock().Columns()
 	for x := range width {
-		var around stoneNeighbourhood
+		var around stoneNeighborhood
 		for i := range around {
 			if nx := x + i - pattern.FaceReach; nx >= 0 && nx < width {
 				around[i] = cols[nx]
@@ -166,7 +166,7 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 			cell, cell256 := before.CellAt(x, y), before256.CellAt(x, y)
 			if !cols[x].Rock(y) {
 				if cell.Rune != 0 || cell256.Rune != 0 {
-					t.Fatalf("open cell (%d,%d) drew %q, %q in 256 colours", x, y, cell.Rune, cell256.Rune)
+					t.Fatalf("open cell (%d,%d) drew %q, %q in 256 colors", x, y, cell.Rune, cell256.Rune)
 				}
 				continue
 			}
@@ -177,7 +177,7 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 			}
 			_, fg256, bg256 := pattern.Art256(pattern.ArtStrata, 7, pattern.ArtCell{X: 100 + int64(x), Y: int64(y), Depth: depth, Face: face, W: stoneGroupWidth, H: height})
 			if cell256.Rune != r || cell256.Fg.R != fg256 || cell256.Bg.R != bg256 || cell256.Attrs != terminal.AttrFg256|terminal.AttrBg256 {
-				t.Fatalf("rock (%d,%d) drew %q %v on %v (%v) in 256 colours, want %q %d on %d", x, y, cell256.Rune, cell256.Fg, cell256.Bg, cell256.Attrs, r, fg256, bg256)
+				t.Fatalf("rock (%d,%d) drew %q %v on %v (%v) in 256 colors, want %q %d on %d", x, y, cell256.Rune, cell256.Fg, cell256.Bg, cell256.Attrs, r, fg256, bg256)
 			}
 		}
 	}
@@ -190,7 +190,7 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 			if got, want := after.CellAt(x, y), fresh.CellAt(x, y); got != want {
 				t.Fatalf("after a scroll (%d,%d) drew %+v, a new renderer %+v", x, y, got, want)
 			}
-			// Away from the edges a column keeps its neighbours, so its stone moves whole
+			// Away from the edges a column keeps its neighbors, so its stone moves whole
 			if x >= pattern.FaceReach && x+1 < width-pattern.FaceReach {
 				if got, was := after.CellAt(x, y), before.CellAt(x+1, y); got != was {
 					t.Fatalf("(%d,%d) drew %+v after a scroll, want %+v from the column it took", x, y, got, was)
@@ -220,7 +220,7 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 // where a column within reach opens nearer, the left one on a tie, and its own column's
 // opening on a tie with a side's
 func TestARockCellsFaceIsItsNearestOpening(t *testing.T) {
-	var around stoneNeighbourhood
+	var around stoneNeighborhood
 	for i := range around {
 		around[i] = engine.RockColumn{Ceil: 10, Floor: 20}
 	}

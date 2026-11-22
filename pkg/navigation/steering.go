@@ -13,7 +13,7 @@ type Source interface {
 
 // BestNeighborDirection is the escape hatch for a cell the field does not cover —
 // one inside a wall, or one the goal cannot reach. It answers with the step toward
-// whichever neighbour stands closest to the goal, and DirNone when no neighbour
+// whichever neighbor stands closest to the goal, and DirNone when no neighbor
 // has been visited at all.
 func BestNeighborDirection(src Source, x, y int) int8 {
 	bestDir := DirNone
@@ -45,7 +45,7 @@ func (c *Costs) FlowVector(src Source, x, y int) (float64, float64, bool) {
 // over the four cells around it so a point entity crossing a cell boundary turns
 // smoothly instead of snapping between eight headings. Cells the field does not
 // cover drop out of the average rather than pulling it toward zero, and a position
-// with no covered neighbour returns the zero vector for the caller to interpret.
+// with no covered neighbor returns the zero vector for the caller to interpret.
 func (c *Costs) InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, float64) {
 	sampleX := preciseX - vmath.CellCenter
 	sampleY := preciseY - vmath.CellCenter

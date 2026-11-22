@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The window wears the start screen's page from its first frame, and Android's splash
      screen shows the logo on it as large and where the start screen does: the splash
-     draws its icon 288 dp across at the window's centre and shows a 192 dp circle of it,
+     draws its icon 288 dp across at the window's center and shows a 192 dp circle of it,
      and launch_logo insets the logo to the start screen's 128 dp, its diagonal inside
      that circle. Launched from anywhere, the splash shows the logo. -->
 <resources xmlns:tools="http://schemas.android.com/tools">

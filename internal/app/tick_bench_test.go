@@ -276,7 +276,7 @@ func (r *effectRig) standBody(species component.SpeciesType, kind component.Beha
 }
 
 // BenchmarkDeathEffects measures the effects a death leaves and the converging
-// spirit, on a bare world: "tick" is one tick's share of spawning, ageing and ending
+// spirit, on a bare world: "tick" is one tick's share of spawning, aging and ending
 // them, "frames" a tick's three frames of drawing them. bodies is a 5x3 body dying
 // every tick, storm 600 cells going at once every ten ticks. swarm and eye are
 // whole bodies ending through the composite system, standing them left untimed: a

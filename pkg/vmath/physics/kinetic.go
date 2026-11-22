@@ -40,7 +40,7 @@ func SetImpulse(k *Kinetic, vx, vy float64) {
 }
 
 // reflectCell is one axis of a bounds reflection over the cells lo..hi, both
-// inclusive: a coordinate past either lands on the centre of the edge cell it
+// inclusive: a coordinate past either lands on the center of the edge cell it
 // passed, its velocity flipped. It returns the coordinate's cell either way.
 func reflectCell(pos, vel *float64, lo, hi int) (cell int, reflected bool) {
 	cell = int(math.Floor(*pos))
@@ -58,7 +58,7 @@ func reflectCell(pos, vel *float64, lo, hi int) (cell int, reflected bool) {
 
 // ReflectBoundsX handles horizontal boundary collision over the cells minX..maxX,
 // both inclusive, returns true if reflection occurred: a position past either is
-// clamped to the centre of the edge cell it passed
+// clamped to the center of the edge cell it passed
 func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
 	_, reflected := reflectCell(&k.PreciseX, &k.VelX, minX, maxX)
 	return reflected
@@ -92,7 +92,7 @@ func SetGridPos(k *Kinetic, x, y int) {
 
 // Kinetic3D is Kinetic in a volume: a point mass's position in cells, velocity in
 // cells per second and acceleration in cells per second squared. Its cell is
-// vmath.PointAt3(k.Pos) and a cell's centre p.Center(); what is one vector
+// vmath.PointAt3(k.Pos) and a cell's center p.Center(); what is one vector
 // expression has no function here: an impulse is V3Add onto Vel, a speed cap
 // V3ClampMagnitude.
 type Kinetic3D struct {

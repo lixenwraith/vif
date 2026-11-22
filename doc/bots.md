@@ -198,7 +198,7 @@ note alike: its `layout` is the network's, its `scored_by` the document's
 ## Telling cursors apart
 
 Every other cursor is marked with its slot, `0` to `F`; yours is unmarked. A player
-who left is drawn as its mark alone, in its colour, where it stood, until it is
+who left is drawn as its mark alone, in its color, where it stood, until it is
 dropped two minutes later. The status bar's `4P:1` means four cursors, yours in
 slot 1. `:player` tells players from bots and names each bot's holder. Slots
 identify cursors for this session only, and a dropped player's slot may be reused.
@@ -320,7 +320,7 @@ or no cell gains ground.
 
 ### Targets
 
-A target is one of the kinds the [catalogue](#kinds) marks as
+A target is one of the kinds the [catalog](#kinds) marks as
 one, the nearest of it to the cursor.
 
 Distance counts rows twice, as the terminal draws them. `HasTarget` and `OnTarget`
@@ -495,7 +495,7 @@ on_update = [
   of a file's name.
 - `inputs`: what it reads, in the order its weights take them, after those
   `[bot] inputs` lists for every network of the graph. Each is a name of the
-  [catalogue](#inputs): the nearest of a kind by rank and field (`species_x`,
+  [catalog](#inputs): the nearest of a kind by rank and field (`species_x`,
   `species2_near_y`, `landing3_soon`), the rock's edges, the first cell that
   blocks the cursor each way, and the bot's own readings.
   - Each reading covers the cells the view shows and keeps to its scale. What
@@ -515,7 +515,7 @@ on_update = [
   - The rock's edges are the view's own where no rock stands, as at `cave`'s
     Kraken. Loot has no input: a drop homes on its owner.
 - `hidden`: the tanh units between the inputs and the outputs, 0 to 32.
-- `outputs`: those it has of the [catalogue's](#outputs), `special` and `move`
+- `outputs`: those it has of the [catalog's](#outputs), `special` and `move`
   when it lists none. One left out is never asked for and has no weights. Each
   unit of an output (`special`, `fire`, `x`, `y`) is the sum of its weights
   over the inputs, plus its weights over the hidden units, plus its bias. A
@@ -537,7 +537,7 @@ on_update = [
     update. A positive weight on a thing's offset closes that share of the gap
     an update: in `cave`, 0.6 to 1.2 on `species_y` holds a raider's row.
   - A negative weight on an offset runs the ship to the rock. Back off
-    through a nearness, and pair it with a centring term: `column` across,
+    through a nearness, and pair it with a centering term: `column` across,
     `ceiling` and `floor` down.
   - A small bias is a steady drift: a move is a cell once it reaches half of
     one, 0.0042 in `x` and 0.014 in `y` on the 119 columns and 36 rows a
@@ -978,14 +978,14 @@ What a network reads and asks for:
   `cave` written so kept its populations' bytes, and a guard on each `Steer`
   does the same with nothing added.
 
-<!-- catalogue: generated, see its first lines -->
-## Catalogue
+<!-- catalog: generated, see its first lines -->
+## Catalog
 
 What a graph's guards and `PointAt` take as a target, what a network reads
 and asks for, and what a score pays for. This section is generated from the
-tables of `internal/bot/catalogue.go`: change a row there, then run
+tables of `internal/bot/catalog.go`: change a row there, then run
 `VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`. `vif -schema`
-lists the same inputs, outputs, scales and sources under `bot_catalogue`.
+lists the same inputs, outputs, scales and sources under `bot_catalog`.
 
 ### Kinds
 
@@ -1135,7 +1135,7 @@ names what one of it pays. A source it leaves out pays nothing.
   second: all of them at that pace or faster, the share that pace is of a slower
   one, a quarter at least.
 - `travel`: a column the cave scrolled.
-<!-- /catalogue -->
+<!-- /catalog -->
 
 ## Recording and replaying
 
@@ -1157,7 +1157,7 @@ unattended.
 - It issues no commands.
 - A scenario seating one player (`max_players = 1`, as the tutorial) takes none
   beside its player: a seat (`-bot`, `:bot`, the menu's bot rows, which say why)
-  is refused before a session opens, a bot's own run dialling in at the door, and
+  is refused before a session opens, a bot's own run dialing in at the door, and
   a fleet offers none. A bot may still play it alone, as `-watch -bot 1` does.
 - It reaches only what its view shows. A seat's view is the size of its holder's
   screen, about the bot's own cursor: on a map no larger than that screen it

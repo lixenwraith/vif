@@ -58,7 +58,7 @@ type Membership struct {
 	dismissed  atomic.Bool // this run was dismissed from its session; the next one is what replaces it
 	shed       atomic.Bool // the dismissal was its host keeping its tick
 	wasDropped atomic.Bool // the dismissal was the host's drop, which keeps this run's key out
-	dialling   atomic.Bool // a :join is being dialled while this run plays on
+	dialing    atomic.Bool // a :join is being dialed while this run plays on
 	leaving    atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 
 	pendingJoin *network.PendingJoin
@@ -133,7 +133,7 @@ type Membership struct {
 	// refusal the dialer can retry rather than an identity and a silent wait.
 	lobbyClosing atomic.Bool
 
-	// midRunGate serialises the mid-run admission. The handshakes that reach it run
+	// midRunGate serializes the mid-run admission. The handshakes that reach it run
 	// concurrently, but the gate they call reads a whole world and then waits on a
 	// session-cumulative ready count, so two of them at once cannot tell whose
 	// joiner confirmed.
@@ -146,7 +146,7 @@ type Membership struct {
 	firstPerson  network.JoinerReport
 	personJoined bool
 
-	// admissions bounds how often one dialling host may be admitted. It is built
+	// admissions bounds how often one dialing host may be admitted. It is built
 	// with the run (Open) rather than with the session because a run can open one
 	// later with :host, and a budget that started when hosting did would be a
 	// budget reset by whatever closed the last session.
@@ -227,7 +227,7 @@ type RestartAsk struct {
 
 	// Host is the address to open hosting on once the next run's clock is running.
 	// A coordinator changing scenario does not go back into a startup lobby: its
-	// guests are already redialling, and the mid-run gate is the door they arrive
+	// guests are already redialing, and the mid-run gate is the door they arrive
 	// at. Migrate is the policy the session held and Door the verifier its doors
 	// took, which the door reopens under.
 	Host    string
@@ -236,12 +236,12 @@ type RestartAsk struct {
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial now that succession moved the door. Join alone is a :join target
-	// that Dialled holds already admitted; Dialled alone is this run's own door,
-	// redialled once its host went. With none the next run is solo, which is what an
+	// that Dialed holds already admitted; Dialed alone is this run's own door,
+	// redialed once its host went. With none the next run is solo, which is what an
 	// authority with an empty roster has become.
-	Rejoin  bool
-	Join    string
-	Dialled *JoinDial
+	Rejoin bool
+	Join   string
+	Dialed *JoinDial
 
 	// Press says the next run's player started its join, so its seat waits for
 	// their press.
@@ -253,7 +253,7 @@ type RestartAsk struct {
 	Follow uint8
 }
 
-// JoinBase is the run's Config and wiring as a join dialled from it builds on, copied
+// JoinBase is the run's Config and wiring as a join dialed from it builds on, copied
 // where the dial starts so the dial reads nothing of the run's own: a session half is
 // checked against it (ValidateWith) and a session's scenario prepared on it (Prepare).
 type JoinBase interface {
@@ -303,7 +303,7 @@ type Wiring struct {
 	HostListeners []net.Listener
 
 	// JoinPress says this run's join is one its player started, at launch or from a
-	// :join, whose seat waits for their press (joinWaits). A run dialled on
+	// :join, whose seat waits for their press (joinWaits). A run dialed on
 	// its own, or whose player already pressed, takes its seat once its world is built.
 	JoinPress bool
 

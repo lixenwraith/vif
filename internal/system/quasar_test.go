@@ -110,10 +110,10 @@ func TestQuasarCursorReturningCancelsTheSplashOnce(t *testing.T) {
 		t.Fatalf("cursor back in range: state %d, want homing", q.Machine.State)
 	}
 	if n := countEvents(events, event.EventSplashTimerCancel); n != 1 {
-		t.Fatalf("returning cursor cancelled the splash %d times, want once", n)
+		t.Fatalf("returning cursor canceled the splash %d times, want once", n)
 	}
 	if n := countEvents(stepQuasars(w, s), event.EventSplashTimerCancel); n != 0 {
-		t.Fatalf("the step after the return cancelled %d more splashes", n)
+		t.Fatalf("the step after the return canceled %d more splashes", n)
 	}
 }
 
@@ -257,7 +257,7 @@ func TestQuasarChargeWithoutAimFallsBackToHoming(t *testing.T) {
 		t.Fatalf("a zap with no cursor spawned %d lightnings", n)
 	}
 	if n := countEvents(events, event.EventSplashTimerCancel); n != 1 {
-		t.Fatalf("the fallen-back charge cancelled its splash %d times, want once", n)
+		t.Fatalf("the fallen-back charge canceled its splash %d times, want once", n)
 	}
 	if q.Machine.Expired() {
 		t.Fatalf("instance %+v is still an expired charge", q.Machine)

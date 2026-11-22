@@ -94,17 +94,17 @@ func (v *Vocabulary[C]) Sustained[A any](name string, build func(*A) (func(C), e
 }
 
 // Signals sets where an instance keeps the signals raised on it, which adds the
-// guard Signalled { name }: it passes while the program's signal of that name is
+// guard Signaled { name }: it passes while the program's signal of that name is
 // raised, and the edge that commits on it lowers the signal
 func (v *Vocabulary[C]) Signals(word func(C) *uint8) { v.signals = word }
 
-// signalArgs names the signal a Signalled guard reads
+// signalArgs names the signal a Signaled guard reads
 type signalArgs struct {
 	Name string `toml:"name"`
 }
 
-// signalled is the guard a vocabulary with signals adds
-const signalled = "Signalled"
+// signaled is the guard a vocabulary with signals adds
+const signaled = "Signaled"
 
 // Emit registers an effect that reads its table's event and origin beside its
 // payload, as the scenario dialect's EmitEvent does; build checks them, decoding
@@ -150,7 +150,7 @@ func (v *Vocabulary[C]) Entries() []dialect.Entry {
 		out = append(out, dialect.Entry{Name: name, Kind: dialect.KindFlag})
 	}
 	if v.signals != nil {
-		out = append(out, dialect.Entry{Name: signalled, Kind: dialect.KindGuard, Args: dialect.Fields[signalArgs]()})
+		out = append(out, dialect.Entry{Name: signaled, Kind: dialect.KindGuard, Args: dialect.Fields[signalArgs]()})
 	}
 	dialect.Sort(out)
 	return out

@@ -1095,7 +1095,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 }
 
 // computeBoxCharsInArea draws a batch's box characters once all its walls stand, since
-// each reads its neighbours
+// each reads its neighbors
 func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style component.BoxDrawStyle) {
 	if style == component.BoxDrawNone {
 		return

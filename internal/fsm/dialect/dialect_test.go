@@ -19,7 +19,7 @@ type compare struct {
 	} `toml:"inner"`
 }
 
-// TestAnOpNotOfTheSixIsRefused: a misspelt op fails the load naming its key and the
+// TestAnOpNotOfTheSixIsRefused: a misspelled op fails the load naming its key and the
 // six names, where it once compared for equality.
 func TestAnOpNotOfTheSixIsRefused(t *testing.T) {
 	for _, raw := range []any{"ge", "", "EQ", int64(1)} {

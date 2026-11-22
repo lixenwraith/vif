@@ -2,7 +2,7 @@ description = "Target Dummy: take any weapon at any charge from the range on the
 min_players = 1
 max_players = 1
 
-# A weapon range for one player. The cursor starts at the centre with no weapon,
+# A weapon range for one player. The cursor starts at the center with no weapon,
 # so nothing fires before a pickup, and every loot kind lies still to its left, H L
 # M P over E B R T, each giving one charge or its heat or energy and lying back on
 # its cell three seconds after the pickup under a countdown, so the cursor has time
@@ -12,7 +12,7 @@ max_players = 1
 # while the cursor stands on one, again every three seconds under a countdown, and
 # a standing dummy takes its new hit points at once. A dummy shot down rises again
 # on its spot once the cursor has walked onto it and back out of its shield's
-# reach, and an energy drop homes on the cursor from the dummy's centre whenever
+# reach, and an energy drop homes on the cursor from the dummy's center whenever
 # its energy is 0. :n lays the range again.
 #
 # Only player 0's cursor steps on the pads and the dummy's spot, so the range is
@@ -68,7 +68,7 @@ params = { dx = "int", dy = "int", color = "table" }
 body = { OffsetX = "${dx}", OffsetY = "${dy}", WallVisualConfig = { fg_color = "${color}", render_fg = true } }
 
 [macros.Pad]
-doc = "A pad's frame and its `sign`, a character code, centred on the cell variables `x` and `y` hold."
+doc = "A pad's frame and its `sign`, a character code, centered on the cell variables `x` and `y` hold."
 params = { x = "string", y = "string", sign = "int", color = "table" }
 body = [
     { action = "EmitEvent", event = "EventWallBatchSpawnRequest", payload = { block_mask = "none", box_style = "single", cells = [
@@ -113,14 +113,14 @@ transitions = [
     { trigger = "EventCursorSpawned", target = "Range" },
 ]
 
-# Everything stands about the map's centre, where the cursor starts: the drops in
+# Everything stands about the map's center, where the cursor starts: the drops in
 # two rows of four, 18 to 54 columns left, 12 columns and 13 rows apart, so a
-# countdown under one, 8 cells by 9, stands clear of its neighbours' and of the
+# countdown under one, 8 cells by 9, stands clear of its neighbors' and of the
 # row below; the dummy 20 columns right, three columns clear of the starting
 # cursor's shield; the pads 44 columns right, seven rows above and below it, each
 # countdown under its pad. The dummy's spot is its footprint's box, and a cursor is
 # out of its shield's reach of the dummy beyond 16 columns or 8 rows from the
-# dummy's centre, so the pads, 42 to 46 columns right, stand clear of it.
+# dummy's center, so the pads, 42 to 46 columns right, stand clear of it.
 [states.Range]
 parent = "Root"
 on_enter = [
@@ -160,7 +160,7 @@ transitions = [
     { trigger = "Tick", target = "DummyDown", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
 ]
 
-# A standing dummy takes new hit points by giving way to a fresh one; a cancelled
+# A standing dummy takes new hit points by giving way to a fresh one; a canceled
 # pylon is no kill, so nothing counts it
 [states.DummyUp]
 parent = "Root"
@@ -268,7 +268,7 @@ transitions = [
 ]
 
 # Energy run down to 0 brings one energy drop, homing on the cursor from the
-# dummy's centre, and another only after the energy has moved off 0 again. The
+# dummy's center, and another only after the energy has moved off 0 again. The
 # half second lets the cursor's first energy reach its status first.
 [states.PlayerActive]
 parent = "Root"

@@ -20,7 +20,7 @@ type ColumnFunc struct {
 // columnFuncs renders, for every store a capture carries, the column layout of its
 // component: one column per leaf field in declaration order, each over every row,
 // so a keyframe's bytes repeat by field rather than by row and deflate as a column
-// does. A field without a column layout fails generation rather than travelling
+// does. A field without a column layout fails generation rather than traveling
 // some other way.
 func columnFuncs(defs Definitions) []ColumnFunc {
 	pkg := componentPackage()

@@ -27,7 +27,7 @@ type Config struct {
 	Wavelength int `json:"wavelength"`
 	Swing      int `json:"swing"`  // rows the channel strays either side of the middle; 0 is all the walls leave
 	Detail     int `json:"detail"` // rows of rough rock laid over the smooth profile
-	Ramp       int `json:"ramp"`   // columns closing in from a mouth of MaxGap centred rows, or of no rock past Mouth
+	Ramp       int `json:"ramp"`   // columns closing in from a mouth of MaxGap centered rows, or of no rock past Mouth
 
 	// Octaves, when set, makes the cave jagged: each wall reaches into the gap by its
 	// own fractal noise of that many octaves, from Wavelength halving down
@@ -45,7 +45,7 @@ type Config struct {
 	Open Opening `json:"open,omitzero"`
 }
 
-// Opening widens a cave past column At, over Ramp columns, to Gap open rows centred,
+// Opening widens a cave past column At, over Ramp columns, to Gap open rows centered,
 // at most all the walls leave, or to no rock at all when 0, and holds it open from
 // there.
 type Opening struct {
@@ -80,7 +80,7 @@ const jaggedMedian = 2
 // unit is fixed-point one: a knot is a value in [0, unit)
 const unit = 1 << 16
 
-// minSwing is the least a centre knot stands off the middle, as a fraction of unit:
+// minSwing is the least a center knot stands off the middle, as a fraction of unit:
 // knots alternate sides, so each bend of the channel travels at least twice this
 const minSwing = unit / 4
 
@@ -91,7 +91,7 @@ const roughWavelength = 4
 // Each noise source draws its own knots
 const (
 	channelGap uint64 = iota + 1
-	channelCentre
+	channelCenter
 	channelRoughTop
 	channelRoughBottom
 	channelWallTop
@@ -280,7 +280,7 @@ func (c Config) smooth(channel uint64, i, w int64) int64 {
 	return a + (b-a)*(u*u*(3*w-2*u))/(w*w*w)
 }
 
-// snake is the centre channel: smooth noise whose knots alternate above and below
+// snake is the center channel: smooth noise whose knots alternate above and below
 // the middle, each at least minSwing off it
 func (c Config) snake(i, w int64) int64 {
 	k := i / w
@@ -289,9 +289,9 @@ func (c Config) snake(i, w int64) int64 {
 	return a + (b-a)*(u*u*(3*w-2*u))/(w*w*w)
 }
 
-// side is centre knot k: the upper half on even knots, the lower on odd ones
+// side is center knot k: the upper half on even knots, the lower on odd ones
 func (c Config) side(k int64) int64 {
-	off := minSwing + c.knot(channelCentre, k)*(unit/2-minSwing)/unit
+	off := minSwing + c.knot(channelCenter, k)*(unit/2-minSwing)/unit
 	if k%2 == 0 {
 		return unit/2 + off - 1
 	}

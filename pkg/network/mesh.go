@@ -67,7 +67,7 @@ type meshFrame struct {
 }
 
 // Mesh is an in-process link graph: what a node sends, its directly connected
-// neighbours drain on their next tick. It is the multi-participant harness — a real
+// neighbors drain on their next tick. It is the multi-participant harness — a real
 // socket adds framing and latency, neither of which the domain rules depend on, and
 // unlike a single stream it can express a topology that is not a star. A chain
 // A—B—C is what proves an artifact reaches a participant its producer never
@@ -254,7 +254,7 @@ func (p *MeshPort) meterLocked(id PeerID) *linkMeter {
 // ParticipantID is the canonical source order used by the barrier.
 func (p *MeshPort) ParticipantID() uint32 { return uint32(p.local) }
 
-// addLink records a neighbour, reporting whether it was new.
+// addLink records a neighbor, reporting whether it was new.
 func (p *MeshPort) addLink(peer *MeshPort, served bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -314,7 +314,7 @@ func (p *MeshPort) deliver(in Inbound) {
 	p.queue = append(p.queue, meshFrame{in: in, releaseAt: releaseAt, bytes: bytes})
 }
 
-// Send delivers to one direct neighbour; a participant that is not a neighbour is
+// Send delivers to one direct neighbor; a participant that is not a neighbor is
 // unreachable in one hop, which is what a relay exists to solve.
 func (p *MeshPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 	p.mu.Lock()
@@ -327,10 +327,10 @@ func (p *MeshPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 	return p.deliverTo(peer, msgType, payload)
 }
 
-// Broadcast sends to every direct neighbour.
+// Broadcast sends to every direct neighbor.
 func (p *MeshPort) Broadcast(msgType uint8, payload []byte) { p.BroadcastExcept(0, msgType, payload) }
 
-// BroadcastExcept sends to every direct neighbour but one. Relaying an artifact back
+// BroadcastExcept sends to every direct neighbor but one. Relaying an artifact back
 // down the link it arrived on is pure duplicate traffic: the sender already holds it.
 func (p *MeshPort) BroadcastExcept(exclude uint32, msgType uint8, payload []byte) {
 	p.mu.Lock()
@@ -368,7 +368,7 @@ func (p *MeshPort) deliverTo(peer *MeshPort, msgType uint8, payload []byte) bool
 	return true
 }
 
-// Inject replays a frame into this node's inbound queue as if a neighbour had sent
+// Inject replays a frame into this node's inbound queue as if a neighbor had sent
 // it. It is the mesh's half of the join gate: a participant that read session
 // traffic off its stream before the port owned it hands the frames over here.
 func (p *MeshPort) Inject(peer uint32, msgType uint8, payload []byte) {

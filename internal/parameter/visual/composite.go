@@ -48,7 +48,7 @@ var SwarmPatternChars256 = [2][2][4]rune{
 
 // LookFrame is a frame as authored, a string per row: its glyphs, a space for none,
 // and per cell its foreground and background palette entries (hex, a space for the
-// look's colour and for no background) and attribute (B bold, D dim). Fg, Bg and
+// look's color and for no background) and attribute (B bold, D dim). Fg, Bg and
 // Attr are each optional.
 type LookFrame struct {
 	Glyphs []string `toml:"glyphs"`
@@ -57,8 +57,8 @@ type LookFrame struct {
 	Attr   []string `toml:"attr"`
 }
 
-// LookArt is a look as authored: the palettes its frames index, the colour of a
-// glyph without an entry and, where Console, the 256-colour pair
+// LookArt is a look as authored: the palettes its frames index, the color of a
+// glyph without an entry and, where Console, the 256-color pair
 type LookArt struct {
 	Fg, Bg       []color.RGB
 	Color        color.RGB
@@ -76,7 +76,7 @@ func CompileLook(width, height int, art LookArt) (component.Look, error) {
 	look := component.Look{Fg: art.Fg, Bg: art.Bg, Color: art.Color, Fg256: art.Fg256, Bg256: art.Bg256, Console: art.Console}
 	var errs []error
 	if len(art.Fg) > LookPaletteMax || len(art.Bg) > LookPaletteMax {
-		errs = append(errs, fmt.Errorf("fg and bg hold %d and %d colours, at most %d", len(art.Fg), len(art.Bg), LookPaletteMax))
+		errs = append(errs, fmt.Errorf("fg and bg hold %d and %d colors, at most %d", len(art.Fg), len(art.Bg), LookPaletteMax))
 	}
 	if len(art.Frames) == 0 {
 		errs = append(errs, errors.New("no frame"))

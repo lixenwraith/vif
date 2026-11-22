@@ -22,7 +22,7 @@ These hold regardless of which repository is targeted first.
   be a regular file there: no absolute path and no path relative to `cwd`, even
   for a scenario this run resolved itself, since the same scenario is served to
   joiners and an author's host path means nothing on their machines.
-- **Honour the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`. No
+- **Honor the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`. No
   target may write outside `DESTDIR`, and none may require network access.
 - **The Makefile runs under GNU make and FreeBSD make.** `!=` rather than
   `$(shell)`, no conditionals, functions or order-only prerequisites, and
@@ -36,22 +36,22 @@ These hold regardless of which repository is targeted first.
   outruns them, and `VIF_WRITE_GENERATED=1` on that test rewrites them.
 - **Version comes from the source, never from flags.** `git archive` expands
   `internal/asset/version.txt` to the tag and commit (`export-subst`, which
-  GitHub's archives honour too), and a checkout build reads Go's VCS stamp, so
+  GitHub's archives honor too), and a checkout build reads Go's VCS stamp, so
   `vif -version` names the tag without an ldflags contract. A Go module proxy
   zip carries neither, so `go install …/cmd/vif@vX.Y.Z` names the version and no
   commit, and a build of an unpacked zip reports `(devel)`.
 - **Runtime state is XDG.** Logs, journals and music recordings under
   `$XDG_STATE_HOME`; nothing in `/var`, nothing beside the binary.
-- **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
+- **License stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
   vendored or redistributed content (typing corpus, images, sound specs) must
-  be licence-checked before it enters `wad/` or a release archive, and its
+  be license-checked before it enters `wad/` or a release archive, and its
   notice travels with it. The corpus in `wad/content/` is Go standard-library
-  source under the Go Authors' BSD licence, `wad/content/LICENSE`, which the wad
+  source under the Go Authors' BSD license, `wad/content/LICENSE`, which the wad
   archive and every install carry (the content loader reads only `.txt` and
   `.toml`). What a binary links travels as `NOTICES`: `make notices` writes the
-  licences of Go and of every module one build links, the host's release or the
+  licenses of Go and of every module one build links, the host's release or the
   one `GOOS`, `GOARCH` and `TAGS` name, from the module cache or `vendor/` and
-  with no network, so a new dependency brings its own and one with no licence
+  with no network, so a new dependency brings its own and one with no license
   file stops the target; purego's (Apache-2.0, for the desktop window) is in it
   wherever the build links purego. `make release` writes it and `make install`
   stops without it; the release workflow writes each archive's for that
@@ -59,13 +59,13 @@ These hold regardless of which repository is targeted first.
   fetches `golang.org/x/mobile` where the cache lacks it) and the session
   image's builder the headless build's, which the image holds as `/NOTICES`
   beside `/LICENSE`. The font the window, Android and `vif.wasm` draw cells
-  with is Hack, under the MIT licence and Bitstream Vera's, which the terminal
-  module embeds; its licence is that module's `atlas/LICENSE`, below the root
+  with is Hack, under the MIT license and Bitstream Vera's, which the terminal
+  module embeds; its license is that module's `atlas/LICENSE`, below the root
   `notices` reads, so it travels beside `NOTICES` as `LICENSE.font`: `make
   release` copies it to `bin/` and `make install` stops without it, and the
   release workflow and Gradle copy it from the module they build with. The
   page's own text is lixen.com's Hack Proportional and the Android app's Hack
-  Nerd Font, both under Hack's two licences and Nerd Fonts' OFL, whose texts lie
+  Nerd Font, both under Hack's two licenses and Nerd Fonts' OFL, whose texts lie
   beside their files in `web/fonts/` and the APK's `assets/fonts/`, so the web
   archive and the APK carry them. The About overlay points to `NOTICES`.
 
@@ -124,7 +124,7 @@ extracts, still needs its trust, origin and cache policy decided.
 ## 3. Gaps to close before a first submission
 
 `make install` stages everything a package review expects: the binary, the system
-config root, the licences (`LICENSE`, `NOTICES`, `LICENSE.font`), `man6/vif.6`, a
+config root, the licenses (`LICENSE`, `NOTICES`, `LICENSE.font`), `man6/vif.6`, a
 `Terminal=true` desktop entry whose
 second action plays in the window (`vif -g`), scalable and symbolic icons, and
 bash, zsh and fish completion. What remains is
@@ -145,8 +145,8 @@ Target `vif` (release) with `vif-git` optional.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
    `make release` sets `-s -w`, which Arch's debug packaging wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.
-   Confirm the licences land in `/usr/share/licenses/vif/`; a `build()` that
-   runs `go build` itself also runs `make notices` and copies the font's licence
+   Confirm the licenses land in `/usr/share/licenses/vif/`; a `build()` that
+   runs `go build` itself also runs `make notices` and copies the font's license
    to `bin/LICENSE.font`, as `make release` does: `install` stops without either.
 4. `check()` runs `go test ./...`. `script/test.sh` binds ports and must not
    run in a build chroot.
@@ -184,9 +184,9 @@ Lowest priority: Go game packages move slowly through NEW.
    route; commit a `vendor/` only on the packaging branch.
 3. `debian/copyright` in DEP-5 form enumerates the corpus files in
    `wad/content/` separately: they are Go standard-library source under the Go
-   Authors' BSD licence. So is the vendored cell font,
+   Authors' BSD license. So is the vendored cell font,
    `vendor/github.com/lixenwraith/terminal/atlas/hack.*`, under Hack's MIT and
-   Bitstream Vera licences (its `atlas/LICENSE`), and so are the page's and the
+   Bitstream Vera licenses (its `atlas/LICENSE`), and so are the page's and the
    app's font, `web/fonts/hack-proportional-*.woff2` and
    `android/app/src/main/assets/fonts/hack-400.ttf`, under those and Nerd Fonts'
    OFL (the `LICENSE` beside each).

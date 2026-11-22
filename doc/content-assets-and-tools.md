@@ -211,7 +211,7 @@ terminal module's `atlas` embed:
   printable ASCII glyphs plus a fallback each, a 12-row bitmap a glyph: the large
   face 12 pixels wide, the small 6; Go source, not embedded.
 - **Cell font** (the terminal module's `atlas/hack.bin`, `hack.woff2`): Hack 3.003
-  (MIT and Bitstream Vera licences) as bitmaps at 6x12, 8x16 and 12x24, which the
+  (MIT and Bitstream Vera licenses) as bitmaps at 6x12, 8x16 and 12x24, which the
   window and Android draw cells with (`atlas.Hack()`), and as a web font for a
   browser (`atlas.HackWeb()`); linked only by the builds with a graphical host, so
   by no `vif_headless` build, no Linux or FreeBSD `vif_nogui` one and no Windows

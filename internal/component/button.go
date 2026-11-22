@@ -20,7 +20,7 @@ type ButtonComponent struct {
 	Held      bool
 }
 
-// ButtonRect places slot of count buttons in one row centred on a mapW by mapH map;
+// ButtonRect places slot of count buttons in one row centered on a mapW by mapH map;
 // a map too narrow for the row lets it overhang, which the renderer clips
 func ButtonRect(slot, count, mapW, mapH int) (x, y, w, h int) {
 	gap := parameter.ButtonGap

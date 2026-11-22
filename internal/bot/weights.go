@@ -166,11 +166,11 @@ func (n *network) spell(b *bytes.Buffer, genes []float64) {
 		at += len(n.names)
 		if output {
 			if hidden := genes[at : at+n.hidden]; written(hidden) {
-				spelt := make([]string, len(hidden))
+				spelled := make([]string, len(hidden))
 				for h, w := range hidden {
-					spelt[h] = number(w)
+					spelled[h] = number(w)
 				}
-				fmt.Fprintf(b, "%s = [%s]\n", hiddenName, strings.Join(spelt, ", "))
+				fmt.Fprintf(b, "%s = [%s]\n", hiddenName, strings.Join(spelled, ", "))
 			}
 			at += n.hidden
 		}

@@ -350,7 +350,7 @@ func TestEveryRaiderTypeFliesTheCycle(t *testing.T) {
 
 // TestEachCaveRaidsWithTheSameRanks: the raid's pick lists eight raider
 // types to each stone art, in the order CaveStart's pick lists the arts, and every
-// program once. Each cave's eight wear one palette and console colour, and fly the
+// program once. Each cave's eight wear one palette and console color, and fly the
 // same ranks in the same order, its hit points rising, so caves differ in looks
 // alone. Every type drops from the raider table: heat, then the U, which a full gun
 // passes over for two energy a drop, then energy.

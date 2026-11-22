@@ -794,7 +794,7 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 A magic square takes the presses of the keys a state captures for it: a digit
 selects the block it names for the pressing slot, and h, l, k and j turn that
 block's row or column a place. `EventSquareSpawnRequest { x, y, layout, groups,
-hp, block_width, block_height, target_group_id }` lays it centred on the cell,
+hp, block_width, block_height, target_group_id }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
 attack, hold and defense; one square stands at a time. `EventSquareAligned { kind,
 line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0 attack, 1
@@ -1025,7 +1025,7 @@ room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }
 removes instances and the materializes still bringing them, every program's when
 it names none. `EventBehaviorSignalRequest { program, signal, count }` raises one
 of the program's `signals` on `count` of its instances, or with no count on all:
-those whose state has an edge guarded by `Signalled` on it and that do not hold it
+those whose state has an edge guarded by `Signaled` on it and that do not hold it
 yet, drawn alike on every instance, so a region sends a salvo of the size it
 chose where each instance would roll for itself; a request naming no program, or
 a signal that program does not declare, fails the load. `wad/scenario/base/cave` is the worked example: its raider types,
@@ -1052,7 +1052,7 @@ combat = "swarm"                    # Attack-matrix row its own starts from: swa
 mass = 2.0                          # Soft collision, flocking, knockback, wind; 0: the row's knockback only (optional)
 drops = "raider"                    # Drop table its kills roll, the scenario's or a code species' (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
-lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
+lifetime_ms = 35000                 # 0 lives until killed or canceled (optional)
 entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
 entrance_ms = 250                   # How long that materialize plays; 0 plays its style's whole (optional)
 death = "scatter"                   # What a kill leaves of its body: none, flash, fadeout or scatter, the default (optional)
@@ -1081,7 +1081,7 @@ pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and k
 missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, contact, strike, hold
 
 [prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
-color = { r = 255, g = 120, b = 0 }  # The beams' colour
+color = { r = 255, g = 120, b = 0 }  # The beams' color
 fill_ms = 300                       # Each beam's head running in; hold_ms and recede_ms likewise
 
 [prototype.mount]                   # A weapon each instance carries: EventMountRequest's keys but host (optional)
@@ -1096,7 +1096,7 @@ flags = ["Enraged"]                 # Held while the state runs
 probe = "ResolveTarget"             # Must pass for an entry to commit; probe_args its args
 on_enter = [{ action = "StoreTarget" }]      # Effects
 on_update = [{ action = "ChargeToStored" }]  # Sustained verbs, every tick the state holds
-on_exit = [...]                     # Effects, also when the instance dies or is cancelled
+on_exit = [...]                     # Effects, also when the instance dies or is canceled
 cues = [{ at = 400, action = "...", payload = { ... } }]  # An effect at 400‰ of the entry
 transitions = [
     { trigger = "Timeout", target = "Roam" },
@@ -1116,10 +1116,10 @@ target = "Roam"
   every shipped scenario; `fg` and `bg` rows give each cell an entry of the
   prototype's palette as a hex digit (`0`-`f`), a space for the prototype's `color`
   and for no background; an `attr` row gives `B` (bold), `D` (dim) or a space. A
-  256-colour host draws a look with `fg256` and `bg256` in that pair alone, every
+  256-color host draws a look with `fg256` and `bg256` in that pair alone, every
   glyph in the one and every background in the other, which reads on every console
   palette, and shows a hit by reversing the glyph; without the pair it draws the
-  palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
+  palettes' nearest colors. The hit flash, then `Enraged`, tints every glyph. The
   eye's types are drawn from the same look.
 - The death: a kill leaves `death` of the body where it stood, a scatter of its
   glyphs unless the prototype names `none`, `flash` or `fadeout`; a lifetime's end
@@ -1172,7 +1172,7 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `behavior.count` the last ships dive hardest; every instance steps a program for
   itself, so a row one instance alone holds, a `player.` or `kills.` one, fails
   the load), `Var { name, op, value }` (a variable of the scenario's machine, so a
-  candidate guarded on `wave` picks a faster dive) and `Signalled { name }` (one
+  candidate guarded on `wave` picks a faster dive) and `Signaled { name }` (one
   of the program's `signals` is raised on the instance; the edge that commits on
   it lowers it, and until one does it stays raised).
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
@@ -1210,15 +1210,15 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   clockwise on screen when set, closing on the circle from off it; `mirror` turns
   it the other way for a body posted left of the middle), `Drag { rate }` (linear
   drag per second) and `Freeze` (no move this tick).
-- Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
+- Flags: `Enraged` (combat's enrage: no knockback, the enraged color),
   `Shielded` (no damage, no stun), `ChargeLine` (the charge line: two pulses from
-  the body's centre to the centre of the footprint on the stored cell, the landing
+  the body's center to the center of the footprint on the stored cell, the landing
   marker's cell, over the end of the entry, each two fifths of it
   (`BehaviorChargeLinePulseShare`), so a lock flagged with it shows where a charge
   goes), `TeleportLine` (the teleport line from the body where it stands to the
-  same centre, over the entry, for a state that ends in `Teleport` on its
+  same center, over the entry, for a state that ends in `Teleport` on its
   timeout's `actions`),
-  `Landing` (the landing marker: the centre of the footprint the body takes on the
+  `Landing` (the landing marker: the center of the footprint the body takes on the
   stored cell blinks white, red and pink, so flagging the lock, the charge and the
   teleport marks where an attack lands until it does) and `Armed` (the body's mount
   fires: a program that flags any state so fires it in those alone).
@@ -1300,7 +1300,7 @@ rows = [
   behavior program with its header on the cell, at most 256 a map; a character no
   entry names, or an entry naming no program of the scenario, fails the load.
 - `EventMapLayRequest { map, x, y }` lays it with its top left at the cell, which
-  an `origin` counts from an edge or the centre: each instance stands as its own
+  an `origin` counts from an edge or the center: each instance stands as its own
   `EventBehaviorSpawnRequest` would stand it, at once or through its entrance, in
   row order. A request naming no map of the scenario fails the load where it is
   written.

@@ -938,7 +938,7 @@ func TestTheMenuSearchFindsRowsOnEveryPageAndActsInPlace(t *testing.T) {
 		t.Fatalf("a search for pause listed %q, want %q", keys, want)
 	}
 	if got := menuRow(ctx, "settings/#Pause/pause_menu").Label; got != "Settings / Pause in menu" {
-		t.Fatalf("a found row is labelled %q", got)
+		t.Fatalf("a found row is labeled %q", got)
 	}
 	key(terminal.KeyDown, 0)
 	key(terminal.KeyEnter, 0)
@@ -998,7 +998,7 @@ func TestAOneFieldFormIsATextBoxOnItsRow(t *testing.T) {
 // TestThePauseFlagsGateTheMenuAndCommandLinePauses: Pause in menu and Pause in
 // command line decide whether opening each asks to pause a solo game, the menu's
 // change asking at once; p asks for the pause only another ends, and a game waiting
-// for its first press refuses :pause and greys the Pause row.
+// for its first press refuses :pause and grays the Pause row.
 func TestThePauseFlagsGateTheMenuAndCommandLinePauses(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)

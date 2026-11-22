@@ -18,9 +18,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestEmber256WearsTheHeatBarLeadColour: the solid 256-colour ember takes the
+// TestEmber256WearsTheHeatBarLeadColor: the solid 256-color ember takes the
 // palette of the heat bar's last filled cell, at every heat and screen width.
-func TestEmber256WearsTheHeatBarLeadColour(t *testing.T) {
+func TestEmber256WearsTheHeatBarLeadColor(t *testing.T) {
 	t.Parallel()
 	gameCtx, cursors := peerWorld(t, 1)
 	gameCtx.World.Resources.Config.ColorMode = terminal.ColorMode256
@@ -57,10 +57,10 @@ func TestEmber256WearsTheHeatBarLeadColour(t *testing.T) {
 }
 
 // TestShield256RimClosesOnEveryAxis: at any radius and cell aspect, a shield's
-// 256-colour rim crosses each axis its TrueColor field reaches along, on both sides
-// of its centre, and no axis the field leaves bare; and once the field reaches a row
-// above its centre, the rim closes round it, so no step between edge-sharing cells
-// leads from the centre past the field without crossing it
+// 256-color rim crosses each axis its TrueColor field reaches along, on both sides
+// of its center, and no axis the field leaves bare; and once the field reaches a row
+// above its center, the rim closes round it, so no step between edge-sharing cells
+// leads from the center past the field without crossing it
 func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 	t.Parallel()
 	const w, h, cx, cy = 90, 90, 45, 45
@@ -102,7 +102,7 @@ func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 			for queue := [][2]int{{cx, cy}}; len(queue) > 0; queue = queue[1:] {
 				c := queue[0]
 				if c != [2]int{cx, cy} && !inField(c[0], c[1]) {
-					t.Errorf("aspect %v radius %v: cell %v past the field is reached from the centre inside the rim", aspect, radius, c)
+					t.Errorf("aspect %v radius %v: cell %v past the field is reached from the center inside the rim", aspect, radius, c)
 					break
 				}
 				for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
@@ -122,7 +122,7 @@ func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 const consoleGlyphs = "·×÷°±•‼←↑→↓≈≡≤≥─│┌┐└┘├┤┬┴┼═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬█░▒■▲▶▼◀♦"
 
 // TestConsoleGlyphsAreInEveryConsoleFont: a console draws a glyph its font lacks as '#' or a
-// replacement mark, so everything a 256-colour path draws is ASCII or in consoleGlyphs: the
+// replacement mark, so everything a 256-color path draws is ASCII or in consoleGlyphs: the
 // code's tables, and the shipped scenarios, whose programs' frames and messages draw too.
 func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 	t.Parallel()

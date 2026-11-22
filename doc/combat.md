@@ -20,7 +20,7 @@ another one.
 | Hits on cursors | none (no PvP) | applied by each cursor's owner alone |
 
 A peer never sees a remote cursor's orbs, tracers, projectiles, bolts, pulses or
-rays, and never receives its loadout's behaviour; it receives what that loadout
+rays, and never receives its loadout's behavior; it receives what that loadout
 did to the Shared world, as the artifacts in §5. A mount raises only local
 events: its cursor hits go through `strikeCursor`, which acts only on a cursor
 this instance simulates, and its pulse is a Shared entity every instance advances.
@@ -118,7 +118,7 @@ no other while it lasts. Each tick a pulse ages, swells from `PulseGrowStart` of
 radius to all of it over `Grow`, and strikes inside the size it has reached every
 `HitInterval`, or once as it fires; it ends after `Duration` unless `Sustained`. A
 ridden pulse ends with its host or once its mount names another, and holds, neither
-ageing nor striking, while a `MountArmed` mount is disarmed, so a stun holds the
+aging nor striking, while a `MountArmed` mount is disarmed, so a stun holds the
 green's attack and its pulse alike. A cursor's strike resolves its drains locally
 and crosses its geometry (§5); a mount's strikes each cursor inside it through
 `strikeCursor`. `WeaponSpecs` holds the kind's `PulseSpec` and a mount overrides it
@@ -202,8 +202,8 @@ cursor once a tick however much of its body and guts touch it.
 | Cursor weapon hit | Artifact |
 |---|---|
 | Tracer, rod, turret bullet on a Shared target | one direct request stamped Shared (stamped class) |
-| Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner, and whether the weapon was at its cap |
-| Special-fire detonation | one batch of explosion centres sharing radius, attack and owner |
+| Missile blast, disruptor pulse | explosion geometry: center, radius, attack, owner, and whether the weapon was at its cap |
+| Special-fire detonation | one batch of explosion centers sharing radius, attack and owner |
 | Ray on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
@@ -217,19 +217,19 @@ arc's from the struck target, since on a guest the hit lands a playout lead late
 
 ## 6. Presentation
 
-Renderers draw only what exists on their instance. Orbs take their kind's colour
+Renderers draw only what exists on their instance. Orbs take their kind's color
 from `orbPalette` and show the bullseye at the cap. A discharge's `WeaponPalette`
 is positive or negative by the cursor's energy, or hostile for a mount; a tracer
 keeps the palette it was fired with and draws as a background-only trail that
 contracts as it drains. A pulse draws from its component in its `PulseStyle`: a
 ring of ripples over what it strikes, a glow under the species that carries it,
-whose hostile colour is the storm's green, or nothing when hidden. Rays are drawn straight
+whose hostile color is the storm's green, or nothing when hidden. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
-a mount's warning as its core line alone. Missiles and bullets draw hostile colours
-from their `Hostile` flag; lightning uses its colour table. A bolt's ends name
+a mount's warning as its core line alone. Missiles and bullets draw hostile colors
+from their `Hostile` flag; lightning uses its color table. A bolt's ends name
 entities, each drawn this frame where its entity is, the local cursor at its D-18
 prediction, and a spawn's cells only once the entity is gone. Each has a
-256-colour path.
+256-color path.
 
 ## 7. Tick order
 
@@ -237,7 +237,7 @@ prediction, and a spawn's cells only once the entity is gone. Each has a
 Host species run next, then `mount` after every host so a host arms before its
 mount fires, then `pulse`, so a pulse strikes from the tick it is fired, then
 `combat`, which also ages statuses and lands burn ticks. Lightning, missile and
-bullet integrate after combat; `transient` ages explosion centres late.
+bullet integrate after combat; `transient` ages explosion centers late.
 
 ## 8. Adding a weapon
 
@@ -247,7 +247,7 @@ bullet integrate after combat; `transient` ages explosion centres late.
    `MountSystem.fire`.
 3. Give its attack family a profile against every cursor defender; an over-time
    family sets `Status`, `Period` and `Duration`.
-4. Add its orb colours, loot type with its `LootSpecs` and `LootVisuals` rows, and
+4. Add its orb colors, loot type with its `LootSpecs` and `LootVisuals` rows, and
    a tier in `profile.Drops`, unless it is innate; a scenario's kinds charge it by
    name (`weapon = "<name>"`) once `WeaponSpecs` holds it.
 5. A player-domain push of a replicated event must be named in `crossingPushes`

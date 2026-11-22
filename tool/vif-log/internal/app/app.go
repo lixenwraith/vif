@@ -347,7 +347,7 @@ func (a *App) say(sev tui.ToastSeverity, msg string) {
 	a.toast.Show(o, toastFrames)
 }
 
-// actions maps key actions to behaviour; keys knows nothing about App.
+// actions maps key actions to behavior; keys knows nothing about App.
 var actions = map[keys.Action]func(*App){
 	keys.ActQuit:         func(a *App) { a.quit = true },
 	keys.ActRedraw:       func(a *App) { a.term.Sync() },

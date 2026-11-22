@@ -41,7 +41,7 @@ const (
 	DevourerOmenMax    = 6 * time.Second
 	DevourerOmenSpread = 1.4 // radians
 
-	// A gut strikes within DevourerGutRadius column units of its centreline, which
+	// A gut strikes within DevourerGutRadius column units of its centerline, which
 	// forms straight and then sags DevourerGutSag and writhes DevourerGutWrithe
 	DevourerGutRadius = 2.0
 	DevourerGutSag    = 3.2

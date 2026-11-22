@@ -10,7 +10,7 @@ import (
 )
 
 // BenchmarkMazeSpawn is td's maze laid over the map in box-drawn walls and taken
-// down again: every wall's box character read from its neighbours, the cost a
+// down again: every wall's box character read from its neighbors, the cost a
 // storm of walls pays
 func BenchmarkMazeSpawn(b *testing.B) {
 	for _, size := range caveBenchSizes {

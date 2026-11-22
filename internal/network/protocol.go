@@ -4,7 +4,7 @@ import link "github.com/lixenwraith/vif/pkg/network"
 
 // The kinds a session exchanges, and the table a link reads them by. The reserved
 // codes hold their place in the numbering for capabilities the transport does not
-// have yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised
+// have yet; nothing sends or accepts them, and NetworkSystem counts an unrecognized
 // type as a drop rather than translating it.
 const (
 	// MsgSessionRoute is the one frame a dialer sends before it reads: the session
@@ -77,7 +77,7 @@ const (
 
 	// Succession, in the order it runs. A report is the news that the authority is
 	// gone, flooded so a participant two links away learns of a loss only its
-	// neighbour observed; a handoff, a membership change, lets a receiver adopt a
+	// neighbor observed; a handoff, a membership change, lets a receiver adopt a
 	// term it has never seen. There is no vote: the successor is a function of the
 	// chain and the roster (see authority.go), so 0x2D is retired rather than reused.
 	MsgAuthorityReport  link.MessageType = 0x2C // Live: a survivor's notice that the authority is gone
@@ -90,7 +90,7 @@ const (
 	MsgPeerList link.MessageType = 0x20 // Live: the succession chain and its addresses
 
 	// MsgRelayJoin and MsgRelayAdmit admit a participant on the link of the one it
-	// dialled rather than on the coordinator's: a guest's bot joins through its
+	// dialed rather than on the coordinator's: a guest's bot joins through its
 	// holder. The holder runs the handshake and serves the world; the coordinator
 	// still decides, asked on the holder's own link at the two steps that change the
 	// roster — allocating the identity and crossing the arrival.
@@ -104,7 +104,7 @@ const (
 	MsgConnect link.MessageType = 0x02 // Live: a peer opening a link, or confirming a bind
 	MsgAck     link.MessageType = 0x04 // Live: the peer link answered
 
-	// Membership. A departure is observed only by a direct neighbour, so a neighbour
+	// Membership. A departure is observed only by a direct neighbor, so a neighbor
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect link.MessageType = 0x03 // Live: a participant's link was lost
 

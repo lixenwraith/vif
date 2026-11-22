@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// LandingRenderer blinks the centre cell of the footprint an attack lands on: the
+// LandingRenderer blinks the center cell of the footprint an attack lands on: the
 // swarm's from its lock through its charge or teleport, a data species' while its
 // state is flagged Landing. A Kraken's charge marks where its body ends, far larger,
 // and a Devourer's omen the ray its gut forms along. The lines show the path; this
@@ -27,7 +27,7 @@ type LandingRenderer struct {
 	shape      component.DevourerShape
 }
 
-// landingCellRenderer draws the marker at step of its colour cycle
+// landingCellRenderer draws the marker at step of its color cycle
 type landingCellRenderer func(buf *render.RenderBuffer, screenX, screenY, step int)
 
 func NewLandingRenderer(ctx *engine.GameContext) *LandingRenderer {
@@ -90,7 +90,7 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	})
 }
 
-// mark draws the marker on the centre of the area the body covers, its cycle starting
+// mark draws the marker on the center of the area the body covers, its cycle starting
 // on each state's entry
 func (r *LandingRenderer) mark(ctx render.RenderContext, buf *render.RenderBuffer, footprint vmath.Area, elapsed time.Duration) {
 	c := footprint.Center()
@@ -101,7 +101,7 @@ func (r *LandingRenderer) mark(ctx render.RenderContext, buf *render.RenderBuffe
 
 // markCharge marks where a Kraken's charge ends, from its spin's first tick until
 // the body arrives: an outline KrakenLandingReach body radii round, over a glow
-// that rises through the spin and fades toward the centre
+// that rises through the spin and fades toward the center
 func (r *LandingRenderer) markCharge(ctx render.RenderContext, buf *render.RenderBuffer, k *component.KrakenComponent) {
 	glow := visual.KrakenLandingGlowMax
 	if k.State == component.KrakenSpin {

@@ -85,7 +85,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 }
 
 // The Service is owned by its Job and reaches no further than the pod network: no
-// NodePort, so a session is dialled only through the router.
+// NodePort, so a session is dialed only through the router.
 func TestBuildServiceOwnsJobInsideTheCluster(t *testing.T) {
 	object := buildService("abc123", "job-uid", "vif")
 	encoded, err := json.Marshal(object)

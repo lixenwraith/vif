@@ -204,10 +204,10 @@ func TestAKeymapSayingFillFalseGainsNoBinding(t *testing.T) {
 	}
 }
 
-// TestAKeySpeltTwoWaysBindsAsTheSpellingSortingLast: a section binding one key under
+// TestAKeySpelledTwoWaysBindsAsTheSpellingSortingLast: a section binding one key under
 // two spellings binds it as the one that sorts last binds it, before an upgrade and
 // after, which keeps both lines.
-func TestAKeySpeltTwoWaysBindsAsTheSpellingSortingLast(t *testing.T) {
+func TestAKeySpelledTwoWaysBindsAsTheSpellingSortingLast(t *testing.T) {
 	doc := []byte("[normal]\nSPACE = \"fire_main\"\nspace = \"none\"\n[normal_keys]\nESCAPE = \"quit\"\nescape = \"help\"\n")
 	out, _, err := UpgradeKeymap(doc)
 	if err != nil {

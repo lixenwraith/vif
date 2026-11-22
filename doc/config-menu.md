@@ -36,7 +36,7 @@ is typed in, its row's fill gives way to the label in the same orange, and its c
 blinks orange in step with the command line's, as a form's and the `/` filter's do.
 Submitting a session action closes the menu and resumes play. Joining, router
 requests and bot admission complete asynchronously; the status bar reports
-progress or failure. Cancelling before submission starts no action. Replay
+progress or failure. Canceling before submission starts no action. Replay
 viewers retain their inspection-only command restrictions. A bracketed value marks
 a row that is unavailable or read only; for an unavailable row the description
 below the list starts with the reason, the sentence its command gives (`Logging

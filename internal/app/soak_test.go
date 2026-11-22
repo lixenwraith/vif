@@ -45,7 +45,7 @@ func soakScale(short, normal, full int) int {
 	return normal
 }
 
-// soakRun is one journalled source run and everything a replay needs to reproduce it
+// soakRun is one journaled source run and everything a replay needs to reproduce it
 type soakRun struct {
 	cap  *journal.Capture
 	want []string
@@ -215,7 +215,7 @@ func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.
 }
 
 // A gold sequence running when main hands over to quasar, or quasar back to main, is
-// adopted by the region taking over rather than cancelled, and still pays once.
+// adopted by the region taking over rather than canceled, and still pays once.
 func TestGoldOutlivesTheHandoverBetweenMainAndQuasar(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, fixtureSeed, 120, 40)

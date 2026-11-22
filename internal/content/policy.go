@@ -4,7 +4,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// File extensions recognised during corpus load
+// File extensions recognized during corpus load
 const (
 	ExtText = ".txt"
 	ExtTOML = ".toml"

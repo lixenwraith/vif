@@ -20,7 +20,7 @@ type QuasarRenderer struct {
 	zapCell quasarZapCellRenderer
 }
 
-// quasarZapCellRenderer draws one zap range border cell in the colour mode chosen at construction
+// quasarZapCellRenderer draws one zap range border cell in the color mode chosen at construction
 type quasarZapCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, armed bool)
 
 // NewQuasarRenderer creates the renderer
@@ -85,7 +85,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 // renderZapRange renders zap range ellipse boundary
 func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
-	// Same state colour as the quasar itself
+	// Same state color as the quasar itself
 	armed := quasar.Machine.State != component.QuasarHoming
 
 	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
@@ -138,7 +138,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 }
 
 // zapBand is the range of |dx| the band test admits on a row dyCirc from the
-// centre. The test is monotone in |dx|, so the ellipse's crossing, taken as an
+// center. The test is monotone in |dx|, so the ellipse's crossing, taken as an
 // estimate, is corrected a step at a time against the test itself.
 func zapBand(dyCirc, radius, inner, outer float64) (lo, hi int, ok bool) {
 	norm := func(dx int) float64 { return vmath.Magnitude(float64(dx), dyCirc) / radius }

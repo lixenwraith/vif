@@ -71,7 +71,7 @@ func WaitScriptTick(signals <-chan os.Signal, delay time.Duration) bool {
 }
 
 // seatJoin is every seat's join address, which makes its run a joining one. It is
-// never dialled: the seat's stream is one its holder opens in-process (seatLink).
+// never dialed: the seat's stream is one its holder opens in-process (seatLink).
 const seatJoin = "holder:0"
 
 // seat is one bot this run holds: a headless instance of its own that joins the

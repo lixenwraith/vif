@@ -153,7 +153,7 @@ flags so no caller can bypass the start/ready gate. The entry points:
 |---|---|
 | `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
-| `-spectate <addr> [slot]`, `:spectate <target> [slot]` | The targets `-join` takes, dialled to watch: the run takes no place in the session, and looks from the player on `slot`, else the first playing. The command dials while this run plays on and replaces the run, its bots and its journal once the session answers, so a refusal leaves the game as it was; while spectating, `:spectate <slot>` follows another player ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
+| `-spectate <addr> [slot]`, `:spectate <target> [slot]` | The targets `-join` takes, dialed to watch: the run takes no place in the session, and looks from the player on `slot`, else the first playing. The command dials while this run plays on and replaces the run, its bots and its journal once the session answers, so a refusal leaves the game as it was; while spectating, `:spectate <slot>` follows another player ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-spectators <n>` | How many spectators a session this run hosts feeds at once, 0 to 1024; 8 unless set, 0 takes none. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <doors> [host\|migrate]` | Open a run that is **already playing**, at one or more doors, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A successor serves it beside the port its session reaches it at, or takes that port when the address names it, and hosts from then on. A run that hosts already, or is in any other session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
@@ -164,14 +164,14 @@ flags so no caller can bypass the start/ready gate. The entry points:
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 `[tcp://|vif://|vifs://]host:port[/name]`, the name routing to one of several
-sessions on an address and `vifs://` dialling it over TLS, or a `ws(s)://` route a browser joins by, whose last path segment is
+sessions on an address and `vifs://` dialing it over TLS, or a `ws(s)://` route a browser joins by, whose last path segment is
 the name. An `http(s)://` URL names a site instead: `network.RequestSession` posts
 to its `/vif/api/sessions` and the returned link is what `-join` or `:join` dials,
 so a restart or rejoin follows that session rather than creating another. A link
 naming a session whose route does not answer, a `vif://` link in a browser or one
 typed onto another route's port, is looked up by its name in `GET /vif/api/sessions`
 of the site that issued it (the link's own origin, then its host's `https`), and the
-routes listed for this build are dialled. A route's own refusal stands, and a site
+routes listed for this build are dialed. A route's own refusal stands, and a site
 that answers but does not list the session says so. The scheme picks the transport
 and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is one
 or more **doors**, comma-separated (`network.Doors`), each tcp, plain `ws://host:port`
@@ -237,8 +237,8 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer to prove its keys and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a key takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serialises. |
-| `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialing address against a per-host budget, asks the dialer to prove its keys and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a key takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serializes. |
+| `RolePeer` | The dialed (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
 ```mermaid
@@ -389,11 +389,11 @@ made about a dialer before it costs the session anything. The expensive part of 
 join is not the handshake but what follows it: on a running host the admission
 sends a whole world, so a peer that joins and leaves in a loop costs one capture
 per connect.
-`network.AdmissionLimiter` gives each dialling host
+`network.AdmissionLimiter` gives each dialing host
 `parameter.NetworkAdmitBurst` admissions per `NetworkAdmitWindow`, keyed by address
 rather than by identity — an identity is what the attack consumes and is released
 the moment the connection drops. A holder's bot seats join on in-process streams
-(`network.Pipe`), which have no dialler and spend nothing. A refusal is written back
+(`network.Pipe`), which have no dialer and spend nothing. A refusal is written back
 as a `MsgJoinReply` carrying its reason, for the same reason a mid-succession
 refusal is: a dialer that can read why it was turned away backs off, where one that
 only sees the stream end retries immediately.
@@ -407,7 +407,7 @@ than one forging them.
 
 Everything above the dial assumes one reliable, ordered stream per link: deflate
 spans messages, and handshakes, chunked captures and crossings rely on arrival
-order. UDP would mean rebuilding that stream (acknowledgement, retransmission,
+order. UDP would mean rebuilding that stream (acknowledgment, retransmission,
 ordering, congestion control, compression per window) as a QUIC in miniature or a
 non-stdlib QUIC, to buy loss recovery faster than TCP's retransmit timeout, which
 corrections already absorb, and hole punching between NATed peers, which also needs
@@ -503,7 +503,7 @@ so a dialer that never presses delays nobody and keeps nobody from the place. Th
 dialer measures the period from its own readiness, and a press after it dials again
 and seats at once ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 A join refused before an identity is allocated — a name that is not this
-session's, a dialling host past its admission budget, a session electing a new
+session's, a dialing host past its admission budget, a session electing a new
 authority, closing its lobby, ending, full, its one seat the host's own
 (`RefusalNoSeat`, for good), full while a Wraith gives up its place for this dial,
 a kept place still linked or already coming back, or a seat
@@ -639,7 +639,7 @@ ratio is large and world-dependent: the storm high water compresses from about
 `wad/scenario/base/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
 refuse at the encoder a world whose bytes fit on the wire four times over.
 
-The wire cap is a sanity bound rather than the defence. A declared length is a claim
+The wire cap is a sanity bound rather than the defense. A declared length is a claim
 by whoever sent the chunk, so reserving for the declared total would let one
 twenty-byte header make a receiver hold the whole ceiling. The reservation is
 bounded by `snapshotReserve` and the buffer grows with the bytes that actually
@@ -673,7 +673,7 @@ the selective exchange, and they are the only three messages in this
 protocol that form a request/response pair carrying game state. A manifest is a
 compact index over the same capture a correction would have carried: the root, the
 capture header and the partition, each section's page count where it is more than
-one. A request is a receiver's answer to one: an acknowledgement that the roots
+one. A request is a receiver's answer to one: an acknowledgment that the roots
 agreed, or the page hashes of every section of its own index under that partition.
 A shard set is the repair the second kind provokes, so a repair is one round trip
 from its root.
@@ -691,7 +691,7 @@ against them on the link's stream.
 A manifest travels outward one link at a time. A participant with more than one
 link forwards the newest one it answered to the participants behind it — but only
 once it can itself answer that tick, so a question is never passed to someone whose
-neighbour would have to refuse it — and their requests come back to that neighbour,
+neighbor would have to refuse it — and their requests come back to that neighbor,
 which serves them from its retention. A relay behind a relay does the same, and
 each answer upstream names who it answers for, nested. A request and a repair are
 never forwarded: a relay that does not hold the manifest a request names answers
@@ -756,7 +756,7 @@ flooded, and every survivor continues locally once its redial of the host ends.
 
 The closed roster the succession counts against is read from the *world* rather
 than from the offer that admitted this instance: a mid-run joiner is offered the
-lobby as it stood when it dialled, so two participants admitted a minute apart hold
+lobby as it stood when it dialed, so two participants admitted a minute apart hold
 two different lists, while the cursor roster is barrier-bound and therefore the same
 list everywhere.
 
@@ -921,13 +921,13 @@ and `network.barrier_delay_ticks` the lead this instance stamps its own crossing
 with. See [Multiplayer](multi-player.md) §3.5 and §5.3.
 
 The relay's own surface is `snapshot.relay`: how many authoritative records this
-instance is holding for a neighbour to ask about, how many repairs it answered from
+instance is holding for a neighbor to ask about, how many repairs it answered from
 them, how many requests it had to refuse, and the bytes it forwarded and served.
 Those bytes are priced into *this* participant's link plan, never the authority's.
 
 Four measurements reach the status bar, as one badge rather than four items.
 `network.link_rtt_ms` is the round trip to the worst peer, which the badge always
-draws and colours by `StatusNetLatencyWarn`/`Bad`: it is the number a player
+draws and colors by `StatusNetLatencyWarn`/`Bad`: it is the number a player
 already reads in every other networked game, and the one they can act on without
 knowing what a cadence is. `network.stale` is pacing's own verdict (multi-player
 §3.5), read off the window and band that pace this instance rather than a
@@ -947,7 +947,7 @@ interval, the byte rates — is a diagnostic panel rather than a glance, and
 `:session` and the status snapshot are where they can be read against each other.
 
 Loss that happens outside the barrier is published rather than swallowed, because
-either direction would otherwise desynchronise silently:
+either direction would otherwise desynchronize silently:
 `network.transport_lost_in` counts
 inbound notifications a full poll buffer discarded, `network.transport_lost_out`
 counts outbound frames a peer's bounded send queue refused. A new loss is logged
@@ -976,10 +976,10 @@ What the operator surface does not cover:
   the first candidate (multi-player.md §5.3), so the links a shipped binary
   builds are a star and a successor chain even though the relay makes any graph
   work. Per-peer correction cadence follows the same shape: it is a property of a
-  direct link, and a participant reached by relay rides its neighbour's schedule
-  for *corrections* while being answered by that neighbour's retention for
+  direct link, and a participant reached by relay rides its neighbor's schedule
+  for *corrections* while being answered by that neighbor's retention for
   *repairs*. It is also what the succession rule is shaped around: a star's leaves
-  reach nobody but the candidates once its centre goes, so who hosts has to be a
+  reach nobody but the candidates once its center goes, so who hosts has to be a
   function of the chain rather than of a vote;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session; a coordinator whose only links are its own bot
@@ -1075,7 +1075,7 @@ be expressed — `TestTheFirstGuestSucceedsAHostThatLeaves`,
 `TestMeshParityAcrossAHandoff`. The wire gate and the refusals are
 `TestTheTermGateRefusesWhatNobodyHandedThisInstance` and
 `TestASurvivorFollowsOneRecordPerLoss`; the admission half is
-`TestAJoinerDiallingMidHandoffIsRefused`, and the redial
+`TestAJoinerDialingMidHandoffIsRefused`, and the redial
 `TestAGuestWhoseLinkDroppedRedialsItsPlace`, over a real socket.
 
 The relay role's are `TestARelayedParticipantKeepsTheSelectiveStream`,

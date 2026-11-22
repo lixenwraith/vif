@@ -137,7 +137,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 	}
 	defer conn.Close()
 	_, err = PeerDialer(theirs, keys.as(3), time.Second)(conn, 3)
-	check("dialler", err, readsTheirs)
+	check("dialer", err, readsTheirs)
 	check("acceptor", <-accepted, readsOurs)
 }
 

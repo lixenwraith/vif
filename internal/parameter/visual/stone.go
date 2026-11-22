@@ -95,7 +95,7 @@ type StrataBand struct {
 
 // Light and dark bands alternate, each drawn from its family; bands differ in tone and
 // shade density, never in the kind of mark. The light ▒ band inks toward its background
-// so its denser shade lifts the band less, as far as its grain still shows in 256 colours.
+// so its denser shade lifts the band less, as far as its grain still shows in 256 colors.
 var (
 	StrataLight = [...]StrataBand{
 		{Bg: color.RGB{R: 96, G: 85, B: 68}, Fg: color.RGB{R: 126, G: 113, B: 92}, Grain: '░'},

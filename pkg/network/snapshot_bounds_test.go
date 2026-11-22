@@ -19,7 +19,7 @@ func chunkHeaderFor(tick uint64, index, count, total uint32, payload []byte) []b
 	return frame
 }
 
-// TestAssemblyAllocatesForBytesThatArrived is the defence, and it is a property of
+// TestAssemblyAllocatesForBytesThatArrived is the defense, and it is a property of
 // the receiver rather than of the ceiling.
 //
 // A declared length is a claim by whoever sent the chunk. Reserving for it let one

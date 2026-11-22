@@ -158,7 +158,7 @@ entering; then from a plane of bits the index keeps for the mask, a bit a cell,
 built from the cells on the mask's first query and brought to a cell's shared
 occupants whenever a wall is placed, moved, removed or remasked there
 (`Position.wallOf` names a wall, what it stops and the box style it draws in,
-which the box characters' neighbour test reads), so a point is a bit and an
+which the box characters' neighbor test reads), so a point is a bit and an
 area a few words a row. `BlockBits` hands a reader deriving whole the plane's
 words with the surfaces' solid cells (`position.Bits`, which navigation derives
 its passability from). The rock's look (`RockLook`) is the wall system's to lay in
@@ -239,7 +239,7 @@ transport the app attaches.
 | `Game` | Mode, game tick counter and APM. |
 | `Player` | Bounded cursor roster, occupied slots, the slot selected for local input/camera, and the D-18 placement prediction. |
 | `Event` | The event queue. |
-| `Rand` | Root seed and the labelled per-domain RNG streams systems draw in `Init` (D-8). |
+| `Rand` | Root seed and the labeled per-domain RNG streams systems draw in `Init` (D-8). |
 | `Target` | Resolved navigation target groups, written by `NavigationSystem`. |
 | `RouteGraph` | Navigation graph instances and route distributions. |
 | `Pursuit` | Navigation's field toward each cursor, published every tick and read for what one cursor owns (loot); a field is computed at its first read, which leaves the shared throttle phase alone (D-17). |

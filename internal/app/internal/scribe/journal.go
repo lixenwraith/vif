@@ -191,7 +191,7 @@ func (sc *Scribe) Journaling() bool {
 }
 
 // CancelJournalStart lets a stop win over a start not yet served and reports whether
-// there was one. A start alone is reported cancelled; one that followed a stop leaves
+// there was one. A start alone is reported canceled; one that followed a stop leaves
 // that stop, whose close is then all there is to tell.
 func (sc *Scribe) CancelJournalStart() bool {
 	ask := sc.journalAsk.Load()
@@ -207,7 +207,7 @@ func (sc *Scribe) CancelJournalStart() bool {
 		return false
 	}
 	if left == nil {
-		start.report("", errors.New("cancelled by :journal stop"))
+		start.report("", errors.New("canceled by :journal stop"))
 	}
 	return true
 }
@@ -525,7 +525,7 @@ func (sc *Scribe) OpenedLocked(c event.JournalCapture, own OwnState) error {
 
 // adoptLocked takes on twin's simulated state where its driver d stands, as a
 // replay copy restored from a checkpoint does, and refuses a run that does not then
-// hold twin's world. What stays is this instance's own: the terminal's colour, the
+// hold twin's world. What stays is this instance's own: the terminal's color, the
 // wall clock and pacing, the pointer placement it crosses next tick, and the
 // ownedSystems with their streams and status. Caller MUST hold updateMutex.
 func (sc *Scribe) adoptLocked(twin *Scribe, d *journal.ReplayDriver) error {

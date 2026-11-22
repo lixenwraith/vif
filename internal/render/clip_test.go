@@ -8,9 +8,9 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
-// centredContext is the geometry the defect appears in: a terminal larger than
-// the map, so the map is centred and leaves a margin no simulation cell reaches.
-func centredContext() RenderContext {
+// centeredContext is the geometry the defect appears in: a terminal larger than
+// the map, so the map is centered and leaves a margin no simulation cell reaches.
+func centeredContext() RenderContext {
 	return RenderContext{
 		GameXOffset: 3, GameYOffset: 1,
 		ViewportWidth: 20, ViewportHeight: 12,
@@ -33,12 +33,12 @@ func croppedContext() RenderContext {
 func TestPlayfieldRectIsTheMapNotTheViewport(t *testing.T) {
 	t.Parallel()
 
-	centred := centredContext()
-	if got, want := centred.PlayfieldRect(), (Rect{X0: 8, Y0: 4, X1: 18, Y1: 10}); got != want {
-		t.Fatalf("centred playfield = %+v, want %+v", got, want)
+	centered := centeredContext()
+	if got, want := centered.PlayfieldRect(), (Rect{X0: 8, Y0: 4, X1: 18, Y1: 10}); got != want {
+		t.Fatalf("centered playfield = %+v, want %+v", got, want)
 	}
-	if got, want := centred.GameAreaRect(), (Rect{X0: 3, Y0: 1, X1: 23, Y1: 13}); got != want {
-		t.Fatalf("centred game area = %+v, want %+v", got, want)
+	if got, want := centered.GameAreaRect(), (Rect{X0: 3, Y0: 1, X1: 23, Y1: 13}); got != want {
+		t.Fatalf("centered game area = %+v, want %+v", got, want)
 	}
 
 	// A cropped map fills the game area, which is what keeps the clip a no-op on
@@ -51,7 +51,7 @@ func TestPlayfieldRectIsTheMapNotTheViewport(t *testing.T) {
 
 func TestOffMapCoordinatesAreNotVisible(t *testing.T) {
 	t.Parallel()
-	ctx := centredContext()
+	ctx := centeredContext()
 
 	// Inside the map: projects and is visible.
 	if x, y, visible := ctx.MapToScreen(0, 0); !visible || x != 8 || y != 4 {
@@ -70,7 +70,7 @@ func TestOffMapCoordinatesAreNotVisible(t *testing.T) {
 	}
 
 	// The projection is still returned so a renderer can anchor a shape on an
-	// off-map centre and let the clip trim it.
+	// off-map center and let the clip trim it.
 	if vx, vy, _ := ctx.MapToViewport(-2, -1); vx != 3 || vy != 2 {
 		t.Fatalf("off-map anchor projected to (%d,%d), want (3,2)", vx, vy)
 	}
@@ -78,7 +78,7 @@ func TestOffMapCoordinatesAreNotVisible(t *testing.T) {
 
 func TestClipRejectsEveryWritePathOutsideThePlayfield(t *testing.T) {
 	t.Parallel()
-	ctx := centredContext()
+	ctx := centeredContext()
 	pf := ctx.PlayfieldRect()
 
 	writes := map[string]func(b *RenderBuffer, x, y int){
@@ -170,13 +170,13 @@ func TestClipConstrainsPostProcessing(t *testing.T) {
 
 func TestVoidFillPaintsOnlyTheUndrawnMargin(t *testing.T) {
 	t.Parallel()
-	ctx := centredContext()
+	ctx := centeredContext()
 	pf, area := ctx.PlayfieldRect(), ctx.GameAreaRect()
 
 	buf := NewRenderBuffer(terminal.ColorModeTrueColor, 30, 16)
 	buf.SetVoidRegion(area, pf, visual.RgbVoid)
 
-	// A UI layer reaching into the margin keeps its own colours: the fill is for
+	// A UI layer reaching into the margin keeps its own colors: the fill is for
 	// cells nothing drew, not a mask over the ones something did.
 	ui := color.RGB{R: 10, G: 20, B: 30}
 	buf.SetWithBg(area.X0, area.Y0, 'U', color.RGB{R: 255}, ui)
@@ -189,7 +189,7 @@ func TestVoidFillPaintsOnlyTheUndrawnMargin(t *testing.T) {
 			switch {
 			case x == area.X0 && y == area.Y0:
 				if got != ui {
-					t.Fatalf("drawn margin cell (%d,%d) = %v, want the colour it drew %v", x, y, got, ui)
+					t.Fatalf("drawn margin cell (%d,%d) = %v, want the color it drew %v", x, y, got, ui)
 				}
 			case area.Contains(x, y) && !pf.Contains(x, y):
 				if got != visual.RgbVoid {

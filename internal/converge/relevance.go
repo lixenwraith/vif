@@ -47,7 +47,7 @@ func (c *Corrections) relevanceLocked(
 	return out
 }
 
-// near is a square neighbourhood rather than a circle, deliberately: the map is a
+// near is a square neighborhood rather than a circle, deliberately: the map is a
 // grid of character cells, the radius is a scheduling threshold rather than a
 // distance, and a square costs two comparisons where a circle costs a multiply
 // per entity per peer on the publication path.

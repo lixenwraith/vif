@@ -225,8 +225,8 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		HitPoints:        0,
 	})
 
-	// Generate disc members
-	members := s.createDiscMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
+	// Generate disk members
+	members := s.createDiskMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
 	// Header component
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
@@ -328,8 +328,8 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	return 0, 0, false
 }
 
-// createDiscMembers generates elliptical disc of member entities with HP falloff
-func (s *PylonSystem) createDiscMembers(
+// createDiskMembers generates elliptical disk of member entities with HP falloff
+func (s *PylonSystem) createDiskMembers(
 	headerEntity core.Entity,
 	centerX, centerY, radiusX, radiusY, minHP, maxHP int,
 ) []component.MemberEntry {

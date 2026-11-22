@@ -1,6 +1,6 @@
 # The chomper: a mouth that opens on its teeth and snaps shut. One of the cracked
 # cave's first-rank raiders: RaiderRank1 in ../../macros.toml gives its stats and
-# cycle and the cave its colours.
+# cycle and the cave its colors.
 macro = "RaiderRank1"
 theme = "Cracked"
 width = 4

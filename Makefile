@@ -117,7 +117,7 @@ help:
 	@echo "           install put in its root, a player's bot files, keymap.toml and vif.toml with it"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
-	@echo "  notices  Write the licences of Go and of every module the build links as $(NOTICES), as release does"
+	@echo "  notices  Write the licenses of Go and of every module the build links as $(NOTICES), as release does"
 	@echo "           for install (GOOS, GOARCH, TAGS: another build's; NOTICES_OF=android: the Android library's)"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
@@ -175,7 +175,7 @@ serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
-# The font's licence lies beside the atlas in the terminal module the build links,
+# The font's license lies beside the atlas in the terminal module the build links,
 # in the module cache or vendor/: release copies it for install, which runs no Go
 release: check-go $(BIN_DIR) notices
 	@$(WINDOW_CHECK)
@@ -357,8 +357,8 @@ NOTICE_MODS = if [ '$(NOTICES_OF)' = android ]; then \
 		$(GO) -C android list -m -f '{{.Path}}|{{.Version}}|{{.Dir}}' golang.org/x/mobile; \
 	else CGO_ENABLED=0 $(GO) list -deps -tags "$(TAGS)" -f '{{with .Module}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}' $(SRC); fi
 
-# notices writes the licences a binary copy carries: Go's, then each linked module's
-# licence, copying and notice files from the module cache or vendor/, so a new
+# notices writes the licenses a binary copy carries: Go's, then each linked module's
+# license, copying and notice files from the module cache or vendor/, so a new
 # dependency brings its own and one with none at its root stops the target. A
 # distribution's Go keeps its LICENSE outside GOROOT; the corpus carries the same
 # one (doc/packaging.md §1).
@@ -372,14 +372,14 @@ notices: check-go
 	while IFS='|' read -r mod ver dir; do \
 		[ -n "$$dir" ] || dir=vendor/$$mod; \
 		files=$$(ls "$$dir" | grep -iE '^(licen[cs]e|copying|notice)' || true); \
-		[ -n "$$files" ] || { echo "notices: $$mod $$ver has no licence file at its root, $$dir" >&2; exit 1; }; \
+		[ -n "$$files" ] || { echo "notices: $$mod $$ver has no license file at its root, $$dir" >&2; exit 1; }; \
 		printf '%s\n%s %s\n%s\n\n' "$$rule" "$$mod" "$$ver" "$$rule"; \
 		for f in $$files; do cat "$$dir/$$f" || exit 1; echo; done; \
 	done >'$(NOTICES)' || { rm -f '$(NOTICES)'; exit 1; }; \
 	echo "wrote $(NOTICES)"
 
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
-# licences, the manual, the desktop entry and icons, shell completion and the
+# licenses, the manual, the desktop entry and icons, shell completion and the
 # documentation under PREFIX, once it can write all three places. Nothing it
 # installs is compiled here, so a packager controls the build flags.
 install:

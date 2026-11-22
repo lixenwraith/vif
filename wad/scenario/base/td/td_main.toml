@@ -74,7 +74,7 @@ TdP1BR = { macro = "Pylon", x = 480, y = 235, attach = "TdGwBR", next = "TdSt1" 
 TdGwBR = { macro = "Gateway", group = 6, count = "r_p1n", next = "TdSt1" }
 
 # ST pylons, one under T1 and one over T2: snake spawners whose deaths call the storm
-# early. Each has a corner pylon's HP and sends a snake a minute. The map centre
+# early. Each has a corner pylon's HP and sends a snake a minute. The map center
 # between them stays clear: every cursor starts there, and a pylon's touch drains a
 # shield 50 energy a tick.
 TdSt1 = { macro = "Pylon", x = 250, y = 108, attach = "TdSt1Gw", next = "TdSt2" }

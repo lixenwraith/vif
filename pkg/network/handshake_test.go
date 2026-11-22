@@ -98,7 +98,7 @@ func TestTheHandshakeBudgetIsBounded(t *testing.T) {
 	for range 8 {
 		c, err := net.Dial("tcp", addr)
 		if err != nil {
-			continue // refused past the budget is the behaviour under test
+			continue // refused past the budget is the behavior under test
 		}
 		defer c.Close()
 	}

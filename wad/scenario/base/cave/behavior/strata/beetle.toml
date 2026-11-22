@@ -1,6 +1,6 @@
 # The beetle: a banded carapace on tramping legs. One of the strata's fourth-rank
 # raiders: RaiderRank4 in ../../macros.toml gives its stats and cycle and the cave
-# its colours.
+# its colors.
 macro = "RaiderRank4"
 theme = "Strata"
 width = 5

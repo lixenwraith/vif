@@ -37,7 +37,7 @@ func TestTimeControlDefaults(t *testing.T) {
 		t.Fatal("fresh control armed")
 	}
 	if n := drainWake(tc); n != 0 {
-		t.Fatalf("construction signalled wake %d times", n)
+		t.Fatalf("construction signaled wake %d times", n)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestTimeControlScale(t *testing.T) {
 			t.Fatalf("scale %v, want %v", tc.Scale(), s)
 		}
 		if n := drainWake(tc); n != 1 {
-			t.Fatalf("rate change signalled %d times, want 1", n)
+			t.Fatalf("rate change signaled %d times, want 1", n)
 		}
 	}
 	cur := tc.Scale()
@@ -71,13 +71,13 @@ func TestTimeControlPause(t *testing.T) {
 		t.Fatal("pause not observable")
 	}
 	if n := drainWake(tc); n != 1 {
-		t.Fatalf("pause signalled %d times, want 1", n)
+		t.Fatalf("pause signaled %d times, want 1", n)
 	}
 	if tc.SetPaused(true) {
 		t.Fatal("redundant pause reported a change")
 	}
 	if n := drainWake(tc); n != 0 {
-		t.Fatalf("redundant pause signalled %d times", n)
+		t.Fatalf("redundant pause signaled %d times", n)
 	}
 	if !tc.SetPaused(false) || tc.IsPaused() {
 		t.Fatal("resume failed")
@@ -95,7 +95,7 @@ func TestTimeControlHoldOutlastsAPause(t *testing.T) {
 		t.Fatal("a hold did not stop the clock by itself")
 	}
 	if n := drainWake(tc); n != 1 {
-		t.Fatalf("the hold signalled %d times, want 1", n)
+		t.Fatalf("the hold signaled %d times, want 1", n)
 	}
 	if !tc.SetPaused(true) || !tc.OwnPause() {
 		t.Fatal("a pause under a hold was not taken")
@@ -104,7 +104,7 @@ func TestTimeControlHoldOutlastsAPause(t *testing.T) {
 		t.Fatal("ending the pause ended the hold")
 	}
 	if n := drainWake(tc); n != 0 {
-		t.Fatalf("a pause under a hold signalled %d times", n)
+		t.Fatalf("a pause under a hold signaled %d times", n)
 	}
 	if tc.SetHeld(true) {
 		t.Fatal("a second hold reported a change")
@@ -113,7 +113,7 @@ func TestTimeControlHoldOutlastsAPause(t *testing.T) {
 		t.Fatal("ending the hold left the clock stopped")
 	}
 	if n := drainWake(tc); n != 1 {
-		t.Fatalf("the resume signalled %d times, want 1", n)
+		t.Fatalf("the resume signaled %d times, want 1", n)
 	}
 }
 

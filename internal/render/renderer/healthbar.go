@@ -60,7 +60,7 @@ func getOppositePosition(pos visual.HealthBarPosition) visual.HealthBarPosition 
 }
 
 // healthBarPlace is where a kind's bar stands: beside its footprint, on the side
-// the renderer prefers or the other where that leaves the view; centred on its
+// the renderer prefers or the other where that leaves the view; centered on its
 // header; or pinned to the view's top row, for a body as large as the view
 type healthBarPlace uint8
 
@@ -183,7 +183,7 @@ func (r *HealthBarRenderer) slide(ctx render.RenderContext, x, y, length int, po
 	return min(max(x, minX), maxX-length+1), min(max(y, minY), maxY), length
 }
 
-// renderPinned draws a bar on the view's top row, centred across a share of its
+// renderPinned draws a bar on the view's top row, centered across a share of its
 // width, on a backing that reads over the body under it, the hit points lost dotted
 func (r *HealthBarRenderer) renderPinned(ctx render.RenderContext, buf *render.RenderBuffer, ratio float64) {
 	minX, minY, maxX, _ := ctx.VisibleMapBounds()

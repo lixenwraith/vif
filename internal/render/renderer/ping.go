@@ -139,7 +139,7 @@ func (r *PingRenderer) isExcluded(vx, vy int) bool {
 
 // drawCrosshair draws the crosshair lines in viewport space, spanning the map
 // rather than the viewport: on a terminal wider than the map the two differ, and
-// a line crossing the centring margin is a line drawn outside the world
+// a line crossing the centering margin is a line drawn outside the world
 func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, c color.RGB) {
 	pf := ctx.PlayfieldViewportRect()
 	if pf.Empty() {

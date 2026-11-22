@@ -23,7 +23,7 @@ type DevourerComponent struct {
 }
 
 // DevourerOmen is the ray lit where a gut forms once Remaining runs out, between the
-// walls at From and To, angles about the map's centre; zero Remaining is none
+// walls at From and To, angles about the map's center; zero Remaining is none
 type DevourerOmen struct {
 	Remaining time.Duration
 	From, To  float64
@@ -171,7 +171,7 @@ func (s *DevourerShape) Depths(dst []float32, row []float64, x0, dx, y float64) 
 	return row
 }
 
-// Covers reports whether the cell's centre lies in the flesh; the field decides only
+// Covers reports whether the cell's center lies in the flesh; the field decides only
 // within its reach of the edge
 func (s *DevourerShape) Covers(x, y int) bool {
 	px, py := float64(x)+vmath.CellCenter, 2*(float64(y)+vmath.CellCenter)
@@ -182,7 +182,7 @@ func (s *DevourerShape) Covers(x, y int) bool {
 	return edge+s.waveAt(px, py) > 0
 }
 
-// Span is the run of row y's cells, lo through hi, whose centres lie in the open
+// Span is the run of row y's cells, lo through hi, whose centers lie in the open
 // space by more than margin whatever the field does; lo > hi where none does. The
 // open rectangle drawn in by that much is its rounded inner offset.
 func (s *DevourerShape) Span(y int, margin float64) (lo, hi int) {
@@ -196,11 +196,11 @@ func (s *DevourerShape) Span(y int, margin float64) (lo, hi int) {
 	if over := dy - (ay - r); over > 0 {
 		half = ax - r + math.Sqrt(r*r-over*over)
 	}
-	half -= 1e-9 // a centre the rounding puts on the edge is tested, not passed
+	half -= 1e-9 // a center the rounding puts on the edge is tested, not passed
 	return int(math.Floor(s.cx-half-vmath.CellCenter)) + 1, int(math.Ceil(s.cx+half-vmath.CellCenter)) - 1
 }
 
-// Band is the run of row y's cells, lo through hi, past which every centre lies in
+// Band is the run of row y's cells, lo through hi, past which every center lies in
 // the flesh whatever the field does, by a column unit to spare
 func (s *DevourerShape) Band(y int) (lo, hi int) { return s.Span(y, -2*s.reach-1) }
 
@@ -224,7 +224,7 @@ func (s *DevourerShape) waveAt(x, y float64) float64 {
 	return a + (b-a)*fx + (c-a+(d-c-b+a)*fx)*fy
 }
 
-// Wall is where the flesh begins on the ray from the centre at theta
+// Wall is where the flesh begins on the ray from the center at theta
 func (s *DevourerShape) Wall(theta float64) (x, y float64) {
 	dx, dy := math.Cos(theta), math.Sin(theta)
 	lo, hi := 0.0, math.Hypot(s.cx, s.cy)
@@ -247,7 +247,7 @@ func (s *DevourerShape) GutEnds(from, to float64) (x0, y0, x1, y1 float64) {
 	return x0 + math.Cos(from), y0 + math.Sin(from), x1 + math.Cos(to), y1 + math.Sin(to)
 }
 
-// GutLine is a gut's centreline from its end at x0, y0 to its end at x1, y1, age
+// GutLine is a gut's centerline from its end at x0, y0 to its end at x1, y1, age
 // seconds after it formed: straight as it forms, easing into a sag and a writhe of
 // its own phase over its first second
 type GutLine struct {
@@ -263,7 +263,7 @@ func NewGutLine(x0, y0, x1, y1, age, phase float64) GutLine {
 	return l
 }
 
-// Point is the centreline u of the way along
+// Point is the centerline u of the way along
 func (l *GutLine) Point(u float64) (x, y float64) {
 	sag := l.ease * (parameter.DevourerGutSag*math.Sin(math.Pi*u)*l.sway +
 		parameter.DevourerGutWrithe*math.Sin(3*math.Pi*u+l.lean+l.phase))

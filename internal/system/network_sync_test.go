@@ -207,15 +207,15 @@ func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 	if err := gold.LoadShared(data); err != nil {
 		t.Fatalf("LoadShared: %v", err)
 	}
-	var cancelled []core.Entity
+	var canceled []core.Entity
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.SplashTimerCancelPayload); ok {
-			cancelled = append(cancelled, p.AnchorEntity)
+			canceled = append(canceled, p.AnchorEntity)
 		}
 	}
-	if len(cancelled) != 1 || cancelled[0] != header {
+	if len(canceled) != 1 || canceled[0] != header {
 		t.Fatalf("timer cancels after a replacing install = %v, want the replaced %d",
-			cancelled, uint64(header))
+			canceled, uint64(header))
 	}
 }
 
@@ -245,7 +245,7 @@ func TestDepartureReleasesTheSlotSyncSequence(t *testing.T) {
 }
 
 // TestLinkLossDoesNotDespawnWhereItIsObserved pins the reason a departure crosses at
-// all: only a direct neighbour sees a disconnect, and it sees it at a tick of its own
+// all: only a direct neighbor sees a disconnect, and it sees it at a tick of its own
 // transport's choosing, so removing the cursor there would remove it at a different
 // tick on every instance — and never on one that shared no link with the departing
 // participant. The observation produces an artifact; the artifact does the removal.
@@ -531,7 +531,7 @@ func TestARestartAResetInterruptedIsCrossedAgain(t *testing.T) {
 }
 
 // TestANoticeDismissesOnlyASeat: a seat its holder dropped is gone for good on
-// whichever neighbour's word reaches the authority; a player whose link closed is
+// whichever neighbor's word reaches the authority; a player whose link closed is
 // only ever away.
 func TestANoticeDismissesOnlyASeat(t *testing.T) {
 	for _, tc := range []struct {
@@ -813,7 +813,7 @@ func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
 	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))
 	if lost || len(w.Resources.Event.Queue.Consume()) != 0 {
-		t.Fatal("a neighbour's closing link announced the still-connected host's departure")
+		t.Fatal("a neighbor's closing link announced the still-connected host's departure")
 	}
 	net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 2, Slot: 0, Dismissed: true})
 	w.Resources.Event.Queue.Consume()

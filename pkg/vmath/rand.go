@@ -102,7 +102,7 @@ func (r *FastRand) Float64() float64 {
 	return float64(r.Next()>>11) / (1 << 53)
 }
 
-// NewSeededRand returns a generator for the labelled stream of a root seed.
+// NewSeededRand returns a generator for the labeled stream of a root seed.
 func NewSeededRand(root uint64, label string) *FastRand {
 	return NewFastRand(DeriveSeed(root, label))
 }

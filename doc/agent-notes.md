@@ -499,7 +499,7 @@ Docs · Libraries · Branches.
   sets the guest's `cfg.Mode` to `ModePlay` under `RunSafe` before the host goes
   (`TestAGuestThatRedialsItsLostHostTakesItsTurn`).
 - `:join`, the menu's join and a redial dial on the run they replace and hand the
-  dial to the next (`wiring.dialled`): a test of that path calls
+  dial to the next (`wiring.dialed`): a test of that path calls
   `membership.DialJoin` on a wiring of its own and builds its run with `driveRun`
   on a `runConfig` carrying the dial.
 - A fixture's session takes the default policy, `host`, and its guests join as
@@ -565,7 +565,7 @@ Docs · Libraries · Branches.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
-  `TestEitherRouteRefusesBeforeDialling`).
+  `TestEitherRouteRefusesBeforeDialing`).
 
 ## Locks
 
@@ -628,7 +628,7 @@ Docs · Libraries · Branches.
   door's question and the dial's answer, and splices everything after, so a
   passphrase door's later steps pass through it untouched; a stand-in pod in a test
   hands its connection to `HostAcceptor` whole, which reads the route frame itself.
-- A refusal that passes in moments (`RetrySoon`) is redialled every 250 ms, by a
+- A refusal that passes in moments (`RetrySoon`) is redialed every 250 ms, by a
   first dial as by a rejoin, and six dials spend an address's budget for a minute:
   a state that can last, as a lobby does for a dial that only watches, takes a
   refusal a person retries (`ErrUnstarted`).
@@ -849,11 +849,11 @@ Docs · Libraries · Branches.
 ## Looking at the game without a device
 
 - Run `bin/vif` in a tmux pane (`-nw` starts it without waiting for a key) and read
-  it with `tmux capture-pane -p -e`, which keeps the SGR colours; turned into HTML
-  spans and shot with Playwright, it shows real colours. `TERM=linux COLORTERM=`
+  it with `tmux capture-pane -p -e`, which keeps the SGR colors; turned into HTML
+  spans and shot with Playwright, it shows real colors. `TERM=linux COLORTERM=`
   gives the console tier. The capture carries SGR state from one line into the
-  next, so a converter that resets colours at each line paints wrong backgrounds.
-- `tmux capture-pane -e` drops a line's trailing cells of the default colours, so a
+  next, so a converter that resets colors at each line paints wrong backgrounds.
+- `tmux capture-pane -e` drops a line's trailing cells of the default colors, so a
   converter paints black where the theme's background stands: add `-N`.
 - A scenario whose keys are its only input plays headless from a `-script` of
   `press` intents under `-speed max -lv debug -log-stdout`: the FSM's transitions,
@@ -1156,7 +1156,7 @@ Docs · Libraries · Branches.
   `internal/bot`: it deals and settles scripted rounds into a learner on a
   store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
   A changed repeat order moves every hash.
-- An output added to the catalogue is listed (`outputRow.listed`): given to
+- An output added to the catalog is listed (`outputRow.listed`): given to
   every network that lists none, `cave`'s two would grow a unit, their layouts
   change and every population of theirs start over.
 - A dotted key in an inline table is a table of its own, which is how a score
@@ -1440,6 +1440,10 @@ Docs · Libraries · Branches.
   backticked name and path in the docs and look each up in the sources (a
   `go/parser` pass over this module and those it requires, and the words of every
   file but Markdown for flags, keys and tags); a name found nowhere is stale.
+- Code, docs and scenarios spell American; `codespell --builtin en-GB_to_en-US`
+  finds what slips in. Its hits that stay are Actions' `cancelled()` and the tests
+  proving a `colour` key and a `programme` field refused, as `Materialise` is; it
+  passes over ARIA's `aria-labelledby` and `sandbox/3d`'s `disc`, a discriminant.
 
 ## Libraries
 

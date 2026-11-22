@@ -24,7 +24,7 @@ func consumeStormBullet(t *testing.T, events []event.GameEvent) *event.BulletSpa
 	return nil
 }
 
-// openingCircle adds a circle of one colour at (10, 5) and depth z, its first
+// openingCircle adds a circle of one color at (10, 5) and depth z, its first
 // cooldown about to run out, and a storm that holds it alone
 func openingCircle(storm *StormSystem, kind component.StormCircleType, z float64) (*component.StormComponent, *component.StormCircleComponent) {
 	w := storm.world

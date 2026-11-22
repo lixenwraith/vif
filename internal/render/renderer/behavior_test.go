@@ -15,10 +15,10 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestADataSpeciesDrawsTheFrameItShowsInItsStateColour: each member takes its cell
-// of the current frame, its glyph in its palette entry, else the look's colour, over
+// TestADataSpeciesDrawsTheFrameItShowsInItsStateColor: each member takes its cell
+// of the current frame, its glyph in its palette entry, else the look's color, over
 // its background; the hit flash, then enrage, tints every glyph
-func TestADataSpeciesDrawsTheFrameItShowsInItsStateColour(t *testing.T) {
+func TestADataSpeciesDrawsTheFrameItShowsInItsStateColor(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
@@ -46,7 +46,7 @@ func TestADataSpeciesDrawsTheFrameItShowsInItsStateColour(t *testing.T) {
 		t.Fatalf("drew %q%q, want the second frame", left.Rune, right.Rune)
 	}
 	if left.Fg != teal || left.Attrs != terminal.AttrBold || right.Fg != orange || right.Bg != navy {
-		t.Fatalf("drew c in %v (%v) and d in %v over %v, want c bold in its entry and d in the look's colour over its background",
+		t.Fatalf("drew c in %v (%v) and d in %v over %v, want c bold in its entry and d in the look's color over its background",
 			left.Fg, left.Attrs, right.Fg, right.Bg)
 	}
 	combat.IsEnraged = true
@@ -59,7 +59,7 @@ func TestADataSpeciesDrawsTheFrameItShowsInItsStateColour(t *testing.T) {
 	}
 }
 
-// TestADataSpeciesOnAConsoleDrawsItsConsolePair: a 256-colour host draws a look with
+// TestADataSpeciesOnAConsoleDrawsItsConsolePair: a 256-color host draws a look with
 // a console pair in it, every glyph in its foreground and every background in its
 // background, and shows a hit by reversing the glyph
 func TestADataSpeciesOnAConsoleDrawsItsConsolePair(t *testing.T) {
@@ -186,7 +186,7 @@ func TestADataSpeciesInAChargeLineStateDrawsTheChargeLine(t *testing.T) {
 }
 
 // TestTheChargeAndTeleportLinesReachTheLandingMarker: both lines run between the
-// footprints' centres, so they end on the marker's cell, the charge line's head on
+// footprints' centers, so they end on the marker's cell, the charge line's head on
 // a pulse's last tick and the teleport line into the landing's body while it holds
 func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
 	w := engine.NewWorld()
@@ -196,7 +196,7 @@ func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
 
-	// Landing on (30,5), the 3x2 body's centre and so the marker is (30,6)
+	// Landing on (30,5), the 3x2 body's center and so the marker is (30,6)
 	marker := func(r render.SystemRenderer, b component.BehaviorComponent) color.RGB {
 		b.TargetX, b.TargetY = 30, 5
 		w.Components.Behavior.SetComponent(header, b)
@@ -218,10 +218,10 @@ func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
 	}
 }
 
-// TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding: the swarm's lock,
-// charge and teleport, and a data species' state flagged Landing, blink the centre
-// of the footprint they land on through the marker's colour cycle; nothing else does
-func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T) {
+// TestTheLandingMarkerBlinksOnTheFootprintCenterUntilTheLanding: the swarm's lock,
+// charge and teleport, and a data species' state flagged Landing, blink the center
+// of the footprint they land on through the marker's color cycle; nothing else does
+func TestTheLandingMarkerBlinksOnTheFootprintCenterUntilTheLanding(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
@@ -233,7 +233,7 @@ func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T)
 		return buf.CellAt(x, y).Bg
 	}
 
-	// The 3x2 raider lands on (30,5) over rows 5 and 6, its centre (30,6)
+	// The 3x2 raider lands on (30,5) over rows 5 and 6, its center (30,6)
 	b := component.BehaviorComponent{TargetX: 30, TargetY: 5}
 	w.Components.Behavior.SetComponent(raider, b)
 	if bg := marked(30, 6); bg != (color.RGB{}) {
@@ -248,7 +248,7 @@ func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T)
 		}
 	}
 
-	// The 4x2 swarm, its header second on the top row, centres a cell right and down
+	// The 4x2 swarm, its header second on the top row, centers a cell right and down
 	sw := component.SwarmComponent{LockedTargetX: 10, LockedTargetY: 15, TeleportTargetX: 20, TeleportTargetY: 15}
 	for _, tc := range []struct {
 		state          component.SwarmState

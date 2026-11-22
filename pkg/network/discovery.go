@@ -41,7 +41,7 @@ const (
 )
 
 // Beacon is a session as its host announces it on the local network: what a list
-// shows of it, and the doors it is dialled at on the address its datagram came from.
+// shows of it, and the doors it is dialed at on the address its datagram came from.
 type Beacon struct {
 	Nonce    string       `json:"nonce"` // one session, whichever address announces it
 	Name     string       `json:"name"`  // what the session answers to, empty for none

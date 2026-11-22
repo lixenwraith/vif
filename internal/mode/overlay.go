@@ -38,7 +38,7 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 }
 
 // selectedCardScrollDelta keeps row navigation inside a clipped selected card
-// before moving to its neighbour.
+// before moving to its neighbor.
 func selectedCardScrollDelta(cards []engine.OverlayCardRef, selected string, offset, viewportH int, motion input.MotionOp) int {
 	if viewportH < 1 || (motion != input.MotionUp && motion != input.MotionDown) {
 		return 0
@@ -278,7 +278,7 @@ func nearestInColumn(cards []engine.OverlayCardRef, cur int, down bool) int {
 
 // nearestInColumn2 returns the vertically closest card in the adjacent column
 func nearestInColumn2(cards []engine.OverlayCardRef, cur int, right bool) int {
-	// Resolve the neighbouring column first, then the closest card within it
+	// Resolve the neighboring column first, then the closest card within it
 	col, found := 0, false
 	for i := range cards {
 		x := cards[i].X

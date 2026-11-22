@@ -106,7 +106,7 @@ func TestACountdownWithNoRoomTakesTheSmallFace(t *testing.T) {
 }
 
 // A text stands at its origin cell: a second text written there replaces it, and an
-// empty one clears it. A zero colour is the splash white.
+// empty one clears it. A zero color is the splash white.
 func TestATextStandsAtItsOriginUntilReplacedOrCleared(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())

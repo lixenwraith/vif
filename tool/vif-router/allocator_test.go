@@ -374,7 +374,7 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 }
 
 // TestADialThatOnlyWatchesReachesAGameNotASeat: a full session refuses a join
-// before its pod is dialled and is still a spectator's to reach, who takes no seat;
+// before its pod is dialed and is still a spectator's to reach, who takes no seat;
 // one in its lobby is a join's alone, and refuses a spectator the same way.
 func TestADialThatOnlyWatchesReachesAGameNotASeat(t *testing.T) {
 	controller := newAllocator(&fakeKube{}, fakeHealth{state: sessionHealth{Live: true, Ready: true, Capacity: 4}},

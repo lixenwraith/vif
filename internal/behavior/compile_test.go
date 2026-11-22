@@ -172,7 +172,7 @@ func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
 		t.Fatalf("%d frames, want two of eight cells", len(look.Frames))
 	}
 	if !look.Console || look.Fg256 != 214 || look.Bg256 != 52 || look.Color != (color.RGB{R: 200, G: 120, B: 40}) {
-		t.Fatalf("look %+v, want the console pair 214/52 and the prototype's colour", look)
+		t.Fatalf("look %+v, want the console pair 214/52 and the prototype's color", look)
 	}
 	want := []component.LookCell{
 		{Rune: '▀', Fg: 0, Bg: -1, Attr: terminal.AttrBold}, {Rune: 0, Fg: -1, Bg: -1}, {Rune: '▄', Fg: -1, Bg: -1}, {Rune: '▀', Fg: 0, Bg: -1, Attr: terminal.AttrDim},
@@ -309,7 +309,7 @@ func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
 	step(100*ms, func() {}, " -> Roam flags=0 suspended=true")
 }
 
-// TestAnEdgeLowersTheSignalItCommitsOn: Signalled passes while its program's signal
+// TestAnEdgeLowersTheSignalItCommitsOn: Signaled passes while its program's signal
 // is raised, the edge that commits on it lowers that one alone, and a state knows
 // the signals its edges take
 func TestAnEdgeLowersTheSignalItCommitsOn(t *testing.T) {
@@ -320,14 +320,14 @@ func TestAnEdgeLowersTheSignalItCommitsOn(t *testing.T) {
 	const states = `
 [states.Hold]
 on_update = [{ action = "Freeze" }]
-transitions = [{ trigger = "Tick", guard = "Signalled", guard_args = { name = "dive" }, target = "Dive" }]
+transitions = [{ trigger = "Tick", guard = "Signaled", guard_args = { name = "dive" }, target = "Dive" }]
 
 [states.Dive]
 on_update = [{ action = "Freeze" }]
 
 [[global]]
 from = ["Dive"]
-guard = "Signalled"
+guard = "Signaled"
 guard_args = { name = "retreat" }
 target = "Hold"
 `
@@ -367,7 +367,7 @@ target = "Hold"
 	} {
 		doc := program(c.top, c.states)
 		if name == "suspend" {
-			doc["suspend"] = map[string]any{"guard": "Signalled", "guard_args": map[string]any{"name": "dive"}}
+			doc["suspend"] = map[string]any{"guard": "Signaled", "guard_args": map[string]any{"name": "dive"}}
 		}
 		if _, err := Compile(v, map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: compiled: %v, want %q", name, err, c.want)

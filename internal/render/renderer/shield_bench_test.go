@@ -75,7 +75,7 @@ func buildShieldScene(tb testing.TB, s shieldScene) (*ShieldRenderer, render.Ren
 }
 
 // BenchmarkShieldRender paints a frame of shields on a cleared buffer: one cursor's
-// alone, with its boost glow, in 256 colours and growing every frame, sixteen
+// alone, with its boost glow, in 256 colors and growing every frame, sixteen
 // cursors', and a field of drops
 func BenchmarkShieldRender(b *testing.B) {
 	for _, s := range shieldScenes {
