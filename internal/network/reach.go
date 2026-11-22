@@ -201,7 +201,7 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (link.PeerID
 		var refused error
 		if g.Identity.Protocol != 0 {
 			if refused = g.Identity.VerifyBuild(hello.Identity); refused != nil {
-				// Told in the dialler's terms: to it, its build is the one here.
+				// Told in the dialer's terms: to it, its build is the one here.
 				reply.Refuse(hello.Identity.VerifyBuild(g.Identity))
 			}
 		}

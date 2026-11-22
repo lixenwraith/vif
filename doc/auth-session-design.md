@@ -473,7 +473,7 @@ to wait.
   v1 text line nginx writes or the v2 binary header HAProxy does, and keys its
   budgets on the address it names. A deployment with no such edge gives the router
   `-route-cert` and `-route-key`, or `-route-selfsign`, and it ends TLS itself; the
-  game's `vifs://` dials TLS with the system's roots, as a wss door is dialled, or
+  game's `vifs://` dials TLS with the system's roots, as a wss door is dialed, or
   pins the fingerprint the sessions API carries.
 - The ticket key is a file in `/etc/vif-router`, `root:vif-router` 0640 as
   `router.env` is, made once on the node by `update-vif-router.sh` when absent
@@ -783,7 +783,7 @@ Membership, `internal/app/internal/membership`:
 - `relay.go`: a relay's acceptor, `relayNonce`, and the proofs it carries to the
   authority, which `issueRelayNonce` and `relayedKeys` check.
 - `converge.go`: `redial`, `redialDoor`, where a pass is shown.
-- `host.go`, `join.go` and `seat.go`: hosting, dialling, a seat's places,
+- `host.go`, `join.go` and `seat.go`: hosting, dialing, a seat's places,
   `passphraseDoor`, `ticketHook`, `gated`, `Control.Register`, `Login`, `Logout`.
 - `internal/app/internal/config/membership.go`: `Membership`, `PlaceStore`,
   `SignInStore`, `Passphrase`, `TicketKeys`.

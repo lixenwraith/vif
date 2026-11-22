@@ -12,7 +12,7 @@ import (
 // TestMapOffsetAndItsInverseAgree pins the one definition the renderer and the
 // mouse share. They are inverses: the viewport cell the renderer draws the map's
 // origin at must be the cell a click there resolves to, or the pointer and the
-// cursor disagree by half the centring margin.
+// cursor disagree by half the centering margin.
 func TestMapOffsetAndItsInverseAgree(t *testing.T) {
 	t.Parallel()
 
@@ -23,7 +23,7 @@ func TestMapOffsetAndItsInverseAgree(t *testing.T) {
 		wantOffY int
 	}{
 		{
-			name:     "map centred inside a larger viewport",
+			name:     "map centered inside a larger viewport",
 			cfg:      ConfigResource{MapWidth: 10, MapHeight: 6, ViewportWidth: 20, ViewportHeight: 12},
 			wantOffX: 5, wantOffY: 3,
 		},
@@ -78,7 +78,7 @@ func TestMapOffsetAndItsInverseAgree(t *testing.T) {
 }
 
 // TestViewportToMapRejectsTheMargin is the click that used to land on the wrong
-// cell: a coordinate inside the viewport but outside the centred map.
+// cell: a coordinate inside the viewport but outside the centered map.
 func TestViewportToMapRejectsTheMargin(t *testing.T) {
 	t.Parallel()
 	cfg := ConfigResource{MapWidth: 10, MapHeight: 6, ViewportWidth: 20, ViewportHeight: 12}
@@ -86,7 +86,7 @@ func TestViewportToMapRejectsTheMargin(t *testing.T) {
 	if _, _, ok := cfg.ViewportToMap(0, 0); ok {
 		t.Fatal("the viewport's top-left corner resolved to a map cell")
 	}
-	// The map's own origin sits at the centring offset, not at the viewport's.
+	// The map's own origin sits at the centering offset, not at the viewport's.
 	x, y, ok := cfg.ViewportToMap(5, 3)
 	if !ok || x != 0 || y != 0 {
 		t.Fatalf("viewport (5,3) = (%d,%d) ok=%v, want the map origin", x, y, ok)

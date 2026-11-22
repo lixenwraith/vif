@@ -4,7 +4,7 @@ plugins {
 
 // The Go side is bound by gomobile from the module beside this project, which the
 // repository root holds; wad/ is packaged as the APK's assets under wad/, and the
-// licences an APK carries beside it.
+// licenses an APK carries beside it.
 val goModule: File = rootDir
 val repoRoot: File = rootDir.parentFile
 val goBin = layout.buildDirectory.dir("gobin")
@@ -67,7 +67,7 @@ android {
     }
 
     sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/wad").get().asFile)
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/licence").get().asFile)
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/license").get().asFile)
 }
 
 val gomobileTools = tasks.register<Exec>("gomobileTools") {
@@ -116,27 +116,27 @@ val notices = tasks.register<Exec>("notices") {
     commandLine("make", "-s", "notices", "NOTICES_OF=android", "NOTICES=" + noticesFile.get().asFile.path)
 }
 
-// The font's licence lies beside the atlas in the terminal module the library
+// The font's license lies beside the atlas in the terminal module the library
 // links: copied on every build, as the notices are written
-val fontLicenceFile = layout.buildDirectory.file("notices/LICENSE.font")
-val fontLicence = tasks.register<Exec>("fontLicence") {
+val fontLicenseFile = layout.buildDirectory.file("notices/LICENSE.font")
+val fontLicense = tasks.register<Exec>("fontLicense") {
     workingDir = goModule
-    outputs.file(fontLicenceFile)
+    outputs.file(fontLicenseFile)
     outputs.upToDateWhen { false }
-    val out = fontLicenceFile.get().asFile
+    val out = fontLicenseFile.get().asFile
     val mod = "github.com/lixenwraith/terminal"
     doFirst { out.parentFile.mkdirs() }
     commandLine("sh", "-c", "go mod download $mod && " +
         "install -m 0644 \"\$(go list -m -f '{{.Dir}}' $mod)/atlas/LICENSE\" \"\$0\"", out.path)
 }
 
-val licenceAssets = tasks.register<Sync>("licenceAssets") {
+val licenseAssets = tasks.register<Sync>("licenseAssets") {
     from(repoRoot.resolve("LICENSE"))
-    from(fontLicence)
+    from(fontLicense)
     from(notices)
-    into(layout.buildDirectory.dir("generated/licence"))
+    into(layout.buildDirectory.dir("generated/license"))
 }
-tasks.named("preBuild") { dependsOn(wadAssets, licenceAssets) }
+tasks.named("preBuild") { dependsOn(wadAssets, licenseAssets) }
 
 dependencies {
     implementation(files(boundAar).builtBy(bindGo))

@@ -97,8 +97,8 @@ func TestMapSizeFollowsTheTerminalOnlyUntilASecondCursor(t *testing.T) {
 
 // TestJoinerOnAnotherTerminalSharesTheMapFromTickZero is the regression for the
 // divergence two windows of different size produced from the first tick: the FSM boot
-// script spawns cursor slot zero at the centre of the map inside New, so a joiner
-// adopting the bounds afterwards held that shared cursor on its own centre. It runs
+// script spawns cursor slot zero at the center of the map inside New, so a joiner
+// adopting the bounds afterwards held that shared cursor on its own center. It runs
 // the production sequence — bounds before the FSM boots, then an install.
 func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 	t.Parallel()

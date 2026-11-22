@@ -311,14 +311,14 @@ func (s *KrakenSystem) moveBody(motion *component.KineticComponent, x, y float64
 func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, x, y float64) {
 	cfg := s.world.Resources.Config
 	s.foot.reset(cfg.MapWidth, cfg.MapHeight)
-	s.addDisc(x, y, parameter.KrakenBodyRadius*2)
+	s.addDisk(x, y, parameter.KrakenBodyRadius*2)
 	for _, p := range s.world.Resources.KrakenShape.Build(e, k, x, y) {
-		s.addDisc(p.X, p.Y, p.Radius)
+		s.addDisk(p.X, p.Y, p.Radius)
 	}
 	s.foot.stand(s.world, e, int(x), int(y))
 }
 
-func (s *KrakenSystem) addDisc(x, y, radius float64) {
+func (s *KrakenSystem) addDisk(x, y, radius float64) {
 	f := &s.foot
 	w, h := f.gridW, f.gridH
 	// Off-map samples remain animation geometry, without hitboxes or cell sweeps.
@@ -331,7 +331,7 @@ func (s *KrakenSystem) addDisc(x, y, radius float64) {
 	if x0 > x1 || y0 > y1 {
 		return
 	}
-	// Every box cell is written past the list and kept only when the disc covers it
+	// Every box cell is written past the list and kept only when the disk covers it
 	// first, so the loop takes no branch per cell
 	cells := slices.Grow(f.cells, (x1-x0+1)*(y1-y0+1))
 	n := len(cells)

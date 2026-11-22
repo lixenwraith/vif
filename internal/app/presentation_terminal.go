@@ -59,7 +59,7 @@ func (a *App) initPresentationService() error {
 	return a.hub.Register(a.pres)
 }
 
-// newTerminal is the build's own presentation, in the colour mode cfg asks for,
+// newTerminal is the build's own presentation, in the color mode cfg asks for,
 // held to a multiplexer's frame floor unless cfg turns that off.
 func newTerminal(cfg Config) terminalHost {
 	colorMode := terminal.DetectColorMode()

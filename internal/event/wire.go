@@ -113,7 +113,7 @@ type ScheduledWireFrame struct {
 
 // WireBatch closes one participant's production epoch, even an empty one. Source
 // and ProducedTick name the epoch, so a copy arriving by a second mesh path is
-// recognised; a receiver in another Run has no tick for the frames and refuses it.
+// recognized; a receiver in another Run has no tick for the frames and refuses it.
 // Hops counts links since the copy's origin, its producer or the authority that
 // committed it, and bounds relay loops; Committed marks the authority's copy.
 type WireBatch struct {
@@ -135,7 +135,7 @@ type WireBatch struct {
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather
-// than travelling as a silently empty frame.
+// than traveling as a silently empty frame.
 func NewWireFrame(ev GameEvent) (WireFrame, string) {
 	payload, encErr := encodePayload(ev.Type, ev.Payload)
 	if encErr != "" {

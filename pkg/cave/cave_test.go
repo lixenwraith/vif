@@ -54,7 +54,7 @@ func FuzzAColumnKeepsItsWallsAndGap(f *testing.F) {
 }
 
 // An opening leaves every column up to its own as the cave had it, and past its ramp
-// holds its gap centred: no rock, or the gap it names
+// holds its gap centered: no rock, or the gap it names
 func TestAnOpeningKeepsTheCaveBeforeItAndHoldsItsGapPast(t *testing.T) {
 	for _, s := range shapes {
 		for _, gap := range []int{0, s.MinGap} {
@@ -105,11 +105,11 @@ func TestAWallClimbsNoSteeperThanItsWavelengthAllows(t *testing.T) {
 			continue
 		}
 		gapSwing := s.MaxGap - s.MinGap - 2*s.Detail
-		centreSwing := s.Height - 2*s.MinWall - s.MinGap - 2*s.Detail
+		centerSwing := s.Height - 2*s.MinWall - s.MinGap - 2*s.Detail
 		if s.Swing > 0 {
-			centreSwing = min(centreSwing, 2*s.Swing)
+			centerSwing = min(centerSwing, 2*s.Swing)
 		}
-		bound := (3*(gapSwing+centreSwing)+2*s.Wavelength-1)/(2*s.Wavelength) + 2
+		bound := (3*(gapSwing+centerSwing)+2*s.Wavelength-1)/(2*s.Wavelength) + 2
 		if s.Detail > 0 {
 			bound += (3*(s.Detail+1)+2*roughWavelength-1)/(2*roughWavelength) + 1
 		}

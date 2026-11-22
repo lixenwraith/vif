@@ -160,7 +160,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 		ownedShield, _ = b.World().Components.Shield.GetComponent(ownedOnB)
 	})
 
-	// Heat and the shield's reach and colour are mirrored for the remote cursor's
+	// Heat and the shield's reach and color are mirrored for the remote cursor's
 	// presentation and owner-local interactions; they determine no shared outcome.
 	if mirrored.Current != owned.Current || mirrored.Current != 55 || !mirrored.EmberActive {
 		t.Fatalf("remote heat on a = %d, owner holds %d; ember %t",
@@ -1000,7 +1000,7 @@ func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 	}
 }
 
-// assertSharedParity fails with the first divergent record and its neighbours
+// assertSharedParity fails with the first divergent record and its neighbors
 func assertSharedParity(t *testing.T, a, b *App, step int) {
 	t.Helper()
 	x, y := a.SnapshotShared(), b.SnapshotShared()

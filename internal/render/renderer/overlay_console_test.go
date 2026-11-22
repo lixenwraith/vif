@@ -40,7 +40,7 @@ func (s consoleShot) row(y int) string {
 func (s consoleShot) content(i int) string { return s.row(s.g.ContentY + i) }
 
 // TestTheConsoleListsMessagesNewestAtItsFoot: the band's edge names it, the newest
-// message is its last row behind its stamp, in its kind's colour, a long one wraps
+// message is its last row behind its stamp, in its kind's color, a long one wraps
 // under its text, a repeat ends with its count, and the rows it lays out are
 // published for the router to scroll by
 func TestTheConsoleListsMessagesNewestAtItsFoot(t *testing.T) {

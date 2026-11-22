@@ -812,11 +812,11 @@ type paying struct {
 }
 
 // scoring is what a declared score pays and its spelling, which a population is
-// kept under: each name a source of the catalogue's with what one pays, or an
+// kept under: each name a source of the catalog's with what one pays, or an
 // event's with a table, the payload field that names its owner and what one
-// pays. The catalogue's come first, in its order, then the events by name, so a
+// pays. The catalog's come first, in its order, then the events by name, so a
 // sum takes one order every run.
-func scoring(declared map[string]any) (pays []paying, spelt string, err error) {
+func scoring(declared map[string]any) (pays []paying, spelled string, err error) {
 	var events []paying
 	var names []string
 	weigh := func(name string, raw any) (float64, error) {
@@ -832,7 +832,7 @@ func scoring(declared map[string]any) (pays []paying, spelt string, err error) {
 		owners, byEvent := declared[name].(map[string]any)
 		if !byEvent {
 			if !slices.ContainsFunc(sources[:], func(s source) bool { return s.name == name }) {
-				return nil, "", fmt.Errorf("%q is no source of the catalogue's", name)
+				return nil, "", fmt.Errorf("%q is no source of the catalog's", name)
 			}
 			if paid[name], err = weigh(name, declared[name]); err != nil {
 				return nil, "", err
@@ -893,9 +893,9 @@ type (
 	}
 )
 
-// Catalogue lists what a network reads and may ask for and what a score may pay
+// Catalog lists what a network reads and may ask for and what a score may pay
 // for, for -schema
-func Catalogue() (l Listing) {
+func Catalog() (l Listing) {
 	for _, s := range sensors {
 		l.Inputs = append(l.Inputs, Input{s.name, scales[s.scale].name, s.doc})
 	}

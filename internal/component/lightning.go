@@ -13,7 +13,7 @@ const (
 	LightningPurple                           // Negative energy drain
 )
 
-// LightningColorNames are what a document calls each bolt colour
+// LightningColorNames are what a document calls each bolt color
 var LightningColorNames = [...]string{
 	LightningCyan:   "cyan",
 	LightningRed:    "red",

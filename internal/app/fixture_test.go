@@ -80,12 +80,12 @@ func portOf(t *testing.T, a *App) *link.SocketPort {
 	return p
 }
 
-// dialling reports whether a run's :join is still being dialled, as its commands
+// dialing reports whether a run's :join is still being dialed, as its commands
 // tell it: :host, which nothing opens while one is, says so first.
-func dialling(a *App) (busy bool) {
+func dialing(a *App) (busy bool) {
 	a.World().RunSafe(func() {
 		err := a.ctx.SessionCtl.HostError()
-		busy = err != nil && strings.Contains(err.Error(), "being dialled")
+		busy = err != nil && strings.Contains(err.Error(), "being dialed")
 	})
 	return busy
 }
@@ -122,7 +122,7 @@ func tickUntilCursor(t *testing.T, a *App) {
 	t.Fatal("no cursor after 40 ticks")
 }
 
-// spawnCursor adds one auto-slot cursor at the map centre and settles the request
+// spawnCursor adds one auto-slot cursor at the map center and settles the request
 func spawnCursor(t *testing.T, a *App) {
 	t.Helper()
 	var before, after int

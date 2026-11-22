@@ -35,7 +35,7 @@ spec:
       automountServiceAccountToken: false
       # No Service environment variables: the process is told everything it needs
       # on its command line, and injecting the address of every Service in the
-      # namespace tells a session about its neighbours for no reason.
+      # namespace tells a session about its neighbors for no reason.
       enableServiceLinks: false
       # Above the -drain value below, so the drain decides when the session ends
       # and the kubelet's SIGKILL is the backstop it never reaches.

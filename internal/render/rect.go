@@ -35,7 +35,7 @@ func (r Rect) Contains(x, y int) bool {
 	return x >= r.X0 && x < r.X1 && y >= r.Y0 && y < r.Y1
 }
 
-// Intersect returns the overlap of two rectangles, normalised to the zero Rect
+// Intersect returns the overlap of two rectangles, normalized to the zero Rect
 // when they do not meet so a caller cannot end up with an inverted span
 func (r Rect) Intersect(o Rect) Rect {
 	out := Rect{

@@ -114,7 +114,7 @@ func (s Scope) Selects(c Class) bool { return s&(1<<c) != 0 }
 // occupant is a block and what it stops, a plane of bits for each mask a query
 // asked, kept with every block change, the surfaces, the log of the cells whose
 // block answer changed, and the searches over them.
-// SYNC: the caller serialises every call; the index locks nothing.
+// SYNC: the caller serializes every call; the index locks nothing.
 type Index[E comparable] struct {
 	*Grid[E]
 	frame     Frame

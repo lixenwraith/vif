@@ -43,7 +43,7 @@ flowchart LR
 
 ## 2. Runtime contract
 
-| Property | Required behaviour |
+| Property | Required behavior |
 |---|---|
 | Session unit | One process owns one match timeline. The world is in memory; no replacement pod inherits it. |
 | Authority | The dedicated host's Shared world is canonical; guests predict and accept corrections. |
@@ -95,10 +95,10 @@ What bounds a stranger:
 
 - at most `NetworkAdmitBurst` (6) admissions per address in each
   `NetworkAdmitWindow` (1 minute), tracked for at most `NetworkAdmitTracked` (1024)
-  addresses, past which a new one is refused, so the defence cannot become the
+  addresses, past which a new one is refused, so the defense cannot become the
   exhaustion. It is keyed on the player's own address at the router, before its
   lookup on both routes, as one budget per address (`-client-joins`), the front
-  door's from the dialler and the browser route's from `-client-address-header`; a
+  door's from the dialer and the browser route's from `-client-address-header`; a
   dial whose sign-in names an account is moved to that account's budget once the
   exchange names it. At the pod every player arrives from the node's address, so a
   pod run with `-admit ticket` spends no address budget and charges the player the
@@ -119,7 +119,7 @@ What bounds a stranger:
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
 - fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer
-  link (`internal/network`, framed by `pkg/network`): whatever a dialler sends, malformed, oversized, replayed
+  link (`internal/network`, framed by `pkg/network`): whatever a dialer sends, malformed, oversized, replayed
   or cut short, is answered with an offer or a reason, and holds an identity or a
   link only once admitted;
 - the start gate, which waits on whoever is still on the link for one world install.
@@ -152,10 +152,10 @@ What bounds a stranger:
   socket, places at most 32 connections at once, reads one name-sized frame from
   each within five seconds, and refuses before it dials a pod (§9);
 - a spectator being nobody in the session: the router answers a dial that only
-  watches itself, from its copy of the session's feed, charged to the dialler's
+  watches itself, from its copy of the session's feed, charged to the dialer's
   join budget and bounded by `-spectators` a session and `-spectators-per-address`
   of them an address (an IPv6 one's /64), a dial still being answered included.
-  The pod is dialled once, under a ticket of kind `watch` the router signs for
+  The pod is dialed once, under a ticket of kind `watch` the router signs for
   itself, sees no spectator's address or count, and sends nothing that takes a
   place or says where anyone listens (§9,
   [Multiplayer §5.8](multi-player.md#58-watching-a-session));
@@ -189,7 +189,7 @@ replay suffix, the scheduled queue, and frames arriving after the install
 |---|---|---|
 | Remote entries are the **highest applied** sequence, not a contiguous prefix. | A contiguous prefix, exact in every topology. | Within one link a source's frames arrive in order, so the two are the same number in every topology the CLI builds. Where they differ — a frame overtaking a lower one across a relay — the maximum costs one cadence of a frame looking contained when it is not. A contiguous prefix would instead stall on a frame the receiver refused for a full queue and will never see, making that producer replay a growing suffix at every correction for the rest of the session. Bounded and self-healing beats exact and unbounded. |
 | The **local** entry stays a contiguous prefix. | The same maximum. | Local dispatch can complete out of order, so a capture racing an input that was encoded but not yet dispatched must not claim it. |
-| A source the header does not name is **claimed for nothing**. | Fall back to the tick. | The fallback is the misjudgement the fence exists to prevent. Keeping an artifact costs a duplicate the next correction repairs; discarding one costs the player their action. |
+| A source the header does not name is **claimed for nothing**. | Fall back to the tick. | The fallback is the misjudgment the fence exists to prevent. Keeping an artifact costs a duplicate the next correction repairs; discarding one costs the player their action. |
 | The replay suffix is **cleared on reset**. | Leave it, as before. | A reset restarts the sequence counter, so a record retained across one carries a number a post-reset fence would compare against and get wrong in both directions. The old tick boundary pruned these by age; a sequence boundary has no such accident to rely on. |
 | One vector in a **capture-schema bump**, not a compatible addition. | Keep the authority's own fence beside the vector. | Two fences answering one question is how they drift apart. Mixed builds are refused at the join by the capture-schema field in the identity check, so a bump costs nothing a mixed fleet was allowed to do anyway. |
 
@@ -353,7 +353,7 @@ alone, so no dial goes around the router's checks.
 
 | Route | Link | Path | Refuses a bad dial |
 |---|---|---|---|
-| Front door | `vif://<site>:7777/<id>`, `vifs://` where the edge ends TLS | host forward, or the edge's stream server under a PROXY header, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max`; then, in the exchange it runs through itself, a proof that fails |
+| Front door | `vif://<site>:7777/<id>`, `vifs://` where the edge ends TLS | host forward, or the edge's stream server under a PROXY header, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialer past its budget (§4), a session unknown, unready or full, one at `-route-max`; then, in the exchange it runs through itself, a proof that fails |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
 | Tunnel | `vif://<site>:7777/<id>`, a door's, `vifs://` as the front door's | as the front door, then the control connection the door's run holds open to the router, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
@@ -376,12 +376,12 @@ holds, and a name is resumed only by the run it was issued to, within
 pod's name or another's. Tunnels are not listed and are not sessions, though the
 listing's limits count them: a door's run joined a session the fleet or a player
 hosts. Every connection placed, on a pod or a door, is accounted for as it closes,
-by the session's name and never the dialler's address.
+by the session's name and never the dialer's address.
 
 **Spectators.** A dial that only watches (`MsgSessionWatch`,
 [Multiplayer §5.8](multi-player.md#58-watching-a-session)) is answered by the
 router and not spliced. On either route it is placed as a join is, by the frame,
-the identifier and the dialler's budget, and then served the watch handshake by
+the identifier and the dialer's budget, and then served the watch handshake by
 the router itself (`network.ServeWatch`), holding no connection to the pod and
 none of `-route-max`. The first to watch a session opens the router's one
 subscription to its pod (`audiences`, `tcpRouter.subscribe`): a watch dial of the
@@ -402,7 +402,7 @@ a dial builds is the one its feed begins from.
   either is refused as `RefusalAudience`, which a client retries when a spectator
   leaves. A session with no seat free is still shown, a spectator taking none; one
   that is not live is refused as a join is, and one still in its lobby as not
-  started (`ErrUnstarted`), read off its health before its pod is dialled.
+  started (`ErrUnstarted`), read off its health before its pod is dialed.
 - **Lifetime.** The subscription is dropped `audienceLinger` (15 s) after its last
   spectator left, so a page that reloads finds it. A feed the pod ends reaches each
   spectator with the pod's reason; one whose link is lost tells each to find it

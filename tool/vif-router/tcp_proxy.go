@@ -62,7 +62,7 @@ type tcpRouter struct {
 	audiences *audiences         // the sessions being watched; nil shows none
 	opens     time.Duration      // how long a door's run has to open a connection back
 	log       *slog.Logger
-	game      string // the pod port dialled; a test points it at a stand-in
+	game      string // the pod port dialed; a test points it at a stand-in
 	placing   chan struct{}
 
 	// ticket signs the admission tickets the router mints in band; an empty key
@@ -103,7 +103,7 @@ func (r *tcpRouter) serve(listener net.Listener) {
 }
 
 // route places client and stays with it to its end: spliced to the pod or the door
-// it named, or served that session's feed when it dialled only to watch.
+// it named, or served that session's feed when it dialed only to watch.
 func (r *tcpRouter) route(client net.Conn, from net.Addr, signIn string) {
 	upstream, release, at := r.place(client, from)
 	switch {
@@ -232,7 +232,7 @@ func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.A
 }
 
 // closed accounts for one placed connection as it ends: what passed through it and
-// for how long, by the session's name and never the dialler's address.
+// for how long, by the session's name and never the dialer's address.
 func (r *tcpRouter) closed(at placement, in, out int64, started time.Time) {
 	r.log.Info("session route closed", "session", at.id, "door", at.door,
 		"bytes_in", in, "bytes_out", out, "seconds", int64(time.Since(started)/time.Second))
@@ -271,7 +271,7 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	if !sessionIDPattern.MatchString(id) {
 		return refuse(errSessionUnknown)
 	}
-	// Keyed on the dialler, whose address the host forwards unchanged or the edge
+	// Keyed on the dialer, whose address the host forwards unchanged or the edge
 	// names, and charged before the lookup: that costs the API server a list and the
 	// pod a probe.
 	if err := r.admit.Admit(from); err != nil {
@@ -401,8 +401,8 @@ func (r *tcpRouter) tunnel(client net.Conn, from net.Addr, first *link.Message) 
 	}
 }
 
-// addressHost is the address a publication is counted to: the dialler's host with
-// no port, or none for a dialler with no address.
+// addressHost is the address a publication is counted to: the dialer's host with
+// no port, or none for a dialer with no address.
 func addressHost(from net.Addr) string {
 	if from == nil {
 		return ""

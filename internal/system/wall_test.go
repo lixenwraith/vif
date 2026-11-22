@@ -497,7 +497,7 @@ func TestRockAndWallsLeaveSceneryWhereItStands(t *testing.T) {
 }
 
 // newBody is a flying composite, header at (x, y) with members over the w×h cells
-// from there, each a cell's centre
+// from there, each a cell's center
 func newBody(w *engine.World, x, y, width, height int) core.Entity {
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: x, Y: y})

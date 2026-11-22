@@ -15,7 +15,7 @@ import (
 
 // TestTheStateOverlayLabelsEachMachineSpeciesInstance: while the overlay is on, a
 // body a machine steps reads its state's name, with how far through a timed entry
-// it is, centred on the row above it, or under it on the map's top row
+// it is, centered on the row above it, or under it on the map's top row
 func TestTheStateOverlayLabelsEachMachineSpeciesInstance(t *testing.T) {
 	w, game := glyphWorld()
 	config := w.Resources.Config

@@ -218,7 +218,7 @@ func (x *Index[E]) FindClosestEntityInDirection[P Coord](start P, dx, dy int, bo
 					nearest(px, py, vmath.IntAbs(px-startX), px)
 				}
 			}
-			// The first row holding anything settles it, on its occupant nearest the centre
+			// The first row holding anything settles it, on its occupant nearest the center
 			if hit >= 0 {
 				return best, as[P](Point3{X: hit, Y: py, Z: from.Z}), true
 			}
@@ -303,7 +303,7 @@ var (
 )
 
 // FindFreeFromPattern searches 8 directions of origin's layer at expanding radii
-// for a width×height area free of walls matching mask, centred on the search
+// for a width×height area free of walls matching mask, centered on the search
 // point, with Y offsets scaled to the cell aspect when aspectCorrect;
 // additionalCheck, when not nil, may refuse a candidate by its top-left. It
 // returns the area's top-left.
@@ -349,7 +349,7 @@ func (x *Index[E]) FindFreeFromPattern[P Coord](
 				offsetY = int(aspect.FromCircular(float64(offsetY)))
 			}
 
-			// The candidate centred on the search point, on its layer
+			// The candidate centered on the search point, on its layer
 			area := vmath.Area{X: o.X + offsetX - (width / 2), Y: o.Y + offsetY - (height / 2), Width: width, Height: height}
 			if !x.clear(x.probe(mask), area, o.Z, 1) {
 				continue
@@ -384,7 +384,7 @@ var (
 // padding cells off it, as its top-left's offsets from the anchor: the cardinals
 // (0-3), then the diagonals (4-7)
 func exclusionSlots(objectW, objectH int, exclusion Exclusion, padding int) [8][2]int {
-	// An even width has no middle column, so it centres half a cell right: a
+	// An even width has no middle column, so it centers half a cell right: a
 	// countdown's digits ink the left of the box they share.
 	objHalfW := (objectW - 1) / 2
 	objHalfH := objectH / 2
@@ -481,7 +481,7 @@ func (x *Index[E]) FindPlacementAroundExclusion[P Coord](
 	return bestX - a.X, bestY - a.Y, false
 }
 
-// searchDirection is CCW right of the centre column, CW otherwise
+// searchDirection is CCW right of the center column, CW otherwise
 func searchDirection(originX, centerX int) Direction {
 	if originX >= centerX {
 		return SearchCCW

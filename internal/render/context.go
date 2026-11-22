@@ -108,14 +108,14 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResour
 }
 
 // IsInMap reports whether a coordinate names a cell the simulation owns.
-// A centred map leaves margin inside the viewport that projects like a map cell
+// A centered map leaves margin inside the viewport that projects like a map cell
 // but belongs to no cell, so visibility answers are gated on this first.
 func (rc *RenderContext) IsInMap(mapX, mapY int) bool {
 	return mapX >= 0 && mapX < rc.MapWidth && mapY >= 0 && mapY < rc.MapHeight
 }
 
 // PlayfieldViewportRect returns the map's extent in viewport coordinates.
-// It is the whole viewport when the camera crops a larger map, and the centred
+// It is the whole viewport when the camera crops a larger map, and the centered
 // sub-rectangle when the map is smaller than the viewport.
 func (rc *RenderContext) PlayfieldViewportRect() Rect {
 	r := RectWH(rc.MapOffsetX, rc.MapOffsetY,
@@ -154,7 +154,7 @@ func StartHelpRect(width int, label string) Rect {
 // MapToViewport converts map coordinates to viewport-relative coordinates
 // Returns (vx, vy, visible) where visible=false if the coordinate is outside the
 // map or outside viewport bounds. The projection is returned either way, so a
-// caller anchoring a shape on an off-map centre can still use it.
+// caller anchoring a shape on an off-map center can still use it.
 func (rc *RenderContext) MapToViewport(mapX, mapY int) (int, int, bool) {
 	vx := mapX - rc.CameraX + rc.MapOffsetX
 	vy := mapY - rc.CameraY + rc.MapOffsetY

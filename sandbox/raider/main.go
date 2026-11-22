@@ -1,6 +1,6 @@
 // Command raider shows the cave scenario's raider types as it declares them: a
 // band for each stone art, its types weakest rank first between a ceiling and a
-// floor of that art's rock, in the colours their programs give them or one hue a
+// floor of that art's rock, in the colors their programs give them or one hue a
 // slider picks, on the game's truecolor tier or its console tier as a VGA or
 // FreeBSD console shows it. Run it from the repository root, or name the scenario
 // directory with -s.
@@ -27,7 +27,7 @@ import (
 	"github.com/lixenwraith/vif/internal/system"
 )
 
-// A program's fg grid names each glyph's part, which a hue colours
+// A program's fg grid names each glyph's part, which a hue colors
 const (
 	partBody = iota
 	partEyes
@@ -36,7 +36,7 @@ const (
 	parts
 )
 
-// hue colours every raider's four parts alike, and every glyph in one console entry
+// hue colors every raider's four parts alike, and every glyph in one console entry
 type hue struct {
 	name    string
 	rgb     [parts]color.RGB
@@ -45,7 +45,7 @@ type hue struct {
 
 func rgb(r, g, b uint8) color.RGB { return color.RGB{R: r, G: g, B: b} }
 
-// The slider's first stop is each program's own palette; the rest colour every
+// The slider's first stop is each program's own palette; the rest color every
 // raider in one hue, its eyes the palest and its limbs the darkest
 const ownStop = "Cave"
 
@@ -55,7 +55,7 @@ var hues = []hue{
 	{"Orange", [parts]color.RGB{rgb(255, 140, 40), rgb(255, 215, 140), rgb(190, 90, 25), rgb(255, 100, 45)}, visual.ConYellow},
 }
 
-// The tiers a truecolor terminal can show; a 256-colour terminal shows only its own console
+// The tiers a truecolor terminal can show; a 256-color terminal shows only its own console
 type tier struct {
 	name    string
 	console bool
@@ -114,11 +114,11 @@ type glyph struct {
 
 type app struct {
 	term     terminal.Terminal
-	native   bool // the terminal draws 256 colours, so its own console is the only tier
+	native   bool // the terminal draws 256 colors, so its own console is the only tier
 	buf      *render.RenderBuffer
 	caves    []cave
 	w, h     int
-	stop     int // the slider's position, 0 for the programs' own colours
+	stop     int // the slider's position, 0 for the programs' own colors
 	tier     int
 	backdrop bool
 	state    int
@@ -428,7 +428,7 @@ func (a *app) drawRock(art pattern.ArtPreset, seed uint64, y, depth int, face pa
 	}
 }
 
-// swatch is the body colour the slider gives a look
+// swatch is the body color the slider gives a look
 func (a *app) swatch(look *component.Look) color.RGB {
 	if a.stop > 0 {
 		return hues[a.stop-1].rgb[partBody]
@@ -436,8 +436,8 @@ func (a *app) swatch(look *component.Look) color.RGB {
 	return look.Fg[partBody]
 }
 
-// cell paints one glyph as the game's look painter does: its part's colour, the
-// enraged colour over every glyph, and a hit's flash, which a console shows reversed
+// cell paints one glyph as the game's look painter does: its part's color, the
+// enraged color over every glyph, and a hit's flash, which a console shows reversed
 func (a *app) cell(x, y int, cell *component.LookCell, look *component.Look, elapsed time.Duration) {
 	if cell.Rune == 0 {
 		return
@@ -495,14 +495,14 @@ func (a *app) drawHeader() {
 	a.clearRow(0)
 	a.clearRow(1)
 	a.text(1, 0, "each cave's types by rank, R1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
-	help := "←/→ colour  c tier  b backdrop  s state  ↑/↓ scroll  q quit"
+	help := "←/→ color  c tier  b backdrop  s state  ↑/↓ scroll  q quit"
 	if a.native {
-		help = "←/→ colour  b backdrop  s state  ↑/↓ scroll  q quit"
+		help = "←/→ color  b backdrop  s state  ↑/↓ scroll  q quit"
 	}
 	a.text(1, 1, help, rgb(150, 150, 165), terminal.AttrNone)
 }
 
-// drawFooter draws the colour slider, a track with a stop per hue after the
+// drawFooter draws the color slider, a track with a stop per hue after the
 // programs' own and the knob on the chosen one, its names under it, and the view's
 // settings
 func (a *app) drawFooter() {
@@ -512,7 +512,7 @@ func (a *app) drawFooter() {
 	for r := track - 1; r < a.h; r++ {
 		a.clearRow(r)
 	}
-	a.text(1, track, "colour", rgb(255, 255, 255), terminal.AttrBold)
+	a.text(1, track, "color", rgb(255, 255, 255), terminal.AttrBold)
 	last := sliderX + len(hues)*sliderStep
 	for x := sliderX; x <= last; x++ {
 		r := '─'
@@ -565,7 +565,7 @@ func (a *app) text(x, y int, s string, fg color.RGB, attr terminal.Attr) {
 }
 
 // surface hands the frame to the terminal; on a truecolor terminal showing a
-// console tier, each console entry turns into the colour that console shows
+// console tier, each console entry turns into the color that console shows
 type surface struct{ a *app }
 
 func (s surface) ColorMode() terminal.ColorMode { return s.a.term.ColorMode() }

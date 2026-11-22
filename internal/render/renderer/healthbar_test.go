@@ -112,7 +112,7 @@ func TestADataSpeciesHealthBarSpansItsPrototype(t *testing.T) {
 }
 
 // TestAPinnedHealthBarStandsOnTheViewsTopRow: a Devourer's bar spans a share of the
-// view's top row, centred, filled for the hit points it keeps of those it rose with
+// view's top row, centered, filled for the hit points it keeps of those it rose with
 // and dotted for the rest, on a backing darker than what it stands over
 func TestAPinnedHealthBarStandsOnTheViewsTopRow(t *testing.T) {
 	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {

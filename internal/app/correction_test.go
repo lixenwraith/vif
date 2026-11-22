@@ -667,7 +667,7 @@ func TestWorldDifferenceCountsWhatMoved(t *testing.T) {
 }
 
 // TestJoinReusesTheCadencesKeyframe is the world-lock half of a mid-run join.
-// Reading the world once per participant makes a second dialler wait behind the
+// Reading the world once per participant makes a second dialer wait behind the
 // first one's read as well as its transfer. A host publishes keyframes anyway, so a
 // join takes whichever is fresh enough: the read is per-cadence, not per-join.
 func TestJoinReusesTheCadencesKeyframe(t *testing.T) {

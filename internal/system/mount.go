@@ -217,7 +217,7 @@ func (s *MountSystem) aim(m *component.MountComponent, pos component.PositionCom
 	return aimed
 }
 
-// muzzle is the sub-cell point a shot leaves from: the host's centre, pushed Muzzle
+// muzzle is the sub-cell point a shot leaves from: the host's center, pushed Muzzle
 // cells toward the aim (half that vertically)
 func muzzle(m *component.MountComponent, pos component.PositionComponent) (float64, float64) {
 	cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.Center()

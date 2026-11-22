@@ -51,7 +51,7 @@ func TestASpectatorsBadgeNamesWhomItFollows(t *testing.T) {
 
 // TestStatusBarNetworkBadgeIsOneCellChosenBySeverity pins the collapse.
 //
-// One badge for the whole session: the round trip, coloured by how well this
+// One badge for the whole session: the round trip, colored by how well this
 // instance is keeping up, and at most one qualifier, so a worse fact hides a
 // lesser one rather than sitting beside it.
 func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
@@ -117,10 +117,10 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	}
 }
 
-// TestStatusBarBadgeColoursAnUnqualifiedLinkByItsRoundTrip is the reading the
+// TestStatusBarBadgeColorsAnUnqualifiedLinkByItsRoundTrip is the reading the
 // badge exists to give at a glance: a settled session with a slow link is not
 // green, and nothing else on the bar says so.
-func TestStatusBarBadgeColoursAnUnqualifiedLinkByItsRoundTrip(t *testing.T) {
+func TestStatusBarBadgeColorsAnUnqualifiedLinkByItsRoundTrip(t *testing.T) {
 	r, _ := newStatusBar(t)
 	r.statNet.Store("connected")
 

@@ -901,7 +901,7 @@ final class MenuDialog extends Dialog {
         return d;
     }
 
-    // field is the site's text field: the surface colour inside a hairline, the ring's
+    // field is the site's text field: the surface color inside a hairline, the ring's
     // blue while focused; input picks the keyboard
     private EditText field(Context c, String input) {
         EditText f = new EditText(c);

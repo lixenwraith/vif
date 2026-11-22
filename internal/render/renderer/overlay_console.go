@@ -35,7 +35,7 @@ type consoleView struct {
 	built bool
 }
 
-// consoleColors are the console's text colours on this frame's tier
+// consoleColors are the console's text colors on this frame's tier
 type consoleColors struct {
 	kind  [parameter.StatusKindCount]color.RGB
 	stamp color.RGB
@@ -151,7 +151,7 @@ func sanitizeConsole(s string) string {
 	}, s)
 }
 
-// consoleColors picks the console's colours for the tier drawn on
+// consoleColors picks the console's colors for the tier drawn on
 func (r *OverlayRenderer) consoleColors() consoleColors {
 	if r.console == nil {
 		return consoleColors{kind: visual.RgbConsoleKind, stamp: visual.RgbConsoleStamp}

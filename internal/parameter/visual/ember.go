@@ -23,8 +23,8 @@ var (
 	EmberTransitionDuration     = 1000 * time.Millisecond
 	EmberTransitionRiseRatio    = 0.1 // 10% rise time
 	EmberTransitionMaxIntensity = 0.7 // Peak overlay
-	// EmberTransitionCentreShare is the overlay's share at the shield's centre, all of it at the edge
-	EmberTransitionCentreShare = 0.3
+	// EmberTransitionCenterShare is the overlay's share at the shield's center, all of it at the edge
+	EmberTransitionCenterShare = 0.3
 )
 
 // EmberParams holds interpolated visual parameters for a given heat level

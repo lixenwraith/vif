@@ -33,7 +33,7 @@ complete -c vif -o f -o config-content -r -F -d 'Content directory, or a single 
 complete -c vif -o k -o config-keymap -r -F -d 'Keymap TOML, or the name of one in input/ or built in, as vim'
 complete -c vif -o config-music -r -F -d 'Music pattern override TOML'
 complete -c vif -o config-sounds -r -F -d 'Sound definition override TOML'
-complete -c vif -o color -x -a 'auto 256 true' -d 'Colour depth; auto detects the terminal'
+complete -c vif -o color -x -a 'auto 256 true' -d 'Color depth; auto detects the terminal'
 complete -c vif -o g -o gui -d 'Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; the default of a vif-gui build or with vif.toml\'s [presentation] window = true, which -g=false turns off'
 complete -c vif -o cli -d 'Play in the terminal whatever vif.toml\'s [presentation] or a vif-gui build says; wins over -g'
 complete -c vif -o maximized -d 'Open the desktop window maximized; vif.toml\'s [presentation] maximized is the default, and a terminal run ignores it'

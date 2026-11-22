@@ -49,7 +49,7 @@ var (
 	RgbBlossom           = color.LightPink
 	RgbDrain             = color.VibrantCyan
 	RgbMaterialize       = color.BrightCyan
-	RgbMaterializeNugget = RgbNuggetOrange // the beacon's beams, the nugget's own colour
+	RgbMaterializeNugget = RgbNuggetOrange // the beacon's beams, the nugget's own color
 
 	RgbDustDark   = color.DarkGray
 	RgbDustNormal = color.MidGray
@@ -71,7 +71,7 @@ var (
 	RgbCursorNormal   = color.Orange
 	RgbCursorInsert   = color.White
 
-	// RgbPeerCursorText is what a peer's cell character is drawn in. One colour
+	// RgbPeerCursorText is what a peer's cell character is drawn in. One color
 	// for every slot: the background is what says which participant this is, so
 	// the character only has to stay readable against all of them.
 	RgbPeerCursorText = color.Black
@@ -114,7 +114,7 @@ var (
 	RgbGtBg  = color.PaleGold
 	RgbApmBg = color.LimeGreen
 
-	// Tracer colours: the gun's streak, by the cursor's polarity
+	// Tracer colors: the gun's streak, by the cursor's polarity
 	RgbTracerPositive = color.Yellow
 	RgbTracerNegative = color.MediumPurple
 
@@ -175,7 +175,7 @@ var (
 	RgbPulseNegative = color.Orchid
 	RgbPulseHostile  = color.Vermilion
 
-	// Ray colors: a white core, sides in the tracer's polarity colours or a mount's red
+	// Ray colors: a white core, sides in the tracer's polarity colors or a mount's red
 	RgbRayCore     = color.White
 	RgbRayPositive = RgbTracerPositive
 	RgbRayNegative = RgbTracerNegative
@@ -307,14 +307,14 @@ var GlyphColorLUT = [5][3]color.RGB{
 	{RgbGlyphGold, RgbGlyphGold, RgbGlyphGold},
 }
 
-// SceneryDepthMix is how far each scenery layer's colour stands from the background
-// toward its type's bright colour, by level far to near, so depth reads as haze
+// SceneryDepthMix is how far each scenery layer's color stands from the background
+// toward its type's bright color, by level far to near, so depth reads as haze
 var SceneryDepthMix = [3]float64{0.28, 0.52, 0.85}
 
-// RgbPeerCursor is one background colour per roster slot, for the cursors this
+// RgbPeerCursor is one background color per roster slot, for the cursors this
 // instance does not drive. They are chosen apart from RgbCursorNormal and
 // RgbCursorInsert rather than merely from each other: the question a player asks
-// of this colour is "is that me", and only then "which of them is it".
+// of this color is "is that me", and only then "which of them is it".
 var RgbPeerCursor = [...]color.RGB{
 	color.VibrantCyan,
 	color.HotPink,
@@ -326,7 +326,7 @@ var RgbPeerCursor = [...]color.RGB{
 	color.Silver,
 }
 
-// RgbConsoleKind is a message's colour in the console by its kind: what was typed
+// RgbConsoleKind is a message's color in the console by its kind: what was typed
 // apart from what answered it, and an error or alert apart from both
 var RgbConsoleKind = [parameter.StatusKindCount]color.RGB{
 	parameter.StatusNotice:   RgbStatusMessageText,

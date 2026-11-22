@@ -86,7 +86,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	}
 }
 
-// ready initialises a system constructed outside the engine, as World.InitSystems
+// ready initializes a system constructed outside the engine, as World.InitSystems
 // does for the registered set at startup and on reset
 func ready[S engine.System](s S) S {
 	s.Init()

@@ -215,7 +215,7 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 	}
 }
 
-// TestAGuestNoCandidateReachesForks: the centre of a star goes and its guests share
+// TestAGuestNoCandidateReachesForks: the center of a star goes and its guests share
 // no link. The first candidate takes the term alone; the other guest walks the list
 // without reaching it and forks once its turn is over (what a fork does with its
 // place is TestAForkLetsItsPlaceGo's). The host keeps the place of each participant
@@ -284,10 +284,10 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id {
+	if req == nil || req.Dialed == nil || uint32(req.Dialed.Offer().Assigned) != id {
 		t.Fatalf("the guest was not admitted back into its own place: %+v", req)
 	}
-	req.Dialled.Abandon(errors.New("the test is over"))
+	req.Dialed.Abandon(errors.New("the test is over"))
 }
 
 // TestASuccessorTakesPlayersAsTheFirstHostDid: a guest's own port turns a join away
@@ -340,7 +340,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 				a.membership.LocalParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
 		}
 	}
-	// Dialled once the session plays again, as a player meets it: a join whose gate
+	// Dialed once the session plays again, as a player meets it: a join whose gate
 	// reads the frozen world fails if the thaw lands mid-read.
 	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
@@ -394,11 +394,11 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != gid ||
-		req.Dialled.Offer().Host != id {
+	if req == nil || req.Dialed == nil || uint32(req.Dialed.Offer().Assigned) != gid ||
+		req.Dialed.Offer().Host != id {
 		t.Fatalf("the guest was not admitted back into its own place at the successor: %+v", req)
 	}
-	req.Dialled.Abandon(errors.New("the test is over"))
+	req.Dialed.Abandon(errors.New("the test is over"))
 }
 
 // TestASuccessorHostsAtItsOwnPort: :host on a successor naming the port its session
@@ -465,7 +465,7 @@ func TestAGuestThatRedialsItsLostHostTakesItsTurn(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); (successor.authority.Holder() != id || successor.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	if successor.authority.Holder() != id {
-		t.Fatalf("the guest that redialled did not take the session over: %s", successor.authority.Summary())
+		t.Fatalf("the guest that redialed did not take the session over: %s", successor.authority.Summary())
 	}
 	// The redial ends a rejoin pass after the term is taken, and holds the place again
 	// there, or the run would be left with nothing to sign with.
@@ -475,7 +475,7 @@ func TestAGuestThatRedialsItsLostHostTakesItsTurn(t *testing.T) {
 	}
 }
 
-// TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks: a :join or a redial is dialled by
+// TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks: a :join or a redial is dialed by
 // the run it replaces, on that run's wiring; the run built on the dial signs its
 // peer links with its own key all the same, so its link to the first candidate opens.
 func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
@@ -497,7 +497,7 @@ func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.wiring.dialled = d
+	cfg.wiring.dialed = d
 	guest, _ := driveRun(t, "bot", cfg, "default", nil)
 	port, candidate := portOf(t, guest), first.membership.LocalParticipant()
 	waitUntil(t, func() bool { return port.Connected(candidate) }, "the guest's link to the first candidate")
@@ -568,12 +568,12 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	}
 }
 
-// TestAJoinerDiallingMidHandoffIsRefused is the admission half. A dial that lands
+// TestAJoinerDialingMidHandoffIsRefused is the admission half. A dial that lands
 // mid-succession must not be half-admitted into a term about to end, holding a
 // slot the next host's record does not carry from an authority that stopped
 // publishing. The refusal is one the joiner retries, as an ordinary join the
 // mid-run gate criteria pin.
-func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
+func TestAJoinerDialingMidHandoffIsRefused(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	hosting := func(seed uint64) *App {
 		host := mustHeadless(t, seed, 120, 40)
@@ -618,7 +618,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// A guest's own port, which takes joins once its guest hosts, refuses the same.
 	// A guest retained what it installed, so the walk it is told of names its host
 	// as the one candidate, whose turn is the one that runs: the authority it lost
-	// was reached through a relay, so nothing is redialled first.
+	// was reached through a relay, so nothing is redialed first.
 	other := hosting(fixtureSeed)
 	t.Cleanup(tickInBackground(other))
 	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}, Play: takingOver()}, "default", nil)

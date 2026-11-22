@@ -244,7 +244,7 @@ instance's player stream.
 `pkg/vmath` is a `float64` numeric and geometry package and holds the named math
 constants (`TwoPi`, `Golden64`). It provides scalar and vector operations,
 lookup-table trig/decay, ellipses/arcs, float grid traversal and cell strips
-(`Ray`), and a fast seeded RNG: labelled stream seeds (`DeriveSeed`) and seeds
+(`Ray`), and a fast seeded RNG: labeled stream seeds (`DeriveSeed`) and seeds
 folded from several values (`MixChain`). `pkg/vmath/physics.Kinetic` stores
 precise position in cells, velocity in cells per second, and acceleration in
 cells per second squared, all as `float64`.

@@ -5,7 +5,7 @@ filters incrementally, and merges several files into one chronological view.
 
 It reads both streams the game writes:
 
-* **`vif-log-*.jsonl`** — the diagnostic log: levelled, scoped records with a `sub` tag and a `fields.msg` discriminator.
+* **`vif-log-*.jsonl`** — the diagnostic log: leveled, scoped records with a `sub` tag and a `fields.msg` discriminator.
 * **`vif-jrn-*.jsonl`** — the replay journal: one `sub:"journal"` record per replayable event, with `anchor` headers and `capture`, `digest` and `end` records (`internal/event/journal_sink.go`). A second logger instance writes it outside the session's level and scope, so a capture cannot be silenced.
 
 The two share an envelope (`time`, `level`, `sub`, `run`, `tick`, `fields`), so they open together and merge into one chronological view — which is how a journal record is read against the diagnostics of the tick that produced it.

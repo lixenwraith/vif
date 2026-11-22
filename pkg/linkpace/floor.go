@@ -10,8 +10,8 @@ import (
 // floor costs on this world, and what the link was measured to allow.
 type FloorError struct {
 	// RequiredBps is one whole world per floor window — the cheapest schedule
-	// that honours the floor. AvailableBps is the measured delivery rate after
-	// the utilisation share.
+	// that honors the floor. AvailableBps is the measured delivery rate after
+	// the utilization share.
 	RequiredBps  float64
 	AvailableBps float64
 
@@ -32,7 +32,7 @@ func (b Bounds) FloorWindow() time.Duration {
 	return time.Duration(b.FloorKeyframeTicks) * b.TickInterval
 }
 
-// FloorBps is what honouring the floor costs on a world of this size.
+// FloorBps is what honoring the floor costs on a world of this size.
 func (b Bounds) FloorBps(s Sizes) float64 { return floorRate(b, s) }
 
 // Admit decides whether a link may join a session at all.
@@ -53,12 +53,12 @@ func Admit(b Bounds, availableBps float64, s Sizes) error {
 		return nil
 	}
 	required := floorRate(b, s)
-	if required <= availableBps*b.Utilisation {
+	if required <= availableBps*b.Utilization {
 		return nil
 	}
 	return &FloorError{
 		RequiredBps:   required,
-		AvailableBps:  availableBps * b.Utilisation,
+		AvailableBps:  availableBps * b.Utilization,
 		KeyframeBytes: s.Keyframe,
 		Window:        b.FloorWindow(),
 	}

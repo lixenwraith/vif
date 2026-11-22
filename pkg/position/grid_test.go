@@ -241,7 +241,7 @@ func TestClampBoundsEveryShape(t *testing.T) {
 }
 
 // TestClampLeavesALegalMapAlone is the non-vacuous half: a clamp that reshaped an
-// ordinary map would be a bug rather than a defence.
+// ordinary map would be a bug rather than a defense.
 func TestClampLeavesALegalMapAlone(t *testing.T) {
 	t.Parallel()
 	for _, tt := range [][2]int{{80, 24}, {160, 50}, {200, 60}, {1000, 100}} {

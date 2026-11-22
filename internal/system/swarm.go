@@ -517,7 +517,7 @@ func (s *SwarmSystem) hasLineOfSight(c *swarmCtx) bool {
 // probeKinetic admits a charge only with a body to fly
 func (s *SwarmSystem) probeKinetic(c *swarmCtx) bool { return c.kinetic != nil }
 
-// enterCharge aims at the stored cell's centre, to arrive as the entry ends
+// enterCharge aims at the stored cell's center, to arrive as the entry ends
 func (s *SwarmSystem) enterCharge(c *swarmCtx) {
 	sw, k := c.swarm, c.kinetic
 	sw.ChargeStartX, sw.ChargeStartY = k.PreciseX, k.PreciseY

@@ -268,7 +268,7 @@ func Start() (string, error) {
 		return "", err
 	}
 
-	// A level set while stopped is honoured by the new session
+	// A level set while stopped is honored by the new session
 	l.SetLevel(level.Load())
 
 	if cfg.Console {

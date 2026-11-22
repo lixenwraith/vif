@@ -44,7 +44,7 @@ type Settings struct {
 	RoundSeconds     int    `toml:"round_seconds"`
 	// Inputs are the sensors every network of the graph reads ahead of its own
 	Inputs []string `toml:"inputs"`
-	// Score is what pays the bot: a source of the catalogue's and what one of it
+	// Score is what pays the bot: a source of the catalog's and what one of it
 	// pays, or an event by name with the payload field that names its owner. A
 	// graph with none scores nothing and may not learn.
 	Score map[string]any `toml:"score"`
@@ -59,7 +59,7 @@ type Graph struct {
 	nets     []*network
 	text     []byte // the document as written, which Document writes weights into
 	doc      map[string]any
-	pays     []paying // what its score pays, and scoredBy how the score is spelt
+	pays     []paying // what its score pays, and scoredBy how the score is spelled
 	scoredBy string
 }
 
@@ -73,7 +73,7 @@ func (g *Graph) Networks() []string {
 }
 
 // ParseGraph parses and validates one bot document. A startup graph parses before
-// any App has built the event catalogue its triggers name.
+// any App has built the event catalog its triggers name.
 func ParseGraph(name string, data []byte) (*Graph, error) {
 	event.EnsureRegistry()
 	doc, err := toml.NewParser(data).Parse()

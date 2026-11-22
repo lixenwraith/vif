@@ -56,7 +56,7 @@ window manager to place the window
 A person's run under `-size` plays a map fixed at that size, or under `-size fit`
 at their screen's as the run is built (`applyMapLatch`, `World.FixMap`). The screen
 still sizes all else, the status bar, the overlays and the view, which shows a
-smaller map centred and follows the cursor over a larger one. No resize crops
+smaller map centered and follows the cursor over a larger one. No resize crops
 the map or starts a waiting game over, a new game keeps its bounds and a level
 reset to the viewport leaves them, as in a session
 ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)), with nothing
@@ -235,7 +235,7 @@ clock, with the phases `waiting`, `occupied`, `vacant`, `draining` and `expired`
 `Serve` starts it after the probe binds and before the lobby, folds the roster into
 it once a second, and exits when it expires — logging one `session ended` line that
 names the reason. The lobby wait carries the same deadline, because a pod nobody
-dialled is exactly the case the first-guest window exists for and exactly the case
+dialed is exactly the case the first-guest window exists for and exactly the case
 the start gate would otherwise wait in forever.
 
 A signal reads the roster at the instant it arrives rather than the loop's last
@@ -248,7 +248,7 @@ not a fault, and an update first drains the fleet's sessions this way
 (`deploy/k3s/session.sh drain`). The refusal is deliberately distinguishable
 from `errSessionStarting`: that one means retry, this one means the session is
 leaving, so no dialer retries it, and vif-router gives a join to a draining or
-expired pod the same answer without dialling it. A host leaving its own session
+expired pod the same answer without dialing it. A host leaving its own session
 refuses alike ([Multi-player §5.5](multi-player.md#55-leaving-a-session)).
 
 The start gate waits only on guests still linked. One that leaves before confirming
@@ -313,7 +313,7 @@ many dials it will ever accept.
 It also outlives its own authority, and that is why `-serve` keeps the default,
 `-authority host`. A dedicated host *is* the session: its address is what the
 router handed out and what every guest holds, so if the process goes, the answer
-is an orchestrator putting another one at that address and the guests dialling back
+is an orchestrator putting another one at that address and the guests dialing back
 — not a guest declaring itself the host. This is policy, not a limit:
 a migrate session's guests declare ports and its survivors walk the published chain
 for a new host ([Multiplayer](multi-player.md) §5.1, §5.3), and
@@ -575,7 +575,7 @@ which keeps only quit, the audio toggle, `:` and the config menu.
 | `.` | Pause and advance one tick. |
 | `,` | Pause and step back one tick. |
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
-| `h j k l` / `0` | Scroll a map larger than the view by four cells; re-centre. |
+| `h j k l` / `0` | Scroll a map larger than the view by four cells; re-center. |
 | Ctrl+S | Cycle the viewer's mute, which starts as `-mute` says; no journal records it. |
 | `:r tick <n>` | Go to the first step at or past tick `n` of the run shown, the status bar's `GT`. |
 | `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
@@ -604,8 +604,8 @@ so an install or a checkpoint delays a frame instead of stalling the loop, and o
 time a run too slow for its rate cannot play is not banked. The simulation
 keeps its recorded geometry; the frame is laid out for the viewer's terminal, and a
 resize re-lays it. A map the view holds is
-centred in void as the game centres it; a larger one is shown from the recorded
-view's centre, and scroll stops at the map's edges. The command line holds
+centered in void as the game centers it; a larger one is shown from the recorded
+view's center, and scroll stops at the map's edges. The command line holds
 playback, as the game's does, and borrows the recorded mode without announcing a
 change to the world or pausing its clock (`GameContext.Viewer`), so closing it
 leaves the run as recorded; a command that would change the recording is refused.

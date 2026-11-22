@@ -75,7 +75,7 @@ func (s *PulseSystem) Update() {
 }
 
 // advance carries one pulse a tick on, reporting whether it lasts. A ridden pulse
-// follows its host, ends with the mount that names it, and holds, neither ageing
+// follows its host, ends with the mount that names it, and holds, neither aging
 // nor striking, while that mount waits to be armed.
 func (s *PulseSystem) advance(e core.Entity, p *component.PulseComponent, dt time.Duration) bool {
 	if p.Anchor != 0 {

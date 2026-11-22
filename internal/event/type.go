@@ -190,7 +190,7 @@ const (
 	EventGlyphLineRequest
 	// EventGlyphClearRequest (GlyphClearPayload) [local] removes the glyphs in a rectangle without effect, every glyph when the rectangle is empty
 	EventGlyphClearRequest
-	// EventGlyphPutRequest (GlyphPutPayload) [local] lays glyphs cell by cell, each with its rune, colour and level, passing over a held cell
+	// EventGlyphPutRequest (GlyphPutPayload) [local] lays glyphs cell by cell, each with its rune, color and level, passing over a held cell
 	EventGlyphPutRequest
 
 	// --- Energy ---
@@ -524,7 +524,7 @@ const (
 
 	// EventMotionMarkerShowColored (MotionMarkerShowPayload) [local] signals a request to show colored glyph motion markers in ping bound
 	EventMotionMarkerShowColored
-	// EventMotionMarkerClearColored [local] signals clearing colored motion markers (jump executed or cancelled)
+	// EventMotionMarkerClearColored [local] signals clearing colored motion markers (jump executed or canceled)
 	EventMotionMarkerClearColored
 
 	// --- Mode ---
@@ -636,7 +636,7 @@ const (
 
 	// --- Square ---
 
-	// EventSquareSpawnRequest (SquareSpawnRequestPayload) [shared] lays a magic square of blocks centred on a cell
+	// EventSquareSpawnRequest (SquareSpawnRequestPayload) [shared] lays a magic square of blocks centered on a cell
 	EventSquareSpawnRequest
 	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds
 	EventSquareAligned

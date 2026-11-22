@@ -292,7 +292,7 @@ func RepairRows(before, after SharedCapture, limit int) []string {
 }
 
 // worldRows is a world's component rows by store and entity, the cursor's
-// normalised as the index normalises it.
+// normalized as the index normalizes it.
 func worldRows(cap SharedCapture) map[string]map[core.Entity]json.RawMessage {
 	out := map[string]map[core.Entity]json.RawMessage{}
 	raw, err := json.Marshal(cap.World)
@@ -315,7 +315,7 @@ func worldRows(cap SharedCapture) map[string]map[core.Entity]json.RawMessage {
 		for _, r := range rows {
 			v := r.Value
 			if name == cursorStoreName {
-				if n, err := normaliseStoreValue(name, v); err == nil {
+				if n, err := normalizeStoreValue(name, v); err == nil {
 					v = n
 				}
 			}
@@ -382,7 +382,7 @@ func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 	for _, sh := range set.Shards {
 		pages, ok := partition[sh.Section]
 		if !ok {
-			return fmt.Errorf("shard names section %q, which the set does not summarise", sh.Section)
+			return fmt.Errorf("shard names section %q, which the set does not summarize", sh.Section)
 		}
 		if sh.Pages != pages {
 			return fmt.Errorf("shard for %q partitions into %d pages, its section declares %d",

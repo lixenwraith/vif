@@ -400,7 +400,7 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 // --- Spawn ---
 
 // spawnLootMulti scatters drops in a fixed pattern, each bursting away from the
-// centre and staying or returning as drop says
+// center and staying or returning as drop says
 func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity, drop component.LootComponent) {
 	count := len(loots)
 	if count == 0 {
@@ -669,7 +669,7 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component
 	if lootComp.Return > 0 {
 		lootComp.Away = lootComp.Return
 		s.world.Positions.RemoveEntity(entity)
-		// A countdown in the drop's colour stands by its cell until it is back
+		// A countdown in the drop's color stands by its cell until it is back
 		if placed {
 			s.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 				Color: lootComp.Look.Color, OriginX: pos.X, OriginY: pos.Y, Duration: lootComp.Return,

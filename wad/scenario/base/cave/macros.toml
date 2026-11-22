@@ -1,5 +1,5 @@
 # The cave's block: the raiders' one attack cycle, the four difficulty ranks that
-# time it and weigh the body flying it, the four caves' raider colours, the raid's
+# time it and weigh the body flying it, the four caves' raider colors, the raid's
 # count of kills by rank and the cave each stage lays. Every raider type's program
 # invokes its rank with its cave and its look, and the rank invokes Raider.
 # doc/toml-macros.md describes definitions and invocations.
@@ -74,7 +74,7 @@ body = { from = ["Lock", "Charge", "Teleport", "Brake"], guard = "Stunned", targ
 
 # --- A raider type ---
 
-# One raider type: its cave's palette and console colour, its own look, and the
+# One raider type: its cave's palette and console color, its own look, and the
 # stats and cycle timings its rank gives. A program invokes RaiderRank1..4, never
 # this, so every theme's rank flies alike and only looks differ.
 [macros.Raider]
@@ -88,7 +88,7 @@ states = { macro = "RaiderStates", chase_ms = "${chase_ms}", lock_ms = "${lock_m
 global = [{ macro = "RaiderStun" }]
 
 # Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
-# console draws the cave's one colour, a hit reversing it. It materializes onto
+# console draws the cave's one color, a hit reversing it. It materializes onto
 # the map in half a second, a quarter reading as a flash, so scrolling rock has
 # little time to come over its footprint, and lands as the materialize ends; a
 # player's kill rolls the raider table.
@@ -162,7 +162,7 @@ charge_ms = 700
 teleport_ms = 450
 
 [macros.RaiderRank4]
-doc = "A fourth-rank raider: slow and armoured, its touch the costliest."
+doc = "A fourth-rank raider: slow and armored, its touch the costliest."
 base = "Raider"
 
 [macros.RaiderRank4.with]
@@ -175,11 +175,11 @@ lock_ms = 1800
 charge_ms = 800
 teleport_ms = 500
 
-# --- Cave colours ---
+# --- Cave colors ---
 
 # Each stone art's raiders wear one hue in four shades, picked against the rock:
 # a hue apart from it so they read, its shade of dark kin to it so they belong. On
-# a console a raider is one colour. The hit flash is yellow and the enraged tint
+# a console a raider is one color. The hit flash is yellow and the enraged tint
 # red, so no cave's raiders are either.
 
 # Strata, warm brown bands: violet vermin, the cool hue against the warm rock, their
@@ -194,10 +194,10 @@ body = [
 ]
 
 [macros.StrataFg256]
-doc = "The strata raiders' console colour."
+doc = "The strata raiders' console color."
 body = 13                           # bright magenta
 
-# Cracked, cool grey: white haunts, the rock's own cool grey brightened, their limbs
+# Cracked, cool gray: white haunts, the rock's own cool gray brightened, their limbs
 # a shade above its lighter mottle
 [macros.CrackedFg]
 doc = "The cracked cave's raider palette: body, eyes, limbs, accent."
@@ -209,7 +209,7 @@ body = [
 ]
 
 [macros.CrackedFg256]
-doc = "The cracked cave's raider console colour."
+doc = "The cracked cave's raider console color."
 body = 15                           # bright white
 
 # Moss, olive stone with green tufts: orange animals, warm against the green, their
@@ -224,10 +224,10 @@ body = [
 ]
 
 [macros.MossFg256]
-doc = "The moss cave's raider console colour."
+doc = "The moss cave's raider console color."
 body = 3                            # brown, a console's orange
 
-# Crystal, blue-grey stone with amethyst, aqua and quartz points: orchid constructs,
+# Crystal, blue-gray stone with amethyst, aqua and quartz points: orchid constructs,
 # a pinker purple than the amethyst so they stand off its points, their limbs a
 # blue violet near the stone
 [macros.CrystalFg]
@@ -240,7 +240,7 @@ body = [
 ]
 
 [macros.CrystalFg256]
-doc = "The crystal cave's raider console colour."
+doc = "The crystal cave's raider console color."
 body = 13                           # bright magenta
 
 # --- The raid's ramp ---

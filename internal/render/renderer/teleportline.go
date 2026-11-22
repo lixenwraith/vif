@@ -79,7 +79,7 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 	})
 }
 
-// renderLine draws the line with phase-based visibility from the body's centre into the
+// renderLine draws the line with phase-based visibility from the body's center into the
 // landing's, where the landing marker blinks, skipping the cells of the body it leaves
 func (r *TeleportLineRenderer) renderLine(
 	ctx render.RenderContext, buf *render.RenderBuffer,

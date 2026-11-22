@@ -716,7 +716,7 @@ func (c *behaviorCtx) mirrored() bool {
 	return 2*(c.behavior.PostX-foot.HeaderX) < config.MapWidth-foot.Width
 }
 
-// orbit sets the velocity carrying the body round the centre of cell (x, y) at
+// orbit sets the velocity carrying the body round the center of cell (x, y) at
 // radius, rows read by the cell aspect so the circle shows round. What lies between
 // the body and the circle closes at BehaviorOrbitPull, never faster than the orbit.
 func (c *behaviorCtx) orbit(x, y int, radius, speed float64, clockwise bool) {
@@ -803,7 +803,7 @@ func emitFrom(names *dialect.Names, et event.EventType, origin, payload any) (fu
 // mapEdges are the map's edges as AtEdge names them, in the order it tests them
 var mapEdges = [...]string{"left", "right", "top", "bottom"}
 
-// telegraphColors are the colours a program names a telegraph's splash by
+// telegraphColors are the colors a program names a telegraph's splash by
 var telegraphColors = []struct {
 	name string
 	rgb  color.RGB

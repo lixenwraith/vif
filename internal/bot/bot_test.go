@@ -102,7 +102,7 @@ on_update = [{ action = "Steer", payload = { network = "b" } }]`, `network "b" i
 		{"[bot]\ninputs = [\"column\"]\n[network.a]\ninputs = [\"column\"]" + region + "[states.A]", `inputs: "column" is no sensor, or is named twice`},
 		{"[bot]\nauto_fire = \"main\"\n[network.a]\ninputs = [\"column\"]\noutputs = [\"move\", \"fire\"]" + region + "[states.A]",
 			"the output fire is for a graph whose [bot] auto_fire is off"},
-		{"[bot]\nscore = { leaps = 1 }" + region + "[states.A]", `"leaps" is no source of the catalogue's`},
+		{"[bot]\nscore = { leaps = 1 }" + region + "[states.A]", `"leaps" is no source of the catalog's`},
 		{"[bot]\nscore = { EventGoldCompleted.owner = 1 }" + region + "[states.A]", `event EventGoldCompleted carries no number field "owner"`},
 		{"[bot]\nscore = { EventNoSuch.entity = 1 }" + region + "[states.A]", `"EventNoSuch" is no event`},
 		{"[network.a]\ninputs = [\"column\"]\noutputs = [\"move\"]" + region + `[states.A]
@@ -815,7 +815,7 @@ func keeping(t *testing.T, layout string, members ...member) *memory {
 }
 
 // learns is the [bot] table of a graph that learns, and learnsBy how its score
-// is spelt, which a population is kept under
+// is spelled, which a population is kept under
 const (
 	learns   = "[bot]\nlearn = true\nscore = { travel = 1, kill = 5 }"
 	learnsBy = "kill=5 travel=1"

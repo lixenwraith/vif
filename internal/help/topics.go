@@ -50,7 +50,7 @@ var topics = []topicDef{
 			{Actions: []string{"motion_screen_bottom"}, Desc: "Bottom row of the map"},
 			{Actions: []string{"motion_origin"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top-left corner"},
 			{Actions: []string{"motion_end"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Bottom-right corner"},
-			{Actions: []string{"motion_center"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Centre of the map"},
+			{Actions: []string{"motion_center"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Center of the map"},
 			{Actions: []string{"motion_para_back", "motion_para_forward"}, Desc: "Empty row before and after a block of text"},
 			{Actions: []string{"motion_match_bracket"}, Desc: "Jump to the matching bracket under the cursor"},
 			{Actions: []string{"motion_column_up"}, Desc: "Nearest glyph above in the same column"},
@@ -67,9 +67,9 @@ var topics = []topicDef{
 		Key: "markers", Title: "GLYPH MARKERS",
 		Entries: []entryDef{
 			{Actions: []string{"marker_glyph_left", "marker_glyph_down", "marker_glyph_up", "marker_glyph_right"},
-				Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Highlight the coloured glyphs reachable in that direction"},
+				Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Highlight the colored glyphs reachable in that direction"},
 			{Keys: "r  g  b", Desc: "With markers shown, jump to the nearest red, green or blue glyph"},
-			{Keys: "gll  ghh  gkk  gjj", Desc: "Repeat the direction key instead to jump to the nearest glyph of any colour"},
+			{Keys: "gll  ghh  gkk  gjj", Desc: "Repeat the direction key instead to jump to the nearest glyph of any color"},
 		},
 	},
 	{
@@ -181,7 +181,7 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Keys: ":h  :?", Desc: "This help"},
 			{Keys: ":menu  :g  :config", Desc: "The menu: this game, scenarios, multiplayer and bots, settings, developer tools; launch options explain files and flags"},
-			{Keys: ":about", Desc: "Version, engine and licence"},
+			{Keys: ":about", Desc: "Version, engine and license"},
 			{Keys: ":console [clear]", Desc: "The console, as the backtick key opens it and the menu's Console row; clear empties it"},
 			{Keys: ":pause [on|off]  :p", Desc: "Pause or resume the game until the next :pause; in a live session only the host can, every participant stops at the same tick, and a joiner lands paused"},
 			{Keys: ":pause menu|command [on|off]", Desc: "Whether the menu and other windows, or the command line, pause a game that can pause (solo, or hosting only your bots); both on by default. Kept in vif.toml"},
@@ -271,7 +271,7 @@ var topics = []topicDef{
 			{Keys: ".", Desc: "Pause and advance one tick"},
 			{Keys: ",", Desc: "Pause and step back one tick, each shown as '.' shows; recent ticks are ready at once, older ones wait on a replay from the start"},
 			{Keys: "+  -", Desc: "Faster and slower playback"},
-			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centres on the recorded view"},
+			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centers on the recorded view"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},
 			{Keys: ":r tick <n>  :r time <[[h:]m:]s>", Desc: "Go to a tick of the run shown, or its game time at 1x; ahead plays there unpaced, behind replays a copy"},
 			{Keys: ":r restart", Desc: "Play the recording again from its start; :replay is :r's long form"},

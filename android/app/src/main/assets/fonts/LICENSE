@@ -1,11 +1,11 @@
-The app's font and its licences.
+The app's font and its licenses.
 
 hack-400.ttf is Hack Nerd Font Regular, from the Nerd Fonts v3.5.1 release
 (Hack 3.003): lixen.com's hack-400.woff2 as TrueType, since Android reads no
 WOFF2. Hack is under the MIT License, and the Bitstream Vera glyphs it derives
 from under the Bitstream Vera License; Nerd Fonts' patched fonts are under the
 SIL Open Font License 1.1. All three texts are below. No Nerd Fonts icon glyph
-is kept, so the icon sets' own licences do not apply.
+is kept, so the icon sets' own licenses do not apply.
 
 It is a subset of the release's HackNerdFont-Regular.ttf, made with fonttools
 by the command the site's hack-400.woff2 is made with, less --flavor=woff2:

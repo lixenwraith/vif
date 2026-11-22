@@ -386,7 +386,7 @@ func TestAKilledShellBurstsFromItsOutline(t *testing.T) {
 		kind   component.Behavior
 		effect component.DeathEffect
 	}{
-		{"a cancelled pylon", component.BehaviorPylon, component.DeathSilent},
+		{"a canceled pylon", component.BehaviorPylon, component.DeathSilent},
 		{"a fading pylon", component.BehaviorPylon, component.DeathFadeout},
 		{"a flashing pylon", component.BehaviorPylon, component.DeathFlash},
 		{"a snake's body", component.BehaviorSnake, component.DeathScatter},
@@ -595,7 +595,7 @@ func TestAKilledSnakesHeadLeavesItsEffectAsItsBodyFades(t *testing.T) {
 	s.HandleEvent(event.GameEvent{Type: event.EventSnakeCancelRequest})
 	want = asked(snake, root, component.DeathSilent, component.DeathSilent)
 	if ends, kills := endsIn(w); kills != 0 || !slices.Equal(ends, want) {
-		t.Fatalf("a cancelled snake published %d kills and asked %+v, want %+v", kills, ends, want)
+		t.Fatalf("a canceled snake published %d kills and asked %+v, want %+v", kills, ends, want)
 	}
 }
 
@@ -635,6 +635,6 @@ func TestAKilledStormCircleLeavesItsEffect(t *testing.T) {
 	s.HandleEvent(event.GameEvent{Type: event.EventStormCancelRequest})
 	ends, kills := endsIn(w)
 	if kills != 0 || len(ends) != component.StormCircleCount+1 || slices.ContainsFunc(ends, func(p event.CompositeDestroyRequestPayload) bool { return p.Effect != component.DeathSilent }) {
-		t.Fatalf("a cancelled storm published %d kills and asked %+v, want its circles and its root ended silently", kills, ends)
+		t.Fatalf("a canceled storm published %d kills and asked %+v, want its circles and its root ended silently", kills, ends)
 	}
 }

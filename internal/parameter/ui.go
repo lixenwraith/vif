@@ -43,7 +43,7 @@ const UpgradeNamed = 5
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}
 
-// StatusKind ranks a status message and colours it in the console. One replaces the
+// StatusKind ranks a status message and colors it in the console. One replaces the
 // message shown unless that one outranks it and has been up for less than its kind's
 // Min; Shown is how long a message stays. Both are wall time, so a message is read
 // at the rate it was written. A Held kind's line stays apart, under every message
@@ -152,7 +152,7 @@ const (
 	// command line's, search's and an overlay filter's
 	CursorChar = '█'
 
-	// StatusNetLatencyWarn/StatusNetLatencyBad colour the session badge by round
+	// StatusNetLatencyWarn/StatusNetLatencyBad color the session badge by round
 	// trip, the reading a player already has from every other networked game. Bad
 	// is a round trip whose way out outlasts the default playout lead, past which
 	// the lead grows and actions land later; warning is half of that.

@@ -296,13 +296,13 @@ func nearbyConfigOptions(ctx *engine.GameContext) []configNode {
 
 // botFileVerbs spells each verb of :bot that keeps bot files with what follows it
 func botFileVerbs() []string {
-	var spelt []string
+	var spelled []string
 	for _, v := range engine.BotVerbs {
 		if v[0] != "add" && v[0] != "drop" {
-			spelt = append(spelt, engine.BotUsage(v[0]))
+			spelled = append(spelled, engine.BotUsage(v[0]))
 		}
 	}
-	return spelt
+	return spelled
 }
 
 func botConfigOptions(ctx *engine.GameContext) []configNode {

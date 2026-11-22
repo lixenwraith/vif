@@ -573,7 +573,7 @@ func (app *appState) handleEvent(ev terminal.Event) {
 			case tui.ConfirmNo:
 				app.dialogResult = "Confirmed: No"
 			case tui.ConfirmCancel:
-				app.dialogResult = "Cancelled"
+				app.dialogResult = "Canceled"
 			}
 		}
 		return

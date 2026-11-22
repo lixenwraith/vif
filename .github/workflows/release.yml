@@ -60,7 +60,7 @@ jobs:
           for target in $targets; do mkdir -p "stage/$p-$target"; done
           mkdir -p dist
 
-          # Each binary has the licences of what it links beside it: make notices lists
+          # Each binary has the licenses of what it links beside it: make notices lists
           # the build its GOOS, GOARCH and TAGS name, so each call repeats its build's.
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-amd64/vif" ./cmd/vif
@@ -95,7 +95,7 @@ jobs:
             cp LICENSE "stage/$p-$target/"
           done
           # The client binaries embed the font atlas, and vif.wasm the same face as a web font:
-          # the terminal module's, whose licence lies beside it in the version they link.
+          # the terminal module's, whose license lies beside it in the version they link.
           font="$(go list -m -f '{{.Dir}}' github.com/lixenwraith/terminal)/atlas/LICENSE"
           for target in linux-amd64 linux-arm64 freebsd-amd64 web; do
             install -m 0644 "$font" "stage/$p-$target/LICENSE.font"
@@ -163,7 +163,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      # The runner's SDK has a sdkmanager and its licences accepted; the platform
+      # The runner's SDK has a sdkmanager and its licenses accepted; the platform
       # and NDK the build names are installed as make android-toolchain installs them.
       - name: Install the SDK platform and NDK
         shell: bash

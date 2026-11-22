@@ -89,7 +89,7 @@ const (
 	GoldSpawnMaxAttempts = 100
 
 	// MotionJumpSearchMaxRadius bounds the fallback search for an unblocked map
-	// origin, centre, or end target.
+	// origin, center, or end target.
 	MotionJumpSearchMaxRadius = 20
 )
 
@@ -128,8 +128,8 @@ const (
 
 // Buttons: one row a scenario lays across the middle of the map
 const (
-	ButtonGap      = 2  // columns between neighbours and at each end of the row
-	ButtonMaxWidth = 16 // a wide map leaves the row centred rather than stretched
+	ButtonGap      = 2  // columns between neighbors and at each end of the row
+	ButtonMaxWidth = 16 // a wide map leaves the row centered rather than stretched
 
 	// A button takes up to a ButtonHeightShare-th of the map's height, enough at 80x24
 	// for a splash digit's nine ink rows; ButtonMaxHeight leaves a row above and below

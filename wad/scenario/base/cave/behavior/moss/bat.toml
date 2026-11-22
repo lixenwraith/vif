@@ -1,6 +1,6 @@
 # The bat: its wings beating, its feet dangling on the downstroke. One of the moss
 # cave's third-rank raiders: RaiderRank3 in ../../macros.toml gives its stats and
-# cycle and the cave its colours.
+# cycle and the cave its colors.
 macro = "RaiderRank3"
 theme = "Moss"
 width = 5

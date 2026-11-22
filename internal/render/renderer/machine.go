@@ -44,7 +44,7 @@ func (r *MachineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	})
 }
 
-// label draws an instance's state centred on the row above its body, under it at
+// label draws an instance's state centered on the row above its body, under it at
 // the map's top, and kept inside the playfield; a header off the screen gets none
 func label[S ~uint8](r *MachineRenderer, ctx render.RenderContext, buf *render.RenderBuffer, e core.Entity, species component.SpeciesType, in machine.Instance[S]) bool {
 	res := r.gameCtx.World.Resources

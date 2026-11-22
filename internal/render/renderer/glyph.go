@@ -43,7 +43,7 @@ func drawnAt(x, y int, glyph *component.GlyphComponent) drawnGlyph {
 // typeableLayer is the layer typeable text draws in, over every scenery level
 const typeableLayer = len(parameter.DriftLayerFactor)
 
-// glyphCellRenderer draws one glyph in the colour mode chosen at construction
+// glyphCellRenderer draws one glyph in the color mode chosen at construction
 type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph)
 
 // NewGlyphRenderer creates a new glyph renderer

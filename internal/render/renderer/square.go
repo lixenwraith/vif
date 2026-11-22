@@ -19,7 +19,7 @@ import (
 // holds, and under the square each kind's name and cooldown
 type SquareRenderer struct {
 	gameCtx *engine.GameContext
-	console *render.Console // nil draws true colour
+	console *render.Console // nil draws true color
 }
 
 func NewSquareRenderer(ctx *engine.GameContext) *SquareRenderer {
@@ -276,7 +276,7 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 // meter fills a kind's bar as its cooldown runs, full once it is ready, in its glow
-// while its effect holds; an eighth of a cell at a time in true colour, a whole cell
+// while its effect holds; an eighth of a cell at a time in true color, a whole cell
 // on a console
 func (r *SquareRenderer) meter(ctx render.RenderContext, buf *render.RenderBuffer, x, y int, spec *component.SquareKindSpec, effect component.SquareEffect, colors *visual.SquareKindColors) {
 	share := 1.0

@@ -23,7 +23,7 @@ func TestGuttersNumberOnlyReachableRowsAndColumns(t *testing.T) {
 		mapW, mapH int
 		corner     terminal.Cell
 	}{
-		{"centred", 10, 6, undrawn},
+		{"centered", 10, 6, undrawn},
 		{"filling", 60, 30, terminal.Cell{Rune: ' ', Fg: visual.RgbBackground, Bg: visual.RgbBackground}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

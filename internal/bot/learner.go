@@ -62,7 +62,7 @@ type population struct {
 	Members  []member `json:"members"`
 }
 
-// readPopulation is the population data holds under layout and the score spelt
+// readPopulation is the population data holds under layout and the score spelled
 // scoredBy, with its members of genes weights as the engine takes them. It is nil
 // where data holds none, one of another layout, one another score paid or one
 // another version's rule scored: each starts over.

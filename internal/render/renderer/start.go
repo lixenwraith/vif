@@ -20,7 +20,7 @@ type startPalette struct {
 
 // StartScreenRenderer draws the start screen while the launch waits for its press on a
 // host without one of its own: every row above the status bar in the site's colors, the
-// mark centred two fifths of the shorter side, the prompt under it as the site's button,
+// mark centered two fifths of the shorter side, the prompt under it as the site's button,
 // and the help button, where help opens, in the top right corner. The status bar stays,
 // for commands.
 type StartScreenRenderer struct {
@@ -74,7 +74,7 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		bw, bh = 0, 0
 	}
 
-	// The mark centred, as the page's is, moved up or shrunk so the button fits below it
+	// The mark centered, as the page's is, moved up or shrunk so the button fits below it
 	lh := int(math.Round(parameter.StartLogoShare * min(float64(h), float64(w)*float64(ctx.CellAspect))))
 	lh = min(lh, h-bh-parameter.StartPromptGap)
 	if lh < parameter.StartLogoMinRows || ctx.CellAspect <= 0 {

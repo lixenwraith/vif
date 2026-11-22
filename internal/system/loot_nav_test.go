@@ -136,7 +136,7 @@ func dropLoot(w *engine.World, loot *LootSystem, x, y int, owner core.Entity) co
 // lootFlight is what one drop's journey looked like.
 type lootFlight struct {
 	ticks     int     // ticks to collection, -1 if never collected
-	peakSpeed float64 // fastest it travelled (cells/sec)
+	peakSpeed float64 // fastest it traveled (cells/sec)
 	maxDist   float64 // furthest it ever got from its owner (cells)
 	pinned    int     // longest run of consecutive ticks it did not move
 }

@@ -213,7 +213,7 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 
 	for _, glyphType := range colors {
 		targetType := glyphType
-		// Marks the cell's top glyph, where the colour motion lands
+		// Marks the cell's top glyph, where the color motion lands
 		filter := func(e core.Entity) bool {
 			glyph, ok := s.world.Components.Glyph.GetComponent(e)
 			if !ok || glyph.Type != targetType {

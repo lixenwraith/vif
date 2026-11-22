@@ -84,7 +84,7 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 
 // renderPulses draws the pulse due elapsed into a lock: SwarmChargeLinePulseCount
 // pulses of pulse each from showDelay on, the later one brighter, from the body's
-// centre to the landing's, where the landing marker blinks
+// center to the landing's, where the landing marker blinks
 func (r *ChargeLineRenderer) renderPulses(
 	ctx render.RenderContext, buf *render.RenderBuffer,
 	body, landing vmath.Area,

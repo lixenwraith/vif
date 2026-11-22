@@ -229,8 +229,8 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		HitPoints:        0,
 	})
 
-	// Generate disc members
-	members := s.createDiscMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
+	// Generate disk members
+	members := s.createDiskMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:         component.BehaviorTower,
@@ -303,7 +303,7 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	return 0, 0, false
 }
 
-func (s *TowerSystem) createDiscMembers(
+func (s *TowerSystem) createDiskMembers(
 	headerEntity core.Entity,
 	centerX, centerY, radiusX, radiusY, minHP, maxHP int,
 ) []component.MemberEntry {

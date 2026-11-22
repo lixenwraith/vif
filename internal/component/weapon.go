@@ -65,7 +65,7 @@ type CursorDamage struct {
 	HeatDelta   int
 }
 
-// WeaponPalette selects the colours a discharge draws with
+// WeaponPalette selects the colors a discharge draws with
 type WeaponPalette uint8
 
 const (

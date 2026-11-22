@@ -110,7 +110,7 @@ func SharedKey(key string) bool {
 // deniedSimKey lists status keys a replay must not compare.
 //
 // Pause, rate and step are recorded and injected like any other event, but a
-// replay does not honour them: a manual clock stores a rate without applying it
+// replay does not honor them: a manual clock stores a rate without applying it
 // and no replay runs schedulerLoop. fps and frame belong to the render loop,
 // event.backoffs counts update-mutex contention in the live event loop, and rec
 // and stat are telemetry about telemetry. Keys rather than prefixes: the engine

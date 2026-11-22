@@ -13,7 +13,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// PulseRenderer draws the pulses of one style at their centres, in their palettes:
+// PulseRenderer draws the pulses of one style at their centers, in their palettes:
 // the ring over what it strikes, the glow under it. A hidden pulse draws nowhere.
 type PulseRenderer struct {
 	gameCtx *engine.GameContext
@@ -25,7 +25,7 @@ type PulseRenderer struct {
 	console *[component.PaletteCount]uint8
 }
 
-// pulseCellRenderer draws one cell of a pulse in the colour mode chosen at construction
+// pulseCellRenderer draws one cell of a pulse in the color mode chosen at construction
 type pulseCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, c color.RGB, entry uint8)
 
 // The ring ripples out from three tenths of its pulse's size to all of it over the
@@ -158,7 +158,7 @@ func (r *PulseRenderer) renderRing(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// renderGlow fills the size the pulse has swollen to, brightest at its centre
+// renderGlow fills the size the pulse has swollen to, brightest at its center
 func (r *PulseRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderBuffer, p *component.PulseComponent) {
 	alpha := glowAlphaMax * envelope(p.Progress())
 	if alpha <= pulseAlphaMin {

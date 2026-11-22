@@ -173,7 +173,7 @@ The owner-authored cells of every cursor a participant owns, the authority's
 included, are outside the hashed surface: each instance holds another's as a mirror
 up to `NetworkSyncTicks` old, the sync stream is their carrier, and comparing them
 would have a guest whose peer is fighting repair nearly every manifest. Cursor control
-assignment is normalised for hashing and repair. The correction magnitude leaves
+assignment is normalized for hashing and repair. The correction magnitude leaves
 out the same cells, and all of them are re-bound locally after installation.
 
 The manifest root intentionally excludes tick-local header metadata so a predictor
@@ -234,7 +234,7 @@ it, so at most one is ever delayed and never by more than the hold window. One
 further ahead is adopted at its own tick as the jump it is, counted in
 `snapshot.corrections_jumped`, and supersedes the one still waiting: installed
 after it, that one would rewind the world past every crossing applied since. A
-hash-only acknowledgement behind the clock is not adopted: the world already equals
+hash-only acknowledgment behind the clock is not adopted: the world already equals
 it, and adopting its tick would be the rewind.
 
 The host publishes at the close of the tick it describes rather than on a timer's
@@ -519,7 +519,7 @@ cells repaired, keyframes, the lead held and the highest held) with every repair
 and the rows it moved (`snapshot.RepairRows`, the debug record `repair rows`). It
 is deterministic run to run, so a change is read against the same fight; the fight
 is chaotic, so pages repaired move with any change of timing and the late counts
-are the robust measure. Pacing's dynamics were also modelled apart, by integrating
+are the robust measure. Pacing's dynamics were also modeled apart, by integrating
 `paceDecision` against periodic spikes.
 
 Its first day found and fixed, in phase 1: the lead reading the newest epoch's age
@@ -1001,7 +1001,7 @@ The approaches are in three batches, and §5 orders them.
   A manifest that arrives after its tick, or one promised by `Next` whose index has
   not arrived, takes the captured path as before, counted off tick when neither
   reading was taken. One test holds the in-place index to a capture's, root,
-  sections and pages, normalisation and the owner-authored exclusions included.
+  sections and pages, normalization and the owner-authored exclusions included.
 - Left: nothing; the encoder still compares values it owns.
 - Needs: nothing further.
 
@@ -1093,7 +1093,7 @@ The approaches are in three batches, and §5 orders them.
   (`repairIsWorthSending`), so with the world a twentieth of its bytes a repair
   past about two percent of a td world's rows is answered whole; the converge
   fixture's world scatters its placements and holds many pages for that reason.
-- Needs: the cursor's `Control` normalisation and the owner-authored exclusions
+- Needs: the cursor's `Control` normalization and the owner-authored exclusions
   move with every store; retention by reference below builds on it.
 
 ### Retention by reference
@@ -1107,7 +1107,7 @@ The approaches are in three batches, and §5 orders them.
 - In: a store's section stands over the row encoder's own rows, the slice it
   returned for that capture, and holds per page the rows' indices in canonical
   order and the page hash, nothing per row beside a four-byte index; the manifest
-  rows a repair or an audit reads are materialised from them on request. A page
+  rows a repair or an audit reads are materialized from them on request. A page
   whose cells and bytes are the last section's keeps its hash unhashed
   (`samePage`), which is what reuse used to buy by copying every row. The grid
   went to 16-byte cells since, 2 MB a world for 30

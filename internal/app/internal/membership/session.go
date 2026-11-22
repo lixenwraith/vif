@@ -25,9 +25,9 @@ import (
 
 var ErrSessionCanceled = errors.New("network session canceled")
 
-// ErrSessionSignalled is a cancel the process was told to make: it quits even a
+// ErrSessionSignaled is a cancel the process was told to make: it quits even a
 // run that a failed :join would otherwise replace with a solo one.
-var ErrSessionSignalled = fmt.Errorf("%w by a signal", ErrSessionCanceled)
+var ErrSessionSignaled = fmt.Errorf("%w by a signal", ErrSessionCanceled)
 
 // errSessionHandoff refuses a join that arrived while the session was electing a
 // new authority. A joiner retries against the authority that emerges: half-admitting
@@ -363,7 +363,7 @@ func (m *Membership) hostSlot() uint8 {
 	return 0
 }
 
-// JoinDial is a session this instance dialled and whose scenario it holds: everything
+// JoinDial is a session this instance dialed and whose scenario it holds: everything
 // a host can refuse before a world is built, settled. It holds no place there until
 // its seat, which is the press of the player whose run it opens, or comes at once.
 // It holds the handshake alone, so the run it opens is the one its caller built.
@@ -461,7 +461,7 @@ func (d *JoinDial) Abandon(cause error) {
 	}
 }
 
-// TakeDial makes this run, built on d, the one d dialled: its world is checked before
+// TakeDial makes this run, built on d, the one d dialed: its world is checked before
 // the seat, which comes now unless its player presses for it (Loop). A dial already
 // seated replies here.
 func (m *Membership) TakeDial(d *JoinDial) error {
@@ -507,7 +507,7 @@ var ErrSessionMoved = &network.Refusal{Code: network.RefusalBehind,
 // TakeSeat seats this run in the session it prepared for: the host assigns its place
 // now, binding the identity its port and world were built without, and the run
 // replies as to an offer. Pressed for, a host that dropped the handshake while its
-// player was away, or refused for a moment, is dialled again while the game is still
+// player was away, or refused for a moment, is dialed again while the game is still
 // this world's, reading Ctrl-C between dials; a seat at once leaves the retry to its caller.
 func (m *Membership) TakeSeat(pressed bool, signals <-chan os.Signal) error {
 	pending := m.pendingJoin
@@ -518,13 +518,13 @@ func (m *Membership) TakeSeat(pressed bool, signals <-chan os.Signal) error {
 	var refusal *network.Refusal
 	redial := pressed && err != nil && (!errors.As(err, &refusal) || network.RetryOf(err) == network.RetrySoon)
 	for deadline := time.Now().Add(parameter.SessionRejoinWindow); redial && time.Now().Before(deadline); { // [wall] a link bound
-		m.log.Info("session", "msg", "seat dialled again", "error", err.Error())
+		m.log.Info("session", "msg", "seat dialed again", "error", err.Error())
 		m.run.ShowJoinStatus("Joining " + link.Shown(m.cfg.JoinAddress) + "... (" + err.Error() + ")")
 		pending, offer, err = m.redialSeat()
 		if redial = err != nil && network.RetryOf(err) == network.RetrySoon && !errors.Is(err, ErrSessionMoved); redial {
 			select {
 			case <-signals:
-				return ErrSessionSignalled
+				return ErrSessionSignaled
 			case ev := <-m.run.LobbyEvents():
 				if m.run.LobbyEventCancels(ev) {
 					return ErrSessionCanceled
@@ -544,7 +544,7 @@ func (m *Membership) TakeSeat(pressed bool, signals <-chan os.Signal) error {
 }
 
 // redialSeat dials this run's session again and seats at once, while the game there
-// is the one this run's world was built on. What it dialled is closed unless it
+// is the one this run's world was built on. What it dialed is closed unless it
 // seated.
 func (m *Membership) redialSeat() (*network.PendingJoin, network.SessionOffer, error) {
 	pending, preview, err := network.PreviewSession(m.cfg.JoinAddress, joinNetConfig(*m.cfg, *m.wiring))
@@ -1597,7 +1597,7 @@ func (m *Membership) settleLobbyHandshakes(port *link.SocketPort) {
 
 // StartJoinSession completes the tick-zero gate before the socket port owns the
 // stream. The roster arrives with the gate, not with the offer: a joiner that
-// dialled early saw only the participants ahead of it. A gate its session's new
+// dialed early saw only the participants ahead of it. A gate its session's new
 // game landed in is ErrSessionMoved: the host's word, or another game's world.
 func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	if m.pendingJoin == nil {
@@ -1652,7 +1652,7 @@ func (m *Membership) LandingHold() (held, start bool) { return m.landingHeld, m.
 // awaitStartGate reads the host's start record without freezing this instance. The
 // gate carries no deadline — it is a human-paced wait — so the read runs on a
 // goroutine while the terminal is polled here, and a join stays answerable to keys
-// and signals. Cancelling closes the stream, which turns the read in flight into an
+// and signals. Canceling closes the stream, which turns the read in flight into an
 // error rather than a goroutine outliving the run.
 func (m *Membership) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, error) {
 	type gate struct {
@@ -1678,7 +1678,7 @@ func (m *Membership) awaitStartGate(signals <-chan os.Signal) (network.SessionOf
 			}
 			return g.offer, nil
 		case <-signals:
-			return cancel(ErrSessionSignalled)
+			return cancel(ErrSessionSignaled)
 		case ev := <-m.run.LobbyEvents():
 			if m.run.LobbyEventCancels(ev) {
 				return cancel(ErrSessionCanceled)
@@ -1690,7 +1690,7 @@ func (m *Membership) awaitStartGate(signals <-chan os.Signal) (network.SessionOf
 // Rejected handshakes are recoverable until the caller's lobby or install deadline.
 func (m *Membership) waitForStartup(port *link.SocketPort, signals <-chan os.Signal,
 	deadline time.Time, expire func(time.Time) error, ready func() bool) error {
-	// A pod nobody dialled is precisely the case the first-guest window exists for,
+	// A pod nobody dialed is precisely the case the first-guest window exists for,
 	// and it is also the case this gate would otherwise wait in forever. A run with
 	// no bounded policy is given no deadline and waits as it always has.
 	var expiry <-chan time.Time

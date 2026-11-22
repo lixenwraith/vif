@@ -172,7 +172,7 @@ const (
 // through its orb, one cell wide to the orb and RayWidth past it, for RayDuration
 // and RayDurationPerCharge a charge past the first; a mount's warns, fires, rests.
 const (
-	RayWidth             = 3 // cells across, centre included
+	RayWidth             = 3 // cells across, center included
 	RayDuration          = 1500 * time.Millisecond
 	RayDurationPerCharge = 750 * time.Millisecond
 	RayWarning           = 750 * time.Millisecond

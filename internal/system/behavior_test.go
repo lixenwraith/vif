@@ -343,7 +343,7 @@ on_update = [{ action = "Orbit", payload = { to = "stored", radius = 10.0, lap_m
 			stepBehaviors(w, s)
 			angle, d := polar()
 			if math.Abs(d-10) > 1 {
-				t.Fatalf("clockwise %v: the body runs %.2f cells from the centre, want 10 within one", clockwise, d)
+				t.Fatalf("clockwise %v: the body runs %.2f cells from the center, want 10 within one", clockwise, d)
 			}
 			swept += math.Remainder(angle-last, 2*math.Pi)
 			last = angle
@@ -1031,7 +1031,7 @@ on_enter = [
 	centerX, centerY := event.MapAnchorCenter.Cell(-1, 0, w.Resources.Config.MapWidth, w.Resources.Config.MapHeight)
 	want := [][2]int{{wardenX + 7, wardenY + 1}, {wardenX + 30, wardenY + 5}, {wardenX + 3, wardenY}, {centerX, centerY}}
 	if !slices.Equal(loot, want) {
-		t.Fatalf("loot dropped at %v, want %v: from the body, its stored cell, its post and the map's centre", loot, want)
+		t.Fatalf("loot dropped at %v, want %v: from the body, its stored cell, its post and the map's center", loot, want)
 	}
 	if splash == nil || splash.OriginX != wardenX+6 || splash.OriginY != wardenY+2 {
 		t.Fatalf("the splash was raised at %+v, want (%d,%d) by the fields its origin names", splash, wardenX+6, wardenY+2)
@@ -1177,7 +1177,7 @@ func TestASignalIsRaisedOnAsManyAsItCountsOfThoseItsEdgeTakes(t *testing.T) {
 	program := strings.Replace(wardenHead("Hold"), `initial = "Hold"`, "initial = \"Hold\"\nsignals = [\"dive\"]", 1) + `
 [states.Hold]
 on_update = [{ action = "Freeze" }]
-transitions = [{ trigger = "Tick", guard = "Signalled", guard_args = { name = "dive" }, target = "Dive" }]
+transitions = [{ trigger = "Tick", guard = "Signaled", guard_args = { name = "dive" }, target = "Dive" }]
 
 [states.Dive]
 duration_ms = 400
@@ -1213,7 +1213,7 @@ transitions = [{ trigger = "Timeout", target = "Hold" }]
 		}
 		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSignalRequest, Payload: payload})
 		if busy.Signals != 0 {
-			t.Fatal("a warden already diving, whose state takes no dive, was signalled")
+			t.Fatal("a warden already diving, whose state takes no dive, was signaled")
 		}
 		stepBehaviors(w, s)
 		var out []core.Entity

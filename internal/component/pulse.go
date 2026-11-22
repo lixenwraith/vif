@@ -39,7 +39,7 @@ type PulseSpec struct {
 // names it Live. Its weapon makes it; the pulse system ages it, strikes and ends it.
 type PulseComponent struct {
 	PulseSpec
-	X, Y    int         // its centre
+	X, Y    int         // its center
 	Owner   core.Entity // the firing cursor, credited with its hits; zero for a mount's
 	Anchor  core.Entity // the host it rides; zero stays where it fired
 	Hostile bool        // strikes cursors for Damage; a cursor's resolves against species

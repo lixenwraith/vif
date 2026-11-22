@@ -144,7 +144,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 
 	cfg, err := parseConfig(unset("-wad", "/srv/wad", "-scenario", "td"), io.Discard)
 	if err != nil || cfg.Allocator.WadDir != "/srv/wad" || cfg.Allocator.Workload.Scenario != "td" {
-		t.Fatalf("a set variable was not honoured: %+v, %v", cfg.Allocator, err)
+		t.Fatalf("a set variable was not honored: %+v, %v", cfg.Allocator, err)
 	}
 	if _, err := parseConfig(unset("-wad", "relative"), io.Discard); err == nil {
 		t.Error("a relative volume was accepted")

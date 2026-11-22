@@ -19,7 +19,7 @@ const (
 	PriorityNugget
 
 	// === Particles ===
-	// What a species left behind: the flash of a glyph it ploughed through, a
+	// What a species left behind: the flash of a glyph it plowed through, a
 	// wall's fadeout, an explosion, a spirit. The species draws over them all.
 	PriorityFlash
 	PriorityFadeout
@@ -77,7 +77,7 @@ const (
 	PriorityHeat
 	PriorityIndicator
 	PriorityStatusBar
-	// Peers before the local cursor, so an overlap resolves in favour of the one
+	// Peers before the local cursor, so an overlap resolves in favor of the one
 	// the player is steering.
 	PriorityPeerCursor
 	PriorityCursor

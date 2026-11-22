@@ -10,7 +10,7 @@ import (
 // Every field is a value. The component used to carry an `Orbs` array of
 // player-domain entity handles, and a handle is meaningful only inside the
 // instance that allocated it: the live cursor-state sync excluded the array by
-// hand, but a shared capture serialises whole components, so a correction handed a
+// hand, but a shared capture serializes whole components, so a correction handed a
 // receiver another instance's zeroes and orphaned the orbs its own handles named.
 // The index lives in `WeaponSystem` now, derived from the `Orb` store — which is
 // the only record of a live orb — so no shared entity carries a player-domain

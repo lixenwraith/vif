@@ -36,7 +36,7 @@ type Corrections struct {
 	// run is the game run every tick below was read in; see followRun.
 	run atomic.Uint64
 
-	// publishMu serialises every world read a capture makes, so a join re-uses a
+	// publishMu serializes every world read a capture makes, so a join re-uses a
 	// keyframe fresh enough and two joins arriving together share one read. It also
 	// owns the per-peer schedule, so a peer's plan and the capture it is planned
 	// against cannot be read a decision apart. Both encodings of the baseline are
@@ -59,7 +59,7 @@ type Corrections struct {
 
 	// peers is one publisher per directly linked participant: its controller, its
 	// operating point, and the tick it is next due. A relayed participant has no
-	// entry; it rides the schedule of whichever neighbour forwards to it.
+	// entry; it rides the schedule of whichever neighbor forwards to it.
 	peers map[uint32]*peerPublisher
 
 	// The operating point as last decided. base is the publication timeline's
@@ -179,7 +179,7 @@ type peerPublisher struct {
 
 	// relayed names the participants this peer forwards the index to and holds
 	// retention for, with their proofs. The authority cannot see past its own links;
-	// the neighbour that can is the one that says so.
+	// the neighbor that can is the one that says so.
 	relayed []snapshot.RelayedLeaf
 
 	// wide counts the publications this peer is owed a whole body for because its
@@ -294,7 +294,7 @@ func cadenceBounds(tick time.Duration) linkpace.Bounds {
 		NominalKeyframe:     parameter.SnapshotKeyframeCorrections,
 		MaxKeyframe:         parameter.SnapshotKeyframeMaxCorrections,
 		FloorKeyframeTicks:  parameter.SnapshotFloorKeyframeTicks,
-		Utilisation:         parameter.SnapshotLinkUtilisation,
+		Utilization:         parameter.SnapshotLinkUtilization,
 		UrgentDrift:         parameter.SnapshotUrgentDriftPercent,
 		UrgentRelevance:     parameter.SnapshotUrgentRelevancePercent,
 		QuietCadence:        parameter.SnapshotCadenceQuietTicks,
@@ -439,7 +439,7 @@ func (c *Corrections) publishRound(force bool) error {
 		default:
 			// A participant nobody can answer is still owed an authority, and the
 			// only thing that reaches it is the flood. The index still goes to the
-			// direct peers — it is what a relaying neighbour answers, and its answer
+			// direct peers — it is what a relaying neighbor answers, and its answer
 			// is how this instance learns the session has become answerable — but
 			// the whole body goes out beside it until that is true.
 		}
@@ -909,7 +909,7 @@ func (c *Corrections) followRun() event.Stamp {
 }
 
 // followRunLocked is followRun for a caller that holds publishMu, which also
-// serialises the drop. The links' measurements and plans are kept: a reset moves
+// serializes the drop. The links' measurements and plans are kept: a reset moves
 // the game, not the wire. Caller MUST hold publishMu.
 func (c *Corrections) followRunLocked() event.Stamp {
 	at := c.inst.Position()
@@ -1087,7 +1087,7 @@ func (c *Corrections) correct() {
 }
 
 // Apply drains every correction waiting and installs the newest one that resolves;
-// the rest are counted as superseded. It is serialised against itself, because two
+// the rest are counted as superseded. It is serialized against itself, because two
 // installs would share one staging world. The queue is walked in order because a
 // delta is only meaningful against the baseline the entries before it left.
 func (c *Corrections) Apply() {

@@ -69,7 +69,7 @@ func IntegrateWithBounceStats(
 ) (int, int, BounceStats) {
 	// Match Integrate's semi-implicit Euler ordering. Acceleration is applied
 	// once for the whole tick before swept step sizing; applying it inside each
-	// sub-step would make the result depend on collision/tunnelling work.
+	// sub-step would make the result depend on collision/tunneling work.
 	k.VelX += k.AccelX * dt
 	k.VelY += k.AccelY * dt
 

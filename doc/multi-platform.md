@@ -137,7 +137,7 @@ measured for each release.
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `terminal/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
-A text console (Linux's or FreeBSD vt's, 256 colours, `Config.TextConsole`) draws
+A text console (Linux's or FreeBSD vt's, 256 colors, `Config.TextConsole`) draws
 with fonts that lack the half blocks, so the small splash face, which packs two
 pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
 twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
@@ -259,7 +259,7 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
 | An ingress controller. | None translates WebSocket to a raw TCP backend. |
 | WebTransport. | Its advantages do not yet justify an HTTP/3 server and ingress. |
-| A WebRTC data channel. | ICE, signalling and TURN solve a peer-to-peer problem an authoritative host does not have. |
+| A WebRTC data channel. | ICE, signaling and TURN solve a peer-to-peer problem an authoritative host does not have. |
 
 `vif -host ws://:7777` or `-serve ws://:7777` serves a session over WebSocket from
 one binary, one protocol per listener and as many listeners as `-host` names:
@@ -271,7 +271,7 @@ and checks no `Origin`: it grants nothing ambient a foreign page could borrow.
 http. A page served over https opens only `wss://`, so a terminal that hosts for
 one binds a `wss://` door and serves the certificate `-cert` and `-key` name, or one
 `-selfsign` makes for the run, as does `:host wss://:7778` in a run started with
-either; the dialling browser must trust that certificate (one a public authority
+either; the dialing browser must trust that certificate (one a public authority
 issued for the host's name, or a self-signed one the player's browser was told to
 trust by opening `https://host:7778` once, which the door answers with a line saying
 so), and its page's `connect-src` must allow the host's origin. A terminal joins it
@@ -343,7 +343,7 @@ time one side changes.
 The page's own text is lixen.com's text face, Hack Proportional in the site's two
 files, drawn at 90% of its size as the site draws it: the stylesheet takes them from
 `/fonts/` on the page's site, then from `fonts/` beside the page, which
-`web/fonts/` holds with their licence, so no deployment fetches a font from
+`web/fonts/` holds with their license, so no deployment fetches a font from
 elsewhere, and one that serves neither shows the system's sans-serif.
 
 A deployment that publishes the files under other names, as content-hashed ones
@@ -380,7 +380,7 @@ does not make that file exist in the browser filesystem.
 
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A
-`ws://` or `wss://` target is dialled whole, and its last path segment is the name
+`ws://` or `wss://` target is dialed whole, and its last path segment is the name
 sent first, as a `vif://` link's is. An `http(s)://` site creates a session, and the
 page joins the WebSocket route the site answers with; a session's `vif://` link
 joins by the route its site lists, and a bare host:port is refused here (see the
@@ -388,7 +388,7 @@ address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
-that ended it) in place of the terminal and the start screen, centred in what the
+that ended it) in place of the terminal and the start screen, centered in what the
 browser's bars leave, with a Reload button, and Play solo beside it when the run
 joined a game, which opens the page without its `-join`. A refused join's reason says whether a
 retry helps; a socket that does not open says the game may have ended or the link is
@@ -470,7 +470,7 @@ therefore composition, not a simulation fork:
 A host without a start screen of its own, the terminal or the desktop window,
 gets the run's (`Host.StartScreen` unset): while the launch's first game stands in
 its start hold, or a `-join` launch waits for its press, every row above the
-status bar is a page in the site's colors with the logo at the centre and the
+status bar is a page in the site's colors with the logo at the center and the
 prompt under it on a button, as Android's and the page's are. The held game adds
 "F1 help" at the top right, named by the key help is bound to, which a click opens
 as that key does, and help, the configuration menu and `:` open over the page as
@@ -482,7 +482,7 @@ its strikes, 6x12, 8x16 and 12x24 (`atlas.Hack()` of `terminal/atlas`, drawn by
 `terminal/glyph`): a cell takes the largest strike no taller than it, stretched up
 and never down, so a zoom out stops at the smallest and shows whole glyphs. A
 browser draws the same face at any size, from a web font inside `vif.wasm`
-(`atlas.HackWeb()`). The font's licence ships as `LICENSE.font`
+(`atlas.HackWeb()`). The font's license ships as `LICENSE.font`
 ([Packaging §1](packaging.md#1-shared-guidelines)).
 
 The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
@@ -563,7 +563,7 @@ on a start screen (`StartScreen`) over the view, in
 lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
 site's blue button and a `?` in a ring of that blue that opens the touch controls.
 Android shows its own splash screen while the app loads, an icon at most 192 dp
-across on one colour, so the theme gives it the start screen's page and logo and the
+across on one color, so the theme gives it the start screen's page and logo and the
 start screen fills the window with the logo 128 dp across, not two fifths of the
 shorter side as elsewhere: the splash leaves at once and only the buttons fade in. The run starts
 behind it with its player away (`game.Start`'s `away`): its first game waits in its

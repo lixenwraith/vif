@@ -225,7 +225,7 @@ func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
 		programs map[string]string
 		want     string
 	}{
-		"misspelt verb": {map[string]string{"wisp": strings.Replace(wisp, "Freeze", "Freez", 1)},
+		"misspelled verb": {map[string]string{"wisp": strings.Replace(wisp, "Freeze", "Freez", 1)},
 			"scenario arena: program 'wisp': state 'Idle': on_update[0]: unknown sustained action 'Freez'"},
 		"one program too many": {over, fmt.Sprintf("scenario arena: %d behavior programs, at most %d",
 			parameter.BehaviorProgramsMax+1, parameter.BehaviorProgramsMax)},
@@ -331,7 +331,7 @@ func read(t *testing.T, dir string) Scenario {
 // TestATransferCarriesBytesByLengthNotByScanning is why the whole container is
 // deflated as one stream rather than one per file: the framing is length-prefixed,
 // so a file holding the container's own magic, a NUL or an unbalanced quote is
-// taken by its declared length and cannot run into its neighbour. It also bounds
+// taken by its declared length and cannot run into its neighbor. It also bounds
 // the inflation, so a few compressed bytes cannot be made to allocate a megabyte.
 func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 	adversarial := scenarioRegion +
@@ -504,7 +504,7 @@ func TestAScenarioKeymapBindsPlayKeysAlone(t *testing.T) {
 	}
 }
 
-// TestAnEntryKeyNothingReadsIsRefused: a misspelt top-level key fails the read
+// TestAnEntryKeyNothingReadsIsRefused: a misspelled top-level key fails the read
 // naming it, where it once loaded as absent.
 func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 	entry := "descripton = \"A typo.\"\n[regions.main]\nfile = \"main.toml\"\n"

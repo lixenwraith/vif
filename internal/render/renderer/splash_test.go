@@ -65,7 +65,7 @@ func TestAnchoredSplashIsNotDrawnWithoutItsAnchor(t *testing.T) {
 }
 
 // The small face packs two pixel rows a cell where the host draws half blocks, a
-// cell inked in one row as a half block in the colour, and a text console, whose
+// cell inked in one row as a half block in the color, and a text console, whose
 // fonts lack them, draws it a cell a pixel.
 func TestTheSmallFaceDrawsHalfBlocksOffAConsole(t *testing.T) {
 	t.Parallel()

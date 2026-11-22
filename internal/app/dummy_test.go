@@ -16,7 +16,7 @@ import (
 // press moves the standing dummy's hit points at once and again after its
 // countdown, a dummy shot down rises on its spot once the cursor has stood there
 // and walked back out of its shield's reach, and energy at 0 brings an energy drop
-// homing from the dummy's centre.
+// homing from the dummy's center.
 func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "dummy"}
@@ -88,7 +88,7 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 		return still, homing
 	}
 
-	// The map's centre is (60, 20): the range left, its rod at (18, 14), the dummy at
+	// The map's center is (60, 20): the range left, its rod at (18, 14), the dummy at
 	// (80, 20), the pads at (104, 13) and (104, 27)
 	await("dummy", "DummyUp")
 	awaitDummy(1)
@@ -139,7 +139,7 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 	await("dummy", "DummyUp")
 	awaitDummy(2)
 
-	// Energy at 0 brings one drop from the dummy's centre, homing on the cursor
+	// Energy at 0 brings one drop from the dummy's center, homing on the cursor
 	a.Context().PushEventOrigin(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: cursor}, event.OriginDebug)
 	a.Settle()
 	await("player", "PlayerRecharge")

@@ -1,6 +1,6 @@
 # The squid: its tentacles curling under its mantle. One of the crystal cave's
 # third-rank raiders: RaiderRank3 in ../../macros.toml gives its stats and cycle and
-# the cave its colours.
+# the cave its colors.
 macro = "RaiderRank3"
 theme = "Crystal"
 width = 5

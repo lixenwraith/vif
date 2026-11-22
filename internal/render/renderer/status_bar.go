@@ -25,7 +25,7 @@ type statusItem struct {
 	bg   color.RGB
 }
 
-// with returns the item's colours around text
+// with returns the item's colors around text
 func (s statusItem) with(text string) statusItem {
 	s.text = text
 	return s
@@ -50,9 +50,9 @@ func (t *statusText) hold(key int64, a, b string, format func() string) string {
 // tenths keys a duration in seconds by the one decimal its text shows
 func tenths(seconds float64) int64 { return int64(math.Round(seconds * 10)) }
 
-// statusPalette holds the status bar's colours. TrueColor takes the theme's, and so does an
+// statusPalette holds the status bar's colors. TrueColor takes the theme's, and so does an
 // emulator in 256 colors, through xterm's cube; a text console takes fixed entries, each apart
-// from the items beside it and with the text that reads best on it, since a theme colour could
+// from the items beside it and with the text that reads best on it, since a theme color could
 // land on any of eight backgrounds, black included.
 type statusPalette struct {
 	audio            [4]statusItem // by channel mask
@@ -65,7 +65,7 @@ type statusPalette struct {
 	energyError      color.RGB
 	boost            statusItem
 	apm, gt, fps     statusItem
-	label            statusItem // the colour mode, text included
+	label            statusItem // the color mode, text included
 	phase            func(index, total int64) statusItem
 }
 
@@ -501,7 +501,7 @@ func cursorShown(gameCtx *engine.GameContext) bool {
 // renderItems lays the items out across the row edge to edge: as many as fit, in
 // priority order, each in a slot at least its width. The slots are as equal as
 // those widths allow, so an item's edges move when the items shown change, not
-// when a value grows by a digit; its text is centred on its own colours.
+// when a value grows by a digit; its text is centered on its own colors.
 func (r *StatusBarRenderer) renderItems(buf *render.RenderBuffer, y, width int, items []statusItem) {
 	widths, used := r.widths[:0], 0
 	for _, item := range items {
@@ -595,7 +595,7 @@ func (r *StatusBarRenderer) networkShown() (state string, ok bool) {
 }
 
 // networkBadge is the session in one badge: the round trip, which is the reading
-// a player already has from every other networked game, coloured by how well this
+// a player already has from every other networked game, colored by how well this
 // instance is keeping up, and at most one qualifier. A worse fact hides a lesser
 // one; the numbers behind them are in :session and the status snapshot.
 func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
@@ -665,7 +665,7 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 }
 
 // Link health as a player reads it, worst wins; latencySeverity is the round trip
-// alone, which colours a badge that has nothing else to say.
+// alone, which colors a badge that has nothing else to say.
 const (
 	severitySettled = iota
 	severityDegrading

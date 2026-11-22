@@ -39,18 +39,18 @@ const (
 
 const logShutdownTimeout = 2 * time.Second
 
-// colourModes are the -color words. Auto is the default and means "ask the
+// colorModes are the -color words. Auto is the default and means "ask the
 // terminal", which is what every run that does not care wants.
 const (
-	colourAuto = "auto"
-	colour256  = "256"
-	colourTrue = "true"
+	colorAuto = "auto"
+	color256  = "256"
+	colorTrue = "true"
 )
 
 // CLI flags. helpSections describes every one, and flag.Usage prints that table
 // rather than these usage strings, which only have to agree with it.
 var (
-	flagColor    = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
+	flagColor    = flag.String("color", colorAuto, "Color depth: auto, 256 or true")
 	flagMute     = flag.Bool("mute", true, "Start muted or, =false, with sound; unset, vif.toml's [play] decides")
 	flagNoWait   = flag.Bool("nw", true, "Start each new game and seat each join at once or, =false, at a key or click; unset, vif.toml's [play] wait decides")
 	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
@@ -604,12 +604,12 @@ func buildConfig() app.Config {
 	cfg.NoTmuxFrameCap = !settings.Presentation.TmuxFrameCap
 
 	switch *flagColor {
-	case colourTrue:
+	case colorTrue:
 		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorModeTrueColor, true
-	case colour256:
+	case color256:
 		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorMode256, true
 	}
-	// colourAuto leaves ColorModeSet false, which is the terminal deciding.
+	// colorAuto leaves ColorModeSet false, which is the terminal deciding.
 
 	return cfg
 }

@@ -7,9 +7,9 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | Path | What |
 |---|---|
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config`, and an `app.Host` of the view and the speakers, and hands both to `app.Run`. The view's grid, its keys and touches as events and its frames are `terminal/android`'s (`View`), of lixenwraith/terminal. |
-| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back, and for nearby games the device's networks and the Wi-Fi multicast lock), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon; `assets/fonts/` holds the site's font, which the start screen and the menu draw their text in, Hack Nerd Font Regular as TrueType, with its licence. |
+| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back, and for nearby games the device's networks and the Wi-Fi multicast lock), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon; `assets/fonts/` holds the site's font, which the start screen and the menu draw their text in, Hack Nerd Font Regular as TrueType, with its license. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
-| `../LICENSE`, `NOTICES` | Packaged as assets beside it, with the licence of Hack, the font cells are drawn in (MIT and Bitstream Vera), as `LICENSE.font`, the terminal module's `atlas/LICENSE`: Gradle copies it, and has `make notices NOTICES_OF=android` write `NOTICES`, the licences of Go and of the modules the library links, on every build, so `./gradlew` alone needs `make` on `PATH`. |
+| `../LICENSE`, `NOTICES` | Packaged as assets beside it, with the license of Hack, the font cells are drawn in (MIT and Bitstream Vera), as `LICENSE.font`, the terminal module's `atlas/LICENSE`: Gradle copies it, and has `make notices NOTICES_OF=android` write `NOTICES`, the licenses of Go and of the modules the library links, on every build, so `./gradlew` alone needs `make` on `PATH`. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
@@ -17,7 +17,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 
 Needs Go (the version in `go.mod`), a JDK (Gradle's wrapper starts on its `java`,
 and gomobile compiles the binding with the `javac` on `PATH`), and an Android SDK
-holding platform `android-36.1` and NDK `29.0.14206865`, its licence accepted.
+holding platform `android-36.1` and NDK `29.0.14206865`, its license accepted.
 The SDK is `sdk.dir=<path>` in `android/local.properties` (ignored by git), else
 `ANDROID_HOME`, else Android Studio's default, `~/Android/Sdk`
 (`~/Library/Android/sdk` on macOS). The first build downloads Gradle, the JDK 21
@@ -35,7 +35,7 @@ make android-install     # adb install -r the APK of the device's ABI, adb from 
 on a yes; into the SDK it unpacks Google's command-line tools when it has no
 `sdkmanager` (the build `toolchain.sh` pins, checked against its published
 SHA-256), then has `sdkmanager` install the platform, NDK and `platform-tools`,
-asking to accept their licence; it records `sdk.dir` when nothing named the SDK.
+asking to accept their license; it records `sdk.dir` when nothing named the SDK.
 Google ships the SDK's tools for Linux, macOS and Windows only; on FreeBSD, build
 the APK on one of those.
 
@@ -73,7 +73,7 @@ adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
 The app opens on its start screen, in lixen.com's dark theme: the logo at the
-centre, "Tap to start" under it on the site's blue button, and a `?` in the corner
+center, "Tap to start" under it on the site's blue button, and a `?` in the corner
 that opens the touch controls in a window nearly the screen's size, which its ×,
 Back or a tap outside closes. Android's splash screen, up while the app loads, is
 the same page with the logo 128 dp across in the same place, so when it goes only

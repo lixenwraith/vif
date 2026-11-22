@@ -9,8 +9,8 @@ require (
 	github.com/lixenwraith/color v0.1.5
 	github.com/lixenwraith/genetic v0.4.0
 	github.com/lixenwraith/log v0.1.19
-	github.com/lixenwraith/terminal v0.7.4
-	github.com/lixenwraith/terminal/window v0.7.4
+	github.com/lixenwraith/terminal v0.7.5
+	github.com/lixenwraith/terminal/window v0.7.5
 	github.com/lixenwraith/toml v0.10.0
 	golang.org/x/sys v0.50.0
 )

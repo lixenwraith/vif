@@ -265,7 +265,7 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	cfg.wiring.dialled = d
+	cfg.wiring.dialed = d
 
 	a, err := openRun(cfg, false)
 	if err != nil {

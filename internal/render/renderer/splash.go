@@ -69,7 +69,7 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 
 // renderChar draws char's glyph from the cell at gameX, gameY, pack pixel rows a
 // cell: a cell inked whole as its background, under whatever glyph it shows, and one
-// inked in one of its two rows as a half block in the colour over the background it had
+// inked in one of its two rows as a half block in the color over the background it had
 func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, face *asset.Face, pack int, char rune, gameX, gameY int, c color.RGB) {
 	bitmap, _ := face.Glyph(char)
 	_, rows := face.Cells(pack)

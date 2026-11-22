@@ -446,7 +446,7 @@ func (a *App) initWorld() error {
 	for _, sys := range []engine.System{system.NewMetaSystem(a.ctx), system.NewBehaviorSystem(a.world, a.behaviors)} {
 		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}
-	// One ordered pass initialises the complete set, as a reset does; an unknown
+	// One ordered pass initializes the complete set, as a reset does; an unknown
 	// dependency or a cycle is a startup error. Before the session advances, so
 	// the streams drawn here are this game's and the journal anchor reads the
 	// session that follows them.
@@ -524,7 +524,7 @@ func (a *App) settingsUnsaved(err error) {
 }
 
 // applyMapLatch installs this run's D-14 position before any system is built and
-// before the FSM boot script spawns cursor slot zero at the centre of the map.
+// before the FSM boot script spawns cursor slot zero at the center of the map.
 // LockMap alone closes the crop path and engages the playout barrier; a run
 // reproducing a session also carries the bounds it must start on. A person's run
 // that names its size, in no session, plays a map fixed at it or, to fit, as built.

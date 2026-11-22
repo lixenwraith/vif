@@ -47,10 +47,10 @@ const (
 // each instance re-derives rather than adopts.
 const cursorStoreName = "cursor"
 
-// normaliseStoreValue zeroes cursor Control for hashing and repair alike: every
+// normalizeStoreValue zeroes cursor Control for hashing and repair alike: every
 // install re-derives it from local ownership, so hashing it would leave equal worlds
 // disagreeing forever, falling back to keyframes over a field neither holds wrong.
-func normaliseStoreValue(store string, raw json.RawMessage) (json.RawMessage, error) {
+func normalizeStoreValue(store string, raw json.RawMessage) (json.RawMessage, error) {
 	if store != cursorStoreName {
 		return raw, nil
 	}
@@ -139,7 +139,7 @@ type namedRows []ManifestRow
 
 func (r namedRows) row(i int32) ManifestRow { return r[i] }
 
-// rowsOf materialises the rows a page indexes.
+// rowsOf materializes the rows a page indexes.
 func (s *section) rowsOf(page []int32) []ManifestRow {
 	out := make([]ManifestRow, len(page))
 	for k, i := range page {
@@ -387,7 +387,7 @@ func (m *Manifest) Sections() []string {
 func (m *Manifest) Summaries() []SectionSummary { return m.list }
 
 // SectionRows returns one section's canonical rows, for callers auditing what the
-// index commits to, materialised from the rows it stands over.
+// index commits to, materialized from the rows it stands over.
 func (m *Manifest) SectionRows(id string) ([]ManifestRow, bool) {
 	s, ok := m.sections[id]
 	if !ok {

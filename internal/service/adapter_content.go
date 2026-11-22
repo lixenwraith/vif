@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// ContentSource selects where the corpus is read from: FS, labelled Label, is
+// ContentSource selects where the corpus is read from: FS, labeled Label, is
 // the corpus a scenario carries; else Dir, and an empty Dir selects the embedded
 // corpus. Pin restricts the walk to one file.
 type ContentSource struct {

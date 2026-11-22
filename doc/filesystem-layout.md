@@ -263,7 +263,7 @@ removes from its root, naming each as it goes:
 It keeps `audio/`, a player's other keymaps, their own scenarios,
 `scenario/downloads/` and anything else in the root.
 
-`install` adds the binary, licences, manual, desktop entry
+`install` adds the binary, licenses, manual, desktop entry
 and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
 `PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs

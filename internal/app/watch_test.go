@@ -663,7 +663,7 @@ func TestSpectatingReplacesARunOnceItsDialIsTaken(t *testing.T) {
 	ex(solo, "spectate "+host.HostAddr()+" 1")
 	waitUntil(t, func() bool { return solo.restart.Load() != nil }, "the spectator's dial taken; status "+solo.Context().GetStatusMessage())
 	req := solo.restart.Load()
-	defer req.Dialled.Abandon(errors.New("the test is over"))
+	defer req.Dialed.Abandon(errors.New("the test is over"))
 	line.Journal = true // as a run that keeps one is replaced
 	next, _ := line.restarted(req)
 	if m := next.Membership; !m.Watch || m.Follow != 1 || m.JoinAddress != host.HostAddr() || len(m.Bots) != 0 || next.Journal {

@@ -47,7 +47,7 @@ const (
 var BoxDrawStyleNames = [...]string{BoxDrawNone: "none", BoxDrawSingle: "single", BoxDrawDouble: "double"}
 
 // The kinds a box-drawn wall has in the position index, one a style, so the
-// neighbour test the box characters are drawn from reads a bit, not the cell
+// neighbor test the box characters are drawn from reads a bit, not the cell
 const (
 	WallKindBoxSingle WallBlockMask = 1 << 6
 	WallKindBoxDouble WallBlockMask = 1 << 7

@@ -1,6 +1,6 @@
 # The puffer: it swells its spines and lets them fall. One of the moss cave's
 # third-rank raiders: RaiderRank3 in ../../macros.toml gives its stats and cycle and
-# the cave its colours.
+# the cave its colors.
 macro = "RaiderRank3"
 theme = "Moss"
 width = 5

@@ -200,10 +200,10 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
 			Participants: 4, Migrate: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
-	dialled := &membership.JoinDial{}
+	dialed := &membership.JoinDial{}
 	console := []engine.ConsoleLine{{Text: ":join 10.0.0.2:7777/abc", Kind: parameter.StatusInput, At: 1, Count: 1}}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
-		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"default"}, Journal: true, Console: console})
+		Join: "10.0.0.2:7777/abc", Dialed: dialed, Bots: []string{"default"}, Journal: true, Console: console})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
 		!slices.Equal(next.Membership.Bots, []string{"default"}) || !next.Journal || !next.wiring.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
@@ -216,16 +216,16 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 			next.Membership.HostAddress, next.wiring.resumeHost)
 	}
 	if next.Membership.JoinAddress != "10.0.0.2:7777" || next.Membership.SessionName != "abc" ||
-		next.wiring.dialled != dialled {
+		next.wiring.dialed != dialed {
 		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial",
-			next.Membership.JoinAddress, next.Membership.SessionName, next.wiring.dialled)
+			next.Membership.JoinAddress, next.Membership.SessionName, next.wiring.dialed)
 	}
 	if next.Membership.Participants != 0 || next.Membership.Migrate {
 		t.Fatalf("a :join keeps -players %d and a migrating authority %t; want neither, its session's coming with its offer",
 			next.Membership.Participants, next.Membership.Migrate)
 	}
 	if solo == nil || solo.Seed != 7 || solo.Membership.JoinAddress != "" || solo.Membership.SessionName != "" ||
-		solo.wiring.membership.SessionPlayers != 0 || solo.wiring.dialled != nil {
+		solo.wiring.membership.SessionPlayers != 0 || solo.wiring.dialed != nil {
 		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
 	}
 	moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"})
@@ -235,7 +235,7 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	}
 	if alone, solo := line.restarted(&restartRequest{}); alone.Membership.JoinAddress != "" || solo != nil ||
 		alone.wiring.membership.SessionPlayers != 3 || !alone.Membership.Migrate {
-		t.Fatalf("a run following nobody dials %q under a ceiling of %d, migrating %t; want nothing dialled, the session's 3 and the command line's policy kept",
+		t.Fatalf("a run following nobody dials %q under a ceiling of %d, migrating %t; want nothing dialed, the session's 3 and the command line's policy kept",
 			alone.Membership.JoinAddress, alone.wiring.membership.SessionPlayers, alone.Membership.Migrate)
 	}
 	if pinned, _ := line.restarted(&restartRequest{Scenario: "duel", Host: "127.0.0.1:7001"}); pinned.Membership.Migrate {

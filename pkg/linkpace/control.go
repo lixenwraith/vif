@@ -37,10 +37,10 @@ type Bounds struct {
 	// cannot sustain the floor at all.
 	FloorKeyframeTicks uint64
 
-	// Utilisation is the share of measured capacity the cadence is allowed to
+	// Utilization is the share of measured capacity the cadence is allowed to
 	// spend. The rest is headroom for the crossing stream, the state syncs and
 	// the digests, which travel on the same link and are not in this model.
-	Utilisation float64
+	Utilization float64
 
 	// UrgentDrift and UrgentRelevance are where a participant stops being
 	// ordinary, and both are stated as percentages for the same reason: an
@@ -87,8 +87,8 @@ func (b Bounds) Validate() error {
 	case b.FloorKeyframeTicks < b.MinCadenceTicks*uint64(b.MinKeyframe):
 		return fmt.Errorf("linkpace: the floor of %d ticks is shorter than the fastest legal keyframe period (%d)",
 			b.FloorKeyframeTicks, b.MinCadenceTicks*uint64(b.MinKeyframe))
-	case b.Utilisation <= 0 || b.Utilisation > 1:
-		return errors.New("linkpace: utilisation must be within (0,1]")
+	case b.Utilization <= 0 || b.Utilization > 1:
+		return errors.New("linkpace: utilization must be within (0,1]")
 	}
 	return nil
 }
@@ -126,7 +126,7 @@ type Demand struct {
 	// moves stands above the session's mean, in percent. It is comparative by
 	// construction, which is the honest shape for a signal whose whole purpose is
 	// to decide which of several participants gets served first: with one peer
-	// there is nobody to prioritise against and the whole link is already its own.
+	// there is nobody to prioritize against and the whole link is already its own.
 	Relevance int
 
 	// Idle marks a participant with nothing near it and a prediction the last
@@ -156,9 +156,9 @@ type Plan struct {
 	FloorBreached bool
 
 	// FloorBps is what the floor costs on this world: one keyframe per floor
-	// window and nothing else, which is the cheapest schedule that honours it.
+	// window and nothing else, which is the cheapest schedule that honors it.
 	// PlannedBps is what this plan costs. BudgetBps is what the link was measured
-	// to allow after the utilisation share.
+	// to allow after the utilization share.
 	FloorBps   float64
 	PlannedBps float64
 	BudgetBps  float64
@@ -242,7 +242,7 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 		return out
 	}
 
-	budget := m.Throughput * b.Utilisation
+	budget := m.Throughput * b.Utilization
 	out.BudgetBps = budget
 
 	// The floor's own cost is the first question, and it is not a preference. If
@@ -277,7 +277,7 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 	}
 
 	// Every candidate inside the bounds costs more than the budget, yet the floor
-	// itself fits: sit at the cheapest schedule that honours the floor. This is
+	// itself fits: sit at the cheapest schedule that honors the floor. This is
 	// the constrained-but-converging case, and it is not a breach.
 	fallback := cheapestFloorPlan(b)
 	fallback.FloorBps, fallback.BudgetBps = out.FloorBps, budget
@@ -288,7 +288,7 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 }
 
 // desired is where this participant would like to sit before the link is
-// consulted: fast when its own picture is drifting or its neighbourhood is busy,
+// consulted: fast when its own picture is drifting or its neighborhood is busy,
 // slower than nominal when neither is true and the bytes are better spent
 // elsewhere.
 func (c *Controller) desired(d Demand) uint64 {
@@ -327,7 +327,7 @@ func search(b Bounds, from uint64, s Sizes, budget float64) (Plan, bool) {
 	for c := max(from, b.MinCadenceTicks); c <= b.MaxCadenceTicks; c++ {
 		kMax := int(b.FloorKeyframeTicks / c)
 		if kMax < b.MinKeyframe {
-			continue // this cadence cannot honour the floor at any interval
+			continue // this cadence cannot honor the floor at any interval
 		}
 		kMax = min(kMax, b.MaxKeyframe)
 		kFrom := max(min(b.NominalKeyframe, kMax), b.MinKeyframe)
@@ -340,12 +340,12 @@ func search(b Bounds, from uint64, s Sizes, budget float64) (Plan, bool) {
 	return Plan{}, false
 }
 
-// cheapestFloorPlan is the least expensive schedule that still honours the
+// cheapestFloorPlan is the least expensive schedule that still honors the
 // floor, and it is both the fallback and the price the floor is quoted at.
 //
 // The cheapest schedule is the slowest cadence the bounds allow with the fewest
 // keyframes that still fills the floor window: the whole world has to be sent
-// once per window whatever else happens, so what is left to minimise is the
+// once per window whatever else happens, so what is left to minimize is the
 // deltas in between, and the slowest cadence sends the fewest of them.
 func cheapestFloorPlan(b Bounds) Plan {
 	c := max(min(b.FloorKeyframeTicks, b.MaxCadenceTicks), b.MinCadenceTicks)
@@ -426,7 +426,7 @@ func rate(b Bounds, cadence uint64, keyframe int, s Sizes) float64 {
 }
 
 // floorRate is what the convergence floor costs on a world of this size: the
-// price of the cheapest schedule that honours it. Quoting it as "one keyframe
+// price of the cheapest schedule that honors it. Quoting it as "one keyframe
 // per window" alone would understate it wherever the declared maximum cadence
 // cannot stretch to the whole window, because then the floor is met by a
 // keyframe *and* the deltas the bounds force in beside it.

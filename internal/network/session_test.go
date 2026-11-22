@@ -115,7 +115,7 @@ func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 // TestAWatchDialIsShownTheSessionAndHandedItsFeed: a dial that opens with the watch
 // frame, at a door that takes joins too, passes the door's admission, is shown the
 // session with no place in it and served its scenario, and at its seat reads the
-// feed on the stream it dialled, as no peer of the host. The door's ticket gate
+// feed on the stream it dialed, as no peer of the host. The door's ticket gate
 // admits a ticket to watch and not one to play; a door with no feed says so.
 func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
 	offer := testOffer()
@@ -353,7 +353,7 @@ func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {
 	addr := gone.Addr().String()
 	gone.Close()
 	if _, err := link.Dial(addr, &DefaultConfig().Config); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
-		t.Fatalf("dialling a closed port: %v", err)
+		t.Fatalf("dialing a closed port: %v", err)
 	}
 }
 
@@ -701,10 +701,10 @@ func admitFrom(host string, port int) net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP(host), Port: port}
 }
 
-// TestAdmissionSpendsABudgetPerDiallingHost covers the amplification this bounds:
+// TestAdmissionSpendsABudgetPerDialingHost covers the amplification this bounds:
 // a join costs the session a whole world read and the dialer one connect, so a
 // peer that cycles is free to it and expensive to everything else.
-func TestAdmissionSpendsABudgetPerDiallingHost(t *testing.T) {
+func TestAdmissionSpendsABudgetPerDialingHost(t *testing.T) {
 	t.Parallel()
 	l := NewAdmissionLimiter()
 
@@ -768,7 +768,7 @@ func TestAdmissionIgnoresWhatADialerChangesFreely(t *testing.T) {
 }
 
 // TestAnInProcessStreamSpendsNoBudget: a holder opens one for each of its bots, and
-// it has no dialler whose budget it could spend.
+// it has no dialer whose budget it could spend.
 func TestAnInProcessStreamSpendsNoBudget(t *testing.T) {
 	t.Parallel()
 	l := NewAdmissionLimiter()
@@ -804,7 +804,7 @@ func TestAdmissionRefillsWithItsWindow(t *testing.T) {
 	}
 }
 
-// TestAdmissionDoesNotGrowWithoutBound keeps the defence from becoming the leak:
+// TestAdmissionDoesNotGrowWithoutBound keeps the defense from becoming the leak:
 // a spray of addresses costs one window's worth of keys rather than one per dial.
 func TestAdmissionDoesNotGrowWithoutBound(t *testing.T) {
 	t.Parallel()

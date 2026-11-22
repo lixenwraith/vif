@@ -35,7 +35,7 @@ const (
 const SpawnTypeDataFirst = SpawnTypeCount
 
 // MaterializeStyle is one spawn type: the name a document calls it by, its beams'
-// colour, a program's alone, as the renderer holds a code style's, and its timing;
+// color, a program's alone, as the renderer holds a code style's, and its timing;
 // the fill runs each beam's head from the edge to the target, the hold keeps the
 // beam, the recede runs the tail after it
 type MaterializeStyle struct {

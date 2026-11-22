@@ -97,7 +97,7 @@ instead of duplicating camera arithmetic. `MapToViewport` and `MapToScreen`
 report a coordinate visible only when it is both a map cell and inside the
 viewport, so an out-of-map coordinate that projects into a centered map's margin
 answers false. `MapToViewport` still returns the projection (`MapToScreen`
-returns zero), so a renderer anchoring a shape on an off-map centre projects it
+returns zero), so a renderer anchoring a shape on an off-map center projects it
 there and lets the clip trim the result, as the explosion field does. Area
 renderers should still intersect their iteration bounds with `VisibleMapBounds`
 to avoid the wasted work; the quasar zap ellipse does, and walks only the row's
@@ -166,7 +166,7 @@ the cell under the pointer is the cell the renderer drew there.
 
 Replay separates simulation geometry from presentation geometry. The journal
 anchor fixes the former; each frame's context is re-laid for the viewer's
-terminal, with its own viewport, centring and camera derived from the recorded
+terminal, with its own viewport, centering and camera derived from the recorded
 camera plus the viewer's `h/j/k/l` scroll, clamped to the map. The recorded camera
 and viewport are never written.
 
@@ -353,7 +353,7 @@ the last pass with `RenderBuffer.KeepExact`, which lasts the frame. In an emulat
 the overlay window and the status bar draw as in truecolor and keep their whole
 rectangles, and the start screen keeps its mark and its button. The game keeps the theme's
 sixteen but for black: the console's black is the background every color was
-chosen against, and a theme's is most often a lighter neighbour of its own
+chosen against, and a theme's is most often a lighter neighbor of its own
 background, so on an emulator entry 0, kept rectangles included, leaves as the
 theme background's RGB. The pinned telemetry panel blends into the game and stays
 on the theme with it. A text console's frame is untouched by any of this.
@@ -398,7 +398,7 @@ The splash renderer draws its two faces (`asset.SplashFaces`) as cell
 backgrounds, so the glyph under an inked cell stays. The large face is a cell a
 pixel everywhere. The small face, six by twelve pixels, packs two pixel rows a cell
 where the host draws half blocks, a cell inked in one row as `▀` or `▄` in the
-splash's colour over the background it had; a text console, whose fonts lack them,
+splash's color over the background it had; a text console, whose fonts lack them,
 draws it a cell a pixel, six cells wide and twelve tall ([Multi-platform
 §4](multi-platform.md#4-platform-matrix)). The splash system places by the same
 packing (`Config.TextConsole`), so a countdown's box is the cells it draws.
@@ -409,10 +409,10 @@ crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
 
-The landing marker is one cell, the centre of the footprint a charge or a teleport
+The landing marker is one cell, the center of the footprint a charge or a teleport
 lands on, cycling white, red and pink every `visual.LandingBlinkStep` from the
 lock until the landing. The charge and teleport lines run between the footprints'
-centres, so both end on it: a charge pulse's head arrives on the pulse's last tick,
+centers, so both end on it: a charge pulse's head arrives on the pulse's last tick,
 since `Machine.Elapsed` moves a tick at a time. It draws over the player's fields,
 so a shield's rim never hides it. Truecolor lights its background alone, so a glyph under it still reads;
 256-color draws a foreground block, since eight backgrounds cannot show its bright
@@ -422,7 +422,7 @@ A Kraken's charge has no line. The same renderer marks where its body ends, from
 the spin's first tick until it arrives, with an outline
 `visual.KrakenLandingReach` body radii round: wider than a shield, so it shows
 round the cursor it locked on while that cursor still stands there. Inside it a
-glow fades toward the centre and rises through the spin, from
+glow fades toward the center and rises through the spin, from
 `KrakenLandingGlowMin` to `KrakenLandingGlowMax`, which tells how soon the body
 leaves. Both blend `RgbKrakenAttack` into backgrounds alone; 256-color draws the
 outline in `Kraken256Landing`, as a shield's.
@@ -436,7 +436,7 @@ distance from the ray once, over the open space alone, so no halo doubles where
 two of the ray's cells meet; 256-color draws the core in `Devourer256Omen`.
 
 Health bars stand above a body's footprint, below it where that leaves the view,
-centred on a Kraken's header, or pinned to the view's top row for a Devourer,
+centered on a Kraken's header, or pinned to the view's top row for a Devourer,
 across `HealthBarPinnedShare` of its width on a darkened backing with the hit
 points lost dotted. A bar its body leaves neither side for, a body as tall as the
 view or wider, slides into the view, cut to its width, while the body shows.
@@ -446,11 +446,11 @@ until the next show the same pose, so it keeps the shaded cells while the pose,
 position and visible bounds match, and draws them again as they are. It takes the
 tentacle samples the Kraken system built that tick from `KrakenShape` and samples
 the shape itself only when something moved the Kraken after its system ran. Each
-disc stamps its box with squared distances, and only a cell within
-`vmath.RoundingMargin` of a disc or rim edge takes the square root the definition
+disk stamps its box with squared distances, and only a cell within
+`vmath.RoundingMargin` of a disk or rim edge takes the square root the definition
 compares, so the cells are exactly those of the per-cell distance test. The rim is
-one shade, `KrakenRimRune`, in the color of the first disc reaching a cell: that
-disc reaches it near its outer edge, so a rim graded by distance from it showed its
+one shade, `KrakenRimRune`, in the color of the first disk reaching a cell: that
+disk reaches it near its outer edge, so a rim graded by distance from it showed its
 outer shade alone. In 256 colors, where the console showed the legs' dark half and
 the body's void as black, the Kraken draws in console entries: legs, rim and body in
 `Kraken256Leg`, the body solid where its void passes `Effect256Threshold`, and a leg
@@ -470,9 +470,9 @@ container, medians of nine alternating runs: 51.4 µs a tick before the burn,
 49.0 µs with it. A burn's three frames cost 22 µs a tick averaged over the burn,
 where the same pose alive costs 53 µs, the renderer sampling both.
 
-The discs sit `KrakenSampleStep` apart toward the tip and every third, then every
+The disks sit `KrakenSampleStep` apart toward the tip and every third, then every
 second, within 10 and 20 cells of the body (`KrakenSampleStrides`), where they are
-widest. Over 4,000 poses of the campaign's kraken region that is 518 discs instead
+widest. Over 4,000 poses of the campaign's kraken region that is 518 disks instead
 of 790 and 49% fewer stamped cells, against the even spacing: 0.06% of drawn cells
 vanish at the edges, 0.15% turn between solid and rim, 0.2% shift color by more
 than two levels and 0.25% of footprint cells change. `BenchmarkKrakenRegion` in the
@@ -494,7 +494,7 @@ one pass (`DevourerShape.Depths`), past the run the open space surely holds
 never an angle, so the folds close on themselves: folds along the wall drifting
 outward, a wet lip, grain, veins and a beat, a sample's texture worked out once as
 the flesh first covers it and the lip and the gloss read from tables. A gut is
-stamped in chords within `devourerGutSlack` of its centreline and shaded from a
+stamped in chords within `devourerGutSlack` of its centerline and shaded from a
 table over its tube. The fitted cells are kept as runs along a row, a run of whole
 cells written in one call (`SetRunWithBg`). The folds' drift and the beat move
 nearly every cell a little each frame, half of them by a CIELAB distance under 2,
@@ -570,17 +570,17 @@ the palette as a fadeout does.
 ### Local and peer cursors
 
 Two renderers rather than one loop, and they answer different questions. The local
-cursor answers "where am I, and what am I about to act on", so it takes the colour
+cursor answers "where am I, and what am I about to act on", so it takes the color
 of whatever it is standing on and follows the local input mode. A peer answers
-"where is that player", so it keeps one colour per roster slot whatever it stands
+"where is that player", so it keeps one color per roster slot whatever it stands
 on — drawing them the same way would make the two indistinguishable exactly when it
 matters, which is when they overlap. `PriorityPeerCursor` sits directly under
-`PriorityCursor` so an overlap resolves in favour of the one the player is steering.
+`PriorityCursor` so an overlap resolves in favor of the one the player is steering.
 
 `peer_cursor` keeps a participant visible even when it projects no shield or
 ember. A Wraith wears the Wraith field round the cell it holds
 (`visual.WraithField`): the player shield's radius, pale and cool, its glow
-turning every `WraithGlowPeriod`, at the peer blend, its rim green in 256 colours.
+turning every `WraithGlowPeriod`, at the peer blend, its rim green in 256 colors.
 The local cursor and the inverted marker read the cell underneath through one
 `cellContent`, which picks the cell's top glyph as typing does, so what they show
 is what a keystroke would hit.
@@ -599,7 +599,7 @@ The box is clipped to the visible map before any per-frame table is built, and
 every cell in it reaches the screen by one offset. The edge is displaced at
 `visual.EmberJaggedBuckets` angles (64) and a ring stops at
 `visual.EmberRingThreshold` (0.03): against 256 angles and 0.001, the edge
-flickers in a coarser pattern, half the lit cells take another colour from heat
+flickers in a coarser pattern, half the lit cells take another color from heat
 15 up, and a ring's faint tail, at most 3 levels, is gone. One ember burning from
 heat 100 to 0, a third of its cells on a painted background, paints in about
 12.6 µs native (16.3 at 256 angles and 0.001) and 35 µs in wasm (45); in a live
@@ -619,7 +619,7 @@ builds a table every frame. In truecolor the local cursor's field is a lens: eve
 cell it lights starts from black, so a lone shield keeps its full contrast, and any
 other field crossing it, a peer's, a drop's or a Wraith's, adds its light there. In
 256 colors the rim fits the grid at any radius: it spans from the outermost drawn
-cell on each axis inward, takes in each cell whose outward neighbour leaves it, so
+cell on each axis inward, takes in each cell whose outward neighbor leaves it, so
 the ring closes, and lowers a top that is the axis cell alone onto the row beneath.
 `BenchmarkShieldRender`, medians of three alternating runs net of the buffer clear,
 native, against the per-kind tables this replaced: one cursor 3.8 to 2.4 µs,
@@ -679,13 +679,13 @@ the prompt a game waiting for its start stands with (`RenderContext.Prompt`),
 else the goal, until the next goal or a new game; under the start screen, whose
 button asks, neither. Its
 colors come from one palette per color mode: the theme's in truecolor, and in an
-emulator in 256 colors through xterm's cube, labelled 256; on a text console fixed
+emulator in 256 colors through xterm's cube, labeled 256; on a text console fixed
 entries, each apart from the items beside it and with the text that reads best on it. The audio state is a letter: X muted, S sfx, M music,
 O both; it is absent without an audio engine.
 
 The start screen (`StartScreenRenderer`) is the terminal's and the desktop
 window's: while `RenderContext.StartScreen` holds it covers every row above the
-status bar, the logo at the centre two fifths of the shorter side and the prompt
+status bar, the logo at the center two fifths of the shorter side and the prompt
 under it on a button, the site's colors in truecolor and console entries in 256
 colors. An emulator's mark and button keep the site's colors through xterm's cube;
 a console's fonts lack the half blocks that round it, so there it is the label in
@@ -707,7 +707,7 @@ emulator in 256 colors does too, on a text console as whole blocks in the entry
 each cell mostly shows. The console is a band across the screen right above the
 status bar, `ConsoleShare` of the rows above it with `ConsoleMinRows` at least,
 under a rule with its title and the widest key hint that fits. A row starts with
-its message's local time (`ConsoleStamp`) and wraps under its text, coloured by
+its message's local time (`ConsoleStamp`) and wraps under its text, colored by
 kind (`visual.RgbConsoleKind`, `visual.ConsoleKind256` on a text console): input
 teal, refusals salmon, alerts orange, announcements orchid, the rest as the bar.
 `GameContext` keeps the last `ConsoleHistory` messages, a repeat of the newest

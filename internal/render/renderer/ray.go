@@ -12,14 +12,14 @@ import (
 )
 
 // RayRenderer draws every ray in flight from its RayComponent: a white core with
-// palette-coloured sides where the ray widens, brighter the more charges fired it
+// palette-colored sides where the ray widens, brighter the more charges fired it
 // and fading over its last quarter. A warning is the core line alone. Walls stay clear.
 type RayRenderer struct {
 	gameCtx  *engine.GameContext
 	drawCell rayCellRenderer
 }
 
-// rayCellRenderer draws one ray cell, core or side, in the colour mode chosen at construction
+// rayCellRenderer draws one ray cell, core or side, in the color mode chosen at construction
 type rayCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool)
 
 var (

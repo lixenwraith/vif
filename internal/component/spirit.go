@@ -36,11 +36,11 @@ var SpiritColorNames = [...]string{
 type SpiritPattern uint8
 
 const (
-	SpiritConverge SpiritPattern = iota // spiralling in to their targets, trailing light
+	SpiritConverge SpiritPattern = iota // spiraling in to their targets, trailing light
 	SpiritScatter                       // thrown out from where they stood, fading there
 )
 
-// SpiritPart is one glyph of a flight, travelling between two precise positions in
+// SpiritPart is one glyph of a flight, traveling between two precise positions in
 // cells. Color is a scattered part's own; a converging one cycles its flight's.
 type SpiritPart struct {
 	FromX, FromY float64

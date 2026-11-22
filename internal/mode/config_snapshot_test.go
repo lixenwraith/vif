@@ -328,7 +328,7 @@ func TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds(t *testing.T) {
 	}
 }
 
-// BenchmarkMenuSnapshot is the full tree built and marshalled, as a host drawing its
+// BenchmarkMenuSnapshot is the full tree built and marshaled, as a host drawing its
 // own menu has every frame while the menu is open: three bots, three other players
 // and the scenario list on a run that holds a session.
 func BenchmarkMenuSnapshot(b *testing.B) {

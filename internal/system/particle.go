@@ -574,7 +574,7 @@ func (s *ParticleSystem) fallSpeed() float64 {
 	return parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
 }
 
-// orbitKick is a tangential velocity of speed around a centre at circular-space
+// orbitKick is a tangential velocity of speed around a center at circular-space
 // offset (dx, dy), turning the way the Kraken's legs do for a positive spin
 func orbitKick(dx, dy, speed, spin float64, aspect vmath.Aspect) (vx, vy float64) {
 	tx, ty := vmath.Normalize2D(vmath.Perpendicular(dx, dy))
@@ -707,7 +707,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	state.buffers.Observe(1, len(state.processedGridCells))
 }
 
-// anchors resolves this tick's orbit centres for one behavior; chase reports a cursor
+// anchors resolves this tick's orbit centers for one behavior; chase reports a cursor
 // jump, which boosts the stagger group it selects
 func (s *ParticleSystem) anchors(behavior component.ParticleBehavior) (centers []orbitCenter, chase bool) {
 	s.centers = s.centers[:0]
@@ -762,7 +762,7 @@ func (s *ParticleSystem) anchors(behavior component.ParticleBehavior) (centers [
 	return s.centers, chase
 }
 
-// nearestCenter returns the centre closest to (x, y) in its own orbit's space
+// nearestCenter returns the center closest to (x, y) in its own orbit's space
 func nearestCenter(centers []orbitCenter, x, y float64) (orbitCenter, bool) {
 	best, bestDist := orbitCenter{}, math.Inf(1)
 	for _, c := range centers {
@@ -850,7 +850,7 @@ func (s *ParticleSystem) touch(behavior component.ParticleBehavior, state *parti
 	return s.processBlossomTargets(state, entity, targets)
 }
 
-// fade steps a timed particle's colour down one level once its remaining life
+// fade steps a timed particle's color down one level once its remaining life
 // falls below the lower level's lifetime
 func (s *ParticleSystem) fade(prof *particleProfile, entity core.Entity) {
 	timer, ok := s.world.Components.Timer.GetPtr(entity)

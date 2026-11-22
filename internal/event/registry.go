@@ -58,7 +58,7 @@ func NewPayloadStruct(et EventType) any {
 	return payloadNew[et]()
 }
 
-// EnsureRegistry initialises the event registry exactly once, safe against
+// EnsureRegistry initializes the event registry exactly once, safe against
 // concurrent App construction. InitRegistry is generated and carries no guard.
 func EnsureRegistry() { registryOnce.Do(InitRegistry) }
 

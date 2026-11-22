@@ -56,7 +56,7 @@ type devourerPicture struct {
 type devourerLook [2][3]float32
 
 // The lip and the gloss are tabled over the depth the lip reaches, and a gut's
-// tube over its radius and its segment's swell. A gut's centreline is stamped in
+// tube over its radius and its segment's swell. A gut's centerline is stamped in
 // chords that leave it by devourerGutSlack column units at most, within the bounds.
 const (
 	devourerWetReach    = 3 * visual.DevourerLipWidth
@@ -115,7 +115,7 @@ const (
 	markGut
 )
 
-// gutNear is a sample's nearest centreline point of the gut stamped as stamp: its
+// gutNear is a sample's nearest centerline point of the gut stamped as stamp: its
 // squared distance and how far along the gut
 type gutNear struct {
 	d2, u float32
@@ -373,7 +373,7 @@ func (r *DevourerRenderer) fleshRow(shade *devourerShade, src *devourerSource, c
 	if cols <= 0 || cy >= src.height-minY {
 		return
 	}
-	// A sample lies within 0.6 column units of its cell's centre
+	// A sample lies within 0.6 column units of its cell's center
 	open, shut := cols, cols
 	if lo, hi := r.shape.Span(minY+cy, 0.6); lo <= hi {
 		open, shut = min(max(lo-minX, 0), cols), min(max(hi+1-minX, 0), cols)
@@ -444,7 +444,7 @@ func (r *DevourerRenderer) fleshRun(src *devourerSource, fx, fy, at, n int) {
 }
 
 // paintGut lays the gut in a slot over the image: each sample takes the nearest
-// point of its centreline, stamped chord by chord, and shades as a tube there,
+// point of its centerline, stamped chord by chord, and shades as a tube there,
 // segments swelling and crawling along it, tapering into the walls and edged dark
 func (r *DevourerRenderer) paintGut(shade *devourerShade, src *devourerSource, g *component.DevourerGutComponent, slot int) {
 	w, h := 2*(shade.maxX-shade.minX+1), 2*(shade.maxY-shade.minY+1)

@@ -118,8 +118,8 @@ type prototypeDoc struct {
 	Attacks     map[string]attackDoc `toml:"attacks"`
 	Materialize *styleDoc            `toml:"materialize"`
 
-	// The look: frames, the palettes their cells index, the colour of a glyph
-	// without an entry, and the console pair a 256-colour host draws
+	// The look: frames, the palettes their cells index, the color of a glyph
+	// without an entry, and the console pair a 256-color host draws
 	Frames []visual.LookFrame `toml:"frames"`
 	Fg     []color.RGB        `toml:"fg"`
 	Bg     []color.RGB        `toml:"bg"`
@@ -231,7 +231,7 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		}
 	}
 	if (d.Fg256 == nil) != (d.Bg256 == nil) {
-		fail("fg256 and bg256 come together, the pair a 256-colour host draws")
+		fail("fg256 and bg256 come together, the pair a 256-color host draws")
 	}
 	if len(d.Frames) > 1 && d.PatternMs <= 0 {
 		fail("pattern_ms %d: %d frames need a positive period", d.PatternMs, len(d.Frames))
@@ -384,7 +384,7 @@ func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
 }
 
 // style makes p's materialize style the swarm's, named by the program, with the
-// colour and timings the prototype gives
+// color and timings the prototype gives
 func (d *prototypeDoc) style(p *component.BehaviorPrototype) (errs []error) {
 	p.Materialize = component.MaterializeStyles[component.SpawnTypeSwarm]
 	p.Materialize.Name, p.Materialize.Color = p.Name, visual.RgbMaterialize

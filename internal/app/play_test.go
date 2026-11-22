@@ -31,7 +31,7 @@ import (
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds
-// is centred and does not move, a larger one is shown from the recorded view and
+// is centered and does not move, a larger one is shown from the recorded view and
 // scrolls no further than its edges, and pan pushed past an edge is not banked.
 func TestReplayViewStopsAtTheMapEdges(t *testing.T) {
 	t.Parallel()
@@ -42,7 +42,7 @@ func TestReplayViewStopsAtTheMapEdges(t *testing.T) {
 	if cam, off, _ := viewAxis(50, 100, 100, 200, 0); cam != 50 || off != 0 {
 		t.Fatalf("an unpanned view the recorded size: camera %d offset %d, want the recorded 50 0", cam, off)
 	}
-	// A 60-cell view on a 100-cell recording at camera 50 starts from its centre, 70.
+	// A 60-cell view on a 100-cell recording at camera 50 starts from its center, 70.
 	cam, _, kept := viewAxis(50, 100, 60, 200, 1000)
 	if cam != 140 || kept != 70 {
 		t.Fatalf("panned past the far edge: camera %d pan %d, want 140 70", cam, kept)

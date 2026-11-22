@@ -78,7 +78,7 @@ func TestLoadStreamsResumesTheGeneratorsSystemsHold(t *testing.T) {
 		receiverHeld.Next()
 	}
 	if unknown := receiver.LoadStreams(core.DomainShared, saved); len(unknown) != 0 {
-		t.Fatalf("receiver did not recognise streams it issues: %v", unknown)
+		t.Fatalf("receiver did not recognize streams it issues: %v", unknown)
 	}
 	for i, w := range want {
 		if got := receiverHeld.Next(); got != w {
@@ -111,7 +111,7 @@ func TestLoadStreamsNamesUnknownStreams(t *testing.T) {
 	}
 }
 
-// TestStreamIssuesAFreshGeneratorPerDraw pins the behaviour a reset depends on: a
+// TestStreamIssuesAFreshGeneratorPerDraw pins the behavior a reset depends on: a
 // system re-running Init must get its stream from the start of the new session's
 // sequence, never resumed at the finished game's position.
 func TestStreamIssuesAFreshGeneratorPerDraw(t *testing.T) {

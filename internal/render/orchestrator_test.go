@@ -30,14 +30,14 @@ func (t *captureTerminal) Flush(cells []terminal.Cell, width, height int) {
 
 func (t *captureTerminal) at(x, y int) terminal.Cell { return t.cells[y*t.width+x] }
 
-// scribbler draws one colour over every cell of the buffer it is handed. It is
+// scribbler draws one color over every cell of the buffer it is handed. It is
 // the worst case the clip exists for: a renderer that iterates the viewport, or
 // a shape whose bounding box runs past the map, with no bound of its own.
 type scribbler struct{ c color.RGB }
 
 func (s *scribbler) Render(_ RenderContext, buf *RenderBuffer) {
 	buf.SetWriteMask(visual.MaskTransient)
-	// Background only, so the assertions read the composed colour rather than the
+	// Background only, so the assertions read the composed color rather than the
 	// occlusion dimming a rune would trigger in finalize.
 	b := buf.Bounds()
 	for y := b.Y0; y < b.Y1; y++ {
@@ -101,12 +101,12 @@ func TestScreenSpaceLayersStayUnclipped(t *testing.T) {
 
 	ui := color.RGB{B: 200}
 	o.Register(Registration{Renderer: &scribbler{c: ui}, Priority: PriorityOverlay})
-	o.RenderFrame(centredContext(), engine.NewWorld())
+	o.RenderFrame(centeredContext(), engine.NewWorld())
 
 	for y := range screenH {
 		for x := range screenW {
 			if got := term.at(x, y).Bg; got != ui {
-				t.Fatalf("cell (%d,%d) = %v, want the unclipped UI colour %v", x, y, got, ui)
+				t.Fatalf("cell (%d,%d) = %v, want the unclipped UI color %v", x, y, got, ui)
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 	drawn := color.RGB{R: 200}
 	o.Register(Registration{Renderer: &scribbler{c: drawn}, Priority: PriorityBullet})
 
-	ctx := centredContext()
+	ctx := centeredContext()
 	o.RenderFrame(ctx, engine.NewWorld())
 
 	pf, frame := ctx.PlayfieldRect(), ctx.FrameRect()

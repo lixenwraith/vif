@@ -86,7 +86,7 @@ func (s *FuseSystem) Update() {}
 
 // fuse plays one request: its sources consumed and its target placed on the nearest
 // footprint free of walls a spawn is kept from at their centroid, the composites'
-// alone when it takes any, and at the map's centre when a sweep finds none. It fails
+// alone when it takes any, and at the map's center when a sweep finds none. It fails
 // naming what its domain cannot take, an entity twice or one no longer standing; a
 // sweep's elected participant takes no drains while a spawn of the target flies.
 func (s *FuseSystem) fuse(shared bool, p *event.FuseRequestPayload) {

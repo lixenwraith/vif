@@ -122,7 +122,7 @@ func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
 	// Three ticks each way is 300 ms; the estimator smooths toward it and the
-	// responder answers on its own drain, so that neighbourhood is the wire rather
+	// responder answers on its own drain, so that neighborhood is the wire rather
 	// than a scheduling artifact.
 	if peer := report.Peers[0]; peer.RTT < 200*time.Millisecond {
 		t.Fatalf("a three-tick each-way link measured %s", peer.RTT)
@@ -453,7 +453,7 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 			slow.CadenceTicks, fast.CadenceTicks)
 	}
 	if fast.CadenceTicks > parameter.SnapshotCadenceQuietTicks {
-		t.Fatalf("the healthy peer was slowed to %d ticks by its neighbour's link",
+		t.Fatalf("the healthy peer was slowed to %d ticks by its neighbor's link",
 			fast.CadenceTicks)
 	}
 }

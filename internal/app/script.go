@@ -407,7 +407,7 @@ func learnLine(st bot.Stats) (line string) {
 }
 
 // runDriven plays one driven participant, a script or a bot, until it finishes or
-// the process is signalled.
+// the process is signaled.
 func runDriven(cfg runConfig, kind, name string, build func(*App) (pacedSource, error)) (finished bool, err error) {
 	signals, stopSignals := notifySignals()
 	defer stopSignals()
@@ -416,7 +416,7 @@ func runDriven(cfg runConfig, kind, name string, build func(*App) (pacedSource, 
 
 // drive builds the App in the session cfg names, lets build put a driver on it, and
 // steps that driver headless under the run's wall pace, or presented. finished is
-// false when stop or a cancelled session ended the run first. While hold reports
+// false when stop or a canceled session ended the run first. While hold reports
 // true, or a hold stands, the run stands still and re-anchors its pace after.
 func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func() bool,
 	build func(*App) (pacedSource, error)) (finished bool, err error) {
@@ -455,7 +455,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 	// A solo run that opens a session, with :host or for its bots, gains a peer to
 	// keep step with, so pacing engages at that moment. The clock is re-anchored there
 	// rather than carried forward, or the ticks it ran flat out would be a debt the
-	// pacing immediately spends. An explicit -speed max is honoured either way.
+	// pacing immediately spends. An explicit -speed max is honored either way.
 	autoPace := cfg.TimeScaleSpec == ""
 	nextTick := time.Now() // [wall] pacing only
 	for {

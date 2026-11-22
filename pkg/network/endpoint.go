@@ -29,7 +29,7 @@ import (
 // Scheme is how a session's bytes travel. TCP carries native play at both ends; a
 // WebSocket carries the same stream for a browser or a network that blocks the TCP
 // port, from the deployment's route or a host's own ws:// listener. A site names no
-// session yet: its router is asked for one, and the link it answers is dialled.
+// session yet: its router is asked for one, and the link it answers is dialed.
 type Scheme uint8
 
 const (
@@ -170,7 +170,7 @@ func DoorList(doors []Endpoint) string {
 	return strings.Join(addrs, ",")
 }
 
-// Shown is how a message names a dialled address: a WebSocket route by its host,
+// Shown is how a message names a dialed address: a WebSocket route by its host,
 // since the rest of its URL is a session key nobody reads, any other as given.
 func Shown(target string) string {
 	if e, err := ParseEndpoint(target); err == nil && e.Scheme == SchemeWebSocket {
@@ -188,7 +188,7 @@ func (e Endpoint) Listenable() error {
 	switch e.Scheme {
 	case SchemeTCP:
 		if e.TLS {
-			return errors.New("vifs:// is dialled, never bound: a tcp door under TLS is a router's")
+			return errors.New("vifs:// is dialed, never bound: a tcp door under TLS is a router's")
 		}
 		return nil
 	case SchemeSite:
@@ -436,7 +436,7 @@ func (a wsAddr) String() string  { return string(a) }
 // RequestSession asks site's router for a new session, within timeout, and
 // returns the link this build joins it by. players, bots (the session's own) and
 // scenario choose from what the site advertises, zero for its defaults; a refusal,
-// an unauthorised one included, is its message. signIn is the process's sign-in for
+// an unauthorized one included, is its message. signIn is the process's sign-in for
 // the site, shown to an https site alone, so it budgets the account, not the address.
 func RequestSession(site string, players, bots int, scenario, signIn string, timeout time.Duration) (target, fingerprint string, err error) {
 	req, err := siteRequest(site, players, bots, scenario, signIn)

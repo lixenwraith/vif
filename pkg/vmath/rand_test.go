@@ -16,7 +16,7 @@ func TestNewSeededRandMatchesDerive(t *testing.T) {
 	}
 }
 
-// TestDeriveSeedSensitivity asserts neighbouring inputs do not collide
+// TestDeriveSeedSensitivity asserts neighboring inputs do not collide
 func TestDeriveSeedSensitivity(t *testing.T) {
 	const label = "glyph"
 	for root := range uint64(1024) {
@@ -38,7 +38,7 @@ func TestDeriveSeedNeverZero(t *testing.T) {
 	}
 }
 
-// TestStreamIndependence asserts labelled streams do not overlap in practice
+// TestStreamIndependence asserts labeled streams do not overlap in practice
 func TestStreamIndependence(t *testing.T) {
 	const labels, depth = 32, 1024
 	seen := make(map[uint64]string, labels*depth)

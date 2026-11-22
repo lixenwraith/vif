@@ -127,7 +127,7 @@ if each then has a world of its own type, the point belongs on the index.
 
 The spiral, the pattern search and the exclusion search each work the layer
 their origin names, a body with depth tested through the layers it spans, and so
-does the directional scan. What a layer means, a storey or a slice of depth, is
+does the directional scan. What a layer means, a story or a slice of depth, is
 the game's, so none was guessed. A form of all three that crosses layers
 searches 26 directions where a layer has 8, and has to settle: the order the
 layers are tried in, a depth in `vmath.Aspect` beside the cell's width and
@@ -274,9 +274,9 @@ to the middle as the map resizes, or a fixed map, closes it.
 ### Let a bot see the Devourer
 
 - Priority: P2
-- Affected files: `internal/bot/catalogue.go`
+- Affected files: `internal/bot/catalog.go`
 
-A bot's catalogue holds no kind for the Devourer, its guts or its omens, so a bot
+A bot's catalog holds no kind for the Devourer, its guts or its omens, so a bot
 flies into its walls, which `default` meets about four minutes into every campaign
 game. Kinds `devourer` and `gut` by their nearest covered cell, and
 `landing` reading an omen's ray as it reads a Kraken's charge, would close it.
@@ -313,7 +313,7 @@ of Lixen's that bind, as they stood on 2026-11-20:
 ### Settle what the learner leaves open
 
 - Priority: P1
-- Affected files: `internal/bot` (`bot.go`, `learner.go`, `catalogue.go`), the
+- Affected files: `internal/bot` (`bot.go`, `learner.go`, `catalog.go`), the
   shipped bot documents
 - Guide: [Bots: Learning](bots.md#learning),
   [what was tried](bots.md#tried-and-not-built)
@@ -337,7 +337,7 @@ of Lixen's that bind, as they stood on 2026-11-20:
   the 50 to 75 rounds that do tell them apart.
 - **Scenarios.** `td` and `armada` carry no bot of their own, so `-bot` there
   seats `default`. `armada`'s waits for its design. `td`'s has its towers to
-  hold, and no kind of the catalogue sights a tower: a kind `tower` first.
+  hold, and no kind of the catalog sights a tower: a kind `tower` first.
 - **An entry as built.** Once a ninth member is proved, the next newcomer
   enters on one round whatever it scored. It is one place of probation a
   proof, under what a run's fielded pair can show: owed a read as an arm by
@@ -347,7 +347,7 @@ of Lixen's that bind, as they stood on 2026-11-20:
 
 - Priority: P3
 - Affected files: `internal/app/script.go` (`learn`, `newGame`),
-  `internal/bot/catalogue.go` (`weight`)
+  `internal/bot/catalog.go` (`weight`)
 - Guide: [Bots: Learning](bots.md#learning)
 
 - A bot learns in a session only its cursor holds. Two bots or more in one
@@ -364,7 +364,7 @@ of Lixen's that bind, as they stood on 2026-11-20:
 ### Let a scenario expose values of its own to a bot
 
 - Priority: P3
-- Affected files: `internal/bot/catalogue.go`, `internal/engine/resource.go`
+- Affected files: `internal/bot/catalog.go`, `internal/engine/resource.go`
 
 A network reads the world, and a guard the bot's status rows, among them whether
 a region of the scenario runs (`fsm.<region>.index`). Neither reads a state of
@@ -539,7 +539,7 @@ wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg
 from the `image/` category, which the digest leaves out and a joiner is not sent.
 What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
 
-- **A tile.** A legend entry that is a wall: its glyph, colours, box style and
+- **A tile.** A legend entry that is a wall: its glyph, colors, box style and
   block mask named once. `MapLayout` gains its cells beside `Spawns`, and the wall
   system lays them on the lay request as it lays a pattern, as one composite or as
   loose walls, a batch a block mask and box style. A 500 by 250 map is 125 KB of
@@ -747,8 +747,8 @@ tutorial attach. What is left:
 - Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
 The next round of lessons ([Tutorial §2](tutorial.md#2-what-it-holds) lists
-what runs) adds `[ ]`, the markers and macros, practises the keys it only tells
-(`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centres from the
+what runs) adds `[ ]`, the markers and macros, practices the keys it only tells
+(`N`, `M`, `C`, `X`, `P`), lays a lesson again on a resize, centers from the
 map's edge (`origin`, [FSM reference](fsm-reference.md#event-emission)),
 and cues a lesson cleared.
 
@@ -901,7 +901,7 @@ since it spells them. What it costs, and what it does not reach:
   removes only sensitive data that rotating a credential cannot make safe, so it
   will not purge them. PR titles and bodies are edited on GitHub by hand.
 
-### Put the font's licence beside the page
+### Put the font's license beside the page
 
 - Priority: P2
 - Affected files: `Makefile` (`page`), `.gitignore`
@@ -909,7 +909,7 @@ since it spells them. What it costs, and what it does not reach:
 `make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which, of
 the page's copies, only the release workflow's web archive carries, so a
 deployment of `web/` serves Hack's web font, inside `vif.wasm`, without its
-licence beside it: only the font's own name table holds the text. Closes with
+license beside it: only the font's own name table holds the text. Closes with
 `page` installing the terminal module's `atlas/LICENSE` as
 `$(PAGE_DIR)/LICENSE.font`, which `.gitignore` takes as it takes the page's
 scripts.
@@ -920,7 +920,7 @@ scripts.
 - Affected files: `internal/render/renderer/overlay.go`
 
 The About window neither wraps a value nor scrolls, so at 80x24 it stops above
-its `licence` and `notices` rows; once it does both it can name what the build
+its `license` and `notices` rows; once it does both it can name what the build
 links, from its build info.
 
 ### Sign the Android build with a release key
@@ -955,7 +955,7 @@ Publish `vif-git` alongside the release-based AUR package.
 
 The command-line tools `toolchain.sh` pins (22.0) warn that `sdkmanager` is
 deprecated for `android sdk`, which ships in the same package. Switch `setup` to it
-once its install, licence and SDK-root flags are settled, bumping the pinned build
+once its install, license and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
 ### Give the Windows zip sound, and confirm it in Windows Terminal
@@ -1066,7 +1066,7 @@ existing ones finish on theirs.
 
 Not yet tried on a cluster: `tc netem` latency, loss and reordering, which should
 recover at the next bounded correction or keyframe; a pod delete or a node
-failure, whose connected-client behaviour should be recorded, with no replacement
+failure, whose connected-client behavior should be recorded, with no replacement
 advertised as the same match; and a full log tmpfs, which should lose a bounded
 amount of log without ending a game.
 
@@ -1335,7 +1335,7 @@ What the feature itself needs, best shaped by deploying it step by step:
   page's thread and `td` does not fit, so the authority belongs in a Worker of its
   own.
 - `-doors-per-address` counted as the join budget counts an address. It counts the
-  dialler's whole host (`addressHost`), so one IPv6 /64 holds that many doors an
+  dialer's whole host (`addressHost`), so one IPv6 /64 holds that many doors an
   address, up to `-tunnels`; the join budget and a session's spectators are
   counted by `network.AdmissionKey`.
 
@@ -1995,7 +1995,7 @@ while those who stayed took the damage. The choices, none of them the netcode's:
 
 - Priority: P3
 - Affected files: `tool/vif-router` (a loopback listener, `allocator.go`),
-  `internal/app/internal/membership/host.go`, the pod's `/health` neighbour,
+  `internal/app/internal/membership/host.go`, the pod's `/health` neighbor,
   `deploy/guest/vif-router.env`, `deploy/update.sh`
 - Guide: [Auth and session design D16](auth-session-design.md#0-decisions),
   [§3.4](auth-session-design.md#34-session-passes),
@@ -2308,7 +2308,7 @@ A request overriding the disruptor's `PulseSpec` for every cursor field by field
 - Affected files: `internal/system/shield.go`, `internal/system/interaction.go`,
   `internal/event/payload.go`
 
-A request naming an entity, a radius and a colour, so a scenario mounts a shield on
+A request naming an entity, a radius and a color, so a scenario mounts a shield on
 a tower or a wall and sizes or tints it from what it watches, as a cursor's energy
 turns its shield on and off and sets its polarity. `ShieldComponent` carries both,
 the capture with it, and any shield draws at them; missing are the request, which
@@ -2387,7 +2387,7 @@ environment could announce as a local event, would keep them on the text.
 Composite members (gold), particles, nuggets and species stay put; a side-scroller
 may want some of them carried with the nearest layer. Decay and blossom change a
 glyph's level, so a glyph they touch changes layer and speed mid-flight. In 256
-colours normal and bright glyphs share one console entry, so only the dark layer
+colors normal and bright glyphs share one console entry, so only the dark layer
 reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
@@ -2400,16 +2400,16 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 The console landed ([Input §9](input-and-modes.md#9-command-mode)). Open:
 
-- `StatusAnnounce` has its rank and colours, but nothing posts one: a server's word
+- `StatusAnnounce` has its rank and colors, but nothing posts one: a server's word
   to its players needs a message on the wire first.
 - A finger scrolls the console, as it does help, only on its one-cell scrollbar; a
   drag over its rows would suit a phone better.
-- Help and telemetry still centre on the whole screen under a touch keyboard, whose
+- Help and telemetry still center on the whole screen under a touch keyboard, whose
   covered rows only the console keeps above (`ComputeConsoleGeometry`).
 
 The options Lixen did not take (2026-11-14), each with what would reopen it:
 
-- Placement: a drop-down from the top, as Quake's, or help's centred window. The band
+- Placement: a drop-down from the top, as Quake's, or help's centered window. The band
   at the foot keeps the newest line beside the status bar it came from and leaves the
   pinned HUD at the top-left in view. Reopen if a scenario needs its map's foot seen
   while the console is open.
@@ -2438,7 +2438,7 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   is and kept as `[play] music_volume`, needs a music gain in the mixer with an
   authoritative readback first; the row then follows `sfx_volume`'s shape on
   every host, the native menu's stepper included. Keymap, backend, paths and
-  colour depth remain startup settings; `:d break` stays on the command line,
+  color depth remain startup settings; `:d break` stays on the command line,
   since a row cannot take its arguments. A Keymap row choosing among the built-in
   table and the keymaps a name finds (`vim`) would reach them where no flag does,
   on Android and for a browser's player, and needs the key table rebuilt in a run.

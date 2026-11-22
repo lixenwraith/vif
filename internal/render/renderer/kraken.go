@@ -15,8 +15,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// KrakenRenderer shades every tentacle disc solid in the color of the last disc
-// covering a cell, rims the rest in the first disc reaching it, and voids the body.
+// KrakenRenderer shades every tentacle disk solid in the color of the last disk
+// covering a cell, rims the rest in the first disk reaching it, and voids the body.
 // A tick moves the Kraken and three frames show it, so the cells are shaded once
 // per change and drawn again as they are. A dead Kraken's last pose burns away
 // under the living.
@@ -26,7 +26,7 @@ type KrakenRenderer struct {
 
 	shaded  krakenShade
 	samples []component.KrakenSample // the pose's own, when the system's are of another
-	disc    []int32                  // per visible cell, one past the last sample whose disc covers it
+	disk    []int32                  // per visible cell, one past the last sample whose disk covers it
 	rim     []int32                  // per visible cell, the key of the first sample whose rim reaches it
 	cells   []terminal.Cell
 	spans   [][2]int      // per visible row, the columns any rim reached
@@ -153,7 +153,7 @@ func (r *KrakenRenderer) shade(of *krakenShade, samples []component.KrakenSample
 
 	// In 256 colors a cell holds console entries, as its color's red channel
 	width, keys := maxX-minX+1, int32(len(samples))
-	disc, rim, colors, cells, drawn := r.disc, r.rim, r.colors, r.cells, r.drawn
+	disk, rim, colors, cells, drawn := r.disk, r.rim, r.colors, r.cells, r.drawn
 	background := visual.RgbBackground
 	if r.palette {
 		background = color.RGB{R: visual.ConBlack}
@@ -162,7 +162,7 @@ func (r *KrakenRenderer) shade(of *krakenShade, samples []component.KrakenSample
 		row := cy*width - minX
 		for cx := span[0]; cx <= span[1]; cx++ {
 			i := row + cx
-			owner, solid := disc[i], true
+			owner, solid := disk[i], true
 			if owner == 0 {
 				owner, solid = keys+1-rim[i], false
 			}
@@ -232,41 +232,41 @@ func (r *KrakenRenderer) shade(of *krakenShade, samples []component.KrakenSample
 	}
 }
 
-// stamp clears the cells last shaded and marks each visible cell with the disc and
+// stamp clears the cells last shaded and marks each visible cell with the disk and
 // the rim that own it. It knows nothing of a burn: a value of one held across its
 // loop cost the living a twentieth of their shading.
 func (r *KrakenRenderer) stamp(samples []component.KrakenSample, minX, minY, maxX, maxY int) {
 	width, height := maxX-minX+1, maxY-minY+1
 	n := width * height
 	for _, c := range r.drawn {
-		r.disc[c.index], r.rim[c.index], r.cells[c.index] = 0, 0, terminal.Cell{}
+		r.disk[c.index], r.rim[c.index], r.cells[c.index] = 0, 0, terminal.Cell{}
 	}
 	r.drawn = r.drawn[:0]
 	if cap(r.cells) < n {
-		r.disc, r.rim, r.cells = make([]int32, n), make([]int32, n), make([]terminal.Cell, n)
+		r.disk, r.rim, r.cells = make([]int32, n), make([]int32, n), make([]terminal.Cell, n)
 	}
-	r.disc, r.rim, r.cells = r.disc[:n], r.rim[:n], r.cells[:n]
+	r.disk, r.rim, r.cells = r.disk[:n], r.rim[:n], r.cells[:n]
 	r.spans = slices.Grow(r.spans[:0], height)[:height]
 	for i := range r.spans {
 		r.spans[i] = [2]int{maxX + 1, minX - 1}
 	}
 
-	// The last disc covering a cell owns it, so a later sample takes it over. The first
+	// The last disk covering a cell owns it, so a later sample takes it over. The first
 	// rim reaching it owns it, so rims key samples counting down from the first and a
-	// cell keeps the greatest key; a rim spans its own disc too, as a covered cell shows
+	// cell keeps the greatest key; a rim spans its own disk too, as a covered cell shows
 	// none. A squared distance outside the rounding margin of both thresholds decides by
 	// comparison alone; within the band the distance itself decides, as the definition has it.
-	disc, rim := r.disc, r.rim
+	disk, rim := r.disk, r.rim
 	keys := int32(len(samples))
 	for i := range samples {
 		s := &samples[i]
 		sx, radius := s.X, s.Radius
 		id, key := int32(i+1), keys-int32(i)
 		rimRadius := s.Radius + visual.KrakenRimReach
-		discT, rimT := s.Radius*s.Radius, rimRadius*rimRadius
-		discIn, rimIn := discT-vmath.RoundingMargin, rimT-vmath.RoundingMargin
+		diskT, rimT := s.Radius*s.Radius, rimRadius*rimRadius
+		diskIn, rimIn := diskT-vmath.RoundingMargin, rimT-vmath.RoundingMargin
 		reach := rimRadius + vmath.RoundingMargin
-		band := 2 * vmath.RoundingMargin * (rimT - discT + 2*vmath.RoundingMargin)
+		band := 2 * vmath.RoundingMargin * (rimT - diskT + 2*vmath.RoundingMargin)
 		x0, x1 := max(minX, int(math.Ceil(s.X-reach-vmath.CellCenter))), min(maxX, int(math.Floor(s.X+reach-vmath.CellCenter)))
 		y0, y1 := max(minY, int(math.Ceil(s.Y-reach/parameter.KrakenRowSquash-vmath.CellCenter))), min(maxY, int(math.Floor(s.Y+reach/parameter.KrakenRowSquash-vmath.CellCenter)))
 		if x0 > x1 {
@@ -276,21 +276,21 @@ func (r *KrakenRenderer) stamp(samples []component.KrakenSample, minX, minY, max
 			span := &r.spans[cy-minY]
 			span[0], span[1] = min(span[0], x0), max(span[1], x1)
 			dy, row := (float64(cy)+vmath.CellCenter-s.Y)*parameter.KrakenRowSquash, (cy-minY)*width-minX
-			discRow, rimRow := disc[row+x0:row+x1+1], rim[row+x0:row+x1+1]
-			rimRow = rimRow[:len(discRow)]
+			diskRow, rimRow := disk[row+x0:row+x1+1], rim[row+x0:row+x1+1]
+			rimRow = rimRow[:len(diskRow)]
 			column := float64(x0) + vmath.CellCenter
-			for c := range discRow {
+			for c := range diskRow {
 				dx := column - sx
 				column++
 				d2 := dx*dx + dy*dy
-				owner, first := discRow[c], int32(0)
-				if d2 <= discIn {
+				owner, first := diskRow[c], int32(0)
+				if d2 <= diskIn {
 					owner = id
 				}
 				if d2 < rimIn {
 					first = key
 				}
-				if math.Abs((d2-discT)*(d2-rimT)) <= band {
+				if math.Abs((d2-diskT)*(d2-rimT)) <= band {
 					distance := math.Sqrt(d2)
 					if distance <= radius {
 						owner = id
@@ -299,7 +299,7 @@ func (r *KrakenRenderer) stamp(samples []component.KrakenSample, minX, minY, max
 						first = key
 					}
 				}
-				discRow[c], rimRow[c] = owner, max(rimRow[c], first)
+				diskRow[c], rimRow[c] = owner, max(rimRow[c], first)
 			}
 		}
 	}

@@ -182,7 +182,7 @@ func (m *Membership) DrainOffTick() {
 	}
 }
 
-// DropParticipant closes one participant's link; a direct neighbour observes the
+// DropParticipant closes one participant's link; a direct neighbor observes the
 // loss and the authority turns it into one departure at one agreed tick.
 func (m *Membership) DropParticipant(id uint32) bool {
 	p, ok := m.SessionTransport().(engine.PeerDroppingPort)
@@ -555,13 +555,13 @@ func (m *Membership) takeOwnPlaceLocked() {
 	m.world.Supersede(false)
 }
 
-// errRedialEnded turns down an admission the redialling run no longer takes.
+// errRedialEnded turns down an admission the redialing run no longer takes.
 var errRedialEnded = errors.New("the run went on without this host")
 
 // redial takes this run back to the host it lost, which it had a link of its own
 // to: a link that dropped on this side alone leaves a place that host's Wraith gives
 // back, under the key the run joined with. The chain names where each host but the
-// first is dialled; the first is at the door this run came in by. Only a person's run
+// first is dialed; the first is at the door this run came in by. Only a person's run
 // redials. The place is let go for the dial to prove, its record as the drop left it.
 func (m *Membership) redial(lost link.PeerID) bool {
 	var (
@@ -591,9 +591,9 @@ func (m *Membership) redial(lost link.PeerID) bool {
 	m.lent.Store(c)
 	m.places.release(c)
 	if relay {
-		m.log.Info("session", "msg", "redialling the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
+		m.log.Info("session", "msg", "redialing the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
 	} else {
-		m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
+		m.log.Info("session", "msg", "redialing the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
 	}
 	core.Go(func() { m.redialDoor(cfg, wire, base, addr, lost, c, relay) })
 	return true
@@ -620,7 +620,7 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 		}
 		if err != nil {
 			// A relay's door nothing answers at may be its run on the way back to a
-			// relay of its own, and is dialled again; a host's is that host gone.
+			// relay of its own, and is dialed again; a host's is that host gone.
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) && !relay {
 				m.log.Info("session", "msg", "the redial was refused", "peer", uint64(lost), "error", err.Error())
 				m.authority.RedialRefused(lost)
@@ -629,7 +629,7 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			}
 			continue
 		}
-		back := &RestartAsk{Notice: notice, Dialled: d}
+		back := &RestartAsk{Notice: notice, Dialed: d}
 		if relay && d.Offer().Host != m.authority.Holder() && m.authority.Fixed() {
 			// A relay above forked a session of its own, which kept this run's place: in
 			// a pinned session nobody else takes the host's place over.
@@ -664,7 +664,7 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 // whose turn has come, for one that takes this run back into its place as a -relay
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
-// admitted; one that refuses outright, or a host with no place, is not dialled again.
+// admitted; one that refuses outright, or a host with no place, is not dialed again.
 func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base JoinBase, lost link.PeerID, c *place) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
@@ -696,7 +696,7 @@ func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base Join
 				}
 				continue
 			}
-			back := &RestartAsk{Notice: "Host connection restored", Dialled: d}
+			back := &RestartAsk{Notice: "Host connection restored", Dialed: d}
 			if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
 				return true

@@ -66,7 +66,7 @@ var krakenLattice = func() (lattice []struct{ r, bend float64 }) {
 	}
 }()
 
-// KrakenSample is one disc along a tentacle, the Index-th from the root; Step runs
+// KrakenSample is one disk along a tentacle, the Index-th from the root; Step runs
 // from 0 at the root to 1 at the tip.
 type KrakenSample struct {
 	X, Y, Radius, Step float64

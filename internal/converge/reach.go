@@ -64,7 +64,7 @@ func newReach(inst Instance, reg *status.Registry) *Reach {
 	}
 }
 
-// BindAdvertised binds the port this participant is dialled on and returns the
+// BindAdvertised binds the port this participant is dialed on and returns the
 // address to declare. want is -listen, empty for the coordinator's own port. An
 // address with no host is completed by the coordinator from the connection.
 func BindAdvertised(want, hostAddr string) (net.Listener, string) {
@@ -255,7 +255,7 @@ func (r *Reach) cutOff() bool {
 }
 
 // dialSuccessor keeps the chain's first link open, so the instance that will have
-// to author already has one when it does. One out of reach is dialled as a followed
+// to author already has one when it does. One out of reach is dialed as a followed
 // host is, each attempt after a longer wait, then left (NetworkHostDialAttempts):
 // the walk dials it again should the authority go. Another successor, or a link to
 // this one that stood and dropped, starts the attempts over.
@@ -454,7 +454,7 @@ func (r *Reach) admitPeerLink(from link.PeerID) error {
 		func(p network.RosterEntry) bool { return p.ID == from }) {
 		return fmt.Errorf("peer link: participant %d is not in this session", from)
 	}
-	// Two participants dialling each other would each keep the link it took first and
+	// Two participants dialing each other would each keep the link it took first and
 	// close the other, leaving neither when they took different ones: both keep the
 	// lower identity's.
 	r.mu.Lock()

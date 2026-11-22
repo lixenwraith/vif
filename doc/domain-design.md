@@ -67,7 +67,7 @@ Bots use the same owner boundary: watching or replaying a bot presents that
 instance's private effects. A short lightning zap survives its first driven tick
 so the next frame can display it.
 
-The same rule admits owner-authored cursor writes: grants and per-tick ageing do
+The same rule admits owner-authored cursor writes: grants and per-tick aging do
 not update a cursor this instance does not simulate.
 
 ### D-3 — Cross the smallest shared outcome
@@ -83,7 +83,7 @@ never enters the replay suffix (D-9).
 | Effect | Crossing artifact |
 |---|---|
 | Direct player hit on a shared target | one combat request per target |
-| Missile, dust, or disruptor area effect | immutable centre/radius/attack geometry |
+| Missile, dust, or disruptor area effect | immutable center/radius/attack geometry |
 | Fusion of a participant's drains | the species and header cell its materialize or spirit lands, from the causal participant |
 | Shared gold member typed | header, member, and typist cursor |
 | Drain breaking a gold member | the member's death |
@@ -326,7 +326,7 @@ participant, and the hash reads it as zero.
 Position is different: it is Shared and changes through
 `EventCursorMoveRequest`. Protection is a deterministic creation constant.
 
-A capture carries owner-authored values so a joiner can materialise remote
+A capture carries owner-authored values so a joiner can materialize remote
 cursors. During an in-session correction, the receiver preserves the values for
 cursors it authors and rebuilds control/roster binding from participant identity.
 No shared-profile system computes a remote owner's values.
@@ -558,7 +558,7 @@ A correction exchange is selective:
 
 1. the authority sends the root of a deterministic manifest, and its section hashes
    to a receiver whose root differs;
-2. an equal root produces a hash-only acknowledgement and no state body;
+2. an equal root produces a hash-only acknowledgment and no state body;
 3. a mismatch descends only into differing sections and pages;
 4. returned pages prove their own hash and must reconstruct the authority root;
 5. any refusal leaves the live world untouched and falls back to a keyframe.
@@ -570,7 +570,7 @@ equal canonical world has another dense-store order.
 
 Correction magnitude is measured during commit. It is telemetry, not a verdict.
 Runtime shared digests identify drift surfaces between corrections but do not
-escalate to a terminal desynchronisation state.
+escalate to a terminal desynchronization state.
 
 An install never moves the clock backwards. A capture behind it is projected: the
 staging world takes the capture, this instance's owner-authored values, its own
@@ -592,7 +592,7 @@ demand. A peer sits at `SnapshotCorrectionTicks` (4); at `SnapshotCadenceMinTick
 recent level or its count of moved entities within `SnapshotRelevanceRadius` of its
 cursor stands `SnapshotUrgentRelevancePercent` above the peers' mean; at
 `SnapshotCadenceQuietTicks` (8) while nothing moves near it and its last installed
-correction changed no entity. A saturated link's plan fits `SnapshotLinkUtilisation`
+correction changed no entity. A saturated link's plan fits `SnapshotLinkUtilization`
 of its measured throughput, and every cadence is raised to a power of two, at most
 `SnapshotCadenceMaxTicks` (60). Degradation is immediate; recovery is stepped.
 Keyframes stretch before cadence slows because whole worlds are more expensive than
@@ -621,7 +621,7 @@ is the Shared placement gate.
 |---|---|
 | **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, devourer, data species, tower, gateway, wall, gold, marker, button, FSM, time |
 | **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
-| **Stamped** | materialise, spirit; domain is resolved per request |
+| **Stamped** | materialize, spirit; domain is resolved per request |
 
 Gold is contested Shared state: typing contribution is tallied per roster slot and
 ties resolve to the lowest slot. Nuggets and loot are personal and cannot be
@@ -689,7 +689,7 @@ exactly.
 
 The player-visible distinction is one badge. A connected link shows
 `nP:s <round trip>` — n players and this instance's hexadecimal slot s, omitted for
-a cursorless coordinator (remote cursors show their slots as `0`–`F`) — coloured
+a cursorless coordinator (remote cursors show their slots as `0`–`F`) — colored
 green, amber or red by the worst of the round trip and its qualifier. At most one
 qualifier shows, worst first:
 
@@ -846,7 +846,7 @@ departing cursor Wraith, and reconnect must take a current world.
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant but a seat or a browser then dials the first candidate on the published succession chain, so the shape is a star with a successor chain over it. |
 | Partition | Survivors walk the **succession list** without a vote: each candidate takes a term of its own in its turn, so losing the first candidate with the authority passes the session to the next, and survivors that reach different candidates play on as different games, each host keeping the others' places as Wraiths. A survivor that reaches no candidate forks. Merging an explicit local fork or a divided game does not work. A fork with no link left departs the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
-| Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
+| Relay scheduling | A relayed participant inherits its neighbor's cadence and repair pricing. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
 | Presentation | A presentation smaller than the map is a viewport the camera scrolls; remote cursor presentation has no interpolation beyond receive scheduling. |
 | Portability | `float64` determinism is a same-build guarantee, not arbitrary cross-platform bit-exact lockstep. |

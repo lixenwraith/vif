@@ -212,7 +212,7 @@ func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
 	f.Valid = true
 }
 
-// settle runs the queued cells down, relaxing each neighbour: a cell reached
+// settle runs the queued cells down, relaxing each neighbor: a cell reached
 // shorter takes that step, one reached equally the lower-numbered step, so a
 // direction is a function of the distances alone and a repair agrees with a
 // recompute. track records every cell whose distance moved.
@@ -277,7 +277,7 @@ func (f *FlowField) Opened(g *SearchGrid, cells, targets []vmath.Point) bool {
 			f.Distances[idx], f.VisitedGen[idx], f.Directions[idx] = best, f.CurrentGen, from
 			f.changed = append(f.changed, idx)
 		}
-		// Only the opening and the neighbours within a step of it can improve
+		// Only the opening and the neighbors within a step of it can improve
 		// anything through the edges it added.
 		d := f.Distances[idx]
 		g.reset(max(0, d-c.Y), 2*c.Y+c.Diag)
@@ -296,7 +296,7 @@ func (f *FlowField) Opened(g *SearchGrid, cells, targets []vmath.Point) bool {
 }
 
 // canonical is the step a cell takes toward the goal: the lowest direction to a
-// neighbour whose distance plus the step is the cell's own, DirTarget when none.
+// neighbor whose distance plus the step is the cell's own, DirTarget when none.
 func (f *FlowField) canonical(g *SearchGrid, idx int32) int8 {
 	for m := g.open[idx]; m != 0; m &= m - 1 {
 		k := bits.TrailingZeros8(m)
@@ -317,7 +317,7 @@ type SearchGrid struct {
 	w, h    int
 	free    []uint8         // bordered, (w+2)×(h+2): 1 where passable
 	open    []uint8         // per cell, a bit per DirVectors index
-	step    [DirCount]int32 // to each neighbour, in field cells
+	step    [DirCount]int32 // to each neighbor, in field cells
 	padStep [DirCount]int   // the same, in the bordered grid
 	ring    [][]int32
 	pending int
@@ -378,7 +378,7 @@ func openMask(up, mid, down []uint8) uint8 {
 }
 
 // Move closes and opens cells, then remasks the directions open from every cell
-// within a step of one, each once however many changed cells it neighbours.
+// within a step of one, each once however many changed cells it neighbors.
 func (g *SearchGrid) Move(closed, opened []vmath.Point) {
 	pw := g.w + 2
 	for _, c := range closed {

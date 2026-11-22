@@ -80,14 +80,14 @@ func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 		}
 		want := peerCursorColor(uint8(slot))
 		if got := cellFor(cursors[slot]).Bg; got != want {
-			t.Fatalf("slot %d drew background %v, want its slot colour %v", slot, got, want)
+			t.Fatalf("slot %d drew background %v, want its slot color %v", slot, got, want)
 		}
 	}
 }
 
 // TestAWraithIsDrawnAsItsLabelAlone: a Wraith keeps its label at the cell it holds,
-// in its slot's colour over whatever lies beneath, so it reads as a place kept for
-// a player rather than a player in play, in either colour mode.
+// in its slot's color over whatever lies beneath, so it reads as a place kept for
+// a player rather than a player in play, in either color mode.
 func TestAWraithIsDrawnAsItsLabelAlone(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
@@ -122,7 +122,7 @@ func TestAWraithIsDrawnAsItsLabelAlone(t *testing.T) {
 	}
 }
 
-// TestAWraithWearsATurningPaleField: in either colour mode the cell a Wraith holds is
+// TestAWraithWearsATurningPaleField: in either color mode the cell a Wraith holds is
 // ringed by the Wraith field, whose lit side turns with game time, while a Wraith off
 // the map draws none.
 func TestAWraithWearsATurningPaleField(t *testing.T) {
@@ -167,20 +167,20 @@ func TestASoloRunDrawsNoPeers(t *testing.T) {
 	}
 }
 
-// TestEverySlotHasItsOwnColour is what makes the colour identifying rather than
+// TestEverySlotHasItsOwnColor is what makes the color identifying rather than
 // decorative: two participants that shared one would read as one participant.
-func TestEverySlotHasItsOwnColour(t *testing.T) {
+func TestEverySlotHasItsOwnColor(t *testing.T) {
 	t.Parallel()
 	seen := make(map[color.RGB]uint8, len(visual.RgbPeerCursor))
 	for slot := range uint8(len(visual.RgbPeerCursor)) {
 		c := peerCursorColor(slot)
 		if prev, dup := seen[c]; dup {
-			t.Fatalf("slots %d and %d share a colour", prev, slot)
+			t.Fatalf("slots %d and %d share a color", prev, slot)
 		}
 		seen[c] = slot
 	}
-	// Past the palette a slot wraps rather than losing its colour entirely: an
-	// unrecognisable peer is still better than an invisible one.
+	// Past the palette a slot wraps rather than losing its color entirely: an
+	// unrecognizable peer is still better than an invisible one.
 	if peerCursorColor(uint8(len(visual.RgbPeerCursor))) != peerCursorColor(0) {
 		t.Fatal("a slot past the palette did not wrap")
 	}
@@ -219,7 +219,7 @@ func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 }
 
 // TestConsolePeerFieldsAreNotDimmed: the console shows a dimmed rim or ember as black, so in
-// 256 colours a peer's shield and ember take the palette the local player's would.
+// 256 colors a peer's shield and ember take the palette the local player's would.
 func TestConsolePeerFieldsAreNotDimmed(t *testing.T) {
 	t.Parallel()
 	gameCtx, cursors := peerWorld(t, 2)

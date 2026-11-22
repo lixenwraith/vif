@@ -1,6 +1,6 @@
 # The gremlin: a hunched thing of the cracks, scuttling. One of the cracked cave's
 # first-rank raiders: RaiderRank1 in ../../macros.toml gives its stats and cycle and
-# the cave its colours.
+# the cave its colors.
 macro = "RaiderRank1"
 theme = "Cracked"
 width = 4

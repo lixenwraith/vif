@@ -344,9 +344,9 @@ func (c *compiler[C]) edge(where, guard string, guardArgs map[string]any, target
 	return e, c.heard
 }
 
-// signalled builds the guard that passes while a signal of the program's is raised,
+// signaled builds the guard that passes while a signal of the program's is raised,
 // and notes it for the edge compiling
-func (c *compiler[C]) signalled(args map[string]any) (func(C) bool, error) {
+func (c *compiler[C]) signaled(args map[string]any) (func(C) bool, error) {
 	a, err := dialect.Decode[signalArgs](args)
 	if err != nil {
 		return nil, err
@@ -442,8 +442,8 @@ func (c *compiler[C]) guard(where, name string, args map[string]any) func(C) boo
 	}
 	g, err := dialect.Tree[func(C) bool]{
 		Leaf: func(name string) (func(map[string]any) (func(C) bool, error), bool) {
-			if name == signalled && c.v.signals != nil {
-				return c.signalled, true
+			if name == signaled && c.v.signals != nil {
+				return c.signaled, true
 			}
 			vb, ok := c.v.verbs[name]
 			if !ok {

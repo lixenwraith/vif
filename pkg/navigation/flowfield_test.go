@@ -60,7 +60,7 @@ func (h *minHeap) pop() heapEntry {
 }
 
 // referenceCompute is Compute as it stood before its wall answers were memoized
-// and its heap became a bucket queue: every neighbour and both corners of every
+// and its heap became a bucket queue: every neighbor and both corners of every
 // diagonal asked of isBlocked directly.
 type wallChecker func(x, y int) bool
 
@@ -185,7 +185,7 @@ func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked wallChecke
 	}
 }
 
-// shortestStep reports whether a direction at (x, y) leads to a neighbour the
+// shortestStep reports whether a direction at (x, y) leads to a neighbor the
 // field may step to whose distance plus the step's cost is the cell's own.
 func shortestStep(f *FlowField, x, y int, isBlocked wallChecker) bool {
 	d := f.GetDirection(x, y)
@@ -255,7 +255,7 @@ func FuzzComputeMatchesReference(f *testing.F) {
 
 // FuzzReachMeasuresWhatTheFieldsRead: from any cell, on any walls, a reach reports
 // for every goal what a field seeded at that goal holds at the cell, and where the
-// cell holds nothing the least over its neighbours a diagonal away, as the snake
+// cell holds nothing the least over its neighbors a diagonal away, as the snake
 // lock read the fields; the scratch one measure leaves does not reach the next.
 func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
 	for seed := range uint64(16) {

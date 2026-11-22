@@ -90,7 +90,7 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	// Buffer is orchestrator-owned; no lock needed for clear
 	o.buffer.Clear()
 
-	// A map smaller than the viewport is centred in the game area, and the margin
+	// A map smaller than the viewport is centered in the game area, and the margin
 	// that leaves is not addressable by any simulation coordinate. The clip is set
 	// per layer here so no renderer has to re-derive the bound, and the frame outside
 	// the map is declared so finalize presents it as out of play, not as empty map.
