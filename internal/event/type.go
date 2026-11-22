@@ -631,14 +631,14 @@ const (
 	EventGatewayDespawnRequest
 	// EventGatewayDespawned (GatewayDespawnedPayload) [shared] signals that a gateway entity has been cleaned up
 	EventGatewayDespawned
-	// EventGatewayHoldRequest (GatewayHoldRequestPayload) [shared] holds every gateway's spawns for a while
+	// EventGatewayHoldRequest (GatewayHoldRequestPayload) [shared] holds one gateway's spawns, or every one's, for a while
 	EventGatewayHoldRequest
 
 	// --- Square ---
 
 	// EventSquareSpawnRequest (SquareSpawnRequestPayload) [shared] lays a magic square of blocks centred on a cell
 	EventSquareSpawnRequest
-	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind that fired its effect
+	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds
 	EventSquareAligned
 	// EventSquareBlockFallen (SquareBlockFallenPayload) [shared] announces a block that lost its last cell
 	EventSquareBlockFallen

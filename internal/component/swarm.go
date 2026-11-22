@@ -3,6 +3,7 @@ package component
 import (
 	"time"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/machine"
 )
 
@@ -33,4 +34,6 @@ type SwarmComponent struct {
 	TeleportTargetX, TeleportTargetY int // header cell the teleport aims at, which the arrival takes while clear
 
 	ChargesCompleted int // Decelerate and Arrive entries: charges, teleports and locks that could do neither
+
+	Gateway core.Entity // the gateway that sent it, 0 for none
 }

@@ -1083,12 +1083,13 @@ type QuasarSpawnRequestPayload struct {
 
 // --- Swarm ---
 
-// SwarmSpawnRequestPayload contains coordinates for creation and the target group
-// the swarm homes on, the cursors' at zero
+// SwarmSpawnRequestPayload contains coordinates for creation, the target group the
+// swarm homes on, the cursors' at zero, and the gateway that sent it, if any
 type SwarmSpawnRequestPayload struct {
-	X             int   `toml:"x"`
-	Y             int   `toml:"y"`
-	TargetGroupID uint8 `toml:"target_group_id"`
+	X             int         `toml:"x"`
+	Y             int         `toml:"y"`
+	TargetGroupID uint8       `toml:"target_group_id"`
+	Gateway       core.Entity `toml:"gateway"`
 }
 
 // KrakenSpawnRequestPayload defaults (0, 0) to the map center, and hit points of 0
@@ -1812,10 +1813,12 @@ type GatewaySpawnRequestPayload struct {
 	UseRouteGraph       bool                  `toml:"use_route_graph"` // If true, request route graph computation for this gateway
 }
 
-// GatewayHoldRequestPayload holds every gateway's spawns and the acceleration of
-// its rate for DurationMs, or for what is left of a longer hold
+// GatewayHoldRequestPayload holds the spawns and the rate's acceleration of the
+// gateway on AnchorEntity, every gateway's when it is 0, for DurationMs or for what
+// is left of a longer hold
 type GatewayHoldRequestPayload struct {
-	DurationMs int `toml:"duration_ms"`
+	DurationMs   int         `toml:"duration_ms"`
+	AnchorEntity core.Entity `toml:"anchor_entity"`
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity

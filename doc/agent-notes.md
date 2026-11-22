@@ -1006,8 +1006,9 @@ Docs · Libraries · Branches.
 - A graph with no network is compared in seconds: a 60 s round at 120x40 under
   `-headless -speed max` takes 0.1 to 0.2 s. At `-lv debug -log-stdout` each FSM
   transition carries a tick that restarts with the game, so `cave`'s
-  `"to":"PlayerCrushed"` and `"to":"PlayerDied"` lines are round lengths. A
-  scenario copied to `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s
+  `"to":"PlayerCrushed"` and `"to":"PlayerDied"` lines are round lengths, as
+  `magic`'s `"to":"Fallen"` are under a `-script` of `press` intents and `-ls fsm`.
+  A scenario copied to `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s
   <name>`.
 - A network graph and its learners are compared in rounds by a scratch test in
   `internal/app`, kept out of the commit. It puts `bot.NewDriver` on a

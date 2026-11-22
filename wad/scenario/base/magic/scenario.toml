@@ -1,16 +1,17 @@
-description = "Magic: turn the rows and columns of a magic square under a swarm; three of a kind in a line strike, hold or shield."
+description = "Magic: turn the rows and columns of a magic square under a swarm; three of a kind in a line strike or hold the gateways it faces, or shield."
 min_players = 1
 max_players = 16
 
 # The Lo Shu square, 2 7 6 over 9 5 1 over 4 3 8, its digits in three kinds: 2 1 3
 # attack, 6 5 4 hold and 8 7 9 defense, one of each along every row and column. A
 # digit selects its block; h and l turn the block's row a place, k and j its column.
-# A line that comes to hold three of a kind fires it: attack strikes every swarm
-# dead, hold stuns them and stops the gateways, defense shields the blocks and
-# pushes the swarms off. Each recharges once it ends, as the legend under the square
-# counts. Swarms pour from eight gateways round the edge and wear the blocks they
-# cover; a fallen block still turns and aligns, but no swarm seeks it. The game is
-# lost with the last block.
+# A line holding three of a kind fires it every 2 s: attack strikes dead the swarms
+# of the gateways the line faces, the right column the three on the right, hold
+# stuns them and stops those gateways for 1 s, defense shields the blocks and pushes
+# the swarms off for 1 s; the legend under the square fills as each recharges.
+# Swarms pour from eight gateways round the edge and wear the blocks they cover; a
+# fallen block still turns and aligns, but no swarm seeks it. The game is lost with
+# the last block.
 
 # The square, its legend, and the gateways' pylons clear of both
 [map]
@@ -36,14 +37,6 @@ params = { message = "string", var = "string" }
 defaults = { var = "fallen" }
 body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, payload_vars = { message = "${var}" } }
 
-[macros.Announce]
-doc = "Flash the screen in `color` and show a status message."
-params = { color = "table", message = "string" }
-body = [
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = "${color}", intensity = 0.6, duration_ms = 300 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" } },
-]
-
 # A gateway's pylon is small and stands on the edge; nothing on the map wears it.
 # Each gateway spawns on an interval of its own, so the swarms come on in a stream
 # rather than in waves, faster by a tenth every 20 seconds down to one in 3.
@@ -58,13 +51,6 @@ body = { parent = "Root", on_enter = [
     ] },
     { trigger = "EventPylonSpawnFailed", target = "${next}" },
     { trigger = "Tick", target = "${next}", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-] }
-
-[macros.Fired]
-doc = "Announce the effect a line of `kind` fired."
-params = { kind = "int", color = "table", message = "string" }
-body = { trigger = "EventSquareAligned", internal = true, guard = "PayloadIntCompare", guard_args = { field = "kind", op = "eq", value = "${kind}" }, actions = [
-    { macro = "Announce", color = "${color}", message = "${message}" },
 ] }
 
 # --- The square ---
@@ -89,42 +75,41 @@ Gate6 = { macro = "Gate", at = "bottom", x = 0, y = -1, interval_ms = 9600, next
 Gate7 = { macro = "Gate", at = "bottom_left", x = 4, y = -1, interval_ms = 8800, next = "Gate8" }
 Gate8 = { macro = "Gate", at = "left", x = 4, y = 0, interval_ms = 10400, next = "Play" }
 
-# Keys are the square's while it stands; a block's fall is told, the last one's ends the game
+# Keys are the square's while it stands; a block's fall is told, the last one's ends
+# the game. The keys are told a while in, so what ended the last game reads first.
 [states.Play]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "123456789hjkl" }, reconcile = true },
-    { macro = "Say", message = "1-9 select a block, h l turn its row and k j its column" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "1-9 select a block, h l turn its row and k j its column" }, delay_ms = 2000 },
 ]
 on_exit = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "" }, reconcile = true },
 ]
 transitions = [
-    { macro = "Fired", each = { kind = [0, 1, 2], message = ["Strike", "Hold", "Shield"], color = [
-        { r = 255, g = 70, b = 40 }, { r = 255, g = 200, b = 0 }, { r = 0, g = 220, b = 255 },
-    ] } },
     { trigger = "EventSquareBlockFallen", target = "Fallen", guard = "PayloadIntCompare", guard_args = { field = "remaining", op = "eq", value = 0 } },
     { trigger = "EventSquareBlockFallen", internal = true, capture_vars = { digit = "fallen" }, actions = [
         { macro = "Say", message = "Block {} fell" },
     ] },
 ]
 
+# A lost game flashes red as long as main's, then starts over; the reset clears the
+# status bar, so the new game opens with what ended the last
 [states.Fallen]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
-    { macro = "Announce", color = { r = 255, g = 0, b = 0 }, message = "The square has fallen" },
-]
-on_exit = [
-    { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
 ]
 transitions = [
-    { trigger = "Tick", target = "Reset", guard = "StateTimeExceeds", guard_args = { ms = 4000 } },
+    { trigger = "Tick", target = "Reset", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
 ]
 
 [states.Reset]
 parent = "Root"
-on_enter = [{ action = "EmitEvent", event = "EventGameResetRequest" }]
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+    { macro = "Say", message = "The square has fallen" },
+]
 
 # --- Player: a slot with no cursor, whose keys are its only input ---
 

@@ -798,9 +798,11 @@ hp, block_width, block_height, target_group_id }` lays it centred on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
 attack, hold and defense; one square stands at a time. `EventSquareAligned { kind,
 line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0 attack, 1
-hold, 2 defense), and `EventSquareBlockFallen { digit, remaining }` a block lost
-its last cell. `EventGatewayHoldRequest { duration_ms }` holds every gateway's
-spawns. `wad/scenario/base/magic` is the worked example.
+hold, 2 defense), once a cooldown while it holds, and `EventSquareBlockFallen {
+digit, remaining }` a block lost its last cell. `EventGatewayHoldRequest {
+duration_ms, anchor_entity }` holds the spawns of the gateway on that anchor, every
+gateway's when it names none. A gateway's swarm carries it (`gateway` in
+`EventSwarmSpawnRequest`), which is how a line finds the swarms it faces. `wad/scenario/base/magic` is the worked example.
 
 ### Splash text and glyph lines
 
