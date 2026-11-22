@@ -249,6 +249,15 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	x := sq.X + (w-total)/2
+	if r.console != nil {
+		// The shield's rim crosses this row, a solid band on a console the text drowns in
+		for i := range total {
+			if sx, sy, visible := ctx.MapToScreen(x+i, y); visible {
+				buf.SetWithBg(sx, sy, ' ', visual.RgbBlack, visual.RgbBlack)
+				buf.SetBg256(sx, sy, visual.ConBlack)
+			}
+		}
+	}
 	for kind := range component.SquareKinds {
 		spec, colors := &component.SquareKinds[kind], &visual.SquareKinds[kind]
 		tc, console, attr := visual.RgbSquareFallen, visual.ConGray, terminal.AttrNone
