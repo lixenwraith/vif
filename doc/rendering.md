@@ -313,7 +313,9 @@ exact. Bot play at 240x66 under tmux (24 frames a second), `sandbox/termbench` o
 capture of each build: 27.8 KB a frame before, 20.6 KB after. Slow fields (storm,
 pulse, shield) and materialize's lingering trail showed the rounding as bands and
 stay exact; a plain nearest xterm color, which has only a gray near most dim
-glows, turned the ember's rings gray too.
+glows, turned the ember's rings gray too. The Devourer's hold (§7) would send the
+explosion 23 KB/s to rounding's 12.5 and exact's 29, one every quarter second at
+200x60: its glow moves most cells further each tick than a hold keeps.
 
 A third pass then repaints the void region: the part of the frame outside the
 playfield (the centering margin, and the gutter cells beside it) is filled with
@@ -494,8 +496,15 @@ outward, a wet lip, grain, veins and a beat, a sample's texture worked out once 
 the flesh first covers it and the lip and the gloss read from tables. A gut is
 stamped in chords within `devourerGutSlack` of its centreline and shaded from a
 table over its tube. The fitted cells are kept as runs along a row, a run of whole
-cells written in one call (`SetRunWithBg`). The console has no quadrants: a cell
-half covered or more takes the `Devourer256Tiers` entry nearest its mean.
+cells written in one call (`SetRunWithBg`). The folds' drift and the beat move
+nearly every cell a little each frame, half of them by a CIELAB distance under 2,
+which no one sees and the terminal is sent all the same. So in truecolor a fitted
+cell keeps the cell the picture before drew there while each of its quadrants
+stays within `DevourerHold` of the new fit (`devourerNear`): the error stays under
+it, and only a cell that visibly moved is sent. Rounding its colors as §6 rounds
+the explosion's sent about as many bytes and showed distances up to 11, blotches
+whose edges crawled with the folds. The console has no quadrants: a cell half
+covered or more takes the `Devourer256Tiers` entry nearest its mean.
 
 A hit lights a gut where it landed. Combat names what it struck
 (`CombatComponent.HitEntity`), and while the hit flash runs the gut's cells within
@@ -506,11 +515,16 @@ so a hit paints nothing anew.
 
 `BenchmarkDevourer` at 200x60 with two guts, medians of seven alternating runs on
 one core: a tick's three frames 1.74 ms with ascimage v0.1.3's fit and each frame
-painted whole as it showed, 0.61 ms now with v0.1.4's; the tick 197 to 174 µs,
-the simulation the same tick for tick. With four guts a render frame's mean went
-from 0.59 to 0.19 ms and its 99th percentile, the frame that paints, from 3.2 to
-0.57 ms. Laying the swell field's lattice planes once for the frames they serve
-would take some 40 µs of the shape's 74 µs build; not built.
+painted whole as it showed, 0.61 ms with v0.1.4's; the tick 197 to 174 µs, the
+simulation the same tick for tick. With four guts a render frame's mean went from
+0.59 to 0.19 ms and its 99th percentile, the frame that paints, from 3.2 to 0.57
+ms. The hold, over 200 ticks of the embedded region with the Devourer layer alone,
+each frame encoded by the terminal module: 7,205 cells and 235 KB a Devourer frame,
+2.38 MB/s, to 3,476 cells, 118 KB and 1.20 MB/s; every layer together 2.39 to 1.23
+MB/s. Its CIELAB costs the renderer: a tick's three frames 0.81 to 1.15 ms and a
+frame's 99th percentile 0.99 to 1.38 ms, where encoding takes 1.4 ms a second less.
+Laying the swell field's lattice planes once for the frames they serve would take
+some 40 µs of the shape's 74 µs build; not built.
 
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws typeable text in its cell, only the cell's top glyph, the one
