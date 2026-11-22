@@ -804,8 +804,9 @@ each standing block nearest its middle holds the group's anchor, so a swarm wear
 a block down to its last cell; a group holds eight, so while all nine stand the
 middle block, which the others ring, holds none. A swarm's body costs each block
 cell it covers a hit point a damage window (the `contact` family). A block with no
-cell left falls, still turning and aligning; the game is lost with the last, and
-starts over four seconds later.
+cell left falls, still turning and aligning; the game is lost with the last, under
+a red strobe as long as main's, and starts over on "The square has fallen", the
+keys told 2 s in.
 
 ## 11. System inventory
 
