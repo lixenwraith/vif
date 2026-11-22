@@ -195,7 +195,7 @@ func overlapOf(w *engine.World, cursor core.Entity, cells []memberCell) CursorOv
 	return result
 }
 
-// shieldCovers reports whether a shield centred on (cx, cy) reaches cell (x, y): up,
+// shieldCovers reports whether a shield centered on (cx, cy) reaches cell (x, y): up,
 // with a reach, and the cell within its radius at the cell aspect
 func shieldCovers(w *engine.World, shield *component.ShieldComponent, cx, cy, x, y int) bool {
 	if !shield.Active || !(shield.Radius > 0) {

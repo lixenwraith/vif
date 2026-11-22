@@ -1,6 +1,6 @@
 # The lynx: its ears pricked, it blinks and bristles. One of the moss cave's
 # fourth-rank raiders: RaiderRank4 in ../../macros.toml gives its stats and cycle
-# and the cave its colours.
+# and the cave its colors.
 macro = "RaiderRank4"
 theme = "Moss"
 width = 5

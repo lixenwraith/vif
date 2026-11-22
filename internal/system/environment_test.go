@@ -212,7 +212,7 @@ func TestWindOverrideExpiryAndCancel(t *testing.T) {
 		t.Fatalf("cancel left state: %+v", *s)
 	}
 	if x, y := windAcceleration(w, drain); x != 0 || y != 0 {
-		t.Fatalf("cancelled wind acceleration = (%v,%v), want zero", x, y)
+		t.Fatalf("canceled wind acceleration = (%v,%v), want zero", x, y)
 	}
 }
 
@@ -481,7 +481,7 @@ func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 	phase := s.drift.Phase
 	s.startDrift(&event.DriftStartPayload{Direction: math.Pi, Speed: 2})
 	if !s.drift.Endless || s.drift.Speed != 2 || s.drift.Phase != phase {
-		t.Fatalf("replacement = %+v, want speed 2 until cancelled with phase %v kept", s.drift, phase)
+		t.Fatalf("replacement = %+v, want speed 2 until canceled with phase %v kept", s.drift, phase)
 	}
 	s.startDrift(&event.DriftStartPayload{Direction: 0, Speed: 2})
 	if s.drift.Phase != ([driftLevels][2]int64{}) {
@@ -695,7 +695,7 @@ func (ew *entryWorld) shown() map[component.PositionComponent]rune {
 	return cells
 }
 
-// readRow reads cells on one row as a run of neighbouring columns
+// readRow reads cells on one row as a run of neighboring columns
 func readRow(t *testing.T, cells map[component.PositionComponent]rune) (text string, row, lo, hi int) {
 	t.Helper()
 	row, lo, hi = -1, math.MaxInt, math.MinInt

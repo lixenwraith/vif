@@ -10,7 +10,7 @@ import (
 // over one grid: what a field seeded at a goal reads at the cell, as a step costs
 // the same both ways, a blocked goal counting from its first passable ring at the
 // ring's gap costs. A blocked cell, or a goal it cannot reach, measures from its
-// passable neighbours a diagonal away, as a field read does. Scratch is reused.
+// passable neighbors a diagonal away, as a field read does. Scratch is reused.
 type Reach struct {
 	dist    []int32
 	seen    []uint32 // generation a cell's distance was written at
@@ -72,8 +72,8 @@ func (r *Reach) Nearest(g *SearchGrid, c *Costs, x, y int, goals []vmath.Point, 
 	return r.choice(out)
 }
 
-// pinched reports whether the passable (x, y) has a passable neighbour a diagonal
-// away past two blocked corners: the only neighbour its own search may not reach,
+// pinched reports whether the passable (x, y) has a passable neighbor a diagonal
+// away past two blocked corners: the only neighbor its own search may not reach,
 // and so the only one Measure's fallback can find a goal through, which a search
 // stopped at the choice cannot rule out.
 func pinched(g *SearchGrid, x, y int) bool {
@@ -129,7 +129,7 @@ func (r *Reach) seed(idx, goal, gap int32) {
 	r.seedAt[idx] = int32(len(r.seeds) - 1)
 }
 
-// around searches from the passable neighbours of (x, y), each a diagonal away.
+// around searches from the passable neighbors of (x, y), each a diagonal away.
 func (r *Reach) around(g *SearchGrid, c *Costs, x, y int, out []int32, choosing bool) {
 	r.starts = r.starts[:0]
 	for _, d := range DirVectors {

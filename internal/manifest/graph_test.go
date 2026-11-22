@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 )
 
-// buildWorld returns a world carrying every manifest system, initialised by the
+// buildWorld returns a world carrying every manifest system, initialized by the
 // engine's pass as the app does; a dependency on an unregistered system or a cycle
 // fails here
 func buildWorld(t *testing.T) *engine.World {
@@ -23,7 +23,7 @@ func buildWorld(t *testing.T) *engine.World {
 }
 
 // TestSystemGraphResolves asserts every declared dependency names a registered
-// system and the graph is acyclic, so the startup pass initialises every system
+// system and the graph is acyclic, so the startup pass initializes every system
 func TestSystemGraphResolves(t *testing.T) {
 	buildWorld(t)
 }

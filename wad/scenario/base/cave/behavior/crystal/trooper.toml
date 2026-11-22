@@ -1,6 +1,6 @@
 # The trooper: a helmeted walker swinging its arms. One of the crystal cave's
 # second-rank raiders: RaiderRank2 in ../../macros.toml gives its stats and cycle
-# and the cave its colours.
+# and the cave its colors.
 macro = "RaiderRank2"
 theme = "Crystal"
 width = 4

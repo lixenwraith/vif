@@ -177,12 +177,12 @@ func TestGrayoutFollowsTheCursorItNames(t *testing.T) {
 
 	transient.HandleEvent(scopeEvent(event.EventGrayoutStart, remote))
 	if w.Resources.View.Grayout.Active {
-		t.Fatal("another participant's quasar greyed out this instance's screen")
+		t.Fatal("another participant's quasar grayed out this instance's screen")
 	}
 
 	transient.HandleEvent(scopeEvent(event.EventGrayoutStart, local))
 	if !w.Resources.View.Grayout.Active {
-		t.Fatal("this cursor's own quasar did not grey out its screen")
+		t.Fatal("this cursor's own quasar did not gray out its screen")
 	}
 
 	transient.HandleEvent(scopeEvent(event.EventGrayoutEnd, remote))

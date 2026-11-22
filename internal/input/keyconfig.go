@@ -165,12 +165,12 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 		reset = append(reset, k)
 		notes = append(notes, "reset to the default: "+why[i])
 	}
-	var spelt []toml.Key // the shipped bindings of keys the document binds in another spelling
+	var spelled []toml.Key // the shipped bindings of keys the document binds in another spelling
 	for name, v := range shipped.Tree() {
 		table, _ := v.(map[string]any)
 		for k := range table {
 			if as := boundAs(toml.Key{name, k}); as != "" && as != k {
-				spelt = append(spelt, toml.Key{name, k})
+				spelled = append(spelled, toml.Key{name, k})
 			}
 		}
 	}
@@ -181,7 +181,7 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	}
 	var added []toml.Key
 	if fill {
-		for _, k := range spelt {
+		for _, k := range spelled {
 			if _, err := shipped.Delete(k); err != nil {
 				return nil, nil, err
 			}

@@ -309,7 +309,7 @@ func (w *World) HasSystem(name string) bool {
 	return false
 }
 
-// InitSystems initialises every registered system in dependency order, a
+// InitSystems initializes every registered system in dependency order, a
 // required system before the ones naming it, and reports a dependency on an
 // unregistered system or a cycle. The app runs it once the set is complete and
 // the scheduler on a game reset once the world is cleared; the graph orders only
@@ -546,7 +546,7 @@ func (w *World) Update() {
 	})
 }
 
-// Rand returns the labelled RNG stream for a domain in the current session.
+// Rand returns the labeled RNG stream for a domain in the current session.
 // Single seeding entry point for systems: never seed from a clock.
 func (w *World) Rand(d core.Domain, label string) *vmath.FastRand {
 	return w.Resources.Rand.Stream(d, label)
@@ -969,7 +969,7 @@ func (w *World) UpdateBoundsRadius() {
 
 // ShieldReach is a shield's box half extents in whole cells: its radius in columns
 // and the rows the cell aspect makes of it, none without a reach. Each stops at the
-// map's size, which no cell's distance from a centre on the map passes, so any
+// map's size, which no cell's distance from a center on the map passes, so any
 // radius a game or a peer writes converts to a bounded box.
 func (w *World) ShieldReach(shield *component.ShieldComponent) (int, int) {
 	if !(shield.Radius > 0) {

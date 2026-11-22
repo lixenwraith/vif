@@ -51,7 +51,7 @@ var explosionPalettes = [3]explosionPalette{
 	{visual.RgbEyeExplosionEdge, visual.RgbEyeExplosionMid, visual.RgbEyeExplosionCore},
 }
 
-// explosionTypeRenderer draws one explosion type's field in the colour mode chosen at construction
+// explosionTypeRenderer draws one explosion type's field in the color mode chosen at construction
 type explosionTypeRenderer func(ctx render.RenderContext, buf *render.RenderBuffer, accBuffer []float64,
 	explosionType event.ExplosionType, minX, maxX, minY, maxY int)
 

@@ -126,8 +126,8 @@ func (c *Corrections) owedLocked(ids []uint32) []uint32 {
 }
 
 // canAnswerEveryParticipantLocked reports whether every participant can be
-// answered. A relayed one can when its forwarding neighbour holds retention, which
-// that neighbour states in its own answer since it is the only instance that knows.
+// answered. A relayed one can when its forwarding neighbor holds retention, which
+// that neighbor states in its own answer since it is the only instance that knows.
 // Otherwise the session keeps the whole-body flood, and says why.
 // Caller MUST hold publishMu.
 func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
@@ -231,6 +231,6 @@ func (c *Corrections) applyUnserved(body []byte) {
 	c.selective.wantKeyframe = true
 	c.selectiveMu.Unlock()
 	m.KeyframeFallback.Add(1)
-	c.log.Debug("converge", "msg", "repair unavailable from the relaying neighbour",
+	c.log.Debug("converge", "msg", "repair unavailable from the relaying neighbor",
 		"peer", u.From, "tick", u.Tick, "reason", u.Reason)
 }

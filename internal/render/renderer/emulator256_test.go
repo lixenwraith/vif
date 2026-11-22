@@ -14,7 +14,7 @@ import (
 
 // TestEmulatorUIKeepsItsOwnColors: an emulator in 256 colors draws the console's entries in
 // its theme, so the status bar and the overlay leave the console pass with truecolor's colors,
-// which xterm's cube shows as they are, the bar labelled 256; a text console gets both in its
+// which xterm's cube shows as they are, the bar labeled 256; a text console gets both in its
 // entries.
 func TestEmulatorUIKeepsItsOwnColors(t *testing.T) {
 	t.Parallel()

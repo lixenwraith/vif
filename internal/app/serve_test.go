@@ -517,7 +517,7 @@ func TestServerModeIsWiredWithoutATerminal(t *testing.T) {
 		{"no bind address", func(c *Config) { c.Membership.HostAddress = "" }},
 		{"more guests than slots", func(c *Config) { c.Membership.Participants = parameter.MaxPlayers + 1 }},
 		{"a simulation rate", func(c *Config) { c.TimeScaleSpec = "2" }},
-		{"a colour mode", func(c *Config) { c.ColorModeSet = true }},
+		{"a color mode", func(c *Config) { c.ColorModeSet = true }},
 	} {
 		cfg := runConfig{Config: base()}
 		tc.apply(&cfg.Config)

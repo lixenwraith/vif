@@ -306,7 +306,7 @@ func (s *DevourerSystem) build(e core.Entity, d *component.DevourerComponent) {
 	}
 }
 
-// layGut claims the cells within DevourerGutRadius of a gut's centreline that the
+// layGut claims the cells within DevourerGutRadius of a gut's centerline that the
 // body leaves open, and returns the cell its middle hangs over
 func (s *DevourerSystem) layGut(f *footprint, g *component.DevourerGutComponent, frame int64) (int, int) {
 	x0, y0, x1, y1 := s.shape.GutEnds(g.From, g.To)

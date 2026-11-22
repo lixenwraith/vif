@@ -14,7 +14,7 @@ type backgroundOverlay struct {
 }
 
 // voidRegion is the part of the play frame no map cell covers: the margin a map
-// smaller than the viewport is centred in, and the gutter cells beside it. Left at
+// smaller than the viewport is centered in, and the gutter cells beside it. Left at
 // the theme background it reads as playable space, so finalize paints it separately.
 type voidRegion struct {
 	active    bool
@@ -533,7 +533,7 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 // === OUTPUT ===
 
 // finalize gives every cell nothing painted its region's background: the theme
-// background (or strobe overlay) on the map, the void colour around it. Every cell
+// background (or strobe overlay) on the map, the void color around it. Every cell
 // also leaves with a glyph: after a resize the terminal records its screen as blank
 // black cells, so a blank black cell would match that record and never be sent.
 func (b *RenderBuffer) finalize() {
@@ -546,7 +546,7 @@ func (b *RenderBuffer) finalize() {
 
 // fillVoid paints the declared non-playable margin. Only cells nothing drew are
 // repainted, so a UI or debug layer that legitimately reaches into the margin —
-// an overlay panel, a pinned readout — keeps the colours it composed. The four
+// an overlay panel, a pinned readout — keeps the colors it composed. The four
 // bands are walked rather than the whole area so the playfield, which is most of
 // the game area, is never visited.
 func (b *RenderBuffer) fillVoid() {
@@ -564,7 +564,7 @@ func (b *RenderBuffer) fillVoid() {
 	b.fillVoidBand(max(p.X1, a.X0), a.X1, midY0, midY1)
 }
 
-// fillVoidBand fills one half-open span of untouched cells with the void colour
+// fillVoidBand fills one half-open span of untouched cells with the void color
 func (b *RenderBuffer) fillVoidBand(x0, x1, y0, y1 int) {
 	for y := y0; y < y1; y++ {
 		row := y * b.width

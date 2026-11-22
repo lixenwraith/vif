@@ -342,7 +342,7 @@ func (c *ConfigResource) FloorMapSize(width, height int) (int, int) {
 }
 
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
-// the camera crops a map at least as large as the viewport, and the centring
+// the camera crops a map at least as large as the viewport, and the centering
 // offset when the map is smaller. One definition, because the render and pointer
 // transforms are inverses: where the renderer draws a cell is where a click lands.
 func (c *ConfigResource) MapOffset() (int, int) {
@@ -358,7 +358,7 @@ func (c *ConfigResource) MapOffset() (int, int) {
 
 // ViewportToMap converts a viewport coordinate to the map cell drawn there,
 // inverting MapOffset and the camera. ok is false when the coordinate names no
-// map cell, which on a centred map is every cell of the surrounding margin.
+// map cell, which on a centered map is every cell of the surrounding margin.
 func (c *ConfigResource) ViewportToMap(vx, vy int) (mapX, mapY int, ok bool) {
 	if vx < 0 || vx >= c.ViewportWidth || vy < 0 || vy >= c.ViewportHeight {
 		return 0, 0, false
@@ -807,7 +807,7 @@ func (pr *PlayerResource) PredictedDepth() int { return pr.prediction.count }
 // --- Random Resource ---
 
 // RandResource is the root of every simulation RNG stream.
-// Systems draw a labelled generator in Init and keep it for their lifetime; no
+// Systems draw a labeled generator in Init and keep it for their lifetime; no
 // simulation path seeds from a clock.
 type RandResource struct {
 	root    uint64
@@ -821,7 +821,7 @@ type RandResource struct {
 	streams  map[streamKey]*vmath.FastRand
 }
 
-// streamKey names one labelled generator. Domain is part of the identity: a dual
+// streamKey names one labeled generator. Domain is part of the identity: a dual
 // system draws the same label in both domains and the two must not collapse (D-8).
 type streamKey struct {
 	domain core.Domain
@@ -858,9 +858,9 @@ func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 // leaves a world holding two sessions' streams.
 func (r *RandResource) SetSession(n uint64) { r.session.Store(n) }
 
-// Stream returns a fresh labelled generator for a domain in the current session and
+// Stream returns a fresh labeled generator for a domain in the current session and
 // records it for SaveStreams; a re-Init after a reset needs a fresh one. Two live
-// holders of one name would be one stream by name and two by behaviour, so each
+// holders of one name would be one stream by name and two by behavior, so each
 // system draws under its own Name().
 func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
 	g := vmath.NewSeededRand(r.DomainRoot(d), label)
@@ -964,7 +964,7 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY, edge int) {
 	if !parameter.CameraEnabled {
 		return
 	}
-	// Nothing to scroll: the renderer centres a map smaller than its viewport
+	// Nothing to scroll: the renderer centers a map smaller than its viewport
 	if c.MapWidth <= c.ViewportWidth && c.MapHeight <= c.ViewportHeight {
 		c.CameraX, c.CameraY = 0, 0
 		return
@@ -1468,7 +1468,7 @@ type NetworkResource struct {
 	// its player brings back to its Wraith should it leave. Under the world lock.
 	OnOwnState func(*event.CursorStatePayload)
 
-	// OnPeerLost reports a direct neighbour's departure to the session layer, which
+	// OnPeerLost reports a direct neighbor's departure to the session layer, which
 	// starts a succession if it was the one authoring; OnDeparture's identity
 	// release is local bookkeeping. It reports whether the departure was this
 	// instance's own doing, a seat it dropped, which is news to nobody.

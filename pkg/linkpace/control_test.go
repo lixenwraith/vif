@@ -20,7 +20,7 @@ func gameBounds() Bounds {
 		NominalKeyframe:     10,
 		MaxKeyframe:         30,
 		FloorKeyframeTicks:  60,
-		Utilisation:         0.75,
+		Utilization:         0.75,
 		UrgentDrift:         50,
 		UrgentRelevance:     100,
 		QuietCadence:        8,
@@ -62,7 +62,7 @@ func TestBoundsRefuseAContradictoryEnvelope(t *testing.T) {
 		"cadence order":      func(b *Bounds) { b.NominalCadenceTicks = 1 },
 		"keyframe order":     func(b *Bounds) { b.NominalKeyframe = 0; b.MinKeyframe = 2 },
 		"floor under a step": func(b *Bounds) { b.FloorKeyframeTicks = 1; b.MinCadenceTicks = 2; b.MinKeyframe = 2 },
-		"utilisation":        func(b *Bounds) { b.Utilisation = 0 },
+		"utilization":        func(b *Bounds) { b.Utilization = 0 },
 	}
 	for name, break_ := range cases {
 		b := gameBounds()
@@ -108,7 +108,7 @@ func TestKeyframesStretchBeforeTheCadenceSlows(t *testing.T) {
 	// Just under the nominal schedule's cost: enough to keep the cadence and
 	// stretch the interval.
 	c := mustController(t, b)
-	p := c.Update(measured(nominal*0.95/b.Utilisation, 0), s, Demand{})
+	p := c.Update(measured(nominal*0.95/b.Utilization, 0), s, Demand{})
 	if p.CadenceTicks != b.NominalCadenceTicks {
 		t.Fatalf("cadence slowed to %d before the keyframe interval stretched", p.CadenceTicks)
 	}
@@ -118,7 +118,7 @@ func TestKeyframesStretchBeforeTheCadenceSlows(t *testing.T) {
 
 	// Well under: no interval saves enough, so the cadence has to give.
 	c = mustController(t, b)
-	p = c.Update(measured(nominal*0.2/b.Utilisation, 0), s, Demand{})
+	p = c.Update(measured(nominal*0.2/b.Utilization, 0), s, Demand{})
 	if p.CadenceTicks <= b.NominalCadenceTicks {
 		t.Fatalf("cadence held at %d on a link carrying a fifth of the nominal rate", p.CadenceTicks)
 	}
@@ -174,7 +174,7 @@ func TestABreachIsReportedRatherThanAdaptedTo(t *testing.T) {
 	}
 
 	c := mustController(t, b)
-	p := c.Update(measured(floorCost*0.5/b.Utilisation, 0), s, Demand{})
+	p := c.Update(measured(floorCost*0.5/b.Utilization, 0), s, Demand{})
 	if !p.FloorBreached {
 		t.Fatalf("a link at half the floor's cost reported no breach: %+v", p)
 	}
@@ -190,7 +190,7 @@ func TestABreachIsReportedRatherThanAdaptedTo(t *testing.T) {
 
 	// Exactly at the floor's cost is not a breach: the guarantee holds.
 	c = mustController(t, b)
-	if p := c.Update(measured(floorCost/b.Utilisation, 0), s, Demand{}); p.FloorBreached {
+	if p := c.Update(measured(floorCost/b.Utilization, 0), s, Demand{}); p.FloorBreached {
 		t.Fatalf("a link that carries the floor exactly reported a breach: %+v", p)
 	}
 }
@@ -204,7 +204,7 @@ func TestDegradationIsImmediateAndRecoveryIsStepped(t *testing.T) {
 	fat := measured(10<<20, 0)
 	c.Update(fat, s, Demand{})
 
-	thin := measured(b.FloorBps(s)*1.05/b.Utilisation, 0)
+	thin := measured(b.FloorBps(s)*1.05/b.Utilization, 0)
 	slow := c.Update(thin, s, Demand{})
 	if slow.CadenceTicks <= b.NominalCadenceTicks {
 		t.Fatalf("a narrowed link did not slow the cadence in one decision: %+v", slow)
@@ -228,7 +228,7 @@ func TestDegradationIsImmediateAndRecoveryIsStepped(t *testing.T) {
 
 // TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits is relevance and
 // priority as the controller sees them: a participant whose own picture is
-// drifting, or whose neighbourhood is busy, is published to faster — and one
+// drifting, or whose neighborhood is busy, is published to faster — and one
 // with neither is published to slower, which is what frees the budget for the
 // first.
 func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
@@ -242,7 +242,7 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 	}
 	near := mustController(t, b).Update(fat, s, Demand{Known: true, Relevance: b.UrgentRelevance})
 	if near.CadenceTicks != b.MinCadenceTicks {
-		t.Fatalf("a peer with a busy neighbourhood got cadence %d", near.CadenceTicks)
+		t.Fatalf("a peer with a busy neighborhood got cadence %d", near.CadenceTicks)
 	}
 	quiet := mustController(t, b).Update(fat, s, Demand{Known: true, Idle: true})
 	if quiet.CadenceTicks != b.QuietCadence {
@@ -264,7 +264,7 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 // widens the range.
 func TestDemandCannotBuyACadenceTheLinkCannotCarry(t *testing.T) {
 	b, s := gameBounds(), stormSizes()
-	thin := measured(b.FloorBps(s)*1.1/b.Utilisation, 0)
+	thin := measured(b.FloorBps(s)*1.1/b.Utilization, 0)
 	urgent := mustController(t, b).Update(thin, s, Demand{Known: true, Drift: 400, Relevance: 400})
 	if urgent.CadenceTicks == b.MinCadenceTicks {
 		t.Fatalf("demand bought the minimum cadence on a link at the floor: %+v", urgent)
@@ -291,10 +291,10 @@ func TestAdmitRefusesALinkThatCannotCarryTheFloor(t *testing.T) {
 	b, s := gameBounds(), stormSizes()
 	need := b.FloorBps(s)
 
-	if err := Admit(b, need/b.Utilisation, s); err != nil {
+	if err := Admit(b, need/b.Utilization, s); err != nil {
 		t.Fatalf("a link that exactly carries the floor was refused: %v", err)
 	}
-	err := Admit(b, need*0.4/b.Utilisation, s)
+	err := Admit(b, need*0.4/b.Utilization, s)
 	if err == nil {
 		t.Fatal("a link at 40%% of the floor was admitted")
 	}
@@ -320,16 +320,16 @@ func TestAdmitRefusesALinkThatCannotCarryTheFloor(t *testing.T) {
 	if err := AdmitMetrics(b, Metrics{Throughput: 1, Ready: true, Saturated: false}, s); err != nil {
 		t.Fatalf("admission was refused on an idle sender's rate: %v", err)
 	}
-	if err := AdmitMetrics(b, measured(need*0.1/b.Utilisation, 0), s); err == nil {
+	if err := AdmitMetrics(b, measured(need*0.1/b.Utilization, 0), s); err == nil {
 		t.Fatal("a measured link a tenth of the floor was admitted")
 	}
 }
 
-// TestTheFloorIsPricedAtTheCheapestScheduleThatHonoursIt pins what "the link
+// TestTheFloorIsPricedAtTheCheapestScheduleThatHonorsIt pins what "the link
 // cannot sustain the floor" is actually measured against: not a keyframe alone,
 // but the cheapest legal schedule that delivers one per window — which on a
 // bounded cadence includes the deltas the bounds force in beside it.
-func TestTheFloorIsPricedAtTheCheapestScheduleThatHonoursIt(t *testing.T) {
+func TestTheFloorIsPricedAtTheCheapestScheduleThatHonorsIt(t *testing.T) {
 	b, s := gameBounds(), stormSizes()
 	cheapest := cheapestFloorPlan(b)
 	if got := cheapest.CadenceTicks * uint64(cheapest.KeyframeInterval); got > b.FloorKeyframeTicks {

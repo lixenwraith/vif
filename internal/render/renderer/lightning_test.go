@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestBoltMeetsItsEndCellsOnTheSideItComesFrom: a bolt aims between cell centres, so
+// TestBoltMeetsItsEndCellsOnTheSideItComesFrom: a bolt aims between cell centers, so
 // it draws one quadrant of the cell it leaves and one of the cell it strikes, and along
 // its axis that quadrant faces the other end, whichever way it is fired.
 func TestBoltMeetsItsEndCellsOnTheSideItComesFrom(t *testing.T) {

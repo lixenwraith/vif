@@ -20,9 +20,9 @@ type AuthorityTerm uint64
 // FirstTerm is the term the instance that opens a session authors under.
 const FirstTerm AuthorityTerm = 1
 
-// AuthorityReport floods loss news beyond the lost authority's direct neighbours. A
+// AuthorityReport floods loss news beyond the lost authority's direct neighbors. A
 // notice names the term the lost authority held; a survivor that adopted a record
-// reports that record's term, and Via the neighbour it reaches its host through,
+// reports that record's term, and Via the neighbor it reaches its host through,
 // zero on a link of its own. Deduplication uses (From, Term); the chain and the
 // roster, not reports, name the candidates.
 type AuthorityReport struct {

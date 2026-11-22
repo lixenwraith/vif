@@ -1,6 +1,6 @@
 # The mouse: it twitches its whiskers, and blinks. One of the moss cave's first-rank
 # raiders: RaiderRank1 in ../../macros.toml gives its stats and cycle and the cave
-# its colours.
+# its colors.
 macro = "RaiderRank1"
 theme = "Moss"
 width = 5

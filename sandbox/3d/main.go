@@ -263,7 +263,7 @@ func newTribar(rope bool) scene {
 }
 
 // newRings is the three mutually perpendicular golden ellipses: each passes over one
-// neighbour and under the other, and no two are linked on their own.
+// neighbor and under the other, and no two are linked on their own.
 func newRings() scene {
 	return scene{
 		name: "rings", base: diagonalView, radius: 11, spin: 12, thick: 1.1,
@@ -623,7 +623,7 @@ func (g *gbuf) shade(rk *renderKnobs, radius, refDepth float64) {
 }
 
 // edges darkens the near side of a depth step or crease as a line, and the far side,
-// background included, as a halo that falls off over the window. A neighbour counts as
+// background included, as a halo that falls off over the window. A neighbor counts as
 // a step only where it leaves the plane through this pixel, so a tilted face is not its
 // own occluder, and each ramps in over a second eps so motion never flips it in a frame.
 func (g *gbuf) edges(rk *renderKnobs, eps, sx, sy float64) {

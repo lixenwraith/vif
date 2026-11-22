@@ -16,7 +16,7 @@ var (
 	FlowCompositeFieldGradient = FlowGradient{Base: [3]float64{200, 120, 20}, Span: [3]float64{55, 100, 40}}
 )
 
-// FlowGradient colours a cell at t, 0 at the field's far edge and 1 at its target
+// FlowGradient colors a cell at t, 0 at the field's far edge and 1 at its target
 type FlowGradient struct{ Base, Span [3]float64 }
 
 func (g FlowGradient) At(t float64) color.RGB {

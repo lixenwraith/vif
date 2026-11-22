@@ -72,7 +72,7 @@ exists at the edge. What it must provide:
 | Requirement | Why |
 |---|---|
 | Forward TCP 7777, and only it, to the node: raw, or ended at the edge as TLS and forwarded under a PROXY header (§12) | The whole player-facing native surface, the router's front door; a session's own port never leaves the pod network. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
-| Do not rewrite the source address, or name it in the PROXY header | The front door keys its admission budgets and its tickets on the dialling address. |
+| Do not rewrite the source address, or name it in the PROXY header | The front door keys its admission budgets and its tickets on the dialing address. |
 | Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
 | Admit the site host to the node's 9080 | The router's API and browser route, reached only through the site's nginx (§12). |
 
@@ -162,7 +162,7 @@ them. [`deploy/guest/nftables.conf`](../deploy/guest/nftables.conf) owns one tab
 `inet vif`, and nothing else.
 
 Take the operator address and SSH port from the live session, then install behind a
-timed rollback and open a second SSH connection before cancelling it:
+timed rollback and open a second SSH connection before canceling it:
 
 ```sh
 set -- $SSH_CONNECTION
@@ -415,7 +415,7 @@ bin/vif -join '<join target>'                    # on the second machine, at onc
 ```
 
 From a third terminal on that machine, the front door seats a second guest, and
-refuses what it must before dialling a pod:
+refuses what it must before dialing a pod:
 
 ```sh
 bin/vif -join '<join target>'                             # guests>=2

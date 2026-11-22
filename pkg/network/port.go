@@ -161,7 +161,7 @@ func (p *SocketPort) ServeConn(conn net.Conn, accept func(net.Conn) (PeerID, err
 // joiner's port its seat has not named yet.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
 
-// Preconnect hands a port built before its stream was dialled that stream and the
+// Preconnect hands a port built before its stream was dialed that stream and the
 // identities at its two ends, this one's and the peer's. Before Start only, since a
 // running port has its stream.
 func (p *SocketPort) Preconnect(conn net.Conn, local, peer PeerID) error {

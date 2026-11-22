@@ -14,10 +14,10 @@ github.com/lixenwraith/genetic v0.4.0 h1:gz7qQF6Nn2l2YLJQUeTemOfnlXt/4jfsAswkWg0
 github.com/lixenwraith/genetic v0.4.0/go.mod h1:ND17YfR1ldULc+1bItbP9zxg4juSnOl4iBaRFpSXwAU=
 github.com/lixenwraith/log v0.1.19 h1:nAmfuhAC6z3fb5lC4Ub3pTqwWJEvTwCf2DYfX9a3iZw=
 github.com/lixenwraith/log v0.1.19/go.mod h1:EE8i5nSAW2yZBTytKuhdgehmgzrby6kW1k5DyH1SvBg=
-github.com/lixenwraith/terminal v0.7.4 h1:RXdjst06nzvUQiaEpekQPA/SBm0S9RjJNtYFwFPWM0s=
-github.com/lixenwraith/terminal v0.7.4/go.mod h1:ZwielzwkDazjKryrzrxs9r7RuxfZXL9daxCJytXSldQ=
-github.com/lixenwraith/terminal/window v0.7.4 h1:Peaa7pkM9c6RdC7KE+D0tz36EflLUCJI273rGQoD2sg=
-github.com/lixenwraith/terminal/window v0.7.4/go.mod h1:qYdm9ooXMZBdpH35MatBneKhhBPJjayE74gjFubem9Y=
+github.com/lixenwraith/terminal v0.7.5 h1:lSXmbBea7QRJS76PnV+PMpGuhxIgi3I+nX6FWCf/ALA=
+github.com/lixenwraith/terminal v0.7.5/go.mod h1:ZwielzwkDazjKryrzrxs9r7RuxfZXL9daxCJytXSldQ=
+github.com/lixenwraith/terminal/window v0.7.5 h1:MSgcKSOPbCWekTPx3ouXLoZW0vCmYQSN/ZaPyyo2Jlc=
+github.com/lixenwraith/terminal/window v0.7.5/go.mod h1:Kmgtg1lbOrvrY7/Ye567SUwtlFC6BOVjjXZA2S10h/I=
 github.com/lixenwraith/toml v0.10.0 h1:VLFIQ/SVC34am3ayZOBOOLOtn3XHY+o2FP/QEEyJBwU=
 github.com/lixenwraith/toml v0.10.0/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
 golang.org/x/crypto v0.59.0 h1:xS2jhqYbzNrpvkWP2YTDf4TJwBy3ykR03i8vFDxEc7c=

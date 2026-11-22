@@ -82,8 +82,8 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 		name string
 		mode terminal.ColorMode
 	}{
-		{name: "true colour", mode: terminal.ColorModeTrueColor},
-		{name: "256 colour", mode: terminal.ColorMode256},
+		{name: "true color", mode: terminal.ColorModeTrueColor},
+		{name: "256 color", mode: terminal.ColorMode256},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receiver := mustHeadless(t, seed, 120, 40)
@@ -750,7 +750,7 @@ func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
 
 // TestAnIndexReadInPlaceMatchesTheCaptures: the index built off the live world as
 // a tick closes is the one a capture of that world indexes, root, sections and
-// pages alike, normalisation and the owner-authored exclusions included, on a
+// pages alike, normalization and the owner-authored exclusions included, on a
 // first build and on one reusing the rows of the build before.
 func TestAnIndexReadInPlaceMatchesTheCaptures(t *testing.T) {
 	t.Parallel()

@@ -1,6 +1,6 @@
 # The robot: its antenna sparking as it marches. One of the crystal cave's
 # fourth-rank raiders: RaiderRank4 in ../../macros.toml gives its stats and cycle
-# and the cave its colours.
+# and the cave its colors.
 macro = "RaiderRank4"
 theme = "Crystal"
 width = 5

@@ -64,7 +64,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 ## 2. Current contract
 
-| Area | Current behaviour |
+| Area | Current behavior |
 |---|---|
 | Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 4). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
@@ -147,7 +147,7 @@ A correction must not be repairing entity allocation or run numbering.
 
 The last two are the least obvious. Applied a lead early on its producer, a ninth
 drain would enter the escalation and build that region's world before anyone else
-had it, and a downed cursor would run `MonitorGlobalReset` alone — cancelling every
+had it, and a downed cursor would run `MonitorGlobalReset` alone — canceling every
 region and clearing the level — until the next correction, published while the
 authority was still in `MonitorActive`, put the pre-reset world back.
 
@@ -298,7 +298,7 @@ within `NetworkHoldTicks` it waits ([Netcode design §2.1](netcode-design.md#21-
 Consecutive simulation events are not coalesced on the wire. Two cursor placements
 may consume different glyphs or cause different collision and progression effects;
 discarding the intermediate event would change gameplay. Batching, selective
-state repair, and presentation work are the safe optimisation layers.
+state repair, and presentation work are the safe optimization layers.
 
 ### 3.4 Predicted derivations
 
@@ -686,7 +686,7 @@ The procedure on each survivor is:
    by its own link, a notice or a record reaching it first (`TimeControl.Freeze`).
    The freeze is the hold the session itself asks for, settled at once as the end
    of one is (§3.6), so a replay stands still in the pass the run did. Only a direct
-   neighbour of the authority sees the link drop, and the departure crossing that
+   neighbor of the authority sees the link drop, and the departure crossing that
    would have carried that news is produced by the participant that is gone, so a
    survivor two links away opens the same walk from the notice, which names the lost
    term.
@@ -837,7 +837,7 @@ started the world.
    author already has one when it does. A **successor chain** rather than a full
    mesh: N links instead of N², and the chain is the same
    either way, so the shape is one dial policy and can be widened later without
-   changing an artifact. A candidate the connect does not reach is dialled as a
+   changing an artifact. A candidate the connect does not reach is dialed as a
    followed host is (`Reach.dialSuccessor`): each attempt after a longer wait, then
    left (`NetworkHostDialAttempts`), since the walk dials it again should the
    authority go; another first candidate, or a link that stood and dropped, starts
@@ -892,7 +892,7 @@ handoff.
 | Mesh shape | Successor chain. Full mesh is N² links for redundancy nothing yet asks for; the chain is the same either way, so widening it later is one dial policy. Moving authorship down the list for latency or loss is deliberately *not* here. |
 | Taking over | Off unless the player turns it on (`[play] takeover`, `:takeover`) or pins `-listen`, and a guest without it plays as a leaf. A candidate's address is published to the other players, so it is the player's to offer; refusing a leaf would turn a privacy preference into a lockout. |
 | Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's. |
-| Rejoin after a handoff | Every participant holds the whole chain, so every survivor walks it from the top, each candidate a window's turn, a guest whose own link dropped redialling its host first. |
+| Rejoin after a handoff | Every participant holds the whole chain, so every survivor walks it from the top, each candidate a window's turn, a guest whose own link dropped redialing its host first. |
 | Redial wait | A guest redials its own host for a whole window before it walks, however many others lost the host too: a host that went silent costs that window, and one that quit or crashed refuses at once. |
 | Relaying | Opt-in and off by default (`:relay`, the Multiplayer page). A run carries only those that joined through it unless its player offers more, so nobody's traffic lands on a run that did not offer to carry it. |
 | Joins after a handoff | The successor's own port takes them, the one its survivors already dial, rather than a second door; a join and a peer link each open with a frame of their own. `:host` opens one at the address it names, or names that port, and the successor hosts as the first host did, under the `migrate` policy its players hold. The `-players` ceiling travels in the offer, so it holds whoever hosts. |
@@ -1065,7 +1065,7 @@ heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnSta
 under the game it was sent in (`Stamp.Run`).
 The record stops once the run is out of the session: it closed, or plays on after a
 fork (`converge.Instance.Forked`), its own bots still linked or not, while a
-successor carrying the session keeps its own; a run redialling the host it lost
+successor carrying the session keeps its own; a run redialing the host it lost
 stops it at the drop and keeps it again if it stays; a dismissal forgets the place. The
 arrival crossing carries it, and `CursorSystem.reclaim` equips the Wraith at the free
 cell nearest the one it held, on every instance, and writes the record over the
@@ -1251,7 +1251,7 @@ router asks the run on the control connection to open a connection back, matches
 the two by a ticket and splices them, re-encoding to the door the name the run
 answers to; a run that does not open within the route timeout refuses the dial as a
 pod out of reach does. So a door behind a NAT is reached at the site's address, with
-the budget, the ceiling and the refusals the pods have, the router never dialling an
+the budget, the ceiling and the refusals the pods have, the router never dialing an
 address a caller named, and the run never binding a port the world can reach. A
 browser relays nothing and publishes nothing, as before.
 
@@ -1798,4 +1798,4 @@ so a converged link costs hashes.
   applying an authoritative snapshot and rolling predicted entities back.
 - Unity's [host migration](https://docs.unity.com/en-us/mps-sdk/session-host-migration)
   and [host election](https://docs.unity.com/en-us/mps-sdk/session-op-host): capturing
-  and applying synchronised data is a separate problem from choosing a new host.
+  and applying synchronized data is a separate problem from choosing a new host.

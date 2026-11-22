@@ -56,7 +56,7 @@ type BehaviorPrototype struct {
 	Mass             float64                          // in soft collision, knockback and wind; 0 takes no soft collision, flocking or wind
 	Drops            string                           // the drop table its kills roll, by name; "" drops nothing
 	Contact          CursorDamage                     // what touching it costs a cursor
-	Lifetime         time.Duration                    // 0 = lives until killed or cancelled
+	Lifetime         time.Duration                    // 0 = lives until killed or canceled
 	Death            DeathEffect                      // what a kill leaves of its body
 	Entrance         BehaviorEntrance                 // how it comes onto the map
 	EntranceDuration time.Duration                    // how long the entrance plays, 0 = its materialize's own
@@ -85,7 +85,7 @@ const (
 var EntranceNames = [...]string{EntranceNone: "", EntranceMaterialize: "materialize"}
 
 // LookCell is one cell of a frame: its glyph, none where 0, and its foreground and
-// background palette entries, -1 for the look's colour and for no background
+// background palette entries, -1 for the look's color and for no background
 type LookCell struct {
 	Rune   rune
 	Fg, Bg int8
@@ -93,7 +93,7 @@ type LookCell struct {
 }
 
 // Look is a composite's frames cell by cell, row-major, with the palettes they
-// index, a data species' and an eye's alike. Where Console, a 256-colour host draws
+// index, a data species' and an eye's alike. Where Console, a 256-color host draws
 // every glyph in Fg256 and every background in Bg256.
 type Look struct {
 	Fg, Bg       []color.RGB

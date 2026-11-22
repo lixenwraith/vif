@@ -74,7 +74,7 @@ type Policy struct {
 
 	// Drain is how long a termination request waits for the roster to empty before
 	// exiting anyway. Zero means a termination request exits at once, which is the
-	// behaviour of a run that never asked for a drain.
+	// behavior of a run that never asked for a drain.
 	Drain time.Duration
 }
 

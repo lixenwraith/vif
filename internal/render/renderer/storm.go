@@ -38,7 +38,7 @@ type stormSurfaceSample struct {
 type StormRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Cell writers for the colour mode chosen at construction. The console, which shows
+	// Cell writers for the color mode chosen at construction. The console, which shows
 	// neither shading nor a faint halo, gets flat bodies and solid effect cells instead.
 	bodyCell stormBodyCellRenderer
 	glowCell stormGlowCellRenderer

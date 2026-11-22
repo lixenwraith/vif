@@ -29,7 +29,7 @@ type SwarmComponent struct {
 	LockedTargetX, LockedTargetY int // the cell the lock stored, which the attack goes to
 
 	ChargeStartX, ChargeStartY   float64 // sub-cell position the charge left from
-	ChargeTargetX, ChargeTargetY float64 // the stored cell's centre
+	ChargeTargetX, ChargeTargetY float64 // the stored cell's center
 
 	TeleportTargetX, TeleportTargetY int // header cell the teleport aims at, which the arrival takes while clear
 

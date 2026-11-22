@@ -102,7 +102,7 @@ func (s *SquareSystem) Update() {
 	})
 }
 
-// spawn lays the square whole on the map, centred as near the asked cell as that
+// spawn lays the square whole on the map, centered as near the asked cell as that
 // allows; a second square, a map too small for it, or a layout and groups that do
 // not each name the nine digits once, is refused
 func (s *SquareSystem) spawn(p *event.SquareSpawnRequestPayload) {

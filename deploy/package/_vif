@@ -34,7 +34,7 @@ _arguments \
   '(-k -config-keymap)'{-k,-config-keymap}'[Keymap TOML, or the name of one in input/ or built in, as vim]:path:_files' \
   '-config-music[Music pattern override TOML]:path:_files' \
   '-config-sounds[Sound definition override TOML]:path:_files' \
-  '-color[Colour depth; auto detects the terminal]:value:(auto 256 true)' \
+  '-color[Color depth; auto detects the terminal]:value:(auto 256 true)' \
   '(-g -gui)'{-g,-gui}'[Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; the default of a vif-gui build or with vif.toml'\''s \[presentation\] window = true, which -g=false turns off]' \
   '-cli[Play in the terminal whatever vif.toml'\''s \[presentation\] or a vif-gui build says; wins over -g]' \
   '-maximized[Open the desktop window maximized; vif.toml'\''s \[presentation\] maximized is the default, and a terminal run ignores it]' \

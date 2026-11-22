@@ -11,7 +11,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SpiritRenderer draws the spirit flights: converging parts spiralling in to their
+// SpiritRenderer draws the spirit flights: converging parts spiraling in to their
 // targets with a trail of light, scattered ones flying out and fading
 type SpiritRenderer struct {
 	gameCtx *engine.GameContext
@@ -52,10 +52,10 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // pass over it. The blank a crosshair or a grid line leaves in a cell is no glyph.
 func drawScatter(ctx render.RenderContext, buf *render.RenderBuffer, parts []component.SpiritPart, progress float64) {
 	rest := 1 - progress
-	travelled, light := 1-rest*rest, 1-progress*progress
+	traveled, light := 1-rest*rest, 1-progress*progress
 	for i := range parts {
 		part := &parts[i]
-		at := vmath.PointAt(vmath.Lerp(part.FromX, part.ToX, travelled), vmath.Lerp(part.FromY, part.ToY, travelled))
+		at := vmath.PointAt(vmath.Lerp(part.FromX, part.ToX, traveled), vmath.Lerp(part.FromY, part.ToY, traveled))
 		screenX, screenY, visible := ctx.MapToScreen(at.X, at.Y)
 		if !visible {
 			continue

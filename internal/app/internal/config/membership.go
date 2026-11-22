@@ -42,7 +42,7 @@ type Membership struct {
 	// it. Empty on both is an address with one session on it.
 	SessionName string
 
-	// ListenAddress pins the port this participant is dialled back on in a migrate
+	// ListenAddress pins the port this participant is dialed back on in a migrate
 	// session, and has it listen there whatever [play] takeover says. Without it a
 	// run that may take over binds the coordinator's own port, one firewall rule for
 	// a session, else an OS-assigned one; a bind that fails leaves it a leaf.

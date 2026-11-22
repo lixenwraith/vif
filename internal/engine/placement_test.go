@@ -20,7 +20,7 @@ func TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast(t *testing.T) {
 	exclusion := position.Exclusion{Left: 1, Right: 1, Top: 1, Bottom: 1}
 	ax, ay := cfg.MapWidth/2, cfg.MapHeight/2
 
-	// The top slot sits padding above the exclusion, centred on it, an even width
+	// The top slot sits padding above the exclusion, centered on it, an even width
 	// half a cell right; all of it but one cell is open, and every other cell of the
 	// map is a wall
 	topX, topY := ax-(objW-1)/2, ay-exclusion.Top-objH-padding

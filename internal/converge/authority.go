@@ -76,7 +76,7 @@ type Authority struct {
 	record network.HandoffRecord
 
 	// accepted is the handoff record adopted for each term, so a second record for
-	// a term already adopted is recognised as the split-brain attempt it is rather
+	// a term already adopted is recognized as the split-brain attempt it is rather
 	// than applied over the first.
 	accepted map[network.AuthorityTerm]network.HandoffRecord
 
@@ -574,7 +574,7 @@ type reportKey struct {
 	term network.AuthorityTerm
 }
 
-// peerLost is the transport's report that a direct neighbour has gone. It starts
+// peerLost is the transport's report that a direct neighbor has gone. It starts
 // a succession only for the participant that was authoring; any other departure
 // is the authority's to cross.
 func (u *Authority) peerLost(id uint32) {
@@ -773,7 +773,7 @@ func (u *Authority) keyOf(id link.PeerID) string {
 
 // currentRoster is the closed roster as the world holds it rather than as the offer
 // that admitted this instance described it. A mid-run joiner's offer names the lobby
-// at the moment it dialled, so two participants would hold two lists; arrivals and
+// at the moment it dialed, so two participants would hold two lists; arrivals and
 // departures are barrier-bound crossings, so the cursor roster is the same list
 // everywhere. The offer stays as the fallback before the cursors exist.
 func (u *Authority) currentRoster() []network.RosterEntry {
@@ -1553,7 +1553,7 @@ func (u *Authority) linked(id link.PeerID) bool {
 	return ok && id != 0 && slices.Contains(p.Peers(), uint32(id))
 }
 
-// flood forwards one succession frame to every direct neighbour but the link it
+// flood forwards one succession frame to every direct neighbor but the link it
 // arrived on. Deduplication is by term and participant rather than by a hop count:
 // a report says one thing once, and a handoff is adopted once.
 func (u *Authority) flood(kind link.MessageType, exclude uint32, body []byte) {
@@ -1602,9 +1602,9 @@ func (u *Authority) Summary() string {
 	case contested != 0 && following:
 		line += "; host lost, waiting on its relay"
 	case following:
-		line += "; host lost, redialling its relay"
+		line += "; host lost, redialing its relay"
 	case contested != 0 && fixed:
-		line += "; host lost, redialling it"
+		line += "; host lost, redialing it"
 	case contested != 0:
 		line += "; host lost, walking the succession list"
 	}

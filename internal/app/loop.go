@@ -70,7 +70,7 @@ func Run(c Config, host Host) error {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
 		cfg.wiring.membership.HostListeners, cfg.host.Pressed, cfg.wiring.startScreen = nil, false, false
-		if err != nil && solo != nil && !errors.Is(err, membership.ErrSessionSignalled) {
+		if err != nil && solo != nil && !errors.Is(err, membership.ErrSessionSignaled) {
 			failed := "Join failed: "
 			if cfg.Membership.Watch {
 				failed = "Spectate failed: "
@@ -123,7 +123,7 @@ func runScenario(cfg runConfig, rejoin bool) (next *restartRequest, err error) {
 
 // openRun builds the App, retrying while the coordinator this participant follows
 // rebuilds itself. A first -join retries only a refusal that passes in moments: it
-// reports a host that is not there at once, which is what an operator dialling by
+// reports a host that is not there at once, which is what an operator dialing by
 // hand wants, and a refusal that no retry helps meets the same answer a second later.
 func openRun(cfg runConfig, rejoin bool) (*App, error) {
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
@@ -138,7 +138,7 @@ func openRun(cfg runConfig, rejoin bool) (*App, error) {
 		}
 		// A dial the run before handed over ends with the attempt that failed on it,
 		// as a seat refused once the world was built does: the next one dials afresh.
-		cfg.wiring.dialled = nil
+		cfg.wiring.dialed = nil
 		time.Sleep(parameter.SessionRejoinInterval)
 	}
 }
@@ -154,7 +154,7 @@ func (a *App) Loop() (*restartRequest, error) {
 
 	if a.membership.HasPendingJoin() {
 		// The terminal is polled before the rest of the hub, and only it: the gate
-		// owns the dialled stream until it hands it over, so the network service
+		// owns the dialed stream until it hands it over, so the network service
 		// must not start yet — and without an event source the gate is a wait with
 		// no key and no signal to leave on.
 		if err := a.pollTerminalEarly(); err != nil {
@@ -531,7 +531,7 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 	for {
 		select {
 		case <-signals:
-			return nil, membership.ErrSessionSignalled
+			return nil, membership.ErrSessionSignaled
 		case ev := <-a.lobbyEvents():
 			pressed := false
 			if !a.takeEventWith(ev, func(ev terminal.Event, intent *input.Intent) bool {
@@ -646,7 +646,7 @@ func (a *App) pushMenu(snapshot []byte) {
 
 // renderContext reads everything a frame draws from in one critical section: LevelSetup
 // and reset handlers mutate Config under updateMutex, so it is read with the cursor and
-// the continuous clock, tick-written stamps being quantised and stepping a slowed
+// the continuous clock, tick-written stamps being quantized and stepping a slowed
 // animation. Each is a local copy: a render writes no tick-owned resource. The menu's
 // snapshot is built here, after its refresh, and pushed off the lock.
 func (a *App) renderContext() render.RenderContext {

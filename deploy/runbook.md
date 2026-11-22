@@ -148,12 +148,12 @@ sudo journalctl \
   --no-pager
 ```
 
-## Who dialled a session
+## Who dialed a session
 
 The accepted socket's address is recorded on the node and dropped from the
 published stream. Every player reaches a pod through the router, which dials it
 from the node, so the record names the node's address, and the router's own log
-names the session and never the dialler: a player's address is the site's edge's
+names the session and never the dialer: a player's address is the site's edge's
 to know, in its access log for the browser route, and nobody's for the front door.
 
 ```sh

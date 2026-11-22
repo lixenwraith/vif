@@ -228,7 +228,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   stepping there, a count that many.
 - **Yank and put.** `operator_yank` with a motion, or doubled for its row, fills
   the register with the glyphs
-  the range covers, each with its rune, colour and level, and deletes nothing;
+  the range covers, each with its rune, color and level, and deletes nothing;
   every delete fills it too, as vim's unnamed register. `put_after` lays a span
   from the cell right of the cursor and `put_before` one ending at the cell left
   of it, yanked rows on the rows below and above, a count that many copies on. A
@@ -303,9 +303,9 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 
 ### Prefixes, editing, and modes
 
-- **`g`.** `gg` the map's top row; `go`, `g$`, `gm` its origin, end and centre.
+- **`g`.** `gg` the map's top row; `go`, `g$`, `gm` its origin, end and center.
   `gh`, `gj`, `gk`, `gl` then `r`, `g` or `b` show and jump to a red, green or blue
-  glyph that way; the direction key again (`gll`) jumps to the nearest of any colour.
+  glyph that way; the direction key again (`gll`) jumps to the nearest of any color.
 - **Editing.**
   - `d` + motion, `dd`: delete the motion's range, the current row; `c` + motion,
     `cc`: the same, then Insert; `y` + motion, `yy`, where a keymap binds `y`:
@@ -457,7 +457,7 @@ replay reproduces the count from the journal:
   character) repeated within 500 ms counts only on its 1st, 2nd, 4th, 8th... press,
   so `h` and `l` in turn count in full while a held or hammered `l` counts by its log;
 - a pointer placement (`pointer` on the move record) counts one gesture when the
-  pointer reverses after six columns of travel (a row is two) or has travelled forty
+  pointer reverses after six columns of travel (a row is two) or has traveled forty
   one way since it last counted, at most one per placement and four a second, so a
   dodging pointer reads like mashed keys, a sweep or a slow round of the screen like
   a few presses, and jitter around one spot like nothing; the pointer alone reaches
@@ -530,7 +530,7 @@ developer and authoring controls.
 
 In a live session, pause, step, breakpoints, system mutation, raw `:emit` and FSM
 region operations are refused because applying them to only one scheduler would
-desynchronise shared state. Pause alone is allowed to the authority while every
+desynchronize shared state. Pause alone is allowed to the authority while every
 other participant is its own bot, which stands still with it; an arrival ends the
 pause. The host's `:pause` crosses instead, so it stops everyone, and its `:speed`
 crosses so everyone changes rate; a guest's is refused. Help, telemetry

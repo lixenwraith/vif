@@ -421,14 +421,14 @@ func (e *Encoder) sectionsOver(cap SharedCapture, want map[string]bool, stores [
 // storeSectionLocked is store i's section over rows: the last one when its rows and
 // left-out cells are the same, that one with its changed pages rehashed when only
 // values moved, and a fresh one otherwise. The cursor store's handful of rows is
-// normalised and indexed afresh every time. Caller MUST hold e.mu.
+// normalized and indexed afresh every time. Caller MUST hold e.mu.
 func (e *Encoder) storeSectionLocked(i int, rows []engine.StoreRow, cursors map[core.Entity]bool) (*section, error) {
 	name := engine.SharedWorldStoreNames[i]
 	id := StoreSectionPrefix + name
 	if name == cursorStoreName {
 		out := make([]ManifestRow, 0, len(rows))
 		for _, r := range rows {
-			v, err := normaliseStoreValue(name, r.Value)
+			v, err := normalizeStoreValue(name, r.Value)
 			if err != nil {
 				return nil, err
 			}

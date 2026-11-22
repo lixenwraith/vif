@@ -43,7 +43,7 @@ func TestTheLocalFieldIsALens(t *testing.T) {
 		return buf
 	}
 
-	// Halfway to both fields' edges, then eight tenths out from the peer's centre
+	// Halfway to both fields' edges, then eight tenths out from the peer's center
 	buf := frame()
 	both := color.Screen(color.Screen(visual.RgbBlack, look.Color, peerAlpha(0.5)), look.Color, 0.5*(look.MaxOpacity*1))
 	if got := buf.CellAt(35, 10).Bg; got != both {
@@ -60,10 +60,10 @@ func TestTheLocalFieldIsALens(t *testing.T) {
 	}
 }
 
-// TestAShieldDrawsAtItsOwnRadiusAndColour: a shield reaches its radius in columns
+// TestAShieldDrawsAtItsOwnRadiusAndColor: a shield reaches its radius in columns
 // and the rows the cell aspect makes of it, follows a radius it changes to, and wears
-// its own colour over its kind's, a zero colour leaving the kind's
-func TestAShieldDrawsAtItsOwnRadiusAndColour(t *testing.T) {
+// its own color over its kind's, a zero color leaving the kind's
+func TestAShieldDrawsAtItsOwnRadiusAndColor(t *testing.T) {
 	t.Parallel()
 	const cx, cy = 40, 12
 	tint := color.RGB{R: 200, G: 40, B: 40}
@@ -94,7 +94,7 @@ func TestAShieldDrawsAtItsOwnRadiusAndColour(t *testing.T) {
 		}
 
 		// Radius 4 is two rows at the reference aspect: (0, 2) is on the edge, which the
-		// 256-colour rim, flat on top, meets a row lower
+		// 256-color rim, flat on top, meets a row lower
 		top := 2
 		if mode == terminal.ColorMode256 {
 			top = 1
@@ -130,13 +130,13 @@ func TestAShieldDrawsAtItsOwnRadiusAndColour(t *testing.T) {
 			cell := frame()
 			if mode == terminal.ColorMode256 {
 				if got := cell.CellAt(cx+c.paletteDX, cy); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != c.wantPalette {
-					t.Errorf("colour %v: rim palette = (%d, %v), want %d", c.tint, got.Bg.R, got.Attrs, c.wantPalette)
+					t.Errorf("color %v: rim palette = (%d, %v), want %d", c.tint, got.Bg.R, got.Attrs, c.wantPalette)
 				}
 				continue
 			}
 			want := color.Screen(visual.RgbBackground, c.wantRGB, 0.75*(look.MaxOpacity*1))
 			if got := cell.CellAt(cx+c.rgbX, cy).Bg; got != want {
-				t.Errorf("colour %v: field = %v, want %v", c.tint, got, want)
+				t.Errorf("color %v: field = %v, want %v", c.tint, got, want)
 			}
 		}
 	}
@@ -170,7 +170,7 @@ func TestAShieldWithNoReachDrawsNothing(t *testing.T) {
 
 // TestShieldGeometryFollowsEveryRadiusAndMap: a painter reusing its tables through a
 // frame paints what a new painter per field paints, over more radii than it keeps,
-// centres on and near the map's edges, maps of changing size, and a lens whose table
+// centers on and near the map's edges, maps of changing size, and a lens whose table
 // a frame's other radii push out
 func TestShieldGeometryFollowsEveryRadiusAndMap(t *testing.T) {
 	t.Parallel()

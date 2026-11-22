@@ -43,7 +43,7 @@ final class StartScreen extends FrameLayout {
     };
     private static final String KEYBOARD = "With a keyboard, F1 or the command :help lists every key and command, and the command :q quits.";
     // The site's surface, hairline, muted text, the primary button's blue and the royal
-    // blue it fills while pressed, the periwinkle a ring of that blue is labelled in and
+    // blue it fills while pressed, the periwinkle a ring of that blue is labeled in and
     // its red, as web/terminal.css names them; its page is R.color.page, which the
     // window and the splash wear too. The menu (MenuDialog) wears the same.
     static final int SURFACE = 0xFF1A1B26, LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8, BUTTON = 0xFF2563EB,

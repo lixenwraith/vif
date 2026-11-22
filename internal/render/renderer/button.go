@@ -17,7 +17,7 @@ import (
 // button lights; then the key turns white and the block brightens, fading back.
 type ButtonRenderer struct {
 	gameCtx *engine.GameContext
-	console *render.Console // nil draws true colour
+	console *render.Console // nil draws true color
 }
 
 func NewButtonRenderer(ctx *engine.GameContext) *ButtonRenderer {
@@ -37,7 +37,7 @@ const (
 	buttonLabel            // the key as one character, when the glyph does not fit
 )
 
-// buttonKey places a key's large splash glyph with its ink centred on a w by h
+// buttonKey places a key's large splash glyph with its ink centered on a w by h
 // button. A glyph whose ink does not fit, or a key the face lacks, falls back to the
 // key as one character in the middle.
 type buttonKey struct {

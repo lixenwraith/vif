@@ -203,7 +203,7 @@ var configPages = []configNode{
 	{kind: kindGroup, key: "launch", label: "Launch options", description: cmp.Or(startupNotes[runtime.GOOS], "What is set when the game launches, and where to set it: these rows only explain."), nodes: []configNode{
 		{kind: kindInfo, key: "files", label: "Paths and scenario", description: "Set by vif.toml's [paths] table or the launch flags -config-dir, -s, -f and -k. The Scenarios page starts another scenario now.", read: startupValue},
 		{kind: kindInfo, key: "backend", label: "Audio device / buffer", description: "Set by the launch flag -audio-backend and vif.toml's [audio] buffer_ms. The audio device opens at launch.", read: startupValue},
-		{kind: kindInfo, key: "color", label: "Colour depth", description: "Set by the launch flag -color (auto, 256 or true). Rendering resources are selected at launch.", read: startupValue},
+		{kind: kindInfo, key: "color", label: "Color depth", description: "Set by the launch flag -color (auto, 256 or true). Rendering resources are selected at launch.", read: startupValue},
 		{kind: kindInfo, key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your configuration root, or name a file with the launch flag -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
 		{kind: kindInfo, key: "session", label: "Identity", description: "Session identity and seed are launch flags. The Multiplayer page holds the live session actions, Developer the replay journal.", read: startupValue},
 	}},
@@ -585,7 +585,7 @@ func pageRows(ctx *engine.GameContext, prefix string, nodes []configNode, rows [
 }
 
 // menuMatches is the rows of every page matching all of terms in the page, its
-// sections, the label and the description, each labelled Page / Row
+// sections, the label and the description, each labeled Page / Row
 func menuMatches(ctx *engine.GameContext, terms []string) []core.OverlayMenuRow {
 	var rows []core.OverlayMenuRow
 	for _, p := range configPages {

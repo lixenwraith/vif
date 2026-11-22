@@ -1345,7 +1345,7 @@ func (s *Scheduler) executeReset() {
 	//    cleared the world, before the FSM re-enters, and before the session
 	//    advances, so the streams drawn here are this game's
 	if err := s.world.InitSystems(); err != nil {
-		s.world.Log().Error("app", "msg", "systems not re-initialised", "error", err.Error())
+		s.world.Log().Error("app", "msg", "systems not re-initialized", "error", err.Error())
 	}
 
 	// 5. Unpause via the single owner so clock, context, and audio move together,

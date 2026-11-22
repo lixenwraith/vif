@@ -227,7 +227,7 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 }
 
 // TestAParticipantsPortTakesPeerLinksAndJoins: a participant that bound a port of
-// its own is dialled by another and the stream becomes an ordinary peer, and a join
+// its own is dialed by another and the stream becomes an ordinary peer, and a join
 // at that port runs the session's handshake, each told by the frame it opens with.
 // Only the join is served and reaches the join gate, and one that named another
 // session is refused as such. The port names the addresses it answers at.
@@ -273,7 +273,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		t.Fatal("the dialer does not hold the participant that answered")
 	}
 	waitForPeer(t, func() bool { return listener.Connected(3) },
-		"the listener never admitted the participant that dialled it")
+		"the listener never admitted the participant that dialed it")
 	if !dialer.Send(2, uint8(MsgEvent), nil) {
 		t.Fatal("the new link refused a frame")
 	}

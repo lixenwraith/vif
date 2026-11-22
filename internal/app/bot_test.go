@@ -1499,7 +1499,7 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 }
 
 // TestAStillGuestSeatsBotsAfterItsHostLeaves: a guest's bots join through it
-// whoever holds authority, so the departed host's address is never dialled.
+// whoever holds authority, so the departed host's address is never dialed.
 func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
@@ -2148,11 +2148,11 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	// with the dial that took it back by that key.
 	var req *restartRequest
 	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
-	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id ||
-		req.Dialled.Offer().Relay != relayID || req.Notice != "Relay connection restored" {
+	if req.Dialed == nil || uint32(req.Dialed.Offer().Assigned) != id ||
+		req.Dialed.Offer().Relay != relayID || req.Notice != "Relay connection restored" {
 		t.Fatalf("the person was not admitted back into its own place through its relay: %+v", req)
 	}
-	req.Dialled.Abandon(errors.New("the test is over"))
+	req.Dialed.Abandon(errors.New("the test is over"))
 }
 
 // TestARelayDoorAdmitsAsTheHostOnceItsRunHosts: a guest's -relay door, which asks
@@ -2217,11 +2217,11 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back through the relaying peer")
-	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id ||
-		req.Dialled.Offer().Relay != peerID || req.Dialled.Offer().Host != hostID {
+	if req.Dialed == nil || uint32(req.Dialed.Offer().Assigned) != id ||
+		req.Dialed.Offer().Relay != peerID || req.Dialed.Offer().Host != hostID {
 		t.Fatalf("the guest was not taken back into its own place through the relaying peer: %+v", req)
 	}
-	req.Dialled.Abandon(errors.New("the test is over"))
+	req.Dialed.Abandon(errors.New("the test is over"))
 }
 
 // TestADroppedGuestRejoinsAtACandidatesDoor: a relay's door is named in the chain
@@ -2255,10 +2255,10 @@ func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back at the relay's door")
-	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id || req.Dialled.Offer().Relay != peerID {
+	if req.Dialed == nil || uint32(req.Dialed.Offer().Assigned) != id || req.Dialed.Offer().Relay != peerID {
 		t.Fatalf("the guest was not taken back into its own place at the relay's door: %+v", req)
 	}
-	req.Dialled.Abandon(errors.New("the test is over"))
+	req.Dialed.Abandon(errors.New("the test is over"))
 }
 
 // waitUntil waits for a running session to reach a state, a socket deadline away.
@@ -2412,7 +2412,7 @@ func TestADroppedPersonPlaysOnAloneAndStaysOut(t *testing.T) {
 	cfg := network.DebugConfig(link.RolePeer, "")
 	cfg.Keys = []network.Key{dropped}
 	if _, _, err := network.DialSession(addr, cfg); !errors.Is(err, &network.Refusal{Code: network.RefusalDropped}) {
-		t.Fatalf("the dropped key dialled again: %v", err)
+		t.Fatalf("the dropped key dialed again: %v", err)
 	}
 	cfg.Keys = nil
 	pending, _, err := network.DialSession(addr, cfg)

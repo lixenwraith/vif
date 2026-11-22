@@ -616,7 +616,7 @@ func readSessionName(conn net.Conn, kind link.MessageType, name string, timeout 
 		return err
 	}
 	if got != name {
-		return &Refusal{Code: RefusalUnknown, Reason: "this address is not serving the session that was dialled"}
+		return &Refusal{Code: RefusalUnknown, Reason: "this address is not serving the session that was dialed"}
 	}
 	return nil
 }
@@ -1164,7 +1164,7 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 	}
 }
 
-// PendingJoin owns a dialled stream until the startup gate transfers it to a port.
+// PendingJoin owns a dialed stream until the startup gate transfers it to a port.
 type PendingJoin struct {
 	conn        *link.Stream
 	base        Config
@@ -1238,7 +1238,7 @@ func (p *PendingJoin) Peer() link.PeerID { return cmp.Or(p.offer.Relay, p.offer.
 
 // hold buffers one session frame that arrived out of the handshake's turn, and
 // reports whether it was one. Anything the handshake itself expects is left to the
-// caller, and an unrecognised type is a protocol error rather than something to
+// caller, and an unrecognized type is a protocol error rather than something to
 // stash.
 func (p *PendingJoin) hold(msg *link.Message) bool {
 	p.gateBytes += uint64(link.HeaderSize + len(msg.Payload))
@@ -1840,7 +1840,7 @@ func (l *AdmissionLimiter) AdmitKeyBurst(key string, burst int) error {
 		l.sweepLocked(now)
 		if len(l.seen) >= l.max {
 			// Fails closed: a completed TCP handshake proves the source address, so
-			// a table this wide is many real hosts dialling at once rather than one
+			// a table this wide is many real hosts dialing at once rather than one
 			// forging them, and a roster of sixteen has no reading of that in which
 			// the next dial is the one it was waiting for.
 			return &Refusal{Code: RefusalBudget, Reason: fmt.Sprintf("%d other hosts are joining at once", len(l.seen))}

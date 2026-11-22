@@ -327,7 +327,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
                 }
                 barDown = false;
                 break;
-            default: // a second finger, or the gesture cancelled
+            default: // a second finger, or the gesture canceled
                 barDown = false;
                 barTaps = 0;
         }

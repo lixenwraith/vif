@@ -221,7 +221,7 @@ until its rename to vif in September 2026.
 - SIMD builds; glyph diffs by changed cells
 - Audio, genetic, transformer, ascimage split out
 - Soundlab becomes stapes, a repository of its own
-- Shields at their own radius and colour
+- Shields at their own radius and color
 - `internal/app` split: corrector, config, membership
 - Fusion of drains and composites into any species
 - Dead code swept; cursor syncs bounded

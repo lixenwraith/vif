@@ -1,4 +1,4 @@
-# The session image: the static `vif_headless` binary and its licences on scratch,
+# The session image: the static `vif_headless` binary and its licenses on scratch,
 # with no shell, libc or configuration tree; a session's data is compiled in or
 # mounted read-only. Build from the repository root with BuildKit, for the caches:
 #   docker buildx build -f deploy/docker/Dockerfile -t vif:dev .    # or: make image
@@ -39,7 +39,7 @@ RUN if [ "$(go env GOHOSTARCH)" = "${TARGETARCH}" ] && [ "$(go env GOHOSTOS)" = 
         echo "cross build: config check deferred to the init container"; \
     fi
 
-# The licences of Go and of the modules this build links, by the recipe every other
+# The licenses of Go and of the modules this build links, by the recipe every other
 # copy of a vif binary takes its NOTICES from; it reads both of the build's caches.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} make -s notices TAGS=vif_headless NOTICES=/out/NOTICES

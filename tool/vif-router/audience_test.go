@@ -162,7 +162,7 @@ func eventually(t *testing.T, what string, ok func() bool) {
 }
 
 // TestEverySpectatorIsFedFromOneSubscription: however many dials watch a session,
-// over the front door and the browser route, its pod is dialled once, under a
+// over the front door and the browser route, its pod is dialed once, under a
 // ticket of the router's to watch; each dial is shown the session, sent the
 // scenario if it asks and fed the pod's records from the router's copy; a dial
 // after a new game is shown that game; and the listing counts them.

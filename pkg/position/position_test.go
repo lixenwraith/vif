@@ -590,7 +590,7 @@ func TestARayStopsBeforeTheFirstCellThatBlocks(t *testing.T) {
 }
 
 // TestAPlacementAroundAnExclusionTakesItsPassesInOrder: the first of the 8 slots, in
-// the pattern's order turning away from the map's centre column, that lies inside
+// the pattern's order turning away from the map's center column, that lies inside
 // the map, the caller's check takes and no wall stands in; then at twice the
 // distance; then without the check; then clamped to the map; then, found false,
 // the slot over the fewest blocked cells, the first among equals; on its layer

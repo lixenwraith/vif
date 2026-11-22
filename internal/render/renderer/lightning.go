@@ -89,8 +89,8 @@ func (r *LightningRenderer) endpoint(e core.Entity, x, y int) (int, int) {
 }
 
 // generateFractalPath creates a jagged lightning path by midpoint displacement in
-// quadrant space, two quadrants a cell each way, aimed from one end cell's centre to
-// the other's. A centre is the corner its cell's four quadrants share, so each end
+// quadrant space, two quadrants a cell each way, aimed from one end cell's center to
+// the other's. A center is the corner its cell's four quadrants share, so each end
 // is the quadrant of its cell nearest the path's next point: a bolt meets both cells
 // on the side facing the other, from any direction. A bolt within one cell has none.
 func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.FastRand) []struct{ X, Y int } {
@@ -117,7 +117,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	spine := spineOffset * 4.0
 	detailMagnitude := 6.0
 
-	points = append(points, struct{ X, Y int }{}) // the origin's quadrant, once its neighbour is known
+	points = append(points, struct{ X, Y int }{}) // the origin's quadrant, once its neighbor is known
 	for i := 1; i < segments; i++ {
 		t := float64(i) / float64(segments)
 		bx := sx1 + dxF*t

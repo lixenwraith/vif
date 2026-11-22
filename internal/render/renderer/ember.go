@@ -16,7 +16,7 @@ import (
 // radToJaggedIdx maps radians to the jagged/radii LUT index
 const radToJaggedIdx = visual.EmberJaggedBuckets / vmath.TwoPi
 
-// emberLayerColors is one radial step of the glow: each layer's colour, and the lit
+// emberLayerColors is one radial step of the glow: each layer's color, and the lit
 // layers composed over the theme background, which is what most cells start from
 type emberLayerColors struct {
 	Core, Mid, Edge color.RGB
@@ -33,7 +33,7 @@ type emberRingState struct {
 // emberCellFunc renders a single cell within the ember ellipse
 type emberCellFunc func(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy float64)
 
-// emberFrameFunc prepares the colour state one Paint needs, rebuilding its caches when told to
+// emberFrameFunc prepares the color state one Paint needs, rebuilding its caches when told to
 type emberFrameFunc func(p *EmberPainter, ctx render.RenderContext, rebuild bool)
 
 // EmberPainter handles per-cell rendering with color mode dispatch
@@ -63,7 +63,7 @@ type EmberPainter struct {
 
 	// Caching and Precalculation States
 	lastHeat      int
-	lutBlend      float64 // the blend the colour LUT was composed at
+	lutBlend      float64 // the blend the color LUT was composed at
 	colorLUT      [256]emberLayerColors
 	invRadiiSqLUT [visual.EmberJaggedBuckets]struct{ invRxSq, invRySq float64 }
 	angleIdx      []uint8 // jagged LUT bucket per cell offset, over the widest box
@@ -277,7 +277,7 @@ func (p *EmberPainter) buildRadiiLUT() {
 	}
 }
 
-// emberFrameTrueColor rebuilds the colour LUT when heat or blend changed and advances the rings
+// emberFrameTrueColor rebuilds the color LUT when heat or blend changed and advances the rings
 func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, rebuild bool) {
 	if rebuild {
 		p.colors = interpolateEmberColors(p.params.HeatFactor)
@@ -327,7 +327,7 @@ func (p *EmberPainter) ringSkipDist() float64 {
 	return float64(li+1) / k
 }
 
-// emberFrame256 takes the heat bar's leading colour at the owner's heat, undimmed for a peer
+// emberFrame256 takes the heat bar's leading color at the owner's heat, undimmed for a peer
 // like its shield
 func emberFrame256(p *EmberPainter, ctx render.RenderContext, _ bool) {
 	p.palette256 = heatLead256(p.lastHeat, ctx.ScreenWidth)

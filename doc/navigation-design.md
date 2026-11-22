@@ -40,7 +40,7 @@ toward a target.
 
 The costs come from the cell aspect (`navigation.CostsFor`): 10, 20 and 22 at a
 terminal's 2:1, equal on both axes for a square cell. Eight-way movement is
-allowed, but a diagonal cannot cut a corner either cardinal neighbour of which is
+allowed, but a diagonal cannot cut a corner either cardinal neighbor of which is
 blocked. A blocked target cell seeds the first passable ring around it, out to
 eight cells, as virtual targets at axis-weighted gap costs, so a large actor
 navigates toward an occupied anchor without pretending its footprint fits there.
@@ -60,7 +60,7 @@ costs nothing. Generation stamps mark cells current without clearing the arrays.
 A cell reached two shortest ways takes the lower-numbered direction, so a
 direction is a function of the distances alone. That is what makes repair
 exact: after cells open, `Opened` settles only what the openings improve, from
-the opening and the neighbours within a step of it, and ends with the field a
+the opening and the neighbors within a step of it, and ends with the field a
 recompute would give, bit for bit. It declines, for a recompute, where an
 opening lies on or within the seed ring of a target. The field is fuzzed
 against a reference heap search, and the repair against a recompute.
@@ -162,7 +162,7 @@ snake heads locked on it. A private group costs nothing until read.
 field or a route, the graph and route IDs, a snake head's lock, and each tick's
 output: `HasDirectPath` when the target is in sight, the body flown from its
 header along the line with every cell of it clear, otherwise the flow vector, bilinear over the four cells around a
-point and header-anchored for a composite, with the neighbour nearest the goal
+point and header-anchored for a composite, with the neighbor nearest the goal
 as the escape from a cell the field does not cover. Species systems turn that
 into a homing target through `ResolveMovementTarget` (`targeting.go`) — the
 target itself in sight, else a point `FlowLookahead` cells along the flow — and
@@ -174,11 +174,11 @@ A snake head locks the cursor it reaches soonest (`LockedTarget`). One `Reach`
 from the head over its tier's grid ranks the cursors — what a field seeded at
 each cursor would read at the head, since a step costs the same both ways; a
 blocked cursor cell from its first passable ring, a blocked head cell from its
-neighbours a diagonal away — and stops once the choice is settled
+neighbors a diagonal away — and stops once the choice is settled
 (`Reach.Nearest`): past the nearest cursor, so every equal is measured, and at
 the locked one or past half as far again (`NavLockHoldNum`/`NavLockHoldDen`),
 whichever comes first. A cursor the head's own search cannot reach is measured
-from those neighbours too, and only one past a corner walled on both sides can
+from those neighbors too, and only one past a corner walled on both sides can
 lead to it, so a head beside such a corner measures every cursor. It runs when
 the head has no reachable lock, the roster moved enough for its group field to
 fall due, or `NavFlowSettleTicks` passed; `LockTicks` rides the head's
@@ -314,7 +314,7 @@ above, navigation and the whole tick, in µs:
 ```
 
 The direct path is the body flown from its header along the line of sight. In
-16 such games of 2,400 ticks, 8 seeds at 120×40 and 200×60, the box centred on
+16 such games of 2,400 ticks, 8 seeds at 120×40 and 200×60, the box centered on
 the line and accepted turned 90° that preceded it called 71% and 78% of chase
 ticks direct with 1.6% and 1.2% of those blocked for the body as it stands; the
 body flown as it is calls 73% and 79% direct with 0.3% and 0.1% blocked, the

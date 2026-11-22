@@ -164,7 +164,7 @@ are refused on a larger map: a scenario's fixed one, or a `size` past 4,800 cell
 
 `id` is the session's stable public identifier and the name its pod answers to.
 `join_target` and `ws_url` are opaque strings this router produces: `join_target`
-is the front door below, the one address every session is dialled at, since a pod
+is the front door below, the one address every session is dialed at, since a pod
 is reached from the node alone. `ws_url` is absent where the deployment publishes
 no browser route, which is what a page keyed on it reads as "this fleet is for
 native clients".
@@ -207,10 +207,10 @@ resolves it as the browser route does, dials the pod's game port, replays the na
 and copies bytes both ways until each side has closed, or until a write has stalled
 ten seconds or the other direction ended ten seconds before. A stream that does not
 open with a route frame is closed unanswered. Every other refusal precedes the dial,
-in a join reply the dialer prints: an identifier that is not 16 hex, a dialling
+in a join reply the dialer prints: an identifier that is not 16 hex, a dialing
 address past `-client-joins` (the game's own budget of six joins a minute, shared
 with the browser route), a session unknown, unready or full, and one holding
-`-route-max` connections over both routes. Logs name the session, never the dialler;
+`-route-max` connections over both routes. Logs name the session, never the dialer;
 each connection placed, on a pod or a door, is accounted for as it closes
 (`session route closed`: the session, whether a door, the bytes each way, the seconds).
 
@@ -242,7 +242,7 @@ A sign-in also moves the budgets: a signed-in dial's join is charged to the acco
 and the address's charge at the route frame given back, and a create carrying the
 sign-in (`Authorization: Bearer`, which a native run sends to an https site alone, or
 the page's cookie) is charged to the account under `-account-creates`, so a player
-behind a shared address is held to its own budget, not its neighbours'.
+behind a shared address is held to its own budget, not its neighbors'.
 
 ## Doors
 
@@ -271,7 +271,7 @@ though the listing's `limits` count them (`doors`, `doors_max`). The design is
 A dial that only watches a session (`vif -spectate <link>`, a page's
 `?arg=-spectate=<ws_url>`) opens with `MsgSessionWatch` in the route frame's place
 and is answered here, on the front door and the browser route alike: placed as a
-join is, by the frame, the identifier and the dialler's join budget, then served the
+join is, by the frame, the identifier and the dialer's join budget, then served the
 watch handshake by the router, with no connection to the pod and none of
 `-route-max`. The first spectator of a session opens the router's one subscription
 to its pod's feed, under a ticket of kind `watch` the router signs for itself where
@@ -279,7 +279,7 @@ it signs tickets, and every spectator is sent a copy of that feed, so a pod serv
 one subscriber however many watch. `-spectators` bounds a session's audience and
 `-spectators-per-address` one address's share of it, a dial past either refused as
 a full audience for a retry; a session with no seat free is still shown, and one
-still in its lobby is refused as not started before its pod is dialled. The
+still in its lobby is refused as not started before its pod is dialed. The
 subscription is dropped 15 s after its last spectator left. A door a run published
 carries no feed, and a dial that only watches one is told so. The design is
 [Fleet §9](../../doc/kubernetes-fleet.md#9-the-session-routes) and

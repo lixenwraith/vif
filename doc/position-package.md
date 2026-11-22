@@ -69,7 +69,7 @@ The terms, the package's and the game's:
   lay, shift and extend both through `AddSurface`/`LaySurface`, `ShiftSurface` and
   `SetSurfaceAhead`; a frame drawn between shifts asks `BlocksCarried`. The rock's
   look is the wall system's, laid in `CaveResource` for the rock renderer.
-- A *shape*, a line or polygon rasterised into blocks or a volume into solid
+- A *shape*, a line or polygon rasterized into blocks or a volume into solid
   cells, is the third kind a game may want; none is implemented, and it would
   enter as a surface does, laid from its writer's record.
 
@@ -141,7 +141,7 @@ Each names the choice taken and what the other would have cost.
   elsewhere.
 - Kinds, the mask's bits: a block's kinds are what its `blockOf` names, in the
   game the movers a wall stops and the box style it draws in (`component.BoxKind`,
-  two bits no `BlockMask` carries), so the box characters' neighbour test reads a
+  two bits no `BlockMask` carries), so the box characters' neighbor test reads a
   bit of the style's plane where it copied a cell and looked every occupant's
   wall up. `WallBlockAll` is the four mover kinds, never every bit, so a query
   with it matches no styled wall that stops nothing. A second word of kinds
@@ -191,8 +191,8 @@ Each names the choice taken and what the other would have cost.
   main or under.
 - The direct path, the body flown from its header: `HasAreaLineOfSight` takes the
   body's anchor, the cell it moves by, and tests the body with its anchor on each
-  cell of the line, so the cells it tests are the body's. A box centred on the
-  line sat beside any body whose header is not its centre, and accepting it
+  cell of the line, so the cells it tests are the body's. A box centered on the
+  line sat beside any body whose header is not its center, and accepting it
   turned 90° accepted a body that cannot turn; the two erred both ways, rejecting
   clear bodies about as often as accepting blocked ones.
 - Rows, in `engine`: the sparse index is `Store`'s, and the row type is
@@ -267,7 +267,7 @@ serves a flat map as a volume one cell deep, at no cost to it.
   walks; a body of depth is tested through the layers it spans (`plane.deep`),
   one layer being one probe. Every search, the spiral, the pattern, the
   exclusion and the directional scan, works the layer its origin names, as
-  placing on a floor: what a layer means, a storey or a slice of depth, is the
+  placing on a floor: what a layer means, a story or a slice of depth, is the
   game's, so a search crossing layers is the todo's
   [item](todo.md#placement-searches-that-cross-a-volumes-layers) for a game
   that needs one.

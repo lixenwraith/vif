@@ -258,7 +258,7 @@ greps for rather than enumerating every refusal.
 | `authority reached on a link of this instance's own` | INFO | `authority`, `term` | `Authority.reachedHost`: a survivor that followed its host through a relay opened a link of its own to it, which its artifacts take from here (Multiplayer §5.1) |
 | `late survivor taken back` | INFO | `peer`, `term`, `places` | `Authority.takeBack`: a membership report that reached the host after the floor gives the survivor its place back, with its bots' (Multiplayer §5.2) |
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `authority`, `reason` | the candidate that took the term; every survivor that follows it; a survivor left playing alone, which reached no candidate, lost its path, or is under a pinned authority |
-| `redialling the lost host` / `redialling the lost relay` / `the redial was refused` / `the redial admitted this run back` / `the redial found no place for this run` | INFO | `authority`, `dial` / `relay`, `dial` / `peer`, `error` / `peer` / `peer` | a person's run redialling the host it joined where the chain says or at its own door, or the relay it joined through at that relay's door (multi-player.md §5.1) |
+| `redialing the lost host` / `redialing the lost relay` / `the redial was refused` / `the redial admitted this run back` / `the redial found no place for this run` | INFO | `authority`, `dial` / `relay`, `dial` / `peer`, `error` / `peer` / `peer` | a person's run redialing the host it joined where the chain says or at its own door, or the relay it joined through at that relay's door (multi-player.md §5.1) |
 | `a candidate refused the rejoin` / `a candidate took this run back to its host` / `the host holds no place for this run` | INFO | `candidate`, `error` / `candidate`, `authority` / `candidate` | `Membership.rejoinThrough`: a guest whose redial could not reach its host rejoining through the candidates it walks to, one relaying for others taking it back (multi-player.md §5.1) |
 | `relaying joins through a router` / `router door lost` | INFO / WARN | `router`, `door` / `router`, `error` | `Membership.publishDoor`: the door this run publishes through a router was named, or its control connection ended and is being reopened (Multiplayer §5.6) |
 | `path to the authority lost` | WARN | `relay`, `redial` | `Authority.redialRelay`: a participant cut off at the relay it joined through, and whether its run redials that relay's door before it walks |
@@ -535,7 +535,7 @@ slice reached — how much of the buffer was used, not how much it holds. System
 register one through `newBufferTelemetry`, always for a slice that is
 retained between ticks and re-sliced rather than reallocated, so the number answers
 "how large did this actually have to get" and a change in it across builds is a
-change in behaviour rather than in allocation strategy. `spatial.positions_hwm`,
+change in behavior rather than in allocation strategy. `spatial.positions_hwm`,
 `spatial.cell_occupancy_hwm` and `spatial.position_batch_hwm` are the same idea
 outside a slice: the most entities indexed at once, the most in any single grid
 cell, and the largest position batch committed.
@@ -546,12 +546,12 @@ also excluded from the cross-instance comparison surface (`snapshot.SharedKey`),
 because a peak is a property of one instance's execution rather than of the shared
 world, and two participants that agree about the world will disagree about it.
 
-One neighbouring key is worth reading carefully because it is *not* a mark:
-`spatial.max_cell_occupancy` is a plain gauge, stored rather than maximised, and it
+One neighboring key is worth reading carefully because it is *not* a mark:
+`spatial.max_cell_occupancy` is a plain gauge, stored rather than maximized, and it
 means "the fullest cell **at its last publication**": `Position.PublishTelemetry`
 computes it with the other grid gauges every `parameter.StatSnapshotTicks` ticks,
 whatever period `-lt` sets. `spatial.cell_occupancy_hwm` is the same quantity
-maximised over time, kept on every cell insertion. Max-across-cells and
+maximized over time, kept on every cell insertion. Max-across-cells and
 max-across-cells-and-time are different numbers and both names are accurate; only
 reading one for the other is wrong.
 
@@ -583,7 +583,7 @@ column rather than a line, `FormatCount` gives it a thousandfold suffix and
 
 The telemetry overlay (`:t`) shows one card per visible group. `/` filters the
 cards by group or metric name, and `j`/`k` scrolls through the full height of a
-clipped selected card before moving to its neighbour. Space pins a card; a new
+clipped selected card before moving to its neighbor. Space pins a card; a new
 pin turns on the HUD (`:hud`), which is anchored at the top-left, wraps whole
 cards into additional columns, and reports any groups it cannot fit in a
 one-line `hidden` notice. HUD width expands immediately but contracts only after

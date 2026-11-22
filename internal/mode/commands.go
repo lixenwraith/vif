@@ -43,7 +43,7 @@ var commandNames = []string{
 	"register", "login", "logout", "console",
 }
 
-// CommandNames returns the recognised command names and aliases
+// CommandNames returns the recognized command names and aliases
 func CommandNames() []string { return commandNames }
 
 // ExecuteCommand parses and executes a command string
@@ -1302,7 +1302,7 @@ func handleRelayCommand(ctx *engine.GameContext, args []string) CommandResult {
 }
 
 // relayUnavailable refuses relaying where nobody can reach this run: a browser
-// is never dialled
+// is never dialed
 var relayUnavailable = lacking(paths.ExternalFiles(), "Relaying")
 
 // handleTakeoverCommand sets whether a session whose host chose migrate may move to
@@ -1577,7 +1577,7 @@ func botFiles(ctx *engine.GameContext, words []string) error {
 }
 
 // ParsePlayerSlot reads a roster slot as a command or a launch flag names one: in
-// decimal, or in hexadecimal as a cursor is labelled.
+// decimal, or in hexadecimal as a cursor is labeled.
 func ParsePlayerSlot(value string) (int, error) {
 	base := 10
 	if strings.HasPrefix(strings.ToLower(value), "0x") {

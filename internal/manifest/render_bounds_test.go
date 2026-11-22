@@ -36,7 +36,7 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 	// Content whose drawn extent overhangs the map: a glyph and a sigil on the
 	// last cell of each axis, and a marker rectangle deliberately hanging off the
 	// bottom-right corner. Before the fix the marker's overhang landed in the
-	// centring margin, because a projection into the margin reported itself
+	// centering margin, because a projection into the margin reported itself
 	// visible.
 	glyph := world.CreateEntity(core.DomainShared)
 	world.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'a'})
@@ -108,7 +108,7 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 		}
 	}
 
-	// And the margin the map is centred in is presented as out of play.
+	// And the margin the map is centered in is presented as out of play.
 	buf.Clear()
 	buf.SetVoidRegion(area, pf, visual.RgbVoid)
 	buf.FlushToTerminal(nullTerminal{})

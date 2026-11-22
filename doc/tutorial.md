@@ -110,7 +110,7 @@ last glyph still owes. The map floor is 79 by 20, the view an 80 by 24 terminal
 shows, so no lesson there scrolls and `G` leaves the next heading in sight: the
 heading at row 1, the notes at rows 8 to 12 and the practice lines at rows 13 to
 17, Open's note between its two, all from column 4 and ending by column 78. The
-Visual lesson practises on five rows and turns the shield system on for itself
+Visual lesson practices on five rows and turns the shield system on for itself
 alone, so the ping bounds have a reach to show, and Free turns the glyph spawner
 on: each through a region it spawns (`reach`, `practice`), whose systems a
 join's or a reload's install re-derives, as it would not an action's toggle.
@@ -135,16 +135,16 @@ refuses a lobby that would wait for a guest forever.
 
 ## 3. The next round
 
-- **More lessons**: `[ ]`, `gl` and the colour markers, `q` and `@` macros, and
-  `N`, `M`, `C`, `X`, `P` and `s S` practised rather than told (`s` and `S` skip
+- **More lessons**: `[ ]`, `gl` and the color markers, `q` and `@` macros, and
+  `N`, `M`, `C`, `X`, `P` and `s S` practiced rather than told (`s` and `S` skip
   and go back here).
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions. Below 80 columns the
   camera cuts the notes, which reach column 65; a lesson laid from the viewport's
   width would show them whole.
-- **Centring from the map's edge**: a text or line placed from the right or the
-  bottom edge, or the centre (an `origin` on the request,
+- **Centering from the map's edge**: a text or line placed from the right or the
+  bottom edge, or the center (an `origin` on the request,
   [FSM reference](fsm-reference.md#event-emission)), would spare the scenario
   its arithmetic.
 - **Sound**: a chime on a lesson cleared, as recall cues.
@@ -154,7 +154,7 @@ refuses a lobby that would wait for a guest forever.
 - A vim key whose letter a game reads its own way has an action no default key
   binds, and the tutorial binds it through its keymap, over the player's, rather
   than through a capture answering the key.
-- A put glyph is the glyph yanked, rune, colour and level, and scores as any.
+- A put glyph is the glyph yanked, rune, color and level, and scores as any.
 - Visual's selection is the ping bounds, and `d`, `y`, `r` and `~` stay in
   Visual; vim's block insert has no counterpart, since Insert lays no text, so
   `I` and `A` leave Visual for Insert as elsewhere.

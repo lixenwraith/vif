@@ -288,7 +288,7 @@ func (c *Console) quantizeCell(cell *terminal.Cell, ui bool) {
 
 // blackAsBackground sends the console's black as the theme background's RGB. A console's
 // black is the background every color was chosen against; an emulator's theme draws entry
-// 0 as it likes, most often a lighter neighbour of its own background.
+// 0 as it likes, most often a lighter neighbor of its own background.
 func blackAsBackground(cell *terminal.Cell) {
 	if cell.Attrs&terminal.AttrFg256 != 0 && cell.Fg.R == visual.ConBlack {
 		cell.Fg, cell.Attrs = visual.RgbBackground, cell.Attrs&^terminal.AttrFg256

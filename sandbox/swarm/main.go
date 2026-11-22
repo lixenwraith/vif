@@ -15,13 +15,13 @@ const (
 // A Frame is a 2x4 grid of runes
 type Frame [Height][Width]rune
 
-// Animation holds the sequence of frames; its id is its place in the catalogue, from 1
+// Animation holds the sequence of frames; its id is its place in the catalog, from 1
 type Animation struct {
 	Frames []Frame
 }
 
 func main() {
-	// Define the catalogue of visual concepts
+	// Define the catalog of visual concepts
 	animations := getAnimations()
 
 	// Animation loop parameters

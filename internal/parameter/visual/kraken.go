@@ -6,7 +6,7 @@ const (
 	KrakenHealthBarWidth = 9
 
 	// A tentacle's rim draws KrakenRimRune less than KrakenRimReach cells past its
-	// disc, a charge heats a leg's tip KrakenMoveHeat of the way to the attack color,
+	// disk, a charge heats a leg's tip KrakenMoveHeat of the way to the attack color,
 	// and the body's void clears the glyphs under it where it is more than
 	// KrakenVoidOpaque opaque
 	KrakenRimReach   = 1.53

@@ -56,7 +56,7 @@ type Peer struct {
 	outKind [KindCount]atomic.Uint64
 
 	// served is a stream this end admitted through a join handshake, so the
-	// participant on it is behind this one; a dialled or peer link is not.
+	// participant on it is behind this one; a dialed or peer link is not.
 	served bool
 
 	// I/O, and the frame header scratch each loop owns
@@ -758,7 +758,7 @@ func Pipe() (net.Conn, net.Conn) {
 	return spool(a), spool(b)
 }
 
-// inProcess is the far end of a Pipe as its near end sees it: no dialler, so no
+// inProcess is the far end of a Pipe as its near end sees it: no dialer, so no
 // address to spend a join budget for.
 type inProcess struct{}
 

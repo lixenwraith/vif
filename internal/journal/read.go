@@ -110,7 +110,7 @@ type anchorFields struct {
 }
 
 // Load reads one or more journal files into a single set. The event registry must
-// be initialised first: event names resolve through it.
+// be initialized first: event names resolve through it.
 func Load(paths ...string) (Set, error) {
 	var s Set
 	for _, p := range paths {

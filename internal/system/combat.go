@@ -917,8 +917,8 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 		originY = originPos.Y
 	}
 
-	// One artifact resolves one request per centre per composite, so the centre
-	// joins the salt: two centres of one batch reaching the same body would
+	// One artifact resolves one request per center per composite, so the center
+	// joins the salt: two centers of one batch reaching the same body would
 	// otherwise seed both impulses identically.
 	rng := s.knockbackStream(payload.CrossingID, targetEntity,
 		uint64(payload.ChainDepth)^uint64(targetEntity)^uint64(originX)<<20^uint64(originY))

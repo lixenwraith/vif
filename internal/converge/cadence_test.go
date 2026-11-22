@@ -26,7 +26,7 @@ func TestCadenceBoundsAreTheGameParameters(t *testing.T) {
 		t.Fatalf("the floor is %d ticks, the parameter says %d",
 			b.FloorKeyframeTicks, parameter.SnapshotFloorKeyframeTicks)
 	}
-	// The nominal point must itself honour the floor, or a healthy session would
+	// The nominal point must itself honor the floor, or a healthy session would
 	// start out already reporting a constrained link.
 	if got := b.NominalCadenceTicks * uint64(b.NominalKeyframe); got > b.FloorKeyframeTicks {
 		t.Fatalf("the nominal schedule leaves %d ticks between whole worlds, floor is %d",

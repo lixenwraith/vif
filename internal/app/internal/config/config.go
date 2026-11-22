@@ -204,7 +204,7 @@ type Config struct {
 
 	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
 	// adopts instead of deriving from its terminal. Applied before the FSM boots:
-	// the boot script spawns cursor slot zero centred on the map, so a latch adopted
+	// the boot script spawns cursor slot zero centered on the map, so a latch adopted
 	// later leaves that shared cursor on the wrong cell. Zero means no latch.
 	MapWidth, MapHeight int
 	CropOnResize        bool
@@ -327,7 +327,7 @@ func (c Config) Validate() error {
 	}
 	if c.ProbeAddress != "" && !c.Mode.Serves() {
 		// Refused rather than ignored, for the reason validateDriven refuses a
-		// colour mode with no terminal: a flag that silently does nothing is worse
+		// color mode with no terminal: a flag that silently does nothing is worse
 		// than one that says it cannot.
 		return fmt.Errorf("%s: -probe serves a dedicated host; this mode has no supervisor to answer", c.Mode)
 	}
@@ -364,7 +364,7 @@ func (c Config) Validate() error {
 	return c.validateDriven()
 }
 
-// validateDriven rejects settings a run without its own terminal cannot honour,
+// validateDriven rejects settings a run without its own terminal cannot honor,
 // rather than accepting a flag that would silently do nothing
 func (c Config) validateDriven() error {
 	if c.ColorModeSet && !c.Mode.Presents() {

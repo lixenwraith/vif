@@ -455,7 +455,7 @@ func TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom(t *testing.T) {
 	spawns := make([]int, len(apps))
 	for i, a := range apps {
 		if grayedOut(a) || drainsPaused(a) {
-			t.Fatalf("participant %d starts greyed out or paused", i+1)
+			t.Fatalf("participant %d starts grayed out or paused", i+1)
 		}
 		a.SetDispatchTap(func(ev event.GameEvent) {
 			if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == component.SpeciesQuasar {
@@ -638,7 +638,7 @@ func TestParticipantsKeepTheirOwnCorpus(t *testing.T) {
 	if err := os.MkdirAll(lone, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The first file the loader reads; the directory also holds the corpus's licence
+	// The first file the loader reads; the directory also holds the corpus's license
 	texts, _ := filepath.Glob(filepath.Join(corpusDir, "*"+content.ExtText))
 	if len(texts) < 2 {
 		t.Skipf("corpus %s holds fewer than two text files", corpusDir)

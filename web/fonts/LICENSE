@@ -1,4 +1,4 @@
-The page's fonts and their licences.
+The page's fonts and their licenses.
 
 hack-proportional-400.woff2 and hack-proportional-700.woff2 are lixen.com's
 /fonts/ files, byte for byte: Hack Proportional, the site's text face. They are
@@ -9,7 +9,7 @@ modified font they carry a new name, which the Bitstream Vera License requires
 and the OFL allows. Hack is under the MIT License, and the Bitstream Vera glyphs
 it derives from under the Bitstream Vera License; Nerd Fonts' patched fonts are
 under the SIL Open Font License 1.1. All three texts are below. No Nerd Fonts
-icon glyph is kept, so the icon sets' own licences do not apply.
+icon glyph is kept, so the icon sets' own licenses do not apply.
 
 The script respaces subsets of HackNerdFont-Regular.ttf and
 HackNerdFont-Bold.ttf, made with fonttools:

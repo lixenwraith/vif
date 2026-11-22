@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Cell is a participant's reported interest centre — where its own cursor stands.
+// Cell is a participant's reported interest center — where its own cursor stands.
 // It is a hint for relevance and priority, never an input to simulation: the
 // worst a wrong or stale one can do is send a correction sooner than it was
 // needed.
@@ -88,7 +88,7 @@ type LinkConfig struct {
 	// Smoothing weights the newest sample against the running estimate, for both
 	// round-trip time and delivery rate. RFC 3550's 1/16 is the reference point
 	// and the reason this is not simply an average: a link's interesting
-	// behaviour is a step, not a mean.
+	// behavior is a step, not a mean.
 	Smoothing float64
 
 	// JitterSmoothing weights the newest inter-sample difference. Jitter moves

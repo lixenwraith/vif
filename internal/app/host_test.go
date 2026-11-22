@@ -103,10 +103,10 @@ func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
 		t.Fatal("allocator was not called")
 	}
 	unblock()
-	for deadline := time.Now().Add(2 * time.Second); dialling(a) && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(2 * time.Second); dialing(a) && time.Now().Before(deadline); {
 		time.Sleep(time.Millisecond)
 	}
-	if dialling(a) || a.restart.Load() != nil || a.Position() != before || !strings.Contains(a.ctx.GetStatusMessage(), "test quota reached") {
+	if dialing(a) || a.restart.Load() != nil || a.Position() != before || !strings.Contains(a.ctx.GetStatusMessage(), "test quota reached") {
 		t.Fatalf("refused request changed the run or hid the error: %s", a.ctx.GetStatusMessage())
 	}
 }
@@ -206,7 +206,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// rather than staying behind it.
 	guestTick := guest.Position().Tick
 	if guestTick < 240 {
-		t.Fatalf("guest entered at tick %d; the host was past 240 before it dialled", guestTick)
+		t.Fatalf("guest entered at tick %d; the host was past 240 before it dialed", guestTick)
 	}
 	reg := guest.World().Resources.Status
 	installed := reg.Ints.Get("snapshot.install_tick").Load()
@@ -256,7 +256,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 
 	// Nothing was applied twice: the artifacts the host produced between admitting
 	// the guest and reading the world for it are in the capture, and the barrier
-	// recognised them rather than replaying them onto a world that already had them.
+	// recognized them rather than replaying them onto a world that already had them.
 	assertSharedParity(t, host, guest, 1)
 	if got := host.SessionSummary(); !strings.Contains(got, "host") {
 		t.Fatalf("hosting run reports %q", got)
@@ -644,10 +644,10 @@ func TestARefusedJoinLeavesTheRunPlaying(t *testing.T) {
 
 	a.World().RunSafe(func() { err = a.ctx.SessionCtl.Join(host.HostAddr() + "/that") })
 	if err != nil {
-		t.Fatalf("join refused before dialling: %v", err)
+		t.Fatalf("join refused before dialing: %v", err)
 	}
 	deadline := time.Now().Add(socketWait) // [wall] a link bound
-	for dialling(a) {
+	for dialing(a) {
 		if time.Now().After(deadline) {
 			t.Fatal("the dial never finished")
 		}
@@ -712,7 +712,7 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 }
 
 // TestTheFirstRestartAskedForStands: a run already being replaced refuses a scenario
-// change rather than overwriting the restart it latched, a dialled join's above all.
+// change rather than overwriting the restart it latched, a dialed join's above all.
 func TestTheFirstRestartAskedForStands(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -865,7 +865,7 @@ func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
 
 // TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem: :join on a run whose session is
 // its own bots' dials rather than refusing, and the run it becomes is the one the
-// restart loop builds from its live seats, not the configuration it dialled with, so
+// restart loop builds from its live seats, not the configuration it dialed with, so
 // the bot comes along through its holder.
 func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
@@ -892,14 +892,14 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	if err != nil {
 		t.Fatalf(":join beside its own bot: %v", err)
 	}
-	for deadline := time.Now().Add(socketWait); dialling(a); time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(socketWait); dialing(a); time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the dial never finished")
 		}
 	}
 	req := a.restart.Load()
-	if req == nil || req.Dialled == nil || !slices.Equal(req.Bots, []string{"default"}) {
-		t.Fatalf("restart %+v; want a dialled join that seats default again (status %q)", req, a.Context().GetStatusMessage())
+	if req == nil || req.Dialed == nil || !slices.Equal(req.Bots, []string{"default"}) {
+		t.Fatalf("restart %+v; want a dialed join that seats default again (status %q)", req, a.Context().GetStatusMessage())
 	}
 	// What Run does next: the replaced run goes, and the request builds the next
 	// one, driven here rather than presented.
@@ -1066,7 +1066,7 @@ const admitPace = parameter.NetworkAdmitWindow / parameter.NetworkAdmitBurst
 // scriptedRun starts cfg's run as RunScript does. A joiner dials until its host
 // answers: a host not listening yet, a refusal, or a dial its transport closed
 // unanswered because its handshakes in flight are at their bound, is retried as
-// dialSession retries them. Dialling and the start gate are left after wait, as a
+// dialSession retries them. Dialing and the start gate are left after wait, as a
 // person at the keyboard leaves them.
 func scriptedRun(cfg Config, wait time.Duration) (*App, error) {
 	rc := runConfig{Config: cfg}
@@ -2270,7 +2270,7 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 
 // TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies: a lost link is crossed
 // as a departure that applies a lead later, so its identity is free only then; a
-// dial assigned it in between, as a guest redialling at once was, is the
+// dial assigned it in between, as a guest redialing at once was, is the
 // participant that departure disconnects.
 func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, 120, 40)
@@ -2727,10 +2727,10 @@ func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
 	taken := false
 	t.Cleanup(func() {
 		if !taken {
-			req.Dialled.Abandon(errors.New("the test is over"))
+			req.Dialed.Abandon(errors.New("the test is over"))
 		}
 	})
-	if offer := req.Dialled.Offer(); offer.Host != link.PeerID(rid) || offer.Assigned != link.PeerID(pid) || offer.Relay != 0 {
+	if offer := req.Dialed.Offer(); offer.Host != link.PeerID(rid) || offer.Assigned != link.PeerID(pid) || offer.Relay != 0 {
 		t.Fatalf("the person was admitted as participant %d of host %d through %d; want its own place, %d, in its relay's session, %d, and no relay",
 			offer.Assigned, offer.Host, offer.Relay, pid, rid)
 	}
@@ -2828,7 +2828,7 @@ func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
 // TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest: a session of a run's own
 // bots reads no link once its last bot has gone, and the door :host opens there waits
 // for its first guest as a fresh host's does, rather than reading as a link that went
-// down: nobody has dialled it.
+// down: nobody has dialed it.
 func TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	a := mustHeadless(t, 0x3037, 120, 40)

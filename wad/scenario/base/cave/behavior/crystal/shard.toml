@@ -1,6 +1,6 @@
 # The shard: a living crystal, its facets shimmering, a glint running round it. One
 # of the crystal cave's first-rank raiders: RaiderRank1 in ../../macros.toml gives
-# its stats and cycle and the cave its colours.
+# its stats and cycle and the cave its colors.
 macro = "RaiderRank1"
 theme = "Crystal"
 width = 4

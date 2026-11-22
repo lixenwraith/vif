@@ -43,7 +43,7 @@ considered only after those adapters make movement a three-phase protocol.
 `physics.Integrate` and `physics.IntegrateWithBounceStats` use semi-implicit
 Euler: update velocity from acceleration, then position from the new velocity.
 The bounce variant applies acceleration once before choosing swept substeps; its
-result therefore does not depend on how many anti-tunnelling steps were needed.
+result therefore does not depend on how many anti-tunneling steps were needed.
 `physics.IntegratePosition` deliberately ignores acceleration and is used by
 ballistic, orbital, spring-follow, and other controller-owned paths.
 

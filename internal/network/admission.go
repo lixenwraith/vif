@@ -510,7 +510,7 @@ func signable(domain string, fields ...[]byte) []byte {
 }
 
 // Signed is a statement under an Ed25519 signature: the body as its signer
-// marshalled it, kept byte for byte so the verifier checks what was signed, and the
+// marshaled it, kept byte for byte so the verifier checks what was signed, and the
 // signature over it under the token's domain. A pass and a ticket are each one.
 type Signed struct {
 	Body json.RawMessage `json:"body"`

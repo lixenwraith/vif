@@ -330,7 +330,7 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 			t.Fatalf("participant %d sent no crossing", i+1)
 		}
 	}
-	// The leaves are three links apart, so what they agree on travelled through two
+	// The leaves are three links apart, so what they agree on traveled through two
 	// relays in each direction.
 	if relayed := statOf(apps[2], "network.relay_forwarded"); relayed == 0 {
 		t.Fatal("the branch point relayed nothing")
@@ -430,7 +430,7 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 	}
 	assertMeshParity(t, apps, -1)
 
-	// Participant 3 leaves. Only its neighbour has a link to lose.
+	// Participant 3 leaves. Only its neighbor has a link to lose.
 	apps[2].World().RunSafe(func() {
 		apps[2].World().Resources.Network.Port.(*link.MeshPort).Close()
 	})
@@ -472,12 +472,12 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 	}
 }
 
-// TestOnlyTheNeighbourAParticipantIsBehindAnnouncesItsLostLink: 4 joined through 3
+// TestOnlyTheNeighborAParticipantIsBehindAnnouncesItsLostLink: 4 joined through 3
 // and holds a link beside it, to 2 or to the host. A cut of the link beside retires
 // nobody and closes no link 4 plays through. A cut of a link 4 is behind is its
 // departure: 3's, and the host's own once 3 has left, however long 4 sent nothing,
 // and 2's once 2 carries 4 in 3's place.
-func TestOnlyTheNeighbourAParticipantIsBehindAnnouncesItsLostLink(t *testing.T) {
+func TestOnlyTheNeighborAParticipantIsBehindAnnouncesItsLostLink(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name          string
@@ -602,7 +602,7 @@ func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 		t.Fatal("the relayed participant never received an index")
 	}
 	// The session stopped flooding whole bodies: past the warm-up the authority
-	// leads with the index, and the far participant is answered by its neighbour.
+	// leads with the index, and the far participant is answered by its neighbor.
 	served := statOf(relay, "snapshot.relay_served")
 	converged := statOf(far, "snapshot.corrections_hash_only")
 	if served == 0 && converged == 0 {

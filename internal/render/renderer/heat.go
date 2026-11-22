@@ -18,7 +18,7 @@ type HeatRenderer struct {
 	density    *[4]rune
 }
 
-// heatCellRenderer draws one filled bar cell in the colour mode chosen at construction
+// heatCellRenderer draws one filled bar cell in the color mode chosen at construction
 type heatCellRenderer func(buf *render.RenderBuffer, x, width int, fillRune rune)
 
 // NewHeatRenderer creates a heat meter renderer
@@ -113,7 +113,7 @@ func heatNotch(x, width int) bool {
 	return segmentIndex(x, width) != segmentIndex(x+1, width)
 }
 
-// heatLead256 returns the palette colour of the bar's last lit cell
+// heatLead256 returns the palette color of the bar's last lit cell
 func heatLead256(heat, width int) uint8 {
 	return visual.Heat256LUT[segmentIndex(heatBarLit(heat, width)-1, width)]
 }

@@ -26,17 +26,17 @@ whose flags, files and formats may change without notice.
 <!-- end -->
 <!-- if web -->
 - `index.html`, with its scripts, stylesheet and `fonts/`, the font of its text
-  with that font's licence: the page that runs the game
+  with that font's license: the page that runs the game
 - `vif.wasm`: the game, which the page runs in a Worker through `wasm_exec.js`
 <!-- end -->
-- `LICENSE`: vif's licence, BSD-3-Clause
-- `NOTICES`: the licences of Go and of the modules this build links
+- `LICENSE`: vif's license, BSD-3-Clause
+- `NOTICES`: the licenses of Go and of the modules this build links
 <!-- if client -->
-- `LICENSE.font`: the licence of Hack, the font the desktop window draws its cells
+- `LICENSE.font`: the license of Hack, the font the desktop window draws its cells
   in: MIT, with Bitstream Vera's
 <!-- end -->
 <!-- if web -->
-- `LICENSE.font`: the licence of Hack, the font the page draws its cells in, which
+- `LICENSE.font`: the license of Hack, the font the page draws its cells in, which
   `vif.wasm` carries: MIT, with Bitstream Vera's
 <!-- end -->
 

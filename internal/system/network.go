@@ -281,7 +281,7 @@ type localCrossing struct {
 	bytes    int
 }
 
-// intStat, boolStat and textStat register one counter and enrol it in the set Init
+// intStat, boolStat and textStat register one counter and enroll it in the set Init
 // clears, so registration and reset cannot drift apart.
 func (s *NetworkSystem) intStat(reg *status.Registry, key string) *atomic.Int64 {
 	c := reg.Ints.Get(key)
@@ -1136,7 +1136,7 @@ func (s *NetworkSystem) schedule(ev event.GameEvent) {
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
 	// Counted, never capped. The cap is on what a peer can make this instance hold;
 	// this artifact is this instance's own and has already been broadcast, so
-	// refusing it here would be a divergence rather than a defence.
+	// refusing it here would be a divergence rather than a defense.
 	s.scheduled = append(s.scheduled, barrierArtifact{
 		frame: frame, applyTick: applyTick, produced: s.productionEpoch, source: s.localSource, origin: ev.Origin,
 	})
@@ -2006,7 +2006,7 @@ func (s *NetworkSystem) linkReport(completedTick uint64) link.LinkReport {
 		LagTicks:  uint32(min(s.statLag.Load(), math.MaxUint32)),
 		Magnitude: uint32(min(max(s.statMagnitude.Load(), 0), math.MaxUint32)),
 	}
-	// The interest centre is the shared position of a cursor this instance
+	// The interest center is the shared position of a cursor this instance
 	// simulates — the shared store's, not the D-18 prediction, which no
 	// shared-profile read may reach and which would say nothing more here.
 	for i := range parameter.MaxPlayers {
@@ -2169,9 +2169,9 @@ func (s *NetworkSystem) dismissalScheduled() bool {
 	return false
 }
 
-// noticeDeparture changes no shared cursor: only a direct neighbour sees a lost
+// noticeDeparture changes no shared cursor: only a direct neighbor sees a lost
 // link, at a moment its transport chose, so the coordinator crosses the departure
-// and a neighbour the participant was behind floods a notice. The identity returns
+// and a neighbor the participant was behind floods a notice. The identity returns
 // to the pool when that crossing applies, or here for a participant never crossed
 // in. dismissed is a seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
@@ -2241,7 +2241,7 @@ func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed 
 	return true
 }
 
-// receiveDeparture handles a neighbour's notice: the coordinator turns it into the
+// receiveDeparture handles a neighbor's notice: the coordinator turns it into the
 // crossing, anyone else passes it on.
 func (s *NetworkSystem) receiveDeparture(from uint32, body []byte) {
 	if from == 0 || int(from) >= len(s.departed) || s.departed[from] {
@@ -2252,11 +2252,11 @@ func (s *NetworkSystem) receiveDeparture(from uint32, body []byte) {
 		s.statDrop.Add(1)
 		return
 	}
-	// A neighbour losing its edge does not retire a participant still linked here.
+	// A neighbor losing its edge does not retire a participant still linked here.
 	if s.linked(p.Participant) {
 		return
 	}
-	// A notice dismisses only a seat, which its holder dropped and any neighbour
+	// A notice dismisses only a seat, which its holder dropped and any neighbor
 	// passes on; a player leaves for good only by the authority's own word.
 	if p.Dismissed {
 		slot, ok := s.participantSlot(p.Participant)
@@ -2356,7 +2356,7 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 // dispatchMessage admits the steady-state message kinds the domain model defines:
 // the D-3 artifact epoch and the D-13 owner-authored sync.
 // Raw participant input is not one of them — a peer sends the resolved artifact,
-// never the keystroke that produced it — so an unrecognised type is counted and
+// never the keystroke that produced it — so an unrecognized type is counted and
 // discarded rather than translated.
 func (s *NetworkSystem) dispatchMessage(from uint32, msg *link.Message) {
 	if msg == nil {
@@ -2432,7 +2432,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if !done {
 		return
 	}
-	// The completed transfer is kept rather than cleared: it is what recognises a
+	// The completed transfer is kept rather than cleared: it is what recognizes a
 	// copy that still arrives by a second path.
 	tick, whole := asm.Result()
 	s.statCorrections.Add(1)
@@ -2490,7 +2490,7 @@ func (s *NetworkSystem) receiveSessionRestart(from uint32, addr []byte) {
 
 // publishTransportLoss exposes frames the link lost outside the barrier: inbound
 // notifications a full poll buffer discarded, and outbound frames a peer's send
-// queue refused. Either one silently desynchronises two instances, so a new loss
+// queue refused. Either one silently desynchronizes two instances, so a new loss
 // is logged as well as counted.
 func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 	if p == nil {
@@ -3756,7 +3756,7 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 
 // stateInRange reports whether a sync holds only values its owner's systems produce,
 // read off the tables and parameters they write with. Energy has no bound there, nor
-// a shield's colour, nor the boost's durations above zero, which each kill extends;
+// a shield's color, nor the boost's durations above zero, which each kill extends;
 // a game sizes a shield, up to the map's diagonal, which reaches corner to corner.
 func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
 	cfg := s.world.Resources.Config

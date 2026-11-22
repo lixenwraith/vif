@@ -21,7 +21,7 @@ const (
 )
 
 // logoAt is the mark's ink at u, v, each 0 to 1 across its square: the ring takes the
-// square's edge, a straight cross and two diagonals meet at its centre
+// square's edge, a straight cross and two diagonals meet at its center
 func logoAt(u, v float64) logoInk {
 	if u < 0 || u > 1 || v < 0 || v > 1 {
 		return logoNone
@@ -64,7 +64,7 @@ type logoCells struct {
 	cells   []terminal.Cell
 }
 
-// layout returns the mark w by h cells, its square centred in the box; a box's height
+// layout returns the mark w by h cells, its square centered in the box; a box's height
 // counts in cell widths over the aspect, so the square stays square on screen
 func (l *logoCells) layout(w, h int, aspect vmath.Aspect, bg color.RGB, console *render.Console) []terminal.Cell {
 	if w < 1 || h < 1 || aspect <= 0 {

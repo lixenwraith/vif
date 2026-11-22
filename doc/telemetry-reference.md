@@ -144,7 +144,7 @@ The whole `snapshot.` prefix is outside both comparison surfaces. A host publish
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
 | Game context | `engine.fps`, `context.{frame,screen_w,screen_h,map_locked,mode}` | `newGameContext` | The render loop (`fps`, `frame`), resize, mode change, and the map lock (game context and `NetworkSystem`) | A game reset does not clear them; the owners rewrite them | Status bar: `engine.fps` |
-| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Pause, rate, step and breakpoint changes under the time-control lock | `speed_pct` and `speed` survive both reset forms, except that cancelling an armed run-until request reinstates the rate it was armed from. `breakpoint` returns to `-` and `step` to 0, because the reset cancels both requests | Status bar: `speed`, `step`, `breakpoint` |
+| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Pause, rate, step and breakpoint changes under the time-control lock | `speed_pct` and `speed` survive both reset forms, except that canceling an armed run-until request reinstates the rate it was armed from. `breakpoint` returns to `-` and `step` to 0, because the reset cancels both requests | Status bar: `speed`, `step`, `breakpoint` |
 | Scheduler / world | `engine.{ticks,input_horizon,apm,music_apm,tick_slips,ticks_dropped}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,invalid,queue_len,queue_max,settle_exhausted}`, `event.settle_{pre,tick,loop,reset,input,settle}`, `fsm.{state,elapsed,max_duration,state_index,state_count}` | `NewScheduler` | Dispatch and the tick tail, under the world lock; `engine.input_horizon` when a tick opens and before the machine boots or resets; the `fsm.` summary after the FSM update and on an FSM import. A capture install stores `engine.ticks` and `time.game_elapsed_ms` (`Corrector.adoptClockLocked`) | `Scheduler.resetTelemetry` from `executeReset` | Status bar: `engine.ticks`, `engine.music_apm` and the five `fsm.` summary keys |
 | FSM regions | `fsm.<region>.{state,index,elapsed,max_duration,paused}` for each region of the loaded scenario | `bindFSMTelemetry` from `initLoadedScenario` | After the FSM update each tick, and on an FSM import (`ImportFSM`) | `resetTelemetry` | `:d break region` resolves its region name against the `fsm.<region>.state` keys |
 | Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch and dead-letter arrays, surfaced as strings `event.{dispatch_by_type,dead_by_type}` | Arrays in `NewEventQueue`; strings in `NewScheduler` | The scheduler records after routing; the strings publish every `StatSnapshotTicks` | `Queue.ResetTelemetry` after the stale-event drain | Generic only |
@@ -171,7 +171,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `combat.damage_family_<family>` | Combat | Damage points per attack family (`component.CombatAttackNames`): tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, contact, strike, hold |
 | `combat.live_<type>` | Combat | Live Combat-store population per type. It decomposes `combat.count`, so a type still counted while its species reports inactive is a lifecycle leak |
 | `weapon.<kind>`, `weapon.<kind>_fired`, `player.<slot>.weapon.<kind>` | Weapon | Whether a cursor holds the kind, and discharges per kind. `weapon.main_fired` counts main-fire actions past the cooldown, each of which fires the loadout |
-| `storm.<color>_active_frames` | Storm | Attack ticks of a circle of that colour (red, green, blue) |
+| `storm.<color>_active_frames` | Storm | Attack ticks of a circle of that color (red, green, blue) |
 | `event.settle_<label>` | Scheduler | Settle passes that dispatched an event a replay reproduces, attributed by source label; a `device` event, which no journal holds, counts in none of the event tallies |
 | `player.<slot>.<suffix>` | Per-slot metrics | See [The registry](#the-registry) |
 
@@ -230,7 +230,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `mount.host_rejects` (int) | Mount requests naming an unplaced or non-Shared host, a cursor, or an unknown weapon or lane |
 | `bullet.spawned`, `bullet.hits` (int) | Bullets created by a mount or a cursor's turret, and bullets stopped by a cursor, a shield or a combat target |
 | `dust.created`, `dust.destroyed` (int) | Dust actually created, and dust consumed by a detonation. Expired dust dies through the timer |
-| `dust.centers_dropped` (int) | Burst centres (one per occupied cell) dropped from a detonation that already held `ExplosionCenterCap` |
+| `dust.centers_dropped` (int) | Burst centers (one per occupied cell) dropped from a detonation that already held `ExplosionCenterCap` |
 | `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `scatter`, `dust`, `other`) |
 | `death.tagged` (int) | Entities processed from the `DeathComponent` sweep |
 | `death.{protected,zero,payload}_rejects`, `death.missing_{entities,effect_data}` (int) | Entries refused by `ProtectFromDeath`, zero identifiers, bad payload types, entities already gone, and deaths whose effect lacked position, glyph or wall data |
@@ -321,7 +321,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `snapshot.proof_failures` (int) | Repairs whose rows or result did not reproduce their declared hash. Nothing was written |
 | `snapshot.baseline_refusals` (int) | Indexes or repairs describing a run, session or baseline this instance does not hold |
 | `snapshot.keyframe_fallbacks` (int) | Times the exchange gave up and a whole world was sent or asked for |
-| `snapshot.relay_retained` (int) | Authoritative records held for a neighbour to ask about. An index enters the ring only once its capture is provably the authority's |
+| `snapshot.relay_retained` (int) | Authoritative records held for a neighbor to ask about. An index enters the ring only once its capture is provably the authority's |
 | `snapshot.relay_served`, `snapshot.relay_unserved` (int) | Repairs answered from that retention, and requests refused because the tick is not held |
 | `snapshot.relay_bytes_sent`, `snapshot.relay_bytes_received` (int) | Relayed answer cost, priced against the relaying participant's own link |
 | `snapshot.replay_suffix_records` (int) | Crossings retained for replay |
@@ -333,7 +333,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `snapshot.cadence_keyframe_age_ticks` (int) | How long this instance has actually gone without a whole authoritative world |
 | `snapshot.cadence_uplink_bps`, `snapshot.cadence_floor_bps` (int) | What the schedule costs, and what the convergence floor costs, summed over the planned links |
 | `snapshot.cadence_links`, `snapshot.cadence_constrained_links` (int) | Links the schedule plans for, and how many of them are worse than nominal |
-| `snapshot.cadence_budget_bps` (int) | What the tightest link allows after the utilisation share, priced on the rate it delivered while it was the limit (a join's capture, or frames held behind a backlog) and doubled every `SnapshotLinkCapacityTicks` a constrained plan goes without the link holding them again. Zero means no link has been read as the limit |
+| `snapshot.cadence_budget_bps` (int) | What the tightest link allows after the utilization share, priced on the rate it delivered while it was the limit (a join's capture, or frames held behind a backlog) and doubled every `SnapshotLinkCapacityTicks` a constrained plan goes without the link holding them again. Zero means no link has been read as the limit |
 | `snapshot.cadence_constrained` (bool) | A link moved the operating point worse than nominal. While a cadence is in force and no worse qualifier applies, the status bar shows `slow` |
 | `snapshot.cadence_floor_breached` (bool) | No schedule delivers a whole world inside the guaranteed window, or none arrived. The status bar shows `slow!` while a cadence is in force, and `:session` prints `BELOW THE CONVERGENCE FLOOR` |
 

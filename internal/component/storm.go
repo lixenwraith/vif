@@ -21,7 +21,7 @@ type StormCircleState uint8
 
 const (
 	StormCircleCooldown StormCircleState = iota // waits out its cooldown, then for the convex
-	StormCircleActive                           // runs its colour's attack, held in the convex
+	StormCircleActive                           // runs its color's attack, held in the convex
 )
 
 // StormCircleType derives circle behavior from index

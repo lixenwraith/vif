@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// A beacon's beams take the nugget's own colour, a spawn's the materialize cyan and a
+// A beacon's beams take the nugget's own color, a spawn's the materialize cyan and a
 // program's style its own
 var materializePalette = [component.SpawnTypeCount]color.RGB{
 	component.SpawnTypeDrain:  visual.RgbMaterialize,
@@ -52,7 +52,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	buf.SetWriteMask(visual.MaskTransient)
 
 	// Beams run from the edge of the map, not the edge of the terminal: on a
-	// viewport wider than the map the two differ by the centring margin, and a
+	// viewport wider than the map the two differ by the centering margin, and a
 	// beam starting there starts outside the world.
 	pf := ctx.PlayfieldViewportRect()
 	if pf.Empty() {

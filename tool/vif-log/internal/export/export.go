@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
-// Exporter serialises a record set. JSONL is the only implementation; a plain
+// Exporter serializes a record set. JSONL is the only implementation; a plain
 // text renderer is the second.
 type Exporter interface {
 	Ext() string

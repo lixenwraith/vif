@@ -102,7 +102,7 @@ func TestALinesAccentCallsOutRunesAndTakesNoCell(t *testing.T) {
 	}
 }
 
-// A put lays each cell's glyph with the rune, colour and level it names, and passes
+// A put lays each cell's glyph with the rune, color and level it names, and passes
 // over a cell a glyph holds, an earlier cell of the same put included, a cell off
 // the map and a rune no glyph holds.
 func TestAPutLaysEachGlyphAsYankedAndPassesOverAHeldCell(t *testing.T) {

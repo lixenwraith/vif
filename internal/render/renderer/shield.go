@@ -15,7 +15,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// ShieldStyle is how one Paint lights a field: its kind's look, the colour and
+// ShieldStyle is how one Paint lights a field: its kind's look, the color and
 // palette it wears, its glow, the blend a peer's takes, and whether it is the local
 // cursor's own, the lens every other field lights over
 type ShieldStyle struct {
@@ -30,7 +30,7 @@ type ShieldStyle struct {
 
 // shieldGeometry is a radius's field at the cell aspect, worked out once. A
 // quadrant's cells, by |dy|*stride+|dx|, hold their alpha at full opacity and their
-// glow terms; each row, the columns it draws and the ones its 256-colour rim covers.
+// glow terms; each row, the columns it draws and the ones its 256-color rim covers.
 type shieldGeometry struct {
 	radius         float64
 	invRadiusSq    float64
@@ -38,15 +38,15 @@ type shieldGeometry struct {
 	stride         int
 	used           uint64 // the lookup that last took it
 
-	shape      []float64 // zero draws nothing: the centre, and past the feather
+	shape      []float64 // zero draws nothing: the center, and past the feather
 	edge       []float64 // the turning glow's edge factor, zero inside its threshold
-	dirX, dirY []float64 // the cell's direction from the centre
+	dirX, dirY []float64 // the cell's direction from the center
 	span       []int     // by |dy|: the widest |dx| drawn, -1 for none
 	rimLo      []int     // by |dy|: the |dx| the rim covers, none when rimLo > rimHi
 	rimHi      []int
 }
 
-// distSq is a cell's normalized squared distance from the centre, its row given in
+// distSq is a cell's normalized squared distance from the center, its row given in
 // columns (vmath.Aspect.Circular)
 func (g *shieldGeometry) distSq(dx int, dyCirc float64) float64 {
 	return (float64(dx*dx) + dyCirc*dyCirc) * g.invRadiusSq
@@ -85,7 +85,7 @@ func (g *shieldGeometry) build(radius float64, reachX, reachY int, aspect vmath.
 					g.edge[i] = (d - visual.ShieldGlowEdgeThreshold) / (1 - visual.ShieldGlowEdgeThreshold)
 				}
 			}
-			// A cell whose outward neighbour leaves the rim's disc joins the band, so the
+			// A cell whose outward neighbor leaves the rim's disk joins the band, so the
 			// rim of any radius closes into a ring; a row's rim stays one run
 			if d <= rimMax && (d >= rimMin || g.distSq(adx+1, dyCirc) > rimMax || g.distSq(adx, nextCirc) > rimMax) {
 				g.rimLo[ady] = min(g.rimLo[ady], adx)
@@ -95,7 +95,7 @@ func (g *shieldGeometry) build(radius float64, reachX, reachY int, aspect vmath.
 	}
 
 	// A rim whose top is its axis cell alone lowers it onto the row beneath, so the
-	// ring is flat there instead of carrying a lone cell; the centre row never takes it
+	// ring is flat there instead of carrying a lone cell; the center row never takes it
 	top := rows - 1
 	for top > 0 && g.rimLo[top] > g.rimHi[top] {
 		top--
@@ -106,7 +106,7 @@ func (g *shieldGeometry) build(radius float64, reachX, reachY int, aspect vmath.
 	}
 }
 
-// rimBand fits the 256-colour rim to the cell grid: it spans from the outermost drawn
+// rimBand fits the 256-color rim to the cell grid: it spans from the outermost drawn
 // cell on each axis inward, starting before Shield256RimStart when a shield is too
 // small for that band to hold a whole row or column
 func (g *shieldGeometry) rimBand(aspect vmath.Aspect) (float64, float64) {
@@ -160,7 +160,7 @@ func NewShieldPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *Shield
 
 // geometry is the field for a radius, built on first use and kept for the most
 // recently used radii. The box stops at the map's size, which a cell's distance from
-// a centre on the map never passes.
+// a center on the map never passes.
 func (p *ShieldPainter) geometry(radius float64, ctx *render.RenderContext) *shieldGeometry {
 	reachX := int(min(math.Ceil(radius*parameter.ShieldFeatherEndRatio)+1, float64(ctx.MapWidth)))
 	reachY := int(min(math.Ceil(p.aspect.FromCircular(radius)*parameter.ShieldFeatherEndRatio)+1, float64(ctx.MapHeight)))
@@ -181,7 +181,7 @@ func (p *ShieldPainter) geometry(radius float64, ctx *render.RenderContext) *shi
 	return oldest
 }
 
-// SetLens makes the field of a radius centred on (x, y) this frame's lens
+// SetLens makes the field of a radius centered on (x, y) this frame's lens
 func (p *ShieldPainter) SetLens(ctx render.RenderContext, radius float64, x, y int) {
 	p.lensSpan = append(p.lensSpan[:0], p.geometry(radius, &ctx).span...)
 	p.lensX, p.lensY, p.lensOn = x, y, true
@@ -205,7 +205,7 @@ func (p *ShieldPainter) lensRow(mapY int) (int, int) {
 	return p.lensX - p.lensSpan[ady], p.lensX + p.lensSpan[ady]
 }
 
-// Paint draws a field of a radius centred on (centerX, centerY) in map coordinates,
+// Paint draws a field of a radius centered on (centerX, centerY) in map coordinates,
 // over the visible map; a radius that is not positive draws nothing.
 // Caller must set write mask.
 func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, radius float64, style ShieldStyle) {
@@ -241,7 +241,7 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 	p.paint256(buf, g, centerX, centerY, x0, x1, y0, y1, offX, offY)
 }
 
-// paintTrueColor screens the field over each row's drawn span, left of the centre and
+// paintTrueColor screens the field over each row's drawn span, left of the center and
 // then from it, so a half's columns share a sign and walk its row of the quadrant
 func (p *ShieldPainter) paintTrueColor(buf *render.RenderBuffer, g *shieldGeometry, cx, cy, x0, x1, y0, y1, offX, offY int) {
 	for mapY := y0; mapY <= y1; mapY++ {
@@ -255,7 +255,7 @@ func (p *ShieldPainter) paintTrueColor(buf *render.RenderBuffer, g *shieldGeomet
 		}
 		first := 0
 		if ady == 0 {
-			first = 1 // the centre draws nothing
+			first = 1 // the center draws nothing
 		}
 		lensLo, lensHi := p.lensRow(mapY)
 		row, screenY := ady*g.stride, mapY+offY
@@ -305,7 +305,7 @@ func (p *ShieldPainter) paint256(buf *render.RenderBuffer, g *shieldGeometry, cx
 	}
 }
 
-// rimSpan draws one half-row's rim, lit in the glow colour where it faces the glow
+// rimSpan draws one half-row's rim, lit in the glow color where it faces the glow
 func (p *ShieldPainter) rimSpan(buf *render.RenderBuffer, g *shieldGeometry, row, lo, hi, cx, sign, screenY, offX int, qx, qy float64) {
 	for mapX := lo; mapX <= hi; mapX++ {
 		i := row + (mapX-cx)*sign
@@ -325,7 +325,7 @@ type emberTransitionState struct {
 	transitionStart time.Time
 }
 
-// ShieldRenderer renders every active shield at its own radius and colour, and the
+// ShieldRenderer renders every active shield at its own radius and color, and the
 // Wraith field round every Wraith
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
@@ -374,7 +374,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 // layLens takes the local cursor's shield, when it draws this frame, as the lens. In
-// 256 colours a field is a solid rim, with no base to darken.
+// 256 colors a field is a solid rim, with no base to darken.
 func (r *ShieldRenderer) layLens(ctx render.RenderContext) {
 	r.painter.ClearLens()
 	world := r.gameCtx.World
@@ -536,14 +536,14 @@ func (r *ShieldRenderer) transitionEnvelope(progress float64) float64 {
 	return (1.0 - fallProgress) * visual.EmberTransitionMaxIntensity
 }
 
-// renderTransitionOverlay screens the ember's edge colour over the shield's field,
+// renderTransitionOverlay screens the ember's edge color over the shield's field,
 // stronger towards its edge, so the shield rises out of the ember that ended
 func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, radius float64, intensity float64) {
 	g := r.painter.geometry(radius, &ctx)
 	visMinX, visMinY, visMaxX, visMaxY := ctx.VisibleMapBounds()
 	offX := ctx.GameXOffset + ctx.MapOffsetX - ctx.CameraX
 	offY := ctx.GameYOffset + ctx.MapOffsetY - ctx.CameraY
-	centre := visual.EmberTransitionCentreShare
+	center := visual.EmberTransitionCenterShare
 	for mapY := max(visMinY, centerY-g.reachY); mapY <= min(visMaxY, centerY+g.reachY); mapY++ {
 		dyCirc := r.painter.aspect.Circular(float64(mapY - centerY))
 		for mapX := max(visMinX, centerX-g.reachX); mapX <= min(visMaxX, centerX+g.reachX); mapX++ {
@@ -552,7 +552,7 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 				continue
 			}
 			radial := min(math.Sqrt(normDistSq), 1.0)
-			buf.SetBgScreen(mapX+offX, mapY+offY, visual.RgbEmberEdgeLow, visual.RgbBackground, intensity*(centre+(1-centre)*radial))
+			buf.SetBgScreen(mapX+offX, mapY+offY, visual.RgbEmberEdgeLow, visual.RgbBackground, intensity*(center+(1-center)*radial))
 		}
 	}
 }

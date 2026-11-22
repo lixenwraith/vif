@@ -393,7 +393,7 @@ func (r *OverlayRenderer) renderMenuTextBox(box tui.Region, row core.OverlayMenu
 	}})
 }
 
-// cursorColors are a typing cursor's colours in a field of fg on bg: the cursor's
+// cursorColors are a typing cursor's colors in a field of fg on bg: the cursor's
 // in the shared blink's on half, the field's own in its off half
 func (r *OverlayRenderer) cursorColors(fg, bg color.RGB) (color.RGB, color.RGB) {
 	if cursorShown(r.gameCtx) {
@@ -679,7 +679,7 @@ func (r *OverlayRenderer) renderAbout(body tui.Region) {
 		return
 	}
 
-	// Side by side, the two centred as one block
+	// Side by side, the two centered as one block
 	info := body.Sub(w+parameter.AboutLogoGap, 0, body.W-w-parameter.AboutLogoGap, body.H)
 	top := max(body.H-max(h, aboutInfoRows(info.W, card)), 0) / 2
 	r.renderLogo(body.Sub(0, top, w, h), bg)

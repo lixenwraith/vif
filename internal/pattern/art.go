@@ -104,7 +104,7 @@ func ParseArtPreset(name string) (ArtPreset, bool) {
 	return ArtNone, false
 }
 
-// Art returns the glyph and colours preset p draws cell c in. It is a pure function of
+// Art returns the glyph and colors preset p draws cell c in. It is a pure function of
 // its arguments in integer arithmetic, so every platform draws the same stone, and it
 // allocates nothing, so a renderer may call it for every rock cell of a frame.
 func Art(p ArtPreset, seed uint64, c ArtCell) (rune, color.RGB, color.RGB) {
@@ -112,8 +112,8 @@ func Art(p ArtPreset, seed uint64, c ArtCell) (rune, color.RGB, color.RGB) {
 	return l.r, l.fg, l.bg
 }
 
-// Art256 is Art in xterm-256 indices, every colour but a hued glyph's the grey of its
-// luma: a console would turn the rock's muted browns red, so rock reads grey there and
+// Art256 is Art in xterm-256 indices, every color but a hued glyph's the gray of its
+// luma: a console would turn the rock's muted browns red, so rock reads gray there and
 // only moss and crystal points keep a hue
 func Art256(p ArtPreset, seed uint64, c ArtCell) (rune, uint8, uint8) {
 	l := paint(p, seed, c)
@@ -152,7 +152,7 @@ func paint(p ArtPreset, seed uint64, c ArtCell) look {
 }
 
 // look is what a cell shows; a lamp's glyph shines by itself, so a face's light leaves it,
-// and a hued glyph keeps its hue in 256 colours
+// and a hued glyph keeps its hue in 256 colors
 type look struct {
 	r      rune
 	fg, bg color.RGB
@@ -175,7 +175,7 @@ type stone struct {
 }
 
 // bare draws the host rock: an even grain over two octaves of mottle, each cell a
-// little off its neighbours, and a coarser crust along its face as deep as the mottle
+// little off its neighbors, and a coarser crust along its face as deep as the mottle
 // runs high
 func (s *stone) bare() {
 	mottle := s.noise2(channelMottle, visual.StoneMottleColBits, visual.StoneMottleRowBits)

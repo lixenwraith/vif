@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// labelling is set while a CPU profile runs: timed modules then tag their
+// labeling is set while a CPU profile runs: timed modules then tag their
 // samples kind=<sys|evt|draw|core> module=<name>, which pprof -tagfocus selects
-var labelling atomic.Bool
+var labeling atomic.Bool
 
 // mutexing is set while a mutex capture samples contention
 var mutexing atomic.Bool
@@ -36,9 +36,9 @@ func StartCPU(dir string, d time.Duration, done func(path string, err error)) (s
 		discard(f, path)
 		return "", err
 	}
-	labelling.Store(true)
+	labeling.Store(true)
 	time.AfterFunc(d, func() {
-		labelling.Store(false)
+		labeling.Store(false)
 		pprof.StopCPUProfile()
 		done(path, f.Close())
 	})

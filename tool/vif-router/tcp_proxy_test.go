@@ -115,11 +115,11 @@ func join(addr, id string) error {
 	return err
 }
 
-// TestEitherRouteRefusesBeforeDialling covers each answer short of a pod over the
+// TestEitherRouteRefusesBeforeDialing covers each answer short of a pod over the
 // front door and the browser route alike: none of them may cost that pod a
 // connection, and a dialer that named a session is told why in the stream, and
 // whether a retry can help, which a page reads where it is never shown a status.
-func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
+func TestEitherRouteRefusesBeforeDialing(t *testing.T) {
 	pod := startPod(t)
 	// A closed listener's port can go to another package's listener while go test
 	// ./... runs, and that one answers the dial. A held connection keeps its own end's
@@ -202,12 +202,12 @@ func TestAStreamPastThePlacementBoundIsClosedAtOnce(t *testing.T) {
 			t.Fatal("a silent stream was never counted as being placed")
 		}
 	}
-	past, dialler := net.Pipe()
+	past, dialer := net.Pipe()
 	if upstream, _, _ := router.place(past, nil); upstream != nil {
 		t.Fatal("a stream past the bound was placed")
 	}
-	_ = dialler.SetReadDeadline(time.Now().Add(time.Second))
-	if _, err := dialler.Read(make([]byte, 1)); err != io.EOF {
+	_ = dialer.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := dialer.Read(make([]byte, 1)); err != io.EOF {
 		t.Fatalf("a stream past the bound read %v, want it closed", err)
 	}
 }
@@ -272,7 +272,7 @@ func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 }
 
 // TestTheSessionCeilingSpansBothRoutes: a browser holding the session's one slot
-// refuses a native dial before any pod is dialled, and its close admits the next.
+// refuses a native dial before any pod is dialed, and its close admits the next.
 func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	pod := startPod(t)
 	held := newHolds(1)
@@ -290,7 +290,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 		t.Fatalf("a dial past the ceiling returned %v", err)
 	}
 	if n := pod.accepted.Load(); n != 1 {
-		t.Fatalf("the pod was dialled %d time(s), want the browser's alone", n)
+		t.Fatalf("the pod was dialed %d time(s), want the browser's alone", n)
 	}
 
 	_ = browser.Close()
@@ -312,7 +312,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 
 // TestAnAddressHasOneJoinBudgetOverBothRoutes holds the game's own budget against
 // the player's address, which the pod no longer sees: the front door keys it on the
-// dialler and the browser route on the edge's header, each before a lookup.
+// dialer and the browser route on the edge's header, each before a lookup.
 func TestAnAddressHasOneJoinBudgetOverBothRoutes(t *testing.T) {
 	sessions := &fakeSessionAllocator{routeErr: errSessionUnknown}
 	joins := network.NewAdmissionLimiterOf(time.Minute, 1)
@@ -364,7 +364,7 @@ func (l *accountingLog) String() string {
 
 // TestAPlacedConnectionIsAccountedForAsItCloses: a connection the front door placed
 // is logged as it ends with the session, whether a door, the bytes each way and the
-// seconds, and never the dialler's address.
+// seconds, and never the dialer's address.
 func TestAPlacedConnectionIsAccountedForAsItCloses(t *testing.T) {
 	pod := startPod(t)
 	logs := &accountingLog{}
@@ -412,7 +412,7 @@ func TestAPlacedConnectionIsAccountedForAsItCloses(t *testing.T) {
 		}
 	}
 	if strings.Contains(line, "127.0.0.1:") {
-		t.Fatalf("the accounting line names the dialler: %q", line)
+		t.Fatalf("the accounting line names the dialer: %q", line)
 	}
 }
 

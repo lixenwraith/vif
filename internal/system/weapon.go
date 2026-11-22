@@ -1102,7 +1102,7 @@ func (s *WeaponSystem) strikeRay(cursor core.Entity, ray *component.RayComponent
 	}
 }
 
-// palette is the colour a cursor's discharge draws in, by its energy polarity
+// palette is the color a cursor's discharge draws in, by its energy polarity
 func (s *WeaponSystem) palette(cursor core.Entity) component.WeaponPalette {
 	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
 		return component.PaletteNegative

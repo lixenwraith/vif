@@ -119,10 +119,10 @@ lines = [
 [[blocks]]
 id = "markers"
 lines = [
-  "gl lights the colours to your right",
+  "gl lights the colors to your right",
   "then r, g or b jumps to that glyph",
   "gh, gj and gk look the other ways",
-  "gll leaps to the nearest of any colour",
+  "gll leaps to the nearest of any color",
 ]
 
 [[blocks]]

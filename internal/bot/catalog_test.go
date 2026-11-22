@@ -423,7 +423,7 @@ func BenchmarkEveryInput(b *testing.B) {
 	}
 }
 
-// reference renders the catalogue's tables as the section doc/bots.md keeps of them
+// reference renders the catalog's tables as the section doc/bots.md keeps of them
 func reference() string {
 	var b strings.Builder
 	// item writes a list item wrapped at 80 columns, its later lines indented
@@ -444,13 +444,13 @@ func reference() string {
 		}
 		return strings.Join(names, ", ")
 	}
-	b.WriteString(`## Catalogue
+	b.WriteString(`## Catalog
 
 What a graph's guards and ` + "`PointAt`" + ` take as a target, what a network reads
 and asks for, and what a score pays for. This section is generated from the
-tables of ` + "`internal/bot/catalogue.go`" + `: change a row there, then run
+tables of ` + "`internal/bot/catalog.go`" + `: change a row there, then run
 ` + "`VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference`" + `. ` + "`vif -schema`" + `
-lists the same inputs, outputs, scales and sources under ` + "`bot_catalogue`" + `.
+lists the same inputs, outputs, scales and sources under ` + "`bot_catalog`" + `.
 
 ### Kinds
 
@@ -551,14 +551,14 @@ names what one of it pays. A source it leaves out pays nothing.
 	return b.String()
 }
 
-// TestTheCatalogueReferenceIsItsTables keeps the section of doc/bots.md between
+// TestTheCatalogReferenceIsItsTables keeps the section of doc/bots.md between
 // its two markers as the tables render it; VIF_WRITE_GENERATED=1 rewrites it
 // after a row changes.
-func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
+func TestTheCatalogReferenceIsItsTables(t *testing.T) {
 	const (
 		page = "../../doc/bots.md"
-		open = "<!-- catalogue: generated, see its first lines -->\n"
-		shut = "<!-- /catalogue -->\n"
+		open = "<!-- catalog: generated, see its first lines -->\n"
+		shut = "<!-- /catalog -->\n"
 	)
 	got, err := os.ReadFile(page)
 	if err != nil {
@@ -567,7 +567,7 @@ func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
 	before, rest, found := strings.Cut(string(got), open)
 	kept, after, closed := strings.Cut(rest, shut)
 	if !found || !closed {
-		t.Fatalf("%s has no catalogue section between %q and %q", page, open, shut)
+		t.Fatalf("%s has no catalog section between %q and %q", page, open, shut)
 	}
 	want := reference()
 	if os.Getenv("VIF_WRITE_GENERATED") == "1" && kept != want {
@@ -578,6 +578,6 @@ func TestTheCatalogueReferenceIsItsTables(t *testing.T) {
 	}
 	// Each row is printed with its own line, so none is left without one
 	if kept != want || strings.Contains(want, ": .") {
-		t.Errorf("%s: its catalogue section is stale, or a row says nothing of what it is; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
+		t.Errorf("%s: its catalog section is stale, or a row says nothing of what it is; VIF_WRITE_GENERATED=1 go test ./internal/bot -run Reference rewrites it", page)
 	}
 }

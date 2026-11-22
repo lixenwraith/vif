@@ -1,6 +1,6 @@
 # The demon: horned, its jaw working. One of the cracked cave's fourth-rank raiders:
 # RaiderRank4 in ../../macros.toml gives its stats and cycle and the cave its
-# colours.
+# colors.
 macro = "RaiderRank4"
 theme = "Cracked"
 width = 5

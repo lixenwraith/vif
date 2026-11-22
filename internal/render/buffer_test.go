@@ -8,10 +8,10 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
-// TestRGBWritesComposeOverPaletteColour: an RGB write or blend onto a cell drawn with
-// a palette index composes over that index's colour and clears the palette flag, so the
+// TestRGBWritesComposeOverPaletteColor: an RGB write or blend onto a cell drawn with
+// a palette index composes over that index's color and clears the palette flag, so the
 // terminal never reads a blended R byte as an index.
-func TestRGBWritesComposeOverPaletteColour(t *testing.T) {
+func TestRGBWritesComposeOverPaletteColor(t *testing.T) {
 	t.Parallel()
 	rim := visual.Palette256RGB(color.P256Yellow)
 	flash := color.RGB{R: 200, G: 60, B: 25}
@@ -50,7 +50,7 @@ func TestRGBWritesComposeOverPaletteColour(t *testing.T) {
 // the terminal's own background would show there instead.
 func TestNoCellLeavesBlank(t *testing.T) {
 	t.Parallel()
-	ctx := centredContext()
+	ctx := centeredContext()
 	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
 		b := NewRenderBuffer(mode, 30, 16)
 		b.SetVoidRegion(ctx.FrameRect(), ctx.PlayfieldRect(), visual.RgbVoid)

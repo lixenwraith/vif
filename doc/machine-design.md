@@ -238,7 +238,7 @@ A host is the species system that steps a graph. Its contract:
   overlay (`nameStates`, `Resources.Machines`), and `Graph.Flags` tells a program
   that arms its mount.
 - **State overlay.** `:machine` labels each instance a machine steps with its
-  state's name and, in a timed entry, its progress, centred on the row above the
+  state's name and, in a timed entry, its progress, centered on the row above the
   body (`MachineRenderer`), read from the component's `Machine` and the names its
   host published; it is this instance's view alone.
 - **Footprint effects.** A host that clears the cells under a footprint names the
@@ -306,9 +306,9 @@ its edges, then what its host does around the step.
   Chase with the full interval once the composite is built, before
   `EventSpeciesCreated`.
 - The charge line reads `Machine.Elapsed`, the teleport line `Machine.Progress()`;
-  both run from the body's centre to the landing footprint's, ending on the landing
+  both run from the body's center to the landing footprint's, ending on the landing
   marker. It blinks on the lock's cell through Lock and Charge and on the landing
-  through Teleport, its colour cycle restarting at each entry.
+  through Teleport, its color cycle restarting at each entry.
 
 ### 4.2 Quasar
 
@@ -350,13 +350,13 @@ its edges, then what its host does around the step.
 
 ### 4.3 Storm circles
 
-`C = *circleCtx`, one graph per colour:
+`C = *circleCtx`, one graph per color:
 
-- `circleVariants`, indexed by `StormCircleType`, holds a row per colour: the
+- `circleVariants`, indexed by `StormCircleType`, holds a row per color: the
   spawn's cooldown, the attack, the cooldown after one, Active's flags beside
   Attacking, its enter and tick hooks, its cue, and the mount `createCircleHeader`
   gives the circle. `NewStormSystem` builds the three graphs from the rows once
-  (`newCircleGraph`); a colour is a row, never a switch.
+  (`newCircleGraph`); a color is a row, never a switch.
   - Green, 1 s, 1 s, 1 s, flagged Armed: tick `pulse` counts; the armed disruptor
     mount fires one pulse an attack, which swells over its first half and strikes
     every tick of it.
@@ -588,7 +588,7 @@ per instance:
   alike, since each steps its own copy of a program: `Status`, a row of the
   compared surface (`snapshot.SharedKey`, checked at load); `Var`, a variable of
   the scenario machine, which the scheduler lends through
-  `Resources.Scenario` so no system reaches the machine; and `Signalled`, a bit of
+  `Resources.Scenario` so no system reaches the machine; and `Signaled`, a bit of
   `BehaviorComponent.Signals`. The last is the compiler's own, added by
   `Vocabulary.Signals`: it numbers a program's declared `signals`, has the edge
   that reads one lower it as it commits, and keeps for each state the signals its
@@ -669,7 +669,7 @@ smaller part of it.
   way) and header offset, hit points, the combat row its own starts from (`swarm`
   or `quasar`, the unit composites whose damage lands on their header) with each
   attack family's damage, stun and knockback its `[prototype.attacks]` names, its
-  materialize style (the swarm's, with the colour and timings its
+  materialize style (the swarm's, with the color and timings its
   `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, with each key of the program's
@@ -682,7 +682,7 @@ smaller part of it.
   system for it (§6.2).
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
-  colour of a glyph without an entry and an optional console pair;
+  color of a glyph without an entry and an optional console pair;
   `visual.CompileLook` builds it from the authored rows, the eye's types' art
   included.
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
@@ -738,8 +738,8 @@ smaller part of it.
 - **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each header's members
   from the look's frame at `PatternIndex`, each cell its background and its glyph
-  in its palette entry, else the look's colour; the hit flash, then enraged, tints
-  every glyph. A 256-colour host draws a look with a console pair in that pair and
+  in its palette entry, else the look's color; the hit flash, then enraged, tints
+  every glyph. A 256-color host draws a look with a console pair in that pair and
   shows a hit by reversing the glyph. `lookPainter` draws the eye's cells too, so
   the two cannot drift. The hit-flash pulse is `hitFlashColor`, one function for
   every species renderer.
@@ -774,7 +774,7 @@ its look under its tier's macro. To define one:
 - **Frames.** `frames` holds a table per frame whose `glyphs` are `height` strings
   of `width` cells; a space draws nothing and the map shows through. Two frames or
   more cycle every `pattern_ms`, held while a stun holds. Draw the silhouette in
-  glyphs, not in colour: a host that has few colours still shows the shape.
+  glyphs, not in color: a host that has few colors still shows the shape.
 - **Glyphs.** Each is ASCII or one every text console font carries
   (`consoleGlyphs` in `renderer/color256_test.go`): the single, double and mixed
   box drawing, `█░▒`, `■▲▶▼◀♦`, the arrows `←↑→↓` and `·×÷°±•‼≈≡≤≥`. A console
@@ -786,14 +786,14 @@ its look under its tier's macro. To define one:
   `TestTheFontAtlasCoversEveryGlyphTheCodeDraws` read every shipped scenario's
   TOML, so a glyph outside either set fails CI; `-check` does not test the glyph
   sets, so a scenario kept outside the repository is its author's to check.
-- **Colour.** `fg` and `bg` are palettes of up to 16 colours. A frame's `fg` and
+- **Color.** `fg` and `bg` are palettes of up to 16 colors. A frame's `fg` and
   `bg` rows give each cell a palette entry as a hex digit, a space meaning the
-  look's `color` or no background, and `attr` gives a cell bold or dim. Colour the
+  look's `color` or no background, and `attr` gives a cell bold or dim. Color the
   parts (shell, eyes, legs) rather than each cell, as the raiders do.
-- **Console pair.** `fg256` and `bg256` are the pair a 256-colour host draws the
+- **Console pair.** `fg256` and `bg256` are the pair a 256-color host draws the
   whole look in, every glyph in the one and every background in the other, a hit
   reversing the glyph; without them the host takes each palette entry's nearest
-  colour, which a text console's sixteen can merge into the background. Pick the
+  color, which a text console's sixteen can merge into the background. Pick the
   pair from the console's own entries, the glyph bright (8-15) over a background
   of 0-7, which is all a Linux console's backgrounds take; such an entry passes
   through unchanged ([rendering §6](rendering.md#6-finalization-and-color-modes)).
@@ -806,7 +806,7 @@ its look under its tier's macro. To define one:
 - **Checking it.** `-check` compiles the look with its program
   (`visual.CompileLook`: palette sizes, rows and cells against the footprint,
   palette digits and attributes). Then play it: `bin/vif -s <scenario>` in tmux,
-  captured with colour (`capture-pane -e`) under a 256-colour `TERM` and under
+  captured with color (`capture-pane -e`) under a 256-color `TERM` and under
   `TERM=linux`, and in the desktop window with `-g`.
 
 ## 7. Determinism and identity
@@ -910,7 +910,7 @@ captures, one a tick, read the frames. Per species:
   it. A stun as the line shows ends the attack: the swarm stands for the
   stun, then chases from rest.
 - Storm: `:emit EventStormSpawnRequest` with `:log stat 1`. The per-tick status
-  log counts each colour's attack frames and `mount.fired`, and captures show the
+  log counts each color's attack frames and `mount.fired`, and captures show the
   blue's materialize and the swarm on its footprint the tick the materialize goes. A disruptor
   alone (`:energy 100000000`, `EventWeaponRemoveRequest` for each weapon, `rod`
   to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
@@ -928,7 +928,7 @@ captures, one a tick, read the frames. Per species:
   `bin/vif -check -s wad/scenario/base/cave` prints
   `behaviors ok: 32 (bat, beetle, chomper, … wraith)`, `loot ok: 1 (upgrade)` and
   `drops ok: 2 (kraken, raider)`. A look shows best in tmux
-  pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;
+  pane captures with color, on a 256-color `TERM` and on `TERM=linux`;
   `go run ./sandbox/raider` lays every type out by cave over its rock.
 
 ## 9. Alternatives and prior art

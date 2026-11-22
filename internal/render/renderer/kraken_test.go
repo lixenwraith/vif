@@ -19,8 +19,8 @@ import (
 )
 
 // krakenByDefinition shades the samples one after another as the definition reads: a
-// disc covering a cell makes it solid in the sample's color, a rim reaching a cell no
-// disc covered yet draws the rim's rune there, and the body's void blends over both.
+// disk covering a cell makes it solid in the sample's color, a rim reaching a cell no
+// disk covered yet draws the rim's rune there, and the body's void blends over both.
 // In 256 colors a color is a console entry and the void solid past the threshold.
 // The dead have lost their legs past the cut and glow behind it, into a closing void.
 func krakenByDefinition(of *krakenShade, samples []component.KrakenSample, palette bool) []terminal.Cell {
@@ -104,8 +104,8 @@ func krakenByDefinition(of *krakenShade, samples []component.KrakenSample, palet
 	return cells
 }
 
-// krakenEdgeSamples centers discs on cell centers and corners, with radii that put a
-// cell exactly on a disc's edge or a rim's, where the comparison by squared distance
+// krakenEdgeSamples centers disks on cell centers and corners, with radii that put a
+// cell exactly on a disk's edge or a rim's, where the comparison by squared distance
 // hands the decision to the distance itself
 func krakenEdgeSamples(rng *rand.Rand, minX, minY, maxX, maxY int) []component.KrakenSample {
 	samples := make([]component.KrakenSample, 1+rng.IntN(40))

@@ -103,8 +103,8 @@ preflight() {
 	[ -f "$sdk/platforms/$platform/android.jar" ] || pkgs="$pkgs \"platforms;$platform\""
 	[ -f "$sdk/ndk/$ndk/source.properties" ] || pkgs="$pkgs \"ndk;$ndk\""
 	[ -z "$pkgs" ] || gap "SDK packages$pkgs in $sdk" "${sdkmanager:+$sdkmanager$pkgs}"
-	# The build fetches the build tools its plugin wants under this licence.
-	[ -f "$sdk/licenses/android-sdk-license" ] || gap "the SDK licence, accepted in $sdk" "${sdkmanager:+$sdkmanager --licenses}"
+	# The build fetches the build tools its plugin wants under this license.
+	[ -f "$sdk/licenses/android-sdk-license" ] || gap "the SDK license, accepted in $sdk" "${sdkmanager:+$sdkmanager --licenses}"
 	[ -z "$gaps" ]
 }
 

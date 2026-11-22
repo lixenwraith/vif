@@ -21,7 +21,7 @@ func NewBehaviorRenderer(gameCtx *engine.GameContext) *BehaviorRenderer {
 }
 
 // Render draws each instance's members from the frame it shows in its look, the hit
-// flash, then the enraged colour, tinting every glyph
+// flash, then the enraged color, tinting every glyph
 func (r *BehaviorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
 	if world.Components.Behavior.CountEntities() == 0 {
@@ -72,8 +72,8 @@ func (r *BehaviorRenderer) Render(ctx render.RenderContext, buf *render.RenderBu
 }
 
 // lookPainter draws a look's cells, a data species' and an eye's alike: a cell's
-// background, then its glyph in its palette colour or in tint where tinted. A
-// 256-colour host draws a look's console pair where it has one, which reads on
+// background, then its glyph in its palette color or in tint where tinted. A
+// 256-color host draws a look's console pair where it has one, which reads on
 // every console palette, and shows a hit by reversing the glyph.
 type lookPainter struct{ console bool }
 

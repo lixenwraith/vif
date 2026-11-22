@@ -33,7 +33,7 @@ func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
 		t.Fatal("pending bot appears admitted")
 	}
 	if err := m.removeSeat(pending.number); err != nil || !m.botSeats()[0].Stopping {
-		t.Fatal("pending bot could not be cancelled")
+		t.Fatal("pending bot could not be canceled")
 	}
 }
 

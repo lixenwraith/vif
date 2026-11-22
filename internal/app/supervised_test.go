@@ -87,7 +87,7 @@ func TestAnUnclaimedSessionEndsItsOwnLobby(t *testing.T) {
 			t.Fatalf("the lobby ended after %s, before its own window closed", waited)
 		}
 	case <-time.After(30 * time.Second):
-		t.Fatal("a lobby nobody dialled never ended itself")
+		t.Fatal("a lobby nobody dialed never ended itself")
 	}
 }
 
@@ -340,11 +340,11 @@ func TestVacancyGraceEndsAnEmptiedSession(t *testing.T) {
 	}
 }
 
-// TestSupervisorFlagsAreRefusedWhereNothingWouldHonourThem keeps -probe and the
+// TestSupervisorFlagsAreRefusedWhereNothingWouldHonorThem keeps -probe and the
 // lifetime bounds honest: a mode with no supervisor to answer and nothing to end it
 // refuses them rather than accepting a flag that silently does nothing — and, for
 // the bounds, one that was meant to end a process.
-func TestSupervisorFlagsAreRefusedWhereNothingWouldHonourThem(t *testing.T) {
+func TestSupervisorFlagsAreRefusedWhereNothingWouldHonorThem(t *testing.T) {
 	t.Parallel()
 	for name, mode := range map[string]Mode{
 		"play":     ModePlay,

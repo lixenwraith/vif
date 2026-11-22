@@ -1,6 +1,6 @@
 # The hopper: a cricket that springs on its long legs. One of the moss cave's
 # second-rank raiders: RaiderRank2 in ../../macros.toml gives its stats and cycle
-# and the cave its colours.
+# and the cave its colors.
 macro = "RaiderRank2"
 theme = "Moss"
 width = 4

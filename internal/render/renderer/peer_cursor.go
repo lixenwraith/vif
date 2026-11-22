@@ -12,8 +12,8 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// Peer cursors keep their slot colour and hexadecimal label across instances. A
-// Wraith is drawn as its label alone, in its slot's colour, at the cell it holds,
+// Peer cursors keep their slot color and hexadecimal label across instances. A
+// Wraith is drawn as its label alone, in its slot's color, at the cell it holds,
 // over the field the shield renderer rings it with.
 type PeerCursorRenderer struct {
 	gameCtx      *engine.GameContext
@@ -22,7 +22,7 @@ type PeerCursorRenderer struct {
 	slots256     []uint8
 }
 
-// peerCursorCellRenderer draws one peer cursor in the colour mode chosen at construction
+// peerCursorCellRenderer draws one peer cursor in the color mode chosen at construction
 type peerCursorCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, char rune, slot uint8)
 
 // peerSlotOrder256 are the console backgrounds peers take in turn: none that the local cursor
@@ -37,7 +37,7 @@ func NewPeerCursorRenderer(gameCtx *engine.GameContext) *PeerCursorRenderer {
 	r := &PeerCursorRenderer{gameCtx: gameCtx}
 	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		// A bright background shows as its normal counterpart on eight-background consoles,
-		// so only the colours this one tells apart are kept
+		// so only the colors this one tells apart are kept
 		c := render.ConsoleFor(cfg.ConsolePalette)
 		for _, e := range peerSlotOrder256 {
 			if bg := c.Background(e); !slices.Contains(r.slots256, bg) {
@@ -106,8 +106,8 @@ func (r *PeerCursorRenderer) wraith256(buf *render.RenderBuffer, screenX, screen
 	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: r.slots256[int(slot)%len(r.slots256)]}, terminal.AttrFg256)
 }
 
-// peerCursorColor is one roster slot's colour, wrapped so a slot beyond the
-// palette is drawn in some peer's colour rather than in none.
+// peerCursorColor is one roster slot's color, wrapped so a slot beyond the
+// palette is drawn in some peer's color rather than in none.
 func peerCursorColor(slot uint8) color.RGB {
 	return visual.RgbPeerCursor[int(slot)%len(visual.RgbPeerCursor)]
 }

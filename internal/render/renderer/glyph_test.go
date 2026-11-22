@@ -16,7 +16,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// glyphWorld is a 40×24 truecolour map with no rock, ready for glyphs
+// glyphWorld is a 40×24 truecolor map with no rock, ready for glyphs
 func glyphWorld() (*engine.World, *engine.GameContext) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -102,9 +102,9 @@ func TestTheNearestGlyphDrawsOverTheOnesBehind(t *testing.T) {
 	}
 }
 
-// TestSceneryTakesItsColourFromItsDepth: each scenery layer mixes its type's bright
-// colour into the background by its depth, while typeable text keeps its level's colour
-func TestSceneryTakesItsColourFromItsDepth(t *testing.T) {
+// TestSceneryTakesItsColorFromItsDepth: each scenery layer mixes its type's bright
+// color into the background by its depth, while typeable text keeps its level's color
+func TestSceneryTakesItsColorFromItsDepth(t *testing.T) {
 	w, game := glyphWorld()
 	levels := []component.GlyphLevel{component.GlyphDark, component.GlyphNormal, component.GlyphBright}
 	for i, level := range levels {

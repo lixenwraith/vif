@@ -177,7 +177,7 @@ func TestADeflatedBodyPassesTheStreamRaw(t *testing.T) {
 		t.Fatal("the body was deflated by the link")
 	}
 	if bytes.Contains(rec.Bytes(), bursts[0][0].Payload) {
-		t.Fatal("the epoch travelled plain")
+		t.Fatal("the epoch traveled plain")
 	}
 }
 
