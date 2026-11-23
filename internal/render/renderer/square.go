@@ -1,8 +1,10 @@
 package renderer
 
 import (
+	"math"
 	"slices"
 	"time"
+	"unicode"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -12,19 +14,22 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SquareRenderer draws a magic square: each block in its kind's color, lit as its
-// line fires, its digit at its middle, a frame round the viewer's selection, and
-// under the square each kind's name and cooldown
+// SquareRenderer draws a magic square over its cursor's shield and every field:
+// its orbs on the outer orbit and a boost's glow on the rim, then each block in its
+// kind's color, lit as its line fires, the viewer's selection and the legend
 type SquareRenderer struct {
 	gameCtx *engine.GameContext
 	console *render.Console // nil draws true color
+	orbGlow
 }
 
 func NewSquareRenderer(ctx *engine.GameContext) *SquareRenderer {
-	r := &SquareRenderer{gameCtx: ctx}
-	if cfg := ctx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+	cfg := ctx.World.Resources.Config
+	r := &SquareRenderer{gameCtx: ctx, orbGlow: newOrbGlow(cfg.CellAspect)}
+	if cfg.ColorMode == terminal.ColorMode256 {
 		r.console = render.ConsoleFor(cfg.ConsolePalette)
 	}
 	return r
@@ -35,9 +40,11 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	if world.Components.Square.CountEntities() == 0 {
 		return
 	}
-	buf.SetWriteMask(visual.MaskComposite)
 	slot := world.Resources.Player.ViewSlot()
 	world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+		buf.SetWriteMask(visual.MaskTransient)
+		r.orbs(ctx, buf, sq)
+		buf.SetWriteMask(visual.MaskComposite)
 		for p := range sq.Digits {
 			r.block(ctx, buf, sq, p)
 		}
@@ -51,6 +58,105 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		r.legend(ctx, buf, sq, overheat)
 		return true
 	})
+}
+
+// orbs draws each aiming kind's orb on the square's outer orbit: at the middle of
+// the side its line faces, bursting as the line fires, or dim and turning round the
+// orbit while no line holds the kind, the kinds half a turn apart
+func (r *SquareRenderer) orbs(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
+	period := int64(parameter.SquareOrbIdlePeriod)
+	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
+	aiming := 0
+	for kind, spec := range component.SquareKinds {
+		if left := sq.Effects[kind].Active; spec.Boost && left > 0 {
+			r.surge(ctx, buf, sq, kind, float64(left)/float64(spec.Duration))
+		}
+		if spec.Boost {
+			continue
+		}
+		look, phase := &visual.SquareOrbs[kind], float64(aiming)*math.Pi
+		aiming++
+		line := sq.Line(component.SquareKind(kind))
+		if line < 0 {
+			r.orb(ctx, buf, sq.OrbAt(turn+phase, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
+			continue
+		}
+		burst := 0.0
+		if since := spec.Cooldown - sq.Effects[kind].Cooldown; sq.Effects[kind].Cooldown > 0 && since < parameter.OrbFlashDuration {
+			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
+		}
+		cells, n := sq.Orbs(line, ctx.CellAspect)
+		for _, cell := range cells[:n] {
+			r.orb(ctx, buf, cell, look, spec.Name, 1, burst)
+		}
+	}
+}
+
+// surge lights the shield's rim for a boosting kind, held a share of its boost's
+// time: a band in the kind's glow inside the rim, heaviest in two lobes that turn
+// round it, screened over the shield and fading over the boost's last third; a
+// console draws the rim in dots
+func (r *SquareRenderer) surge(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, held float64) {
+	cx, cy := sq.Center()
+	rim := sq.ShieldRadius(ctx.CellAspect)
+	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, rim+1, ctx.CellAspect.FromCircular(rim+1))
+	if !ok {
+		return
+	}
+	period := int64(visual.SquareSurgeTurn)
+	lobeX, lobeY := math.Sincos(2 * float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi)
+	colors := &visual.SquareKinds[kind]
+	for y := startY; y <= endY; y++ {
+		dy := ctx.CellAspect.Circular(float64(y - cy))
+		for x := startX; x <= endX; x++ {
+			// Columns inside the rim; past it the band ends within one
+			dx := float64(x - cx)
+			distSq := dx*dx + dy*dy
+			depth := rim - math.Sqrt(distSq)
+			shape := 1 - depth/visual.SquareSurgeWidth
+			if depth < 0 {
+				shape = 1 + depth
+			}
+			sx, sy, visible := ctx.MapToScreen(x, y)
+			if shape <= 0 || distSq == 0 || !visible {
+				continue
+			}
+			if r.console != nil {
+				if depth >= 0 && depth < 1 {
+					buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
+				}
+				continue
+			}
+			// The cosine of twice the cell's angle from the lobes', which puts two on the rim
+			lobe := ((dx*dx-dy*dy)*lobeY + 2*dx*dy*lobeX) / distSq
+			buf.SetBgScreen(sx, sy, colors.Glow, visual.RgbBackground, visual.SquareSurgeAlpha*min(3*held, 1)*shape*(0.6+0.4*lobe))
+		}
+	}
+}
+
+// orb draws one orb at a cell: its glyph in its core color under a corona of its
+// other two, at a share of full light, or bursting as its line fires; a console
+// draws its kind's initial in the kind's color
+func (r *SquareRenderer) orb(ctx render.RenderContext, buf *render.RenderBuffer, at vmath.Point, look *visual.SquareOrb, name string, light, burst float64) {
+	if !ctx.IsInViewport(at.X, at.Y) {
+		return
+	}
+	screenX, screenY, _ := ctx.MapToScreen(at.X, at.Y)
+	if r.console != nil {
+		attr := terminal.AttrFg256
+		if light >= 1 {
+			attr |= terminal.AttrBold
+		}
+		buf.SetFgOnly(screenX, screenY, unicode.ToUpper(rune(name[0])), color.RGB{R: look.Console}, attr)
+		return
+	}
+	if burst > 0 {
+		r.renderBurst(ctx, buf, at.X, at.Y, look.Lobe, visual.CircleBlock, burst)
+		return
+	}
+	angle := float64(ctx.GameTime.UnixMilli()%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
+	r.renderCorona(ctx, buf, at.X, at.Y, look.Lobe, look.Counter, vmath.Cos(angle), vmath.Sin(angle), light)
+	buf.SetFgOnly(screenX, screenY, visual.CircleBlock, color.Lerp(visual.RgbBackground, look.Core, light), terminal.AttrNone)
 }
 
 // block draws the block at place p and its digit at its middle

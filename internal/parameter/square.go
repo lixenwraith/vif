@@ -40,9 +40,10 @@ const (
 	SquareBoostCap = SquareStrikeCooldown
 
 	// SquareShieldMargin is the columns the shield over the square reaches past its
-	// corners, and SquareOrbGap the columns from that shield out to the orbit the
-	// kinds' orbs stand on, their coronas two columns clear of the cursor's own orbs'
-	SquareShieldMargin = 2
+	// corners, which keeps its cursor's orbs clear of the legend, and SquareOrbGap
+	// the columns from that shield out to the orbit the kinds' orbs stand on, their
+	// coronas two columns clear of the cursor's own orbs'
+	SquareShieldMargin = 4
 	SquareOrbGap       = OrbOrbitRadiusX - PlayerShieldRadius + 2*OrbCoronaRadiusX + 2
 
 	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds

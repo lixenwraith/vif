@@ -34,7 +34,6 @@ const (
 	PriorityDevourer // the map's edges, under every body that crosses them
 	PriorityPylon
 	PriorityTower
-	PrioritySquare
 	PriorityStorm
 	PriorityKraken
 	PriorityEye
@@ -63,6 +62,7 @@ const (
 	PriorityBullet
 
 	// === Overlays ===
+	PrioritySquare  // Opaque blocks under a shield, so the shield and every field pass behind
 	PriorityLanding // Over the player's fields, so a shield's rim never hides it
 	PriorityButton  // Opaque, so every map layer under it passes behind
 	PrioritySplash

@@ -197,15 +197,16 @@ func (s *SquareSystem) owner(sq *component.SquareComponent) core.Entity {
 }
 
 // cover has its cursor's shield reach past the square's corners, hold its boost to
-// parameter.SquareBoostCap and step by the square's energy, on the instance that
-// simulates the cursor (D-13). With that shield down the blocks take the touches.
+// parameter.SquareBoostCap, step by the square's energy and leave its rays' stems
+// off the blocks, on the instance that simulates the cursor (D-13). With that shield
+// down the blocks take the touches.
 func (s *SquareSystem) cover(sq *component.SquareComponent) {
 	cursor := s.world.ResolveOwnedCursor(s.owner(sq))
 	shield, ok := s.world.Components.Shield.GetPtr(cursor)
 	if !ok {
 		return
 	}
-	shield.BoostCap, shield.Step = parameter.SquareBoostCap, sq.ShieldStep
+	shield.BoostCap, shield.Step, shield.Stemless = parameter.SquareBoostCap, sq.ShieldStep, true
 	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); shield.Radius != want {
 		shield.Radius = want
 		s.world.UpdateBoundsRadius()

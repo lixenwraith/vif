@@ -1333,6 +1333,9 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Active)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Stemless)
+	}
 	return dst
 }
 
@@ -1369,6 +1372,9 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Active, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Stemless, r)
 	}
 	return rows
 }
@@ -2526,6 +2532,9 @@ func encodeColumnsRay(dst []byte, rows []StoreEntry[component.RayComponent]) []b
 	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Palette)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Stemless)
+	}
 	return dst
 }
 
@@ -2583,6 +2592,9 @@ func decodeColumnsRay(r *columnReader) []StoreEntry[component.RayComponent] {
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Palette, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Stemless, r)
 	}
 	return rows
 }

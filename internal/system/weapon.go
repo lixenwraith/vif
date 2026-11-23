@@ -1098,8 +1098,9 @@ func (s *WeaponSystem) advanceRays(cursor core.Entity, orbs orbSlots, dt time.Du
 }
 
 // layRay runs a ray from the cursor's cell through its orb's: one cell wide up to
-// the orb and RayWidth past it, to the first wall or the map edge. An orb on the
-// cursor's own cell leaves the last ray in place.
+// the orb and RayWidth past it, to the first wall or the map edge, its stem drawn
+// unless the cursor's shield hides it. An orb on the cursor's own cell leaves the
+// last ray in place.
 func (s *WeaponSystem) layRay(cursor, orb core.Entity, ray *component.RayComponent) {
 	from, ok := s.world.CursorCell(cursor)
 	if !ok {
@@ -1115,6 +1116,9 @@ func (s *WeaponSystem) layRay(cursor, orb core.Entity, ray *component.RayCompone
 		Knee: max(vmath.IntAbs(dx), vmath.IntAbs(dy)), Far: (parameter.RayWidth - 1) / 2,
 	}
 	ray.Ray.Length = traceRay(s.world, ray.Ray)
+	if shield, ok := s.world.Components.Shield.GetPtr(cursor); ok {
+		ray.Stemless = shield.Stemless
+	}
 }
 
 // strikeRay hits every combat target group a ray covers once: a drain's locally,
