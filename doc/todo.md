@@ -1075,6 +1075,44 @@ Auto-Cloud syncs `vif.toml` whole, so the zoom a player left on a Steam Deck
 (`[presentation] cell`) opens their desktop at it. Closes with the cell kept in
 the state root, read over `vif.toml`'s.
 
+### Have vif.nvim install and update the game
+
+- Priority: P2
+- Affected files: `vif.nvim` (`lua/vif/init.lua`, `lua/vif/health.lua`,
+  `README.md`, `doc/vif.txt`), `doc/packaging.md` §10
+- Guide: [Packaging §10](packaging.md#10-neovim)
+
+The plugin runs the `vif` it finds and brings none, so on a machine without one
+`:Vif` only says so. Closes with these in the plugin:
+
+- **The first launch installs.** `:Vif` with no `vif` on `PATH` and no `bin` in
+  `setup` fetches the game, then starts it, and `:Vif install` does the same
+  when asked. A first argument that is a bare word is the plugin's, every
+  argument of the game's starting with `-`. Whether that first fetch asks
+  before it downloads, as `vim.pack` asks before it installs a plugin, is the
+  owner's to decide.
+- **`:Vif update`** replaces the game the plugin installed with the newest build
+  and says the version it had and the one it has. Nothing looks for a newer one
+  unasked, at start-up or at `:Vif`. A `vif` on `PATH` or named in `setup`
+  stays first and is never replaced: `:Vif update` then says whose it is.
+- **What it fetches**: the release archive of the machine's system and
+  architecture, of the newest tagged release, or of the nightly where there is
+  none or `setup` asks for it, checked against that release's `SHA256SUMS`
+  before it is unpacked. It goes under `stdpath('data')` as a `bin/` with the
+  wad archive's files as the `wad/` beside it, where the binary finds them
+  ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)), so every
+  scenario comes with it. Where no archive is built for the machine, as on
+  macOS, it says so and names `go install`. `:checkhealth vif` names the binary
+  in use, where it came from and its version.
+- **The free mouse.** The pointer moving with no button held does not reach the
+  game in a Neovim terminal, so the game's cursor does not follow it; Neovim
+  passes it on only under `'mousemoveevent'`. Either the plugin sets the option
+  while the game's window is the current one and puts it back after, or its
+  README and help say so where a player looks first.
+- **The install snippets, in place.** The README shows where each goes: a
+  minimal `init.lua` for lazy.nvim and one for `vim.pack`, each whole with its
+  `setup` call, where it now gives a bare line a visitor has to place.
+
 ### Host the game in Neovim natively
 
 - Priority: P3
