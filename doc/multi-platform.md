@@ -21,7 +21,7 @@ host the game.
 
 | Profile | Tags or target | Presentation | Audio | Raw socket sessions | Logging | Intended use |
 |---|---|---|---|---|---|---|
-| Full native | `make release` | Terminal renderer; on Linux and FreeBSD the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
+| Full native | `make release` | Terminal renderer; on Linux, FreeBSD and Windows the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
@@ -562,8 +562,8 @@ browser draws the same face at any size, from a web font inside `vif.wasm`
 (`atlas.HackWeb()`). The font's license ships as `LICENSE.font`
 ([Packaging §1](packaging.md#1-shared-guidelines)).
 
-The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
-build but `vif_nogui`, sets `Host.Presentation` to a `terminal/window` window, a
+The desktop window is one such host: `cmd/vif/gui.go`, in every Linux, FreeBSD and
+Windows build but `vif_nogui`, sets `Host.Presentation` to a `terminal/window` window, a
 module nested in terminal's repository, when `-g` asks for it, as a `vif_gui` build
 or `vif.toml`'s `[presentation] window` does by default and `-cli` refuses. It opens
 holding the grid `-size` names, 120x40 with none, or maximized or full screen on

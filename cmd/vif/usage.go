@@ -86,7 +86,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		title: "Presentation and audio",
 		lines: []flagLine{
 			{names: []string{"color"}, arg: "auto|256|true", hint: "Color depth; auto detects the terminal"},
-			{names: []string{"g", "gui"}, arg: "[=false]", hint: "Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; the default of a vif-gui build or with vif.toml's [presentation] window = true, which -g=false turns off"},
+			{names: []string{"g", "gui"}, arg: "[=false]", hint: "Open the game in a desktop window (Linux, FreeBSD, Windows) instead of the terminal; the default of a vif-gui build or with vif.toml's [presentation] window = true, which -g=false turns off"},
 			{names: []string{"cli"}, hint: "Play in the terminal whatever vif.toml's [presentation] or a vif-gui build says; wins over -g"},
 			{names: []string{"maximized"}, arg: "[=false]", hint: "Open the desktop window maximized; vif.toml's [presentation] maximized is the default, and a terminal run ignores it"},
 			{names: []string{"fullscreen"}, arg: "[=false]", hint: "Open the desktop window full screen; vif.toml's [presentation] fullscreen is the default, and a terminal run ignores it"},
