@@ -115,8 +115,9 @@ func PopulationDir() string {
 // executable names the running binary, which places the checkout's wad
 var executable = os.Executable
 
-// checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays
-// its checkout's scenarios uninstalled; "" for a binary anywhere else.
+// checkoutRoot is the wad/ beside the bin/ holding this binary: a checkout's, so a
+// build plays its scenarios uninstalled, or a package's laid out the same, as the
+// Steam depot is; "" for a binary anywhere else.
 func checkoutRoot() string {
 	exe, err := executable()
 	if err != nil {

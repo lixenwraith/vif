@@ -1,0 +1,13 @@
+// The app build script steamcmd runs (+run_app_build): make steam-upload fills in
+// the ids and writes it beside the depots it names, under STEAM_DIR.
+"AppBuild"
+{
+	"AppID" "@APP@"
+	"Desc" "@DESC@"
+	"ContentRoot" "."
+	"BuildOutput" "output"
+	"Depots"
+	{
+		"@DEPOT_LINUX@" "depot_build_linux.vdf"
+	}
+}

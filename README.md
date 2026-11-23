@@ -36,8 +36,9 @@ simulation libraries.
 - A layered terminal-cell compositor: truecolor, a 256-color tier settled on a
   text console's sixteen colors, blend modes, masks and post-processing.
 - Pure-Go synthesis and a sequencer whose tempo and arrangement follow the
-  player's APM, streamed to common host audio tools, FreeBSD OSS, the browser,
-  Android or a WAV file.
+  player's APM, streamed to common host audio tools, from the desktop window to
+  PulseAudio or PipeWire directly, FreeBSD OSS, the browser, Android or a WAV
+  file.
 - Enemies that adapt: aspect-aware flow fields, route graphs a bandit learns, and
   streaming genetic optimization.
 - Bots that play as participants, through the same input router as a person.
@@ -99,7 +100,10 @@ Each new game waits for a key or click to start it, and a join for one to take
 your place in the session (`-nw` skips both). `F1` (or `:help`) lists the keys,
 `Ctrl-G`, `F10` or `Esc` in Normal mode (or `:g`) opens the [configuration menu](doc/config-menu.md),
 and `:q` quits. Sound is on: `Ctrl-S` cycles through the channels, and `-mute`
-starts muted. A flag sets its value for that run only. `vif.toml` holds every
+starts muted. A terminal run plays through a player it finds on the machine
+(`pacat`, `pw-cat`, `aplay`, `play` or `ffplay`; OSS on FreeBSD), the desktop
+window through PulseAudio or PipeWire itself, which needs none of them; `-ab
+<name>` names one for either. A flag sets its value for that run only. `vif.toml` holds every
 run's defaults, and the menu writes its sound, controls, HUD, relay and Wait to
 start settings back to your own `vif.toml` (the user root's, created at the first
 change when the run read none of yours); the rest last the run.

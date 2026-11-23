@@ -1,0 +1,12 @@
+// The Linux depot: everything make steam-linux assembled, as it lies.
+"DepotBuild"
+{
+	"DepotID" "@DEPOT_LINUX@"
+	"ContentRoot" "linux"
+	"FileMapping"
+	{
+		"LocalPath" "*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+}
