@@ -14,7 +14,7 @@ type SquareKind uint8
 
 const (
 	SquareAttack SquareKind = iota
-	SquareHold
+	SquareWhirl
 	SquareDefense
 	SquareKindCount
 )
@@ -25,32 +25,43 @@ const (
 	SquareLines  = 2 * SquareSide // the rows top down, then the columns left to right
 )
 
-// SquareKindSpec is what a line of one kind fires each time its cooldown runs out: a
-// boost of the shield over the square, any other kind its family from its orb on the
-// bodies the gateways the line faces sent, where the combat matrix has a cursor's row
+// SquareWind is the wind a kind blows about the square as it fires: its force, the
+// turn of it from straight out, a quarter turn carrying bodies clockwise round the
+// shield, how long it blows and the columns past the shield it fades over
+type SquareWind struct {
+	Force, Turn float64
+	Duration    time.Duration
+	Reach       float64
+}
+
+// SquareKindSpec is what a line of one kind fires as its cursor's each time its
+// cooldown runs out: a family on what stands in the third of the map the line faces,
+// a boost of the shield, a wind about the square, the square's magic shed as dust
 type SquareKindSpec struct {
 	Name     string
-	Attack   CombatAttackType
-	Duration time.Duration      // how long the effect holds once fired
-	Cooldown time.Duration      // from a fire until the line fires again
-	Bolt     LightningColorType // the bolt its orb throws at what a fire lands on
-	Boost    bool               // the shield takes no damage while it holds; a kind that does not boost aims
-	Halt     bool               // the gateways the line faces hold their spawns while it holds
-	Wind     float64            // the force of the gust out from the square as it fires, 0 for none
+	Attack   CombatAttackType // CombatAttackNone lands nothing
+	Duration time.Duration    // how long the effect holds once fired
+	Cooldown time.Duration    // from a fire until the line fires again
+	Boost    bool             // the shield takes no damage while it holds
+	Shed     bool
+	Wind     SquareWind // a zero force blows none
 }
 
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
-	SquareAttack:  {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Bolt: LightningRed},
-	SquareHold:    {Name: "hold", Attack: CombatAttackHold, Duration: parameter.SquareHoldDuration, Cooldown: parameter.SquareHoldCooldown, Bolt: LightningGold, Halt: true},
-	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown, Boost: true, Wind: parameter.SquareWindForce},
+	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown},
+	SquareWhirl: {Name: "whirl", Attack: CombatAttackNone, Duration: parameter.SquareWhirlDuration, Cooldown: parameter.SquareWhirlCooldown,
+		Wind: SquareWind{Force: parameter.SquareWhirlForce, Turn: math.Pi / 2, Duration: parameter.SquareWhirlDuration, Reach: parameter.SquareWhirlReach}},
+	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown,
+		Boost: true, Shed: true, Wind: SquareWind{Force: parameter.SquareWindForce, Duration: parameter.SquareWindDuration, Reach: parameter.SquareWindReach}},
 }
 
 // SquareEffect is what is left of one kind's hold and cooldown, both counted from
-// its last fire
+// its last fire, and whether that fire's family landed on anything
 type SquareEffect struct {
 	Active   time.Duration
 	Cooldown time.Duration
+	Struck   bool
 }
 
 // Ready reports whether its line fires it now

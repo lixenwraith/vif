@@ -3748,6 +3748,11 @@ func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent
 		}
 	}
 	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			dst = appendBool(dst, rows[i].Value.Effects[j].Struck)
+		}
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Magic)
 	}
 	for i := range rows {
@@ -3803,6 +3808,11 @@ func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent
 	for i := range rows {
 		for j := range rows[i].Value.Effects {
 			readInt(&rows[i].Value.Effects[j].Cooldown, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Effects {
+			readBool(&rows[i].Value.Effects[j].Struck, r)
 		}
 	}
 	for i := range rows {

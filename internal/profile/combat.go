@@ -306,22 +306,13 @@ func init() {
 		register(&rayProfiles[d])
 	}
 
-	// A magic square's aligned kinds, landed as the cursor's it stands under: a
-	// strike that kills and a stun as long as the hold
+	// A magic square's strike, landed as the cursor's it stands under: it kills
 	register(&AttackProfile{
 		AttackType:  component.CombatAttackStrike,
 		Attacker:    component.CombatEntityCursor,
 		Defender:    component.CombatEntitySwarm,
 		DamageType:  component.CombatDamageArea,
 		DamageValue: parameter.CombatDamageSquareStrike,
-	})
-	register(&AttackProfile{
-		AttackType: component.CombatAttackHold,
-		Attacker:   component.CombatEntityCursor,
-		Defender:   component.CombatEntitySwarm,
-		DamageType: component.CombatDamageArea,
-		EffectMask: component.CombatEffectStun,
-		Duration:   parameter.SquareHoldDuration,
 	})
 
 	// A death wave ends the species that crowd a map; a boss or a structure, with no

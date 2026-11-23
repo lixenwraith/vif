@@ -18,8 +18,8 @@ import (
 )
 
 // SquareRenderer draws a magic square over its cursor's shield and every field:
-// its orbs on the outer orbit and a boost's glow on the rim, then each block in its
-// kind's color, lit as its line fires, the viewer's selection and the legend
+// what its kinds show round the shield, then each block in its kind's color, lit as
+// its line fires, the viewer's selection and the legend
 type SquareRenderer struct {
 	gameCtx *engine.GameContext
 	console *render.Console // nil draws true color
@@ -43,7 +43,7 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	slot := world.Resources.Player.ViewSlot()
 	world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
 		buf.SetWriteMask(visual.MaskTransient)
-		r.orbs(ctx, buf, sq)
+		r.fields(ctx, buf, sq)
 		buf.SetWriteMask(visual.MaskComposite)
 		for p := range sq.Digits {
 			r.block(ctx, buf, sq, p)
@@ -60,34 +60,89 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	})
 }
 
-// orbs draws each aiming kind's orb on the square's outer orbit: at the middle of
-// the side its line faces, bursting as the line fires, or dim and turning round the
-// orbit while no line holds the kind, the kinds half a turn apart
-func (r *SquareRenderer) orbs(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
+// fields draws what each kind shows round the shield, by what the kind fires: a
+// boost's glow on the rim and a turning wind's streaks while they hold, and for a
+// kind that strikes the flash of the third it landed in and its orb, at the middle
+// of the side its line faces, bursting as it fires, or dim and turning round the
+// outer orbit while no line holds the kind
+func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
 	period := int64(parameter.SquareOrbIdlePeriod)
 	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
-	aiming := 0
 	for kind, spec := range component.SquareKinds {
-		if left := sq.Effects[kind].Active; spec.Boost && left > 0 {
-			r.surge(ctx, buf, sq, kind, float64(left)/float64(spec.Duration))
+		effect := sq.Effects[kind]
+		if held := float64(effect.Active) / float64(max(spec.Duration, 1)); held > 0 {
+			if spec.Boost {
+				r.surge(ctx, buf, sq, kind, held)
+			}
+			if spec.Wind.Turn != 0 {
+				r.streaks(ctx, buf, sq, kind, held, math.Sin(spec.Wind.Turn))
+			}
 		}
-		if spec.Boost {
+		if spec.Attack == component.CombatAttackNone {
 			continue
 		}
-		look, phase := &visual.SquareOrbs[kind], float64(aiming)*math.Pi
-		aiming++
+		look := &visual.SquareOrbs[kind]
 		line := sq.Line(component.SquareKind(kind))
 		if line < 0 {
-			r.orb(ctx, buf, sq.OrbAt(turn+phase, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
+			r.orb(ctx, buf, sq.OrbAt(turn, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
 			continue
 		}
+		since := spec.Cooldown - effect.Cooldown
+		if effect.Struck && effect.Cooldown > 0 && since < visual.SquareStrikeFlash {
+			r.flash(ctx, buf, sq, kind, line, 1-float64(since)/float64(visual.SquareStrikeFlash))
+		}
 		burst := 0.0
-		if since := spec.Cooldown - sq.Effects[kind].Cooldown; sq.Effects[kind].Cooldown > 0 && since < parameter.OrbFlashDuration {
+		if effect.Cooldown > 0 && since < parameter.OrbFlashDuration {
 			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
 		}
 		cells, n := sq.Orbs(line, ctx.CellAspect)
 		for _, cell := range cells[:n] {
 			r.orb(ctx, buf, cell, look, spec.Name, 1, burst)
+		}
+	}
+}
+
+// flash tints the third of the map a line faces in its kind's glow, a share of the
+// way from full to gone; a console draws none
+func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind, line int, left float64) {
+	if r.console != nil {
+		return
+	}
+	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			if sx, sy, visible := ctx.MapToScreen(x, y); visible && sq.Faces(line, x, y) {
+				buf.SetBgScreen(sx, sy, visual.SquareKinds[kind].Glow, visual.RgbBackground, visual.SquareStrikeAlpha*left)
+			}
+		}
+	}
+}
+
+// streaks draws a turning wind on the square's outer orbit, held a share of its
+// time: runs of cells in the kind's glow, each fading back from a head that turns
+// the way the wind carries bodies, all fading over the wind's last third; a console
+// draws their heads in dots
+func (r *SquareRenderer) streaks(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, held, sense float64) {
+	period := int64(visual.SquareWhirlTurn)
+	turn := sense * float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
+	orbit := sq.ShieldRadius(ctx.CellAspect) + parameter.SquareOrbGap
+	colors := &visual.SquareKinds[kind]
+	for i := range visual.SquareWhirlStreaks {
+		head := turn + float64(i)*vmath.TwoPi/visual.SquareWhirlStreaks
+		last := vmath.Point{X: -1}
+		for n := range visual.SquareWhirlTail {
+			at := sq.OrbAt(head-sense*float64(n)/orbit, ctx.CellAspect)
+			sx, sy, visible := ctx.MapToScreen(at.X, at.Y)
+			if at == last || !visible {
+				continue
+			}
+			last = at
+			if r.console == nil {
+				buf.SetBgScreen(sx, sy, colors.Glow, visual.RgbBackground,
+					visual.SquareWhirlAlpha*min(3*held, 1)*(1-float64(n)/visual.SquareWhirlTail))
+			} else if n == 0 {
+				buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
+			}
 		}
 	}
 }
