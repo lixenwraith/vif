@@ -809,11 +809,11 @@ square Enter's, which a scenario captures as `\r` to spend its cursor's overheat
 as it likes. `EventSquareSpawnRequest { x, y, layout,
 groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
-attack, hold and defense; one square stands at a time, and it fights through the
+attack, whirl and defense; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
 `EventSquareAligned { kind, line }` says a line, rows 0 to 2 then columns 3 to 5,
-fired its kind (0 attack, 1 hold, 2 defense), once a cooldown while it holds, and
+fired its kind (0 attack, 1 whirl, 2 defense), once a cooldown while it holds, and
 `EventSquareHit { entity }` that a body struck the blocks with that cursor's shield
 down.
 
@@ -832,8 +832,9 @@ cell. `wad/scenario/base/magic` is the worked example.
 
 `EventWindStart { force, direction, duration }` starts the map's wind
 ([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)); with `radial =
-true` it blows out from `x`, `y` whatever its direction, and with a `reach` fades to
-nothing that many columns out.
+true` it blows about `x`, `y`, straight out at direction 0 and round the cell
+clockwise at a quarter turn, beside the map's wind and any radial one turned
+another way, and with a `reach` fades to nothing that many columns out.
 
 ### Splash text and glyph lines
 

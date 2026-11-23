@@ -37,4 +37,7 @@ type ShieldComponent struct {
 
 	Type   ShieldType
 	Active bool
+
+	// Stemless draws its cursor's rays from their orbs out, clear of what it covers
+	Stemless bool
 }

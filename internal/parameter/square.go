@@ -11,11 +11,9 @@ const (
 	SquareBlockGap    = 1
 
 	// A line fires its kind again each cooldown, counted from its last fire, while it
-	// holds three of it: the strike at once, the hold for half its cooldown. The
-	// boost's cooldown leaves what its gust threw the time to walk back
+	// holds three of it. The boost's cooldown leaves what its gust threw the time to
+	// walk back
 	SquareStrikeCooldown = 2 * time.Second
-	SquareHoldDuration   = time.Second
-	SquareHoldCooldown   = 2 * time.Second
 	SquareBoostDuration  = time.Second
 	SquareBoostCooldown  = 8 * time.Second
 
@@ -26,6 +24,15 @@ const (
 	SquareWindForce    = 1000.0
 	SquareWindReach    = 30.0
 	SquareWindDuration = 500 * time.Millisecond
+
+	// SquareWhirlForce is the wind a whirl turns round the square for
+	// SquareWhirlDuration of each SquareWhirlCooldown, fading to nothing
+	// SquareWhirlReach columns past the shield: it carries a body round the shield
+	// as it walks in, a light one further than a heavy one
+	SquareWhirlForce    = 60.0
+	SquareWhirlReach    = 60.0
+	SquareWhirlDuration = 1500 * time.Millisecond
+	SquareWhirlCooldown = 3 * time.Second
 
 	// A square's magic meter charges a second a second, and SquareMagicKill for each
 	// kill its cursor makes, up to SquareMagicFull, which a magic state, every row
@@ -40,14 +47,12 @@ const (
 	SquareBoostCap = SquareStrikeCooldown
 
 	// SquareShieldMargin is the columns the shield over the square reaches past its
-	// corners, and SquareOrbGap the columns from that shield out to the orbit the
-	// kinds' orbs stand on, their coronas two columns clear of the cursor's own orbs'
-	SquareShieldMargin = 2
+	// corners, which keeps its cursor's orbs clear of the legend, and SquareOrbGap
+	// the columns from that shield out to the orbit the kinds' orbs stand on, their
+	// coronas two columns clear of the cursor's own orbs'
+	SquareShieldMargin = 4
 	SquareOrbGap       = OrbOrbitRadiusX - PlayerShieldRadius + 2*OrbCoronaRadiusX + 2
 
 	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds
 	SquareOrbIdlePeriod = 8 * time.Second
-
-	// SquareBoltDuration is how long a fire's bolt stays drawn
-	SquareBoltDuration = 300 * time.Millisecond
 )

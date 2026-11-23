@@ -2,7 +2,6 @@ package system
 
 import (
 	"slices"
-	"time"
 	"unicode/utf8"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -11,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -21,7 +21,6 @@ import (
 // its cooldown runs out.
 type SquareSystem struct {
 	world *engine.World
-	faced []core.Entity // the gateways a fire's line faces, reused
 	on    []core.Entity // a body's members on the blocks, reused
 	toggle
 }
@@ -197,15 +196,16 @@ func (s *SquareSystem) owner(sq *component.SquareComponent) core.Entity {
 }
 
 // cover has its cursor's shield reach past the square's corners, hold its boost to
-// parameter.SquareBoostCap and step by the square's energy, on the instance that
-// simulates the cursor (D-13). With that shield down the blocks take the touches.
+// parameter.SquareBoostCap, step by the square's energy and leave its rays' stems
+// off the blocks, on the instance that simulates the cursor (D-13). With that shield
+// down the blocks take the touches.
 func (s *SquareSystem) cover(sq *component.SquareComponent) {
 	cursor := s.world.ResolveOwnedCursor(s.owner(sq))
 	shield, ok := s.world.Components.Shield.GetPtr(cursor)
 	if !ok {
 		return
 	}
-	shield.BoostCap, shield.Step = parameter.SquareBoostCap, sq.ShieldStep
+	shield.BoostCap, shield.Step, shield.Stemless = parameter.SquareBoostCap, sq.ShieldStep, true
 	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); shield.Radius != want {
 		shield.Radius = want
 		s.world.UpdateBoundsRadius()
@@ -345,104 +345,46 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 	}
 }
 
-// fire runs a kind's effect from line as its cursor's: a boost of the shield, as
-// many rewards as its hold is of a kill's, with a gust out from the square that
-// sheds its magic, any other kind on the gateways the line faces and their bodies
+// fire runs each part of a kind's effect as its cursor's: its family on what stands
+// in the third line faces, as many boost rewards as its hold is of a kill's, its
+// wind about the square, and the square's magic shed as dust
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
-	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown}
 	cursor := s.owner(sq)
-	if !spec.Boost {
-		s.aim(e, sq, cursor, spec, line)
-	} else if cursor != 0 {
+	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown,
+		Struck: spec.Attack != component.CombatAttackNone && s.strike(sq, cursor, spec.Attack, line)}
+	if spec.Boost && cursor != 0 {
 		for range int(spec.Duration / parameter.BoostBaseDuration) {
 			s.world.PushLocal(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
 		}
 	}
-	if cx, cy := sq.Center(); spec.Wind > 0 {
+	if cx, cy := sq.Center(); spec.Wind.Force > 0 {
 		s.world.PushEvent(event.EventWindStart, &event.WindStartPayload{
-			Force: spec.Wind, Duration: parameter.SquareWindDuration, Radial: true, X: cx, Y: cy,
-			Reach: sq.ShieldRadius(s.world.Resources.Config.CellAspect) + parameter.SquareWindReach,
+			Force: spec.Wind.Force, Direction: spec.Wind.Turn, Duration: spec.Wind.Duration, Radial: true, X: cx, Y: cy,
+			Reach: sq.ShieldRadius(s.world.Resources.Config.CellAspect) + spec.Wind.Reach,
 		})
+	}
+	if spec.Shed {
 		s.shed(sq)
 	}
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }
 
-// aim holds each gateway line faces if the kind halts them, and lands the kind's
-// family on every swarm and data species such a gateway sent, a bolt flying to each
-// from the line's orb nearest it
-func (s *SquareSystem) aim(e core.Entity, sq *component.SquareComponent, cursor core.Entity, spec *component.SquareKindSpec, line int) {
-	orbs, n := sq.Orbs(line, s.world.Resources.Config.CellAspect)
-	from := func(x, y int) vmath.Point {
-		if n > 1 && vmath.IntAbs(x-orbs[1].X)+2*vmath.IntAbs(y-orbs[1].Y) < vmath.IntAbs(x-orbs[0].X)+2*vmath.IntAbs(y-orbs[0].Y) {
-			return orbs[1]
-		}
-		return orbs[0]
-	}
-	s.faced = s.faced[:0]
-	s.world.Components.Gateway.Each(func(gw core.Entity, g *component.GatewayComponent) bool {
-		at, ok := s.world.Positions.GetPosition(g.AnchorEntity)
-		if !ok || !sq.Faces(line, at.X, at.Y) {
-			return true
-		}
-		s.faced = append(s.faced, gw)
-		if spec.Halt {
-			s.world.PushEvent(event.EventGatewayHoldRequest, &event.GatewayHoldRequestPayload{
-				DurationMs:   int(spec.Duration / time.Millisecond),
-				AnchorEntity: g.AnchorEntity,
-			})
-			s.bolt(e, from(at.X, at.Y), at.X, at.Y, spec.Bolt)
-		}
-		return true
-	})
-	strike := func(body, gateway core.Entity) {
-		at, ok := s.world.Positions.GetPosition(body)
-		if !ok || !slices.Contains(s.faced, gateway) {
-			return
-		}
-		if orb := from(at.X, at.Y); s.hit(spec, cursor, orb, body) {
-			s.bolt(e, orb, at.X, at.Y, spec.Bolt)
-		}
-	}
-	s.world.Components.Swarm.Each(func(swarm core.Entity, sw *component.SwarmComponent) bool {
-		strike(swarm, sw.Gateway)
-		return true
-	})
-	s.world.Components.Behavior.Each(func(body core.Entity, b *component.BehaviorComponent) bool {
-		strike(body, b.Gateway)
-		return true
-	})
-}
-
-// hit lands a kind's family whole on target as cursor's, from an orb's cell, if the
-// combat matrix lets a cursor strike it with it
-func (s *SquareSystem) hit(spec *component.SquareKindSpec, cursor core.Entity, from vmath.Point, target core.Entity) bool {
-	c, ok := s.world.Components.Combat.GetPtr(target)
-	if !ok || cursor == 0 || profile.Attack(spec.Attack, component.CombatEntityCursor, c.CombatEntityType) == nil {
+// strike lands a family as cursor's on every body with a member in the third of the
+// map line faces, and reports whether any stood there
+func (s *SquareSystem) strike(sq *component.SquareComponent, cursor core.Entity, attack component.CombatAttackType, line int) bool {
+	if cursor == 0 {
 		return false
 	}
-	s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-		AttackType:   spec.Attack,
-		OwnerEntity:  cursor,
-		OriginEntity: cursor,
-		TargetEntity: target,
-		HasOrigin:    true,
-		OriginX:      from.X,
-		OriginY:      from.Y,
-	})
-	return true
-}
-
-// bolt flies a fire's bolt from an orb's cell to another
-func (s *SquareSystem) bolt(owner core.Entity, from vmath.Point, x, y int, tint component.LightningColorType) {
-	s.world.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
-		Owner:     owner,
-		OriginX:   from.X,
-		OriginY:   from.Y,
-		TargetX:   x,
-		TargetY:   y,
-		Duration:  parameter.SquareBoltDuration,
-		ColorType: tint,
-	})
+	bodies := FindTargetsIn(s.world, func(x, y int) bool { return sq.Faces(line, x, y) }, position.ScopeShared, cursor)
+	for _, g := range bodies {
+		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   attack,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
+			TargetEntity: g.Target,
+			HitEntities:  g.Members,
+		})
+	}
+	return len(bodies) > 0
 }

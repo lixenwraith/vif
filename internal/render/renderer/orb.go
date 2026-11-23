@@ -2,7 +2,6 @@ package renderer
 
 import (
 	"math"
-	"unicode"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -15,32 +14,29 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// OrbRenderer draws weapon orbs, and a magic square's on its outer orbit, with corona
-// glow (TrueColor) or simple sigil (256)
+// OrbRenderer draws weapon orbs with corona glow (TrueColor) or simple sigil (256)
 type OrbRenderer struct {
 	gameCtx   *engine.GameContext
 	renderOrb orbRenderFunc
 	fullChar  rune // a fully charged orb's glyph
+	orbGlow
+}
 
-	// Precomputed ellipse containment at the cell aspect
-	effectInvRxSq    float64
-	effectInvRySq    float64
-	effectRadiusXInt int
-	effectRadiusYInt int
+// orbGlow lights an orb's cells at the cell aspect: the corona turning round it and
+// the burst as it fires
+type orbGlow struct {
+	invRxSq, invRySq float64
+	radiusX, radiusY int
+}
+
+func newOrbGlow(aspect vmath.Aspect) orbGlow {
+	rx, ry := parameter.OrbCoronaRadiusX, aspect.Y(parameter.OrbCoronaRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
+	return orbGlow{invRxSq: invRxSq, invRySq: invRySq, radiusX: int(math.Floor(rx)), radiusY: int(math.Floor(ry))}
 }
 
 func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
-	rx := parameter.OrbCoronaRadiusX
-	ry := gameCtx.World.Resources.Config.CellAspect.Y(parameter.OrbCoronaRadiusY)
-	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
-
-	r := &OrbRenderer{
-		gameCtx:          gameCtx,
-		effectInvRxSq:    invRxSq,
-		effectInvRySq:    invRySq,
-		effectRadiusXInt: int(math.Floor(rx)),
-		effectRadiusYInt: int(math.Floor(ry)),
-	}
+	r := &OrbRenderer{gameCtx: gameCtx, orbGlow: newOrbGlow(gameCtx.World.Resources.Config.CellAspect)}
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderOrb, r.fullChar = r.renderOrb256, visual.OrbFullChar256
 	} else {
@@ -55,7 +51,7 @@ type orbRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer, mapX
 // Render draws every orb
 func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
-	if world.Components.Orb.CountEntities() == 0 && world.Components.Square.CountEntities() == 0 {
+	if world.Components.Orb.CountEntities() == 0 {
 		return
 	}
 
@@ -69,109 +65,6 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 		r.renderOrb(ctx, buf, pos.X, pos.Y, orbComp, r.chargeGlyph(orbComp))
 		return true
 	})
-	world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
-		r.squareOrbs(ctx, buf, sq)
-		return true
-	})
-}
-
-// squareOrbs draws each aiming kind's orb on the square's outer orbit: at the middle
-// of the side its line faces, bursting as the line fires, or dim and turning round
-// the orbit while no line holds the kind, the kinds half a turn apart
-func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
-	period := int64(parameter.SquareOrbIdlePeriod)
-	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
-	aiming := 0
-	for kind, spec := range component.SquareKinds {
-		if left := sq.Effects[kind].Active; spec.Boost && left > 0 {
-			r.squareSurge(ctx, buf, sq, kind, float64(left)/float64(spec.Duration))
-		}
-		if spec.Boost {
-			continue
-		}
-		look, phase := &visual.SquareOrbs[kind], float64(aiming)*math.Pi
-		aiming++
-		line := sq.Line(component.SquareKind(kind))
-		if line < 0 {
-			r.squareOrb(ctx, buf, sq.OrbAt(turn+phase, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
-			continue
-		}
-		burst := 0.0
-		if since := spec.Cooldown - sq.Effects[kind].Cooldown; sq.Effects[kind].Cooldown > 0 && since < parameter.OrbFlashDuration {
-			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
-		}
-		cells, n := sq.Orbs(line, ctx.CellAspect)
-		for _, cell := range cells[:n] {
-			r.squareOrb(ctx, buf, cell, look, spec.Name, 1, burst)
-		}
-	}
-}
-
-// squareSurge lights the shield's rim for a boosting kind, held a share of its
-// boost's time: a band in the kind's glow inside the rim, heaviest in two lobes
-// that turn round it, screened over the shield and fading over the boost's last
-// third; a console draws the rim in dots
-func (r *OrbRenderer) squareSurge(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, held float64) {
-	cx, cy := sq.Center()
-	rim := sq.ShieldRadius(ctx.CellAspect)
-	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, rim+1, ctx.CellAspect.FromCircular(rim+1))
-	if !ok {
-		return
-	}
-	period := int64(visual.SquareSurgeTurn)
-	lobeX, lobeY := math.Sincos(2 * float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi)
-	colors, console := &visual.SquareKinds[kind], r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256
-	for y := startY; y <= endY; y++ {
-		dy := ctx.CellAspect.Circular(float64(y - cy))
-		for x := startX; x <= endX; x++ {
-			// Columns inside the rim; past it the band ends within one
-			dx := float64(x - cx)
-			distSq := dx*dx + dy*dy
-			depth := rim - math.Sqrt(distSq)
-			shape := 1 - depth/visual.SquareSurgeWidth
-			if depth < 0 {
-				shape = 1 + depth
-			}
-			sx, sy, visible := ctx.MapToScreen(x, y)
-			if shape <= 0 || distSq == 0 || !visible {
-				continue
-			}
-			if console {
-				if depth >= 0 && depth < 1 {
-					buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
-				}
-				continue
-			}
-			// The cosine of twice the cell's angle from the lobes', which puts two on the rim
-			lobe := ((dx*dx-dy*dy)*lobeY + 2*dx*dy*lobeX) / distSq
-			buf.SetBgScreen(sx, sy, colors.Glow, visual.RgbBackground, visual.SquareSurgeAlpha*min(3*held, 1)*shape*(0.6+0.4*lobe))
-		}
-	}
-}
-
-// squareOrb draws one orb of a square's at a cell: its glyph in its core color under
-// a corona of its other two, at a share of full light, or bursting as its line fires;
-// a console draws its kind's initial in the kind's color
-func (r *OrbRenderer) squareOrb(ctx render.RenderContext, buf *render.RenderBuffer, at vmath.Point, look *visual.SquareOrb, name string, light, burst float64) {
-	if !ctx.IsInViewport(at.X, at.Y) {
-		return
-	}
-	screenX, screenY, _ := ctx.MapToScreen(at.X, at.Y)
-	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		attr := terminal.AttrFg256
-		if light >= 1 {
-			attr |= terminal.AttrBold
-		}
-		buf.SetFgOnly(screenX, screenY, unicode.ToUpper(rune(name[0])), color.RGB{R: look.Console}, attr)
-		return
-	}
-	if burst > 0 {
-		r.renderBurst(ctx, buf, at.X, at.Y, look.Lobe, visual.CircleBlock, burst)
-		return
-	}
-	angle := float64(ctx.GameTime.UnixMilli()%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
-	r.renderCorona(ctx, buf, at.X, at.Y, look.Lobe, look.Counter, vmath.Cos(angle), vmath.Sin(angle), light)
-	buf.SetFgOnly(screenX, screenY, visual.CircleBlock, color.Lerp(visual.RgbBackground, look.Core, light), terminal.AttrNone)
 }
 
 // chargeGlyph is the digit of a charge count below the cap, or the bullseye at it
@@ -225,9 +118,9 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 
 // renderCorona draws the glow turning round an orb's center: a lobe along the turn's
 // direction and its counter opposite, each in its color, at a share of full light
-func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, lobe, counter color.RGB, rotDirX, rotDirY, light float64) {
-	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
-		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
+func (r *orbGlow) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, lobe, counter color.RGB, rotDirX, rotDirY, light float64) {
+	for dy := -r.radiusY; dy <= r.radiusY; dy++ {
+		for dx := -r.radiusX; dx <= r.radiusX; dx++ {
 			if dx == 0 && dy == 0 {
 				continue
 			}
@@ -242,7 +135,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 
 			dxF := float64(dx)
 			dyF := float64(dy)
-			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.invRxSq, r.invRySq)
 			if distSq > 1.0 || distSq == 0.0 {
 				continue
 			}
@@ -268,13 +161,13 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 }
 
 // renderBurst draws radial flash burst when orb fires
-func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor color.RGB, glyph rune, progress float64) {
+func (r *orbGlow) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor color.RGB, glyph rune, progress float64) {
 	expandPhase := 1.0 - progress
 	burstAlpha := progress
 	burstColor := color.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
 
-	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
-		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
+	for dy := -r.radiusY; dy <= r.radiusY; dy++ {
+		for dx := -r.radiusX; dx <= r.radiusX; dx++ {
 			mapX := centerX + dx
 			mapY := centerY + dy
 
@@ -285,7 +178,7 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 
 			dxF := float64(dx)
 			dyF := float64(dy)
-			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.invRxSq, r.invRySq)
 
 			if distSq > 1.0 {
 				continue

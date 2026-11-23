@@ -27,4 +27,5 @@ type RayComponent struct {
 	Scale       int           // damage multiplier, the charges a cursor fired it with
 	Hold        time.Duration // left of the hold a fire request renews on a capped ray; held, it stays at full strength
 	Palette     WeaponPalette
+	Stemless    bool // drawn from its knee out, the stem from its cursor to its orb left bare
 }

@@ -116,29 +116,34 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 // TestALineFiresItsKindAgainEachCooldownWhileItHolds: 1 turned right and 3 left
 // stand the kinds down the columns, each firing at once and again as its cooldown
 // runs out, a turn away and back inside it firing nothing. Each fire of the defense
-// rewards its cursor's boost as many times as its hold is of a kill's, and blows
-// one gust out from the square's middle.
+// rewards its cursor's boost as many times as its hold is of a kill's and blows one
+// gust out from the square's middle, and each of the whirl turns one wind round it.
 func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	pressSquare(s, "1", "l", "3", "h")
-	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareHold}
+	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareWhirl}
 	events := slices.Clone(w.Resources.Event.Queue.Consume())
 	if got := squareFired(events); !slices.Equal(got, down) {
 		t.Fatalf("fired %v, want %v down the columns", got, down)
 	}
-	rewards, gusts := 0, 0
+	rewards, gusts, whirls := 0, 0, 0
 	cx, cy := sq.Center()
 	for _, ev := range events {
 		if p, ok := ev.Payload.(*event.BoostRewardPayload); ok && p.Entity == cursor {
 			rewards++
 		}
-		if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy && p.Force == parameter.SquareWindForce {
-			gusts++
+		if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy {
+			switch {
+			case p.Force == parameter.SquareWindForce && p.Direction == 0:
+				gusts++
+			case p.Force == parameter.SquareWhirlForce && p.Direction == math.Pi/2 && p.Duration == parameter.SquareWhirlDuration:
+				whirls++
+			}
 		}
 	}
-	if gusts != 1 {
-		t.Fatalf("the defense blew %d gusts out from the square's middle, want one", gusts)
+	if gusts != 1 || whirls != 1 {
+		t.Fatalf("the defense blew %d gusts out from the square's middle and the whirl turned %d winds round it, want one each", gusts, whirls)
 	}
 	if want := int(parameter.SquareBoostDuration / parameter.BoostBaseDuration); rewards != want {
 		t.Fatalf("the defense rewarded its cursor's boost %d times, want %d", rewards, want)
@@ -242,99 +247,35 @@ func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	}
 }
 
-// TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent: of swarms sent from the
-// top left, the top and the right, attack in the left column strikes the top left's
-// alone, and hold in the right column stuns the right's alone and holds that gateway
-// alone. Each hit is its cursor's, with a bolt in the kind's color from the line's
-// orb to each body, and for the hold to each gateway.
-func TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent(t *testing.T) {
-	w, s, sq := newSquare(t)
-	cursor := w.Resources.Player.Slot(0)
-	gateways := ready(NewGatewaySystem(w)).(*GatewaySystem)
-	swarms := ready(NewSwarmSystem(w)).(*SwarmSystem)
-	cx, cy := sq.Center()
-	var anchors [3]core.Entity
-	for i, at := range [3]vmath.Point{{X: 4, Y: 1}, {X: cx, Y: 1}, {X: w.Resources.Config.MapWidth - 4, Y: cy}} {
-		anchors[i] = standGateway(w, gateways, at.X, at.Y, component.SpeciesSwarm, parameter.GameUpdateInterval)
-	}
-	for _, ev := range stepGateways(w, gateways) {
-		swarms.HandleEvent(ev)
-	}
-	var sent [3]core.Entity
-	w.Components.Swarm.Each(func(swarm core.Entity, sw *component.SwarmComponent) bool {
-		if g, ok := w.Components.Gateway.GetPtr(sw.Gateway); ok {
-			sent[slices.Index(anchors[:], g.AnchorEntity)] = swarm
-		}
-		return true
-	})
-	if slices.Contains(sent[:], 0) {
-		t.Fatalf("the gateways sent %v, want a swarm each that keeps its gateway", sent)
-	}
-	w.Resources.Event.Queue.Consume()
-
-	pressSquare(s, "1", "l", "3", "h")
-	events := slices.Clone(w.Resources.Event.Queue.Consume())
-	var struck, stunned, held []core.Entity
-	type bolt struct {
-		tint   component.LightningColorType
-		from   vmath.Point
-		tx, ty int
-	}
-	var bolts []bolt
-	for _, ev := range events {
-		switch p := ev.Payload.(type) {
-		case *event.CombatAttackAreaRequestPayload:
-			if p.OwnerEntity != cursor || p.OriginEntity != cursor {
-				t.Fatalf("a %s lands as %d's from %d, want its cursor's", component.CombatAttackNames[p.AttackType], p.OwnerEntity, p.OriginEntity)
-			}
-			if p.AttackType == component.CombatAttackStrike {
-				struck = append(struck, p.TargetEntity)
-			} else if p.AttackType == component.CombatAttackHold {
-				stunned = append(stunned, p.TargetEntity)
-			}
-		case *event.GatewayHoldRequestPayload:
-			held = append(held, p.AnchorEntity)
-		case *event.LightningSpawnRequestPayload:
-			bolts = append(bolts, bolt{p.ColorType, vmath.Point{X: p.OriginX, Y: p.OriginY}, p.TargetX, p.TargetY})
-		}
-	}
-	if !slices.Equal(struck, sent[:1]) || !slices.Equal(stunned, sent[2:]) || !slices.Equal(held, anchors[2:]) {
-		t.Fatalf("struck %v, stunned %v, held %v: want %v, %v and %v", struck, stunned, held, sent[:1], sent[2:], anchors[2:])
-	}
-	aspect := w.Resources.Config.CellAspect
-	attack, _ := sq.Orbs(component.SquareSide, aspect)
-	hold, _ := sq.Orbs(component.SquareLines-1, aspect)
-	var want []bolt
-	for _, b := range []struct {
-		tint component.LightningColorType
-		from vmath.Point
-		e    core.Entity
-	}{{component.LightningRed, attack[0], sent[0]}, {component.LightningGold, hold[0], anchors[2]}, {component.LightningGold, hold[0], sent[2]}} {
-		at, _ := w.Positions.GetPosition(b.e)
-		want = append(want, bolt{b.tint, b.from, at.X, at.Y})
-	}
-	if !slices.Equal(bolts, want) {
-		t.Fatalf("bolts %v, want %v", bolts, want)
-	}
-}
-
-// TestAStrikeKillsABodyWhateverItHoldsAsItsCursors: combat lands a square's strike
-// as a cursor's on a swarm of any hit points, taking them all and crediting it
-func TestAStrikeKillsABodyWhateverItHoldsAsItsCursors(t *testing.T) {
+// TestAStrikeKillsWhatStandsInTheThirdItsLineFaces: attack in the left column lands
+// as its cursor's on the swarm standing left of the square and on none above it,
+// takes every hit point it holds whatever their count, and marks the fire as landed
+func TestAStrikeKillsWhatStandsInTheThirdItsLineFaces(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
-	swarm := standSwarm(w, sq.X, sq.Y-6)
-	c, _ := w.Components.Combat.GetPtr(swarm)
-	c.HitPoints = 100 * parameter.CombatInitialHPSwarm
-	if !s.hit(&component.SquareKinds[component.SquareAttack], cursor, vmath.Point{X: sq.X, Y: sq.Y - 2}, swarm) {
-		t.Fatal("the strike found no row for a cursor on a swarm")
+	cx, cy := sq.Center()
+	left, above := standSwarm(w, 4, cy), standSwarm(w, cx, 2)
+	hp := 100 * parameter.CombatInitialHPSwarm
+	for _, swarm := range []core.Entity{left, above} {
+		c, _ := w.Components.Combat.GetPtr(swarm)
+		c.HitPoints = hp
 	}
+	pressSquare(s, "1", "l", "3", "h")
 	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && (p.OwnerEntity != cursor || p.OriginEntity != cursor) {
+			t.Fatalf("a %s lands as %d's from %d, want its cursor's", component.CombatAttackNames[p.AttackType], p.OwnerEntity, p.OriginEntity)
+		}
 		combat.HandleEvent(ev)
 	}
-	if c.HitPoints != 0 || c.LastDamagedBy != cursor {
-		t.Fatalf("the struck swarm holds %d hit points, last hit by %d: want none, by its cursor %d", c.HitPoints, c.LastDamagedBy, cursor)
+	struck, _ := w.Components.Combat.GetPtr(left)
+	spared, _ := w.Components.Combat.GetPtr(above)
+	if struck.HitPoints != 0 || struck.LastDamagedBy != cursor || spared.HitPoints != hp {
+		t.Fatalf("the swarm left of the square holds %d hit points, last hit by %d, and the one above it %d: want none by cursor %d, and %d",
+			struck.HitPoints, struck.LastDamagedBy, spared.HitPoints, cursor, hp)
+	}
+	if !sq.Effects[component.SquareAttack].Struck {
+		t.Fatal("a strike that killed left its fire marked as landing on nothing")
 	}
 }
 

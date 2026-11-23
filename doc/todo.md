@@ -224,7 +224,7 @@ Magic holds a magic square under its cursor's shield against eight gateways
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
 built to be play tested; its numbers and rules are what the play test settles.
 
-### Tune magic after its fourth play test
+### Tune magic after its fifth play test
 
 - Priority: P1
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
@@ -232,20 +232,22 @@ built to be play tested; its numbers and rules are what the play test settles.
 
 To settle: the shield's start, step and cap and what a touch costs it and the
 blocks, what a defeated wave pays, each kind's duration and cooldown, the gust's
-force and reach, the boost a kill gives and the bank's cap, the paces, how a rank
-and a round quicken them and how long a wave stays, the carrier's weapons, what
-charges the magic meter and what its dust's blast does, and whether one turn may
-align all three kinds at once. Played headless at 80 by 40, a player turned to
-each wave 5 s after it moved lost the square at 208 s.
+and the whirl's force and reach, the boost a kill gives, a weapon's kill of a
+wave's body among them, and the bank's cap, the paces, how a rank and a round
+quicken them and how long a wave stays, the carrier's weapons, what charges the
+magic meter and what its dust's blast does, and whether one turn may align all
+three kinds at once. Played headless at 130 by 44 with no turn, attack and whirl
+held on two rows lost the square at 163 to 216 s, attack and defense at 143 to
+152 s.
 
 ### Give magic's late game an end
 
 - Priority: P2
 - Affected files: `wad/scenario/base/magic/scenario.toml` (`FloodRun`, the ramp)
 
-A strike ends a whole wave whatever its size, so past the paces' floors only the
-time a wave stays tests a player: one turned to each wave 3 s after it moved still
-stood at 900 s. A stay that shortens each round, or a second wave from the opposite
+A strike ends all that stands in its third whatever its count, so past the paces'
+floors only the time a wave stays tests a player: one turned to each wave 3 s
+after it moved still stood at 900 s. A stay that shortens each round, or a second wave from the opposite
 gateway, closes it.
 
 ### Leave magic's dust to the player's key

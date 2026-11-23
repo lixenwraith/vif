@@ -238,8 +238,8 @@ quasar's part in both, across an ellipse half its footprint; one without takes
 neither. A shared target's impulse draws from a stream
 reseeded from the tick and the pair (D-8); a player-domain target's from this
 instance's player stream. A pair is tested for overlap on the tick's cached cells
-before any store is read, since a crowd's pairs number its square: idle under
-`:god` in `magic` at 160 by 50, where nothing kills a wave's bodies, a tick over
+before any store is read, since a crowd's pairs number its square: in `magic` at
+160 by 50 with nothing killing a wave's bodies, a tick over
 705 bodies took 8.5 ms before that and 3.1 ms after, the bodies' course the same.
 `magic` also holds its gateways at 300 bodies, where a tick takes 1 ms.
 
