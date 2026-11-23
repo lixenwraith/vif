@@ -1012,6 +1012,36 @@ Auto-Cloud syncs `vif.toml` whole, so the zoom a player left on a Steam Deck
 (`[presentation] cell`) opens their desktop at it. Closes with the cell kept in
 the state root, read over `vif.toml`'s.
 
+### Host the game in Neovim natively
+
+- Priority: P3
+- Affected files: a presentation beside `terminal/window` and the page
+  (`app.Host`), `vif.nvim`
+- Guide: [Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+
+`vif.nvim` plays the terminal build in a terminal buffer, which every Neovim UI
+draws. A native host would have vif speak msgpack-RPC to `$NVIM` as a
+presentation, behind a tag of its own: each frame's changed cells written to a
+buffer with extmark highlights, keys read through `vim.on_key`, the mouse through
+maps. One or two weeks, for little: Neovim has no key release to hand a plugin
+either, and the terminal buffer already shows every frame the game changes (20.5
+of 20.5 a second). Worth it only if Neovim's terminal becomes the limit.
+
+### Tell a Neovim player their keys tap
+
+- Priority: P3
+- Affected files: the terminal module's `keyprotocol.go`, or Neovim's
+  `src/nvim/vterm/state.c`
+- Guide: [Input and modes](input-and-modes.md) §1
+
+Neovim's terminal (0.11.7, 0.12.6) answers the key protocol's query with every
+flag pushed (`CSI ? 31 u`) and implements `disambiguate` alone, so the module
+reports releases where every key taps: no hold sticks, but `EventInputReport`
+says `releases` and the notice a `releases = true` capture owes never shows.
+Closes with Neovim's query naming only the flags its terminal acts on, reported
+upstream; failing that, the module declining the protocol where `$NVIM` is set,
+which goes by the environment where it now goes by answers.
+
 ### Publish a development AUR package
 
 - Priority: P3

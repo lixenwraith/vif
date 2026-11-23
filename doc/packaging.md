@@ -3,8 +3,8 @@
 Steps to publish vif through a distribution repository, and the
 conventions a change must not break while that work is in progress. Section 1
 applies to every commit, §2 is what the release workflow publishes, §3 to §6 are
-checklists to chip away at, §7 verifies a staged install, and §8 is the Steam
-depot with what its store needs done by hand.
+checklists to chip away at, §7 verifies a staged install, §8 is the Steam depot
+with what its store needs done by hand, and §9 the Neovim plugin.
 
 ## 1. Shared guidelines
 
@@ -324,3 +324,25 @@ Set by hand, and nothing in the repository reads them:
 - Licenses: BSD-3-Clause allows the sale, and Hack's MIT and Bitstream Vera
   licenses allow bundling the font. Valve's redistributables would ride in a
   depot alone, never in the repository or a GitHub archive.
+
+## 9. Neovim
+
+`vif.nvim` (`lixenwraith/vif.nvim`, a repository of its own) is a Lua plugin that
+plays the installed `vif` in a Neovim terminal buffer
+([Platforms §4](multi-platform.md#4-platform-matrix)). It ships no binary and
+builds nothing, so it follows no release of the game: a plugin manager clones its
+default branch, or its newest tag where a player asks for one.
+
+1. Before a push, on the oldest Neovim it supports (0.11) and the newest: `nvim
+   --headless -u NONE -l tests/run.lua`, `:checkhealth vif` with the game on
+   `PATH`, and `:helptags doc/`, whose `tags` file its `.gitignore` keeps out.
+2. Tag `vX.Y.Z` on a change a player would notice: lazy.nvim (`version = '*'`)
+   and `vim.pack` (`version = vim.version.range('*')`) install the newest tag for
+   a player who asks, the branch head otherwise.
+3. On GitHub, give the repository a description and the `neovim-plugin` topic,
+   which the plugin indexes read.
+4. The plugin names the game's `-color` and `-version` flags, where a binary
+   comes from (its missing-binary message, its README and help) and its minimum
+   Neovim (README, `doc/vif.txt`, `lua/vif/health.lua` and `open`): a change to
+   any of them here is a change there, as the AUR and ports packages are once
+   published.

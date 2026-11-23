@@ -144,6 +144,20 @@ with fonts that lack the half blocks, so the small splash face, which packs two
 pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
 twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
 
+A Neovim terminal buffer ([vif.nvim](https://github.com/lixenwraith/vif.nvim),
+Neovim 0.11 and later) plays the terminal build with three differences its
+terminal forces. It shows 24-bit color only with `termguicolors`, which the
+environment does not say, a terminal's own variables passing through Neovim, so
+the plugin starts the game with `-color true` or `-color 256`. It passes on no key
+release while confirming every key protocol flag the game pushes, so the terminal
+module reports releases there and a held key is a run of taps whose notice never
+shows ([todo](todo.md#tell-a-neovim-player-their-keys-tap)). And it passes on the
+pointer moving with no button down only under Neovim's `mousemoveevent`, so the
+cursor follows the pointer only then. The picture keeps the terminal's rate: of
+the 60 frames a second the game draws at 120x40, the 20.5 that change all reach
+the screen in Neovim 0.11.7 and 0.12.6 as in Alacritty alone, on `main` and on
+`td`.
+
 The About overlay's `notices` row names `NOTICES`, which travels with every
 build: beside the binary in an archive, under `share/licenses/vif/` once
 installed, beside the page, and on Android as an asset in the APK, which the app

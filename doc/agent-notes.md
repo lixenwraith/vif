@@ -1014,6 +1014,29 @@ Docs · Libraries · Branches.
   since `os.Executable` reads `/proc/self/exe` and the wad beside `bin/` is found
   by it, and reach an `Xvfb` of the machine by its display number, an abstract
   socket no chroot hides. `repo.steampowered.com` serves both with a `SHA256SUMS`.
+- Neovim comes from the Nix cache where apt is off limits: `nix-build -E 'with
+  import (fetchTarball "https://channels.nixos.org/<channel>/nixexprs.tar.xz")
+  {}; neovim-unwrapped' -o <dir>/nvim` (0.11.7 on `nixos-25.11`, 0.12.6 on
+  `nixpkgs-unstable`), and `neovim-unwrapped.src` is its source where github.com
+  is blocked. Run it in Alacritty with `--listen <sock>`: `nvim --server <sock>
+  --remote-send` types, and `--remote-expr` reads `mode()` or a terminal buffer's
+  text, with no screenshot; it blocks while a `Press ENTER` prompt stands, so
+  bound it with `timeout`.
+- Neovim's terminal confirms every key protocol flag pushed and sends no release:
+  a text key taps, and Escape, an arrow or an F-key stays held in the terminal
+  module's table until its next press. Read a hold from the game's log (`-lv
+  trace -ls input+push`: `IntentKeyPress`, `IntentKeyRelease`) on a scratch
+  scenario that captures a key at boot. Neovim 0.12 inside apt's Alacritty 0.13.2
+  also gets Escape, Enter, Tab and Backspace twice, in Neovim itself too; 0.11
+  and Alacritty 0.17.0 (Nix's) are not affected.
+- Frames that reach a screen are counted from the X server: `ffmpeg -f x11grab
+  -framerate 120 -video_size <WxH> -i :<n>+<x>,<y> -t <s> -f framecrc <file>`
+  writes a checksum a sample, and the changes between neighbors are the distinct
+  frames. The game changes its picture some 20.5 times a second at the default
+  tick, whatever `engine.fps` reads, and every frame at `-speed 4`.
+- With `-l` the game prints `logging enabled: ...` on stdout before its screen,
+  and a mistyped flag prints its error first and the usage after it: what a
+  wrapper shows of an exit is the whole main screen, not its last line.
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
