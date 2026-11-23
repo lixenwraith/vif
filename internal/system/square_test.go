@@ -381,13 +381,27 @@ func TestABodyOnTheBlocksUnderNoShieldCostsHeatOnceATouch(t *testing.T) {
 	}
 }
 
-// TestATurnIntoAMagicStateShedsDustOnceAWait: turned out of the Lo Shu square and
-// back, every row and column sums alike again and each block sheds its dust; the
-// same turns inside the wait shed none, and after it they shed again
-func TestATurnIntoAMagicStateShedsDustOnceAWait(t *testing.T) {
+// TestASquaresMagicChargesAndItsDefenseShedsIt: the meter charges with time and with
+// each kill its cursor makes, a turn into a magic state fills it at once, and a
+// defense's fire sheds the share of SquareMagicDust it holds as dust and empties it
+func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 	w, s, sq := newSquare(t)
-	shed := func(keys ...string) (dust int) {
-		pressSquare(s, keys...)
+	cursor := w.Resources.Player.Slot(0)
+	stepSquare(w, s)
+	for _, killer := range []core.Entity{cursor, cursor + 99} {
+		s.HandleEvent(event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: killer}})
+	}
+	if want := parameter.GameUpdateInterval + parameter.SquareMagicKill; sq.Magic != want {
+		t.Fatalf("a tick and a kill of its cursor's charged %v, want %v", sq.Magic, want)
+	}
+	if pressSquare(s, "5", "l", "h"); !sq.IsMagic() || sq.Magic != parameter.SquareMagicFull {
+		t.Fatalf("a turn into a magic state (%t) left the meter at %v, want it full", sq.IsMagic(), sq.Magic)
+	}
+
+	// 1 turned right and 3 left stand the kinds down the columns, the defense firing
+	shed := func() (dust int) {
+		w.Resources.Event.Queue.Consume()
+		pressSquare(s, "1", "l", "3", "h")
 		for _, ev := range w.Resources.Event.Queue.Consume() {
 			if batch, ok := ev.Payload.(*event.BatchPayload[event.ParticleSpawnEntry]); ok {
 				dust += len(batch.Entries)
@@ -395,20 +409,12 @@ func TestATurnIntoAMagicStateShedsDustOnceAWait(t *testing.T) {
 		}
 		return dust
 	}
-	if dust := shed("5", "l"); dust != 0 || sq.IsMagic() {
-		t.Fatalf("a turn out of the Lo Shu square shed %d dust, magic %t", dust, sq.IsMagic())
+	if dust := shed(); dust != parameter.SquareMagicDust || sq.Magic != 0 {
+		t.Fatalf("a defense on a full meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust)
 	}
-	want := component.SquareBlocks * parameter.SquareMagicDust
-	if dust := shed("h"); dust != want || !sq.IsMagic() {
-		t.Fatalf("the turn back shed %d dust, magic %t, want %d from a magic state", dust, sq.IsMagic(), want)
-	}
-	if dust := shed("l", "h"); dust != 0 {
-		t.Fatalf("a magic state inside the wait shed %d dust", dust)
-	}
-	now := engine.SimTime(0, parameter.GameUpdateInterval)
-	w.Resources.Time.Update(now, now, parameter.SquareMagicCooldown)
-	s.Update()
-	if dust := shed("l", "h"); dust != want {
-		t.Fatalf("a magic state after the wait shed %d dust, want %d", dust, want)
+	w, s, sq = newSquare(t)
+	sq.Magic = parameter.SquareMagicFull / 4
+	if dust := shed(); dust != parameter.SquareMagicDust/4 || sq.Magic != 0 {
+		t.Fatalf("a defense on a quarter meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust/4)
 	}
 }

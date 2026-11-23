@@ -1457,11 +1457,12 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 		r.pressInput(intent, key, source)
 		return true
 	}
-	// A press on a block of a magic square is its digit's, held to drag the block
+	// A press on a magic square is its block's digit, held to drag the block, or
+	// Enter on its burst meter
 	if x, y, ok := r.pointerCell(intent); ok {
-		if digit, _, _ := blockAt(r.ctx, x, y); digit != 0 {
-			r.pressInput(intent, digit, source)
-			r.grab.held, r.grab.turned, r.grab.x, r.grab.y, r.grab.source = true, false, x, y, source
+		if key, _, _ := blockAt(r.ctx, x, y); key != 0 {
+			r.pressInput(intent, key, source)
+			r.grab.held, r.grab.turned, r.grab.x, r.grab.y, r.grab.source = key != '\r', false, x, y, source
 			return true
 		}
 	}
