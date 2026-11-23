@@ -27,6 +27,7 @@ host the game.
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
+| Steam depot | `make steam-linux` | The desktop window, by default | Included | Yes | Included | The `vif_gui` build for linux/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §8](packaging.md#8-steam)) |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -42,6 +43,7 @@ make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
+make steam-linux             # bin/steam/linux, the Steam depot
 make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
 make wasm                    # web/vif.wasm and the page's scripts
 make windows                 # bin/vif.exe

@@ -1003,6 +1003,17 @@ Docs · Libraries · Branches.
   a cell being 12x24 until a zoom, which the scratch `vif.toml`'s `[presentation]
   cell` reads back, `xdotool windowsize` resizes it, and the run's size is its
   log's `init completed` line (`-l=<dir> -lv debug`).
+- Steam's launch runs with no Steam client and no Docker
+  ([Packaging §8](packaging.md#in-the-runtime)): `SteamLinuxRuntime_4/run --
+  <binary> <args>` is pressure-vessel, which works as root in a cloud container,
+  under `Xvfb` with `LIBGL_ALWAYS_SOFTWARE=1`. It takes the machine's graphics
+  libraries (`/usr/lib/pressure-vessel/overrides`), so what the runtime itself
+  lacks shows only in its platform image
+  (`com.valvesoftware.SteamRuntime.Platform-amd64,i386-steamrt4-sysroot.tar.gz`,
+  beside the archive) unpacked and entered with `chroot`: mount `/proc` in it,
+  since `os.Executable` reads `/proc/self/exe` and the wad beside `bin/` is found
+  by it, and reach an `Xvfb` of the machine by its display number, an abstract
+  socket no chroot hides. `repo.steampowered.com` serves both with a `SHA256SUMS`.
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe

@@ -12,10 +12,23 @@ This is a nightly build: a development build of one commit, replaced every night
 whose flags, files and formats may change without notice.
 
 <!-- end -->
+<!-- if client headless windows web -->
 ## In this archive
 
+<!-- end -->
+<!-- if steam -->
+## In this folder
+
+<!-- end -->
 <!-- if client -->
 - `vif`: the game, in a terminal or, with `-g`, in a desktop window
+<!-- end -->
+<!-- if steamlinux -->
+- `bin/vif`: the game, in a window of its own
+<!-- end -->
+<!-- if steam -->
+- `wad/`: the scenarios, the typing corpus, wall images and the shipped keymaps,
+  bot graphs and `vif.toml`, which the game reads from beside its `bin/`
 <!-- end -->
 <!-- if headless -->
 - `vif`: the dedicated game server, a static binary with no terminal, window or
@@ -31,7 +44,7 @@ whose flags, files and formats may change without notice.
 <!-- end -->
 - `LICENSE`: vif's license, BSD-3-Clause
 - `NOTICES`: the licenses of Go and of the modules this build links
-<!-- if client -->
+<!-- if client steam -->
 - `LICENSE.font`: the license of Hack, the font the desktop window draws its cells
   in: MIT, with Bitstream Vera's
 <!-- end -->
@@ -40,8 +53,19 @@ whose flags, files and formats may change without notice.
   `vif.wasm` carries: MIT, with Bitstream Vera's
 <!-- end -->
 
-<!-- if client windows web -->
+<!-- if client windows web steam -->
 ## Play
+
+<!-- end -->
+<!-- if steam -->
+Steam starts the game full screen, in a window of its own. What you type under
+Properties, Launch Options is added to its command line: `-fullscreen=false` opens
+a plain window, `-scale 2` doubles its font for a HiDPI screen, and `-s td` starts
+the tower defense map. Ctrl with `=` or `-`, or with the wheel, zooms, and Ctrl-0
+puts its font back.
+
+`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the settings
+menu, and `:q` quits.
 
 <!-- end -->
 <!-- if client -->
@@ -148,8 +172,23 @@ Nightly builds of this binary are also the container image
 `ghcr.io/lixenwraith/vif:nightly`. `./vif -h` prints every flag.
 
 <!-- end -->
-<!-- if client windows headless -->
+<!-- if client windows headless steam -->
 ## Scenarios and settings
+
+<!-- end -->
+<!-- if steam -->
+`wad/` holds the `td`, `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and
+`tutorial` scenarios beside the main one, the full typing corpus, wall images and
+copies of the keymaps, bot graphs and `vif.toml` to read. Steam replaces it at
+every update and the game never writes there, so what is yours lives elsewhere.
+
+<!-- end -->
+<!-- if steamlinux -->
+The settings menu saves its choices to `~/.config/vif/vif.toml`, created at the
+first change. A keymap of your own is `~/.config/vif/input/keymap.toml`, a scenario
+of your own a directory under `~/.config/vif/scenario/`, and what your bots learn
+is kept in `~/.config/vif/bot/`. Logs (`-l`), replay journals (`-j`) and recorded
+music (`-mw`) go under `~/.local/state/vif/`.
 
 <!-- end -->
 <!-- if client windows -->
@@ -205,8 +244,20 @@ sent it on joining. Logs (`-l`) go under `~/.local/state/vif/log/`.
 
 <!-- end -->
 
-<!-- if client windows web -->
+<!-- if client windows web steam -->
 ## Play with others
+
+<!-- end -->
+<!-- if steam -->
+The lobby at https://lixen.com/vif/lobby/ hosts games on demand and lists the
+running ones, each with a link to join it by. In the game, `:join <link>` joins
+one, as the settings menu's Join a session row does, and `:join https://lixen.com`
+hosts a new game there and joins it.
+
+On your own network, `:host :7777` opens your game to other players, who join it
+with `:join <your-address>:7777` or, once you turn on Visible on this network,
+from the menu's Nearby games. `:bot add` seats a bot beside you, and
+`:spectate <link>` watches a game and takes no seat in it.
 
 <!-- end -->
 <!-- if client windows -->

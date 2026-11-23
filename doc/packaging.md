@@ -3,7 +3,8 @@
 Steps to publish vif through a distribution repository, and the
 conventions a change must not break while that work is in progress. Section 1
 applies to every commit, §2 is what the release workflow publishes, §3 to §6 are
-checklists to chip away at, and §7 verifies a staged install.
+checklists to chip away at, §7 verifies a staged install, and §8 is the Steam
+depot with what its store needs done by hand.
 
 ## 1. Shared guidelines
 
@@ -207,3 +208,119 @@ The settings, keymap, content and installed bot-graph lines must name paths unde
 the staged root, and so must the scenario line of the second check. The main
 scenario, the sound and music banks and the `embedded default` bot line are
 embedded by design. That is the packaging contract in two commands.
+
+## 8. Steam
+
+Steam carries the game as a paid app at a low price. Every other build stays
+free, so a purchase is support, and the store's description says so: the source
+is BSD-3-Clause and free on GitHub, and buying funds its development. The depot
+is the desktop window alone, since Steam starts a binary with no terminal.
+
+`make steam-linux` assembles the Linux depot in `bin/steam/linux/`, from an empty
+directory because Steam installs a depot whole:
+
+- `bin/vif`: the `vif_gui` build for linux/amd64, which opens its window by
+  default. It links `libc.so.6`, `libdl.so.2` and `libpthread.so.0` with no
+  versioned glibc symbol, and loads the window's libraries and the sound
+  server's client library as it runs
+  ([platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+- `wad/`: the config root an install lays out, by the recipe of §2's wad archive.
+  The binary finds it beside its `bin/` and never writes there
+  ([Filesystem §3](filesystem-layout.md#3-resolution-policy)), so an update that
+  replaces it costs a player nothing.
+- `LICENSE`, that build's `NOTICES`, `LICENSE.font` (§1) and a `README.md`
+  (`release-readme`'s `steam-linux`).
+
+It holds nothing of Valve's: the build links no Steamworks SDK
+([todo](todo.md#bind-the-steamworks-sdk-behind-a-tag-of-its-own)).
+
+### In the runtime
+
+A depot is checked in the container Steam runs it in, with no Steam client:
+`run` in Valve's runtime archive is the launch Steam makes, the runtime's `/usr`
+with the host's graphics drivers and its display and sound sockets.
+
+```sh
+make steam-linux
+curl -O https://repo.steampowered.com/steamrt4/images/latest-public-stable/SteamLinuxRuntime_4.tar.xz
+tar -xJf SteamLinuxRuntime_4.tar.xz
+SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -check -s td
+SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -fullscreen
+```
+
+The check's lines must name files under the depot's `wad/`, as §7's name the
+staged root. Steam Linux Runtime 4.0 (4.0.20261021, Debian 13) holds
+`libX11.so.6`, `libEGL.so.1`, `libGL.so.1`, `libOpenGL.so.0` and
+`libpulse-simple.so.0`, and of the players the engine finds by name `pw-cat`
+alone: no `pacat`, `aplay`, `play` or `ffplay`. It holds no `libGLESv2.so.2`,
+which a launch has only where the host does
+([todo](todo.md#open-the-window-where-the-host-has-no-gles-2)). So read, both
+checks passed there on a machine with no GPU (Xvfb, Mesa's llvmpipe); a Steam
+Deck and the Steam client's overlay are checked by hand.
+
+### Upload
+
+`make steam-upload STEAM_APP=<app> STEAM_DEPOT_LINUX=<depot> STEAM_USER=<account>`
+fills the ids into the build scripts of `deploy/package/steam/`, writes them
+beside the depot and runs `steamcmd`, which asks for the builder account's
+password and Steam Guard code itself. It sets nothing live: a build goes to the
+default branch on the partner site's builds page.
+
+The release workflow's `steam` job does the same for a tag and is unplugged: it
+runs once the repository variable `STEAM_UPLOAD` is `true`, with `STEAM_APP` and
+`STEAM_DEPOT_LINUX` as variables and two secrets, `STEAM_USER` and
+`STEAM_CONFIG_VDF`, the base64 of the `config/config.vdf` that account's first
+`steamcmd +login` left. The account is a builder's own, holding Edit App Metadata
+and Publish App Changes To Steam and nothing else, since the secret is its login.
+The job has never run: its first run is a tag's, watched.
+
+### On the partner site
+
+Set by hand, and nothing in the repository reads them:
+
+- **Installation, General.** A launch option for Linux: executable `bin/vif`,
+  arguments `-fullscreen`.
+- **Installation, Linux Runtime.** Steam Linux Runtime 4.0, offered once a Linux
+  launch option exists; left unset, a native game runs in Scout, the first.
+- **Depots.** One for Linux, 64-bit.
+- **Steam Cloud**, by Auto-Cloud, which needs no SDK: the player's settings,
+  keymaps and what their bots learned, each a root path under the user root
+  (`os.UserConfigDir`, so `~/.config/vif`), marked cross-platform:
+  - `vif.toml` in `.config/vif`;
+  - `*.toml` in `.config/vif/input`;
+  - `*` in `.config/vif/bot`, recursive: a player's graphs and each population
+    ([Bots](bots.md#the-population-file)).
+
+  The root is `LinuxHome`; Valve's list has none for `$XDG_CONFIG_HOME`, so a
+  player who moved it syncs nothing. Logs, journals, recordings and places (the
+  state root) and `scenario/downloads` stay on the machine. `vif.toml` carries the
+  window's zoom (`[presentation] cell`) to a player's other machines with the
+  rest.
+- **Steam Input**, the official configuration for a Steam Deck and a controller,
+  in the words the help uses:
+  - right trackpad: the mouse; R2: left click, which fires the main weapon; L2:
+    right click, the special weapon;
+  - d-pad: `h`, `j`, `k`, `l`; A: Enter; B: Escape; X: Space;
+  - Start: F10, the settings menu; a button for Steam's on-screen keyboard.
+
+  Under gamescope the touchscreen is the mouse.
+- **Steam Deck.** Gamescope runs the window through Xwayland, and its smallest
+  cell is 12 pixels tall where Valve asks for 9 at 1280x800. The aim is
+  Playable, which opening the on-screen keyboard by hand still is; Verified
+  wants the default controls to reach everything, the Deck's glyphs in help and
+  prompts and the SDK's text entry
+  ([todo](todo.md#bind-the-steamworks-sdk-behind-a-tag-of-its-own)).
+
+### Store checklist
+
+- Steam Direct: 100 USD an app, returned after 1,000 USD of adjusted gross
+  revenue; signing up as a person is allowed, and the tax interview can take up
+  to 30 days.
+- Release comes 21 days or more after the fee is paid, and after a Coming Soon
+  page has been up two weeks.
+- Valve reviews the store page and the build before either goes live: submit
+  seven business days ahead.
+- Assets: capsules, five screenshots or more, a trailer, the content survey.
+- Licenses: BSD-3-Clause allows the sale, and Hack's MIT and Bitstream Vera
+  licenses allow bundling the font. Valve's redistributables would ride in a
+  depot alone, never in the repository or a GitHub archive.

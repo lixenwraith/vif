@@ -329,3 +329,50 @@ jobs:
             gh release create nightly dist/* --target "$GITHUB_SHA" \
               --title "$title" --notes "$notes" --prerelease
           fi
+
+  # Unplugged: the job runs for a tag once the repository variable STEAM_UPLOAD is
+  # "true", with the app's ids and the builder account's saved login beside it
+  # (doc/packaging.md §8). It uploads a build and sets none live.
+  steam:
+    name: Upload the Steam depot
+    needs: artifacts
+    if: github.ref_type == 'tag' && vars.STEAM_UPLOAD == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Assemble the depot
+        run: make steam-linux RELEASE_LABEL="${GITHUB_REF_NAME#v}"
+
+      # steamcmd is a 32-bit program. Its login is the config.vdf a person's first
+      # login left, Steam Guard code and all, so no run here types a password.
+      - name: Install steamcmd with the builder account's login
+        shell: bash
+        env:
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q && sudo apt-get install -y -q lib32gcc-s1
+          mkdir -p "$HOME/steamcmd" "$HOME/Steam/config"
+          curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+            | tar -xz -C "$HOME/steamcmd"
+          printf '%s' "$STEAM_CONFIG_VDF" | base64 -d >"$HOME/Steam/config/config.vdf"
+
+      - name: Upload
+        env:
+          STEAM_USER: ${{ secrets.STEAM_USER }}
+        run: |
+          make steam-upload STEAMCMD="$HOME/steamcmd/steamcmd.sh" \
+            STEAM_APP='${{ vars.STEAM_APP }}' STEAM_DEPOT_LINUX='${{ vars.STEAM_DEPOT_LINUX }}' \
+            STEAM_USER="$STEAM_USER"

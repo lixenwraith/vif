@@ -939,6 +939,79 @@ install over a debug-signed one: uninstall first, which drops the app's settings
 A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
 release) is a separate decision.
 
+### Ship the Windows window build and its Steam depot
+
+- Priority: P1
+- Affected files: `cmd/vif/gui.go`, `Makefile`, `.github/workflows/release.yml`,
+  `deploy/package/steam/`, `doc/packaging.md` §8
+- Prerequisite: the terminal module's window opening on Windows, tagged
+
+Steam's depot is Linux alone, and the Windows zip is the terminal's
+([Build profiles §4](multi-platform.md#4-platform-matrix)). Closes with the
+window build for windows/amd64 (`-H=windowsgui`, an error shown in a message
+box, sound through WASAPI as the window's own speakers), a `steam-windows` depot
+beside `steam-linux` with its launch option and Auto-Cloud root override
+(`WinAppDataRoaming`, `vif`), and that zip in place of the terminal's in a
+release.
+
+### Open the window where the host has no GLES 2
+
+- Priority: P1
+- Affected files: the terminal module's `window/gl.go`, `go.mod`
+
+The window loads `libGLESv2.so.2`, which neither Steam Linux Runtime holds: a
+Steam launch has it only where the host does
+([Packaging §8](packaging.md#in-the-runtime)), and elsewhere the game ends on
+`window: libGLESv2.so.2: cannot open shared object file`. Closes with the
+window drawing through desktop OpenGL (`libOpenGL.so.0`, else `libGL.so.1`, both
+in the runtime) where GLES 2 does not load, and vif taking that version.
+
+### Bind the Steamworks SDK behind a tag of its own
+
+- Priority: P2
+- Affected files: a new binding package, `cmd/vif`, `Makefile` (`steam-linux`,
+  `verify`), `doc/packaging.md` §8
+- Prerequisite: Lixen's go, and a design for controller glyphs in the help and
+  prompts, which every host shares
+
+The depot links nothing of Valve's, so a Steam build has no rich presence, no
+join from a friend, no achievements, and on a Deck no text entry or glyphs, which
+Verified wants. Closes with a flat-API binding of vif's own under `vif_steam`,
+passed by the depot targets alone, with `make verify` holding that no other
+build lists it:
+
+- `SteamAPI_InitFlat`, `RunCallbacks` and `Shutdown`; `ISteamFriends` rich
+  presence; `ISteamUtils` `ShowFloatingGamepadTextInput`; `ISteamUserStats`
+  achievements; later `ISteamInput` action sets and glyphs. It loads
+  `libsteam_api.so` beside the binary with purego, and on Windows
+  `steam_api64.dll`.
+- A friend's join reads rich presence's `connect`, which holds a router session
+  link, never a player's own door address, and maps to `-join`.
+- The floating text input opens on entering Insert or Command mode in Big
+  Picture or on a Deck; achievements come from scenario events.
+
+Not go-steamworks, whose repository carries Valve's binaries: none of Valve's
+headers or binaries enters this repository or a GitHub archive, only a depot. No
+`SteamAPI_RestartAppIfNecessary`, and no DRM.
+
+### Build the Steam depot for linux/arm64
+
+- Priority: P3
+- Affected files: `Makefile` (`steam-linux`), `deploy/package/steam/`
+
+Steam Linux Runtime 4.0 publishes an arm64 platform, and the depot is amd64
+alone. Closes with `steam-linux` assembling an arm64 depot beside it once the
+partner site takes a native arm64 Linux depot.
+
+### Keep the window's zoom on its machine under Steam Cloud
+
+- Priority: P3
+- Affected files: `internal/paths` (`SaveCell`), `doc/packaging.md` §8
+
+Auto-Cloud syncs `vif.toml` whole, so the zoom a player left on a Steam Deck
+(`[presentation] cell`) opens their desktop at it. Closes with the cell kept in
+the state root, read over `vif.toml`'s.
+
 ### Publish a development AUR package
 
 - Priority: P3
@@ -1304,6 +1377,10 @@ so the site can say when the fleet is full and offer a hosted session instead.
 Joins and creates are budgeted by account where a sign-in names one; a publication
 is budgeted by address alone, and its `Resume` token is the last bearer secret on
 the wire ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
+
+Steam Networking Sockets and its datagram relay would hide a player-hosted
+session's addresses too, and tie hosting to Steam: an option beside this one, not
+part of it.
 
 What the feature itself needs, best shaped by deploying it step by step:
 - `-host vif://<site>:7777` opening the door through the router rather than binding
