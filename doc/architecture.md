@@ -419,8 +419,9 @@ These boundaries belong to separately maintained modules:
   passphrase door and an account sign-in prove with.
 - `github.com/lixenwraith/ascimage`: the dual-mode cell images a wall pattern
   loads (`.aimg`) and the quadrant fit the logo draws with.
-- `github.com/ebitengine/purego`: loading Xlib, EGL and GLES 2 at run time for the
-  desktop window, with cgo off; it comes with `terminal/window`.
+- `github.com/ebitengine/purego`: loading Xlib, EGL and GLES 2 or desktop OpenGL
+  at run time for the desktop window, with cgo off; it comes with
+  `terminal/window`.
 
 `golang.org/x/sys` serves `pkg/network`'s Windows error codes; `golang.org/x/term`,
 `golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through

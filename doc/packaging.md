@@ -253,10 +253,11 @@ staged root. Steam Linux Runtime 4.0 (4.0.20261021, Debian 13) holds
 `libX11.so.6`, `libEGL.so.1`, `libGL.so.1`, `libOpenGL.so.0` and
 `libpulse-simple.so.0`, and of the players the engine finds by name `pw-cat`
 alone: no `pacat`, `aplay`, `play` or `ffplay`. It holds no `libGLESv2.so.2`,
-which a launch has only where the host does
-([todo](todo.md#open-the-window-where-the-host-has-no-gles-2)). So read, both
-checks passed there on a machine with no GPU (Xvfb, Mesa's llvmpipe); a Steam
-Deck and the Steam client's overlay are checked by hand.
+which a launch has only where the host does, so the window draws through the
+runtime's `libOpenGL.so.0` where GLES 2 does not load. Both checks passed there
+on a machine with no GPU (Xvfb, Mesa's llvmpipe), and in the runtime's tree
+alone, with no library of a host's, the window opened through `libOpenGL.so.0`;
+a Steam Deck and the Steam client's overlay are checked by hand.
 
 ### Upload
 

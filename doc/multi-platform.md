@@ -25,7 +25,7 @@ host the game.
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Steam depot | `make steam-linux` | The desktop window, by default | Included | Yes | Included | The `vif_gui` build for linux/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §8](packaging.md#8-steam)) |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
@@ -522,12 +522,13 @@ page's wheel notch within Android's range (`glyph.Zoom`, `-scale` the density),
 never under the smallest strike and filtered where the cell is no whole multiple
 of its strike; the grid follows as a resize, and the run keeps the cell in
 `[presentation] cell` and opens at it. The window's libraries (`libX11.so.6`,
-`libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so the binary builds with
-`CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which the
-Makefile's release targets pass (`GUI_GCFLAGS`). It runs on Wayland through
-XWayland. purego's `fakecgo` links the binary to the system libc, so a Linux
-client binary needs glibc and runs neither on musl nor under Termux; `vif_nogui`
-and `vif_headless` binaries stay static.
+`libEGL.so.1`, and `libGLESv2.so.2` or, where that does not load, desktop
+OpenGL's `libOpenGL.so.0` or `libGL.so.1`) are opened with purego, so the binary
+builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std,
+which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on Wayland
+through XWayland. purego's `fakecgo` links the binary to the system libc, so a
+Linux client binary needs glibc and runs neither on musl nor under Termux;
+`vif_nogui` and `vif_headless` binaries stay static.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in

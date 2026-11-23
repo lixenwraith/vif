@@ -954,18 +954,6 @@ beside `steam-linux` with its launch option and Auto-Cloud root override
 (`WinAppDataRoaming`, `vif`), and that zip in place of the terminal's in a
 release.
 
-### Open the window where the host has no GLES 2
-
-- Priority: P1
-- Affected files: the terminal module's `window/gl.go`, `go.mod`
-
-The window loads `libGLESv2.so.2`, which neither Steam Linux Runtime holds: a
-Steam launch has it only where the host does
-([Packaging §8](packaging.md#in-the-runtime)), and elsewhere the game ends on
-`window: libGLESv2.so.2: cannot open shared object file`. Closes with the
-window drawing through desktop OpenGL (`libOpenGL.so.0`, else `libGL.so.1`, both
-in the runtime) where GLES 2 does not load, and vif taking that version.
-
 ### Bind the Steamworks SDK behind a tag of its own
 
 - Priority: P2
