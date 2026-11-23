@@ -18,7 +18,6 @@ const (
 	BehaviorKraken
 	BehaviorDevourer // its body and each of its guts
 	BehaviorData     // a species a scenario's behavior program defines
-	BehaviorBlock    // a magic square's block
 )
 
 // BehaviorNames are what a document calls each Behavior
@@ -35,7 +34,6 @@ var BehaviorNames = [...]string{
 	BehaviorKraken:   "kraken",
 	BehaviorDevourer: "devourer",
 	BehaviorData:     "data",
-	BehaviorBlock:    "block",
 }
 
 // BehaviorSpecies is the code species whose composites each Behavior routes; a data
@@ -53,7 +51,6 @@ var BehaviorSpecies = [...]SpeciesType{
 	BehaviorKraken:   SpeciesKraken,
 	BehaviorDevourer: SpeciesDevourer,
 	BehaviorData:     SpeciesNone,
-	BehaviorBlock:    SpeciesNone,
 }
 
 // BehaviorEatsWalls marks a body that clears the walls it covers, so a wall never

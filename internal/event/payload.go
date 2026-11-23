@@ -1444,11 +1444,13 @@ type SpeciesCreatedPayload struct {
 }
 
 // SpeciesLandRequestPayload is the species a carrier held, landing with its header
-// on X, Y, the nearest place its footprint fits when that cell does not
+// on X, Y, the nearest place its footprint fits when that cell does not; a gateway's
+// names it, which a data species keeps
 type SpeciesLandRequestPayload struct {
 	Species component.SpeciesType `toml:"species"`
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
+	Gateway core.Entity           `toml:"gateway"`
 }
 
 // --- Loot ---
@@ -1718,12 +1720,13 @@ type CaveOpenPayload struct {
 
 // PylonSpawnRequestPayload contains parameters for pylon creation
 type PylonSpawnRequestPayload struct {
-	X       int `toml:"x"`
-	Y       int `toml:"y"`
-	RadiusX int `toml:"radius_x"`
-	RadiusY int `toml:"radius_y"`
-	MinHP   int `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
-	MaxHP   int `toml:"max_hp"` // HP at center
+	X       int  `toml:"x"`
+	Y       int  `toml:"y"`
+	RadiusX int  `toml:"radius_x"`
+	RadiusY int  `toml:"radius_y"`
+	MinHP   int  `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
+	MaxHP   int  `toml:"max_hp"` // HP at center
+	Inert   bool `toml:"inert"`  // nothing aims at it or hits it: a post, as a gateway's, not a target
 }
 
 // --- Snake ---
@@ -1798,7 +1801,8 @@ type TowerSpawnRequestPayload struct {
 
 // --- Gateway ---
 
-// GatewaySpawnRequestPayload requests creation of a gateway entity
+// GatewaySpawnRequestPayload stands a gateway on AnchorEntity, or re-arms the one it
+// carries with this species and pace
 type GatewaySpawnRequestPayload struct {
 	AnchorEntity        core.Entity           `toml:"anchor_entity"`          // Parent entity (pylon header)
 	BaseIntervalMs      int                   `toml:"base_interval_ms"`       // Spawn interval in milliseconds
@@ -1821,6 +1825,14 @@ type GatewayHoldRequestPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
 }
 
+// GatewaySendRequestPayload has the gateway on AnchorEntity send one of Species now,
+// whatever it spawns at its own pace
+type GatewaySendRequestPayload struct {
+	AnchorEntity core.Entity           `toml:"anchor_entity"`
+	Species      component.SpeciesType `toml:"species"`
+	SubType      component.SubType     `toml:"sub_type"`
+}
+
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity
 type GatewayDespawnRequestPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
@@ -1836,16 +1848,14 @@ type GatewayDespawnedPayload struct {
 
 // SquareSpawnRequestPayload lays a magic square centered on a cell: Layout names the
 // digit of each place row by row, Groups the digits of each kind in SquareKind
-// order. A zero block size or hit points takes the default.
+// order. A zero block size takes the default.
 type SquareSpawnRequestPayload struct {
-	X             int      `toml:"x"`
-	Y             int      `toml:"y"`
-	Layout        string   `toml:"layout"`
-	Groups        []string `toml:"groups"`
-	HP            int      `toml:"hp"`
-	BlockWidth    int      `toml:"block_width"`
-	BlockHeight   int      `toml:"block_height"`
-	TargetGroupID uint8    `toml:"target_group_id"` // the group its standing blocks anchor
+	X           int      `toml:"x"`
+	Y           int      `toml:"y"`
+	Layout      string   `toml:"layout"`
+	Groups      []string `toml:"groups"`
+	BlockWidth  int      `toml:"block_width"`
+	BlockHeight int      `toml:"block_height"`
 }
 
 // SquareAlignedPayload names the kind that fired and its line: 0 to 2 the rows top
@@ -1853,13 +1863,6 @@ type SquareSpawnRequestPayload struct {
 type SquareAlignedPayload struct {
 	Kind component.SquareKind `toml:"kind"`
 	Line int                  `toml:"line"`
-}
-
-// SquareBlockFallenPayload names a fallen block by its digit, with the count of
-// blocks still standing
-type SquareBlockFallenPayload struct {
-	Digit     int `toml:"digit"`
-	Remaining int `toml:"remaining"`
 }
 
 // --- Genetic ---

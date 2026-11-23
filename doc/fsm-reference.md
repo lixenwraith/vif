@@ -84,7 +84,7 @@ only_systems = ["system_name", ...]     # Or (not both): every other toggled sys
 min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
-cursors = false                     # Players hold slots, no cursor on the map (optional)
+cursors = false                     # Players hold slots, no cursor on the map; "fixed" stands each where it spawned (optional)
 
 [navigation]
 field_refresh_ticks = 4             # Out of sight, read the field every 4 ticks (optional; 1)
@@ -539,7 +539,10 @@ With `[map] cursors = false` a spawn, a joiner's arrival included, rosters its s
 with no cursor on the map: only its slot, owner and control, so nothing draws,
 moves, targets or drains it, and `EventCursorSpawned` carries `x = -1`, `y = -1`.
 Its player plays through the keys the scenario captures and their buttons, each
-press from that slot, and counts in `player.count`.
+press from that slot, and counts in `player.count`. With `cursors = "fixed"` the
+spawn equips a whole cursor that stands where it landed: its player's keys, pointer
+and touch move it nowhere, and it and its crosshair are not drawn, while its
+shield, weapons and loot are a free cursor's.
 
 Capture the entity to address that cursor in later actions:
 
@@ -792,17 +795,24 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/base/recall` is the worked example.
 
 A magic square takes the presses of the keys a state captures for it: a digit
-selects the block it names for the pressing slot, and h, l, k and j turn that
-block's row or column a place. `EventSquareSpawnRequest { x, y, layout, groups,
-hp, block_width, block_height, target_group_id }` lays it centered on the cell,
+selects the block it names for the pressing slot, h and l or a and f turn that
+block's row a place, and j and k or d and s its column. `EventSquareSpawnRequest {
+x, y, layout, groups, block_width, block_height }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
-attack, hold and defense; one square stands at a time. `EventSquareAligned { kind,
-line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0 attack, 1
-hold, 2 defense), once a cooldown while it holds, and `EventSquareBlockFallen {
-digit, remaining }` a block lost its last cell. `EventGatewayHoldRequest {
-duration_ms, anchor_entity }` holds the spawns of the gateway on that anchor, every
-gateway's when it names none. A gateway's swarm carries it (`gateway` in
-`EventSwarmSpawnRequest`), which is how a line finds the swarms it faces. `wad/scenario/base/magic` is the worked example.
+attack, hold and defense; one square stands at a time, and it fights through the
+cursor standing on it, whose shield it sizes to cover it. `EventSquareAligned {
+kind, line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0
+attack, 1 hold, 2 defense), once a cooldown while it holds.
+
+A gateway stands on an anchor, as a pylon's header; `EventPylonSpawnRequest {
+inert = true }` stands a pylon no weapon aims at or wears. A second
+`EventGatewaySpawnRequest` on an anchor re-arms its gateway with the species and
+pace it names, a data species by its program's name, keeping what it had
+accumulated. `EventGatewaySendRequest { anchor_entity, species }` has it send one of
+a species at once, and `EventGatewayHoldRequest { duration_ms, anchor_entity }`
+holds its spawns, every gateway's when it names none. A gateway's swarm or data
+species keeps it, which is how a line finds the bodies it faces.
+`wad/scenario/base/magic` is the worked example.
 
 ### Splash text and glyph lines
 

@@ -164,6 +164,9 @@ Docs · Libraries · Branches.
 - The About window draws one row an entry, cuts a value at its column (20 columns
   at 80 wide) and does not scroll: at 80x24 it stops after `source`, so a row
   added to it is seen from 80x30 up.
+- `cmd/vif/gui.go` alone imports `terminal/window`: while that module does not
+  verify against `go.sum` ("checksum mismatch"), `-tags vif_nogui` still builds
+  and gates everything else.
 
 ## Events and ticks
 
@@ -800,7 +803,16 @@ Docs · Libraries · Branches.
 - No target finder or blast reads the profile matrix: they take any header with a
   `Combat` that is no `CompositeTypeContainer` and not on the player's side, so a
   kind dropped from `cursorDefenders` takes no damage but still draws every aimed
-  shot. A body nothing may hit is a container, as the Devourer's is.
+  shot. A body nothing may hit is a container, as the Devourer's is and an `inert`
+  pylon: a loadout shot `magic`'s gateway pylons down, which ended its spawns.
+- A cursor's pulse, ray and blast land on every member they cover, so they kill a
+  crowd as fast as it grows, and each kill boosts the shield half a second: a horde
+  those weapons can kill keeps its shield boosted for good. `magic` takes its
+  flood's bodies out of their reach in the prototype's `attacks`.
+- `TestSystemDomainProfiles` reads a system's file, not its guards: a shared
+  system that touches `Boost`, `Energy` or another D-13 store fails it even behind
+  `ResolveOwnedCursor`. What it wants of one it leaves where the store's owner
+  reads it, as the square's boost cap rides `ShieldComponent.BoostCap`.
 
 ## Glyphs and widgets
 
@@ -824,7 +836,7 @@ Docs · Libraries · Branches.
   does too.
 - A glow added (`BlendAdd`) over a cell nothing painted adds onto black, a band
   darker than the theme's background: blend it with `SetBgScreen` on
-  `visual.RgbBackground`, as the shield's and the square's glows do.
+  `visual.RgbBackground`, as the shield's glow does.
 - A row added to a Settings section moves two tests that hold the page by its
   rows: `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound
   section's, and `TestAPressDrivesTheMenu` presses rows by number down to
@@ -911,6 +923,12 @@ Docs · Libraries · Branches.
   {}`), which brings the squadron wave on. A headless probe reads the route a
   squadron drew as its ships land (`Resources.Scenario.Var("route")`) and plots
   each ship's cells a tick.
+- A scenario's balance is read by a scratch test in `internal/app` under a build
+  tag of its own, its path in `.git/info/exclude`: a headless `App` ticked under a
+  policy that reads `Resources.Scenario.Var` and the stores in `RunSafe` and presses
+  keys through `a.inputMachine.Process`. Auto-fire is the router's, so the probe
+  injects `input.IntentFireMain` every five ticks, and a gateway sends one body a
+  tick at most.
 - `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
   without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
   nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
@@ -1416,7 +1434,8 @@ Docs · Libraries · Branches.
   expands them itself, so the older build is refused at the door instead.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
-  `wad/scenario/` for its name (`tutorial` lists its systems one by one).
+  `wad/scenario/` for its name (`tutorial` lists its systems one by one). A list
+  that narrows turns `behavior` off too: a scenario of data species names it.
 
 ## Corpus
 

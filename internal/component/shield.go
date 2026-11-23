@@ -24,6 +24,9 @@ type ShieldComponent struct {
 	// DrainElapsed is how long a player's shield has been up since it rose or last drained
 	DrainElapsed time.Duration
 
+	// BoostCap is the most boost the shield's cursor banks, zero for no cap
+	BoostCap time.Duration
+
 	Radius float64
 	Color  color.RGB
 

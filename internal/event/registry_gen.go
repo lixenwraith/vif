@@ -230,9 +230,9 @@ func InitRegistry() {
 	RegisterType("EventGatewayDespawnRequest", EventGatewayDespawnRequest)
 	RegisterType("EventGatewayDespawned", EventGatewayDespawned)
 	RegisterType("EventGatewayHoldRequest", EventGatewayHoldRequest)
+	RegisterType("EventGatewaySendRequest", EventGatewaySendRequest)
 	RegisterType("EventSquareSpawnRequest", EventSquareSpawnRequest)
 	RegisterType("EventSquareAligned", EventSquareAligned)
-	RegisterType("EventSquareBlockFallen", EventSquareBlockFallen)
 	RegisterType("EventGeneticRegisterSpecies", EventGeneticRegisterSpecies)
 	RegisterType("EventGeneticAbandonEval", EventGeneticAbandonEval)
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle)
@@ -461,9 +461,9 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGatewayDespawnRequest:           ClassShared,
 	EventGatewayDespawned:                ClassShared,
 	EventGatewayHoldRequest:              ClassShared,
+	EventGatewaySendRequest:              ClassShared,
 	EventSquareSpawnRequest:              ClassShared,
 	EventSquareAligned:                   ClassShared,
-	EventSquareBlockFallen:               ClassShared,
 	EventGeneticRegisterSpecies:          ClassShared,
 	EventGeneticAbandonEval:              ClassShared,
 	EventDebugFlowToggle:                 ClassLocal,

@@ -94,7 +94,7 @@ func TestCheckSystemsAcceptsDependentDisabledToo(t *testing.T) {
 	m := loadSystemsConfig(t, `
 [regions.main]
 initial = "Root"
-disabled_systems = ["cursor","camera","energy","heat","shield","boost","weapon","typing","splash","motion_marker","missile","network"]
+disabled_systems = ["cursor","camera","energy","heat","shield","boost","weapon","typing","square","splash","motion_marker","missile","network"]
 `)
 	if err := checkSystems(m); err != nil {
 		t.Fatalf("checkSystems rejected a self-consistent disable set: %v", err)
@@ -123,6 +123,21 @@ initial = "Root"
 `)
 	if err := checkSystems(closed); err != nil {
 		t.Fatalf("checkSystems rejected a closed only_systems list: %v", err)
+	}
+}
+
+// TestCheckSystemsLetsANarrowingListNameAContextSystem: behavior toggles as any
+// system does, so an only_systems list names it to keep its data species running
+func TestCheckSystemsLetsANarrowingListNameAContextSystem(t *testing.T) {
+	m := loadSystemsConfig(t, `
+[systems]
+only_systems = ["behavior", "composite", "timer", "death"]
+
+[regions.main]
+initial = "Root"
+`)
+	if err := checkSystems(m); err != nil {
+		t.Fatalf("checkSystems refused a list naming behavior: %v", err)
 	}
 }
 
