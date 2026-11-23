@@ -1,0 +1,12 @@
+// The Windows depot: everything make steam-windows assembled, as it lies.
+"DepotBuild"
+{
+	"DepotID" "@DEPOT_WINDOWS@"
+	"ContentRoot" "windows"
+	"FileMapping"
+	{
+		"LocalPath" "*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+}

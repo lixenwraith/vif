@@ -993,20 +993,41 @@ install over a debug-signed one: uninstall first, which drops the app's settings
 A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
 release) is a separate decision.
 
-### Ship the Windows window build and its Steam depot
+### Run the Windows window build on Windows
 
 - Priority: P1
-- Affected files: `cmd/vif/gui.go`, `Makefile`, `.github/workflows/release.yml`,
-  `deploy/package/steam/`, `doc/packaging.md` §9
-- Prerequisite: the terminal module's window opening on Windows, tagged
+- Affected files: `cmd/vif/gui_windows.go`, `cmd/vif/wasapi.go`, the terminal
+  module's `window/window_windows.go`
+- Guide: [Build profiles](multi-platform.md) §4 and §8
 
-Steam's depot is Linux alone, and the Windows zip is the terminal's
-([Build profiles §4](multi-platform.md#4-platform-matrix)). Closes with the
-window build for windows/amd64 (`-H=windowsgui`, an error shown in a message
-box, sound through WASAPI as the window's own speakers), a `steam-windows` depot
-beside `steam-linux` with its launch option and Auto-Cloud root override
-(`WinAppDataRoaming`, `vif`), and that zip in place of the terminal's in a
-release.
+The Windows zip and Steam depot were built and played under Wine 9.0 alone, which
+is not Windows where it matters: one display scale, its own GDI and mixer
+timings, a console every program inherits. Closes with one run on Windows 10 and
+11, what it finds becoming its own item: the zip opened from Explorer and from a
+console (`-version` prints there, `-cli` shows its box only from Explorer),
+sound through speakers and through Bluetooth, a default device switched and
+unplugged mid-game, a display at 125 and 150 %, a second monitor of another
+scale, the terminal module's own Windows checks (its `doc/todo.md`), and a
+launch from the Steam client with its overlay.
+
+### Sign the Windows binary
+
+- Priority: P2
+- Affected files: `.github/workflows/release.yml`
+
+`bin\vif.exe` is unsigned, so SmartScreen asks before a downloaded zip's first
+run; a Steam install is not asked. Closes with the owner's decision on a code
+signing certificate and, with one, a signing step for the zip's and the depot's
+binary whose key the repository never holds.
+
+### Build the Windows window for arm64
+
+- Priority: P3
+- Affected files: `Makefile` (`WINDOW_PACKAGE`), `.github/workflows/release.yml`
+
+The window build cross-compiles for windows/arm64 and is neither released nor
+run; an arm64 Windows machine runs the amd64 zip emulated. Closes with a run on
+one and a second zip.
 
 ### Bind the Steamworks SDK behind a tag of its own
 
@@ -1102,32 +1123,35 @@ deprecated for `android sdk`, which ships in the same package. Switch `setup` to
 once its install, license and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
-### Give the Windows zip sound, and confirm it in Windows Terminal
+### Give the Windows terminal build sound
 
 - Priority: P3
-- Affected files: `Makefile`, `.github/workflows/release.yml`
+- Affected files: `Makefile` (`windows`), `cmd/vif/wasapi.go`
 - Guide: [Build profiles](multi-platform.md) §4
 
-The zip has no sound: try a build without `vif_noaudio` with ffplay on `PATH`.
+The terminal build for Windows has no sound: its speakers are the window's
+alone. Closes with the sink opened for a terminal run as well, which means the
+platform host carrying speakers with no presentation, or with ffplay on `PATH`
+tried in a build without `vif_noaudio`.
 Its mouse comes from Windows 10's own console host, and likely its flicker (§4);
 confirm that Windows Terminal has neither, with the terminal module's synchronized
 frames and re-hidden cursor. `sandbox/termbench` tells hosts apart: `rawin` prints the
 records a mouse report arrives as, `live -lib terminal|tcell` plays a scene on
 each library's own backend.
 
-### Report key releases on Windows
+### Report key releases in a Windows console
 
 - Priority: P3
 - Affected files: the terminal module's Windows backend and key protocol
 - Guide: [Input and modes](input-and-modes.md) §1
 
-A key on Windows is a tap: the console reads as VT input, which carries presses
-alone. A console host with win32-input-mode (Windows Terminal's) reports each
-key's press and release once asked with DECSET 9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _`
-(tcell asks for it and drops the releases). A Windows key source would ask for it
-as the protocol source asks for the key protocol, answer presses where the host
-lacks it, and pair releases through `KeyHolds`. Decide first whether holds on
-Windows are worth it.
+The window build reports releases; in a console a key is still a tap: it reads as
+VT input, which carries presses alone. A console host with win32-input-mode
+(Windows Terminal's) reports each key's press and release once asked with DECSET
+9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _` (tcell asks for it and drops the releases). A
+Windows key source would ask for it as the protocol source asks for the key
+protocol, answer presses where the host lacks it, and pair releases through
+`KeyHolds`. Decide first whether holds in a console are worth it.
 
 ## Fleet
 

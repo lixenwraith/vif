@@ -1,4 +1,4 @@
-//go:build (linux || freebsd) && !vif_headless && !vif_nogui
+//go:build (linux || freebsd || windows) && !vif_headless && !vif_nogui
 
 package main
 
@@ -20,8 +20,8 @@ import (
 // where none answers, and a backend is then found by name as on the terminal
 var speakers func() io.WriteCloser
 
-// The window is in every Linux and FreeBSD build: -g opens it, a vif_gui build
-// by default (gui_default.go), and vif_nogui leaves it out of the binary. It
+// The window is in every Linux, FreeBSD and Windows build: -g opens it, a vif_gui
+// build by default (gui_default.go), and vif_nogui leaves it out of the binary. It
 // plays through its own speakers unless -ab names a backend, and the engine,
 // which opened none of a host's, leaves closing them to the run's end.
 func init() {

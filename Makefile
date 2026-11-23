@@ -44,7 +44,10 @@ RELEASE_LABEL ?= nightly
 STEAM_DIR ?= $(BIN_DIR)/steam
 STEAM_APP ?=
 STEAM_DEPOT_LINUX ?=
+STEAM_DEPOT_WINDOWS ?=
 STEAM_USER ?=
+# The Windows window build as a release's zip holds it, assembled by windows-package
+WINDOWS_DIR ?= $(BIN_DIR)/vif-windows-amd64
 STEAMCMD ?= steamcmd
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
 # drops other comments, squeezes blank lines and fills in the target's names.
@@ -122,7 +125,11 @@ help:
 	@echo "  page     Write the page's terminal.js and worker.js into $(PAGE_DIR), from the terminal module and web/vif.js"
 	@echo "  extension Build wasm, then pack the page as a Chrome extension: $(EXT_DIR) to load unpacked and"
 	@echo "           $(EXT_ZIP) for the store (EXT_VERSION=$(EXT_VERSION); EXT_KEY: the store item's public key)"
-	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
+	@echo "  windows  Cross-compile the terminal build for Windows/amd64 (window, audio and logging omitted)"
+	@echo "  windows-gui Cross-compile the window build for Windows/amd64 as bin/vif-gui.exe: no console, so"
+	@echo "           no terminal; sound through the system's mixer (logging omitted)"
+	@echo "  windows-package Assemble that build as a release's zip holds it, in $(WINDOWS_DIR): bin/vif.exe,"
+	@echo "           the wad beside its bin/, the licenses and a README"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  router Build the website-to-K3s session router"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
@@ -139,7 +146,9 @@ help:
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  steam-linux Assemble the Linux Steam depot in $(STEAM_DIR)/linux: bin/vif opening its window by"
 	@echo "           default, the wad beside its bin/, the licenses and a README"
-	@echo "  steam-upload Send the assembled depot to Steam with steamcmd (STEAM_APP, STEAM_DEPOT_LINUX, STEAM_USER)"
+	@echo "  steam-windows The same for Windows in $(STEAM_DIR)/windows, around bin/vif.exe"
+	@echo "  steam-upload Send the assembled depots to Steam with steamcmd (STEAM_APP, STEAM_DEPOT_LINUX, STEAM_USER;"
+	@echo "           STEAM_DEPOT_WINDOWS adds the Windows depot)"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  notices  Write the licenses of Go and of every module the build links as $(NOTICES), as release does"
 	@echo "           for install (GOOS, GOARCH, TAGS: another build's; NOTICES_OF=android: the Android library's)"
@@ -297,9 +306,13 @@ extension: wasm $(BIN_DIR)
 	[ -z '$(EXT_KEY)' ] || swap "$$out/manifest.json" '"manifest_version": 3,' '"manifest_version": 3, "key": "$(EXT_KEY)",'; \
 	echo "built $$out and $$zip, version $(EXT_VERSION)"
 
-# windows is experimental; doc/multi-platform.md §4 lists its known issues
+# windows is the terminal alone, in a console, and experimental; windows-gui is the
+# window alone, linked with no console. doc/multi-platform.md §4 lists what each lacks.
 windows: check-go $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio vif_nogui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+
+windows-gui: check-go $(BIN_DIR)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "vif_gui novlog $(TAGS)" -ldflags="-H=windowsgui $(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui.exe $(SRC)
 
 # ascimage, the image tool, is built from the module go.mod requires, so it reads
 # and writes the .aimg this vif loads
@@ -327,23 +340,34 @@ verify: generate test
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	GOEXPERIMENT=simd $(GO) build ./...
 	GOOS=js GOARCH=wasm GOEXPERIMENT=simd $(GO) build ./...
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" ./...
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio vif_nogui" ./...
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "vif_gui novlog" ./...
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|lixenwraith/audio$$'; then \
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
 	@if GOOS=linux GOARCH=amd64 $(GO) list -deps -tags vif_nogui $(SRC) | grep -Eq 'ebitengine/purego|lixenwraith/terminal/window$$'; then \
 		echo "FAIL: vif_nogui links purego or the desktop window, so it is no static binary"; exit 1; \
 	fi
-	@for tags in '' vif_nogui vif_noaudio vif_headless; do \
-		files=$$(GOOS=linux GOARCH=amd64 $(GO) list -f '{{.GoFiles}}' -tags "$$tags" $(SRC)) || exit 1; \
+	@if GOOS=windows GOARCH=amd64 $(GO) list -deps -tags vif_gui $(SRC) | grep -q 'ebitengine/purego'; then \
+		echo "FAIL: the Windows window build links purego"; exit 1; \
+	fi
+	@if GOOS=windows GOARCH=amd64 $(GO) list -deps -tags vif_nogui $(SRC) | grep -q 'lixenwraith/terminal/window$$'; then \
+		echo "FAIL: vif_nogui links the desktop window on Windows"; exit 1; \
+	fi
+	@if GOOS=linux GOARCH=amd64 $(GO) list -deps $(SRC) | grep -q 'golang.org/x/sys/windows$$'; then \
+		echo "FAIL: a Linux build links Windows' system calls"; exit 1; \
+	fi
+	@for sink in linux:pulse.go windows:wasapi.go; do for tags in '' vif_nogui vif_noaudio vif_headless; do \
+		files=$$(GOOS=$${sink%:*} GOARCH=amd64 $(GO) list -f '{{.GoFiles}}' -tags "$$tags" $(SRC)) || exit 1; \
 		case "$$tags:$$files" in \
-		:*pulse.go*) ;; \
-		:*) echo "FAIL: the Linux window build lacks its speakers"; exit 1 ;; \
-		*pulse.go*) echo "FAIL: $$tags builds the desktop window's speakers"; exit 1 ;; \
+		:*$${sink#*:}*) ;; \
+		:*) echo "FAIL: the $${sink%:*} window build lacks its speakers"; exit 1 ;; \
+		*$${sink#*:}*) echo "FAIL: $${sink%:*} with $$tags builds the desktop window's speakers"; exit 1 ;; \
 		esac; \
-	done
+	done; done
 	$(GO) vet ./...
 	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui github.com/lixenwraith/terminal/window $(SRC)
+	GOOS=windows GOARCH=amd64 $(GO) vet -tags "vif_gui novlog" github.com/lixenwraith/terminal/window $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
@@ -397,38 +421,56 @@ wad-archive: $(BIN_DIR)
 	tar -C "$$stage" $(TAR_ROOT_OWNER) -czf $(WAD_ARCHIVE) vif; \
 	echo "packed $(WAD_ARCHIVE)"
 
-.PHONY: steam-linux steam-upload
+.PHONY: steam-linux steam-windows steam-upload windows-gui windows-package
 
-# steam-linux assembles the Linux depot, which Steam installs whole, from an empty
-# directory: the window build as bin/vif, the wad beside that bin/, where the binary
-# finds it as a checkout's does (doc/filesystem-layout.md §3), and what an archive
-# carries. The build is linux/amd64 whatever the host, which needs no GUI_GCFLAGS.
-steam-linux: check-go
-	@set -eu; $(INSTALL_FUNCS); depot='$(STEAM_DIR)/linux'; \
-	[ -n '$(STEAM_DIR)' ] || { echo "steam-linux: STEAM_DIR names no directory" >&2; exit 1; }; \
-	rm -rf "$$depot"; install -d -m 0755 "$$depot/bin"; \
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o "$$depot/bin/$(BINARY)" $(SRC); \
-	root="$$depot/wad"; { $(INSTALL_ROOT); } >/dev/null; \
-	install -m 0644 LICENSE "$$depot/LICENSE"; \
-	GOOS=linux GOARCH=amd64 $(MAKE) -s notices TAGS='vif_gui $(TAGS)' NOTICES="$$depot/NOTICES" >/dev/null; \
+# WINDOW_PACKAGE assembles the window build of $$os in $$out, from an empty
+# directory, to run where it lies: bin/vif with the wad beside that bin/, where the
+# binary finds it as a checkout's does (doc/filesystem-layout.md §3), the licenses
+# and the README of $$readme. amd64 whatever the host, which needs no GUI_GCFLAGS.
+WINDOW_PACKAGE = set -eu; $(INSTALL_FUNCS); \
+	[ -n "$${out%/*}" ] || { echo "$@: no directory to assemble in" >&2; exit 1; }; \
+	exe=; tags=; ld=; case "$$os" in windows) exe=.exe; tags=novlog; ld=-H=windowsgui ;; esac; \
+	rm -rf "$$out"; install -d -m 0755 "$$out/bin"; \
+	CGO_ENABLED=0 GOOS=$$os GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "vif_gui $$tags $(TAGS)" -ldflags="$$ld $(GO_LDFLAGS)" -o "$$out/bin/$(BINARY)$$exe" $(SRC); \
+	root="$$out/wad"; { $(INSTALL_ROOT); } >/dev/null; \
+	install -m 0644 LICENSE "$$out/LICENSE"; \
+	GOOS=$$os GOARCH=amd64 $(MAKE) -s notices TAGS="vif_gui $$tags $(TAGS)" NOTICES="$$out/NOTICES" >/dev/null; \
 	dir=$$($(GO) list -m -f '{{.Dir}}' github.com/lixenwraith/terminal); \
-	install -m 0644 "$${dir:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" "$$depot/LICENSE.font"; \
-	$(MAKE) -s release-readme RELEASE_TARGET=steam-linux >"$$depot/README.md"; \
-	echo "assembled $$depot"
+	install -m 0644 "$${dir:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" "$$out/LICENSE.font"; \
+	$(MAKE) -s release-readme RELEASE_TARGET="$$readme" >"$$out/README.md"; \
+	echo "assembled $$out"
 
-# steam-upload hands steamcmd (STEAMCMD) the depot steam-linux assembled, as the
-# builder account STEAM_USER, with the build scripts of deploy/package/steam filled
-# in. steamcmd asks for the password and Steam Guard code itself, unless a login it
-# saved is in place (doc/packaging.md §9).
+# A Steam depot is what Steam installs whole, a directory a platform under STEAM_DIR
+steam-linux: check-go
+	@out='$(STEAM_DIR)/linux' os=linux readme=steam-linux; $(WINDOW_PACKAGE)
+
+steam-windows: check-go
+	@out='$(STEAM_DIR)/windows' os=windows readme=steam-windows; $(WINDOW_PACKAGE)
+
+# windows-package is the same layout as a release's Windows zip holds it
+windows-package: check-go
+	@out='$(WINDOWS_DIR)' os=windows readme=windows-amd64; $(WINDOW_PACKAGE)
+
+# steam-upload hands steamcmd (STEAMCMD) the depots assembled, as the builder
+# account STEAM_USER, with the build scripts of deploy/package/steam filled in: the
+# Linux depot, and the Windows one where STEAM_DEPOT_WINDOWS names it. steamcmd asks
+# for the password and Steam Guard code itself, unless a login it saved is in place
+# (doc/packaging.md §9).
 steam-upload:
 	@set -eu; dir="$$(cd '$(STEAM_DIR)' 2>/dev/null && pwd)" || { echo "steam-upload: make steam-linux first" >&2; exit 1; }; \
 	[ -x "$$dir/linux/bin/$(BINARY)" ] || { echo "steam-upload: make steam-linux first" >&2; exit 1; }; \
 	for v in STEAM_APP='$(STEAM_APP)' STEAM_DEPOT_LINUX='$(STEAM_DEPOT_LINUX)' STEAM_USER='$(STEAM_USER)'; do \
 		case "$$v" in *=) echo "steam-upload: set $${v%=}, as in make steam-upload STEAM_APP=... STEAM_DEPOT_LINUX=... STEAM_USER=..." >&2; exit 1 ;; esac; \
 	done; \
+	scripts='app_build depot_build_linux'; drop='/@DEPOT_WINDOWS@/d'; \
+	if [ -n '$(STEAM_DEPOT_WINDOWS)' ]; then \
+		[ -f "$$dir/windows/bin/$(BINARY).exe" ] || { echo "steam-upload: make steam-windows first" >&2; exit 1; }; \
+		scripts="$$scripts depot_build_windows"; drop='/@NO_DEPOT@/d'; \
+	fi; \
 	desc="$$(git describe --tags --always --dirty 2>/dev/null || echo unknown)"; \
-	for f in app_build depot_build_linux; do \
-		sed -e 's/@APP@/$(STEAM_APP)/g' -e 's/@DEPOT_LINUX@/$(STEAM_DEPOT_LINUX)/g' -e "s/@DESC@/$$desc/g" \
+	for f in $$scripts; do \
+		sed -e "$$drop" -e 's/@APP@/$(STEAM_APP)/g' -e 's/@DEPOT_LINUX@/$(STEAM_DEPOT_LINUX)/g' \
+			-e 's/@DEPOT_WINDOWS@/$(STEAM_DEPOT_WINDOWS)/g' -e "s/@DESC@/$$desc/g" \
 			$(PKG_DIR)/steam/$$f.vdf >"$$dir/$$f.vdf"; \
 	done; \
 	'$(STEAMCMD)' +login '$(STEAM_USER)' +run_app_build "$$dir/app_build.vdf" +quit
@@ -441,8 +483,9 @@ release-readme:
 	linux-arm64) tags='linux client' name='Linux arm64' ;; \
 	linux-amd64-headless) tags=headless name='Linux amd64, the game server' ;; \
 	freebsd-amd64) tags='freebsd client' name='FreeBSD amd64' ;; \
-	windows-amd64) tags=windows name='Windows amd64' ;; \
+	windows-amd64) tags='zip winfolder' name='Windows amd64' ;; \
 	steam-linux) tags='steam steamlinux' name='Steam on Linux' ;; \
+	steam-windows) tags='steam winfolder' name='Steam on Windows' ;; \
 	web) tags=web name='the browser' ;; \
 	*) echo "release-readme: no README for RELEASE_TARGET=$(RELEASE_TARGET)" >&2; exit 1 ;; \
 	esac; \

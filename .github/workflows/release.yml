@@ -78,12 +78,9 @@ jobs:
             go build -trimpath -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std \
             -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
           GOOS=freebsd GOARCH=amd64 make -s notices NOTICES="stage/$p-freebsd-amd64/NOTICES"
-          # Experimental, with make windows's tags; doc/multi-platform.md §4 has its known issues.
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-            go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
-            -o "stage/$p-windows-amd64/vif.exe" ./cmd/vif
-          GOOS=windows GOARCH=amd64 make -s notices TAGS='novlog vif_noaudio' \
-            NOTICES="stage/$p-windows-amd64/NOTICES"
+          # The window build, which Windows has no shell to install: bin/vif.exe with the
+          # wad beside its bin/, its licenses and README (make windows-package).
+          make -s windows-package WINDOWS_DIR="stage/$p-windows-amd64" RELEASE_LABEL="$label"
           GOOS=js GOARCH=wasm \
             go build -trimpath -ldflags='-s -w' \
             -o "stage/$p-web/vif.wasm" ./cmd/vif
@@ -314,7 +311,7 @@ jobs:
           set -euo pipefail
           version=${GITHUB_REF_NAME#v}
           flags=(--draft --verify-tag)
-          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APKs, arm64 for a phone and x86_64 for an emulator, install over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
+          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APKs, arm64 for a phone and x86_64 for an emulator, install over a nightly or a local debug build (android/README.md). The windows-amd64 zip plays in a window of its own: unzip it and open vif.exe in its bin folder. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
           case $version in
           *-*)
             flags+=(--prerelease)
@@ -335,7 +332,7 @@ jobs:
           git push origin refs/tags/nightly --force
 
           title='Nightly development build (not a release)'
-          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APKs (Android 11 and newer), arm64 for a phone and x86_64 for an emulator, are signed with the repository's debug key and install over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
+          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APKs (Android 11 and newer), arm64 for a phone and x86_64 for an emulator, are signed with the repository's debug key and install over the night before; the windows-amd64 zip plays in a window of its own: unzip it and open vif.exe in its bin folder. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly dist/* --clobber
             # The release carries exactly this build, not a renamed or dropped asset.
@@ -371,8 +368,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Assemble the depot
-        run: make steam-linux RELEASE_LABEL="${GITHUB_REF_NAME#v}"
+      # The Windows depot is assembled and sent once STEAM_DEPOT_WINDOWS names it
+      - name: Assemble the depots
+        run: |
+          make steam-linux RELEASE_LABEL="${GITHUB_REF_NAME#v}"
+          if [ -n '${{ vars.STEAM_DEPOT_WINDOWS }}' ]; then
+            make steam-windows RELEASE_LABEL="${GITHUB_REF_NAME#v}"
+          fi
 
       # steamcmd is a 32-bit program. Its login is the config.vdf a person's first
       # login left, Steam Guard code and all, so no run here types a password.
@@ -394,4 +396,4 @@ jobs:
         run: |
           make steam-upload STEAMCMD="$HOME/steamcmd/steamcmd.sh" \
             STEAM_APP='${{ vars.STEAM_APP }}' STEAM_DEPOT_LINUX='${{ vars.STEAM_DEPOT_LINUX }}' \
-            STEAM_USER="$STEAM_USER"
+            STEAM_DEPOT_WINDOWS='${{ vars.STEAM_DEPOT_WINDOWS }}' STEAM_USER="$STEAM_USER"
