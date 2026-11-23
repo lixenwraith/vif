@@ -75,6 +75,7 @@ type BehaviorPrototype struct {
 type AttackRow struct {
 	Damage  int
 	Effects CombatEffectMask
+	Death   DeathEffect // what a kill by this family leaves of the body, the prototype's unless the row names one
 }
 
 // BehaviorEntrance is how a data species comes onto the map when it is asked for

@@ -226,11 +226,11 @@ func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
 }
 
 // A prototype's own rows take its keys over the rows they start from one by one:
-// each attack family it names over its combat row's, and its materialize style,
-// which the program names, over the swarm's
+// each attack family it names over its combat row's and its own death, and its
+// materialize style, which the program names, over the swarm's
 func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
 	src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\n"+
-		"attacks = { pulse = { damage = 0, stun = false }, missile = { damage = 9 } }\n"+
+		"attacks = { pulse = { damage = 0, stun = false }, missile = { damage = 9, death = \"flash\" } }\n"+
 		"materialize = { color = { r = 1, g = 2, b = 3 }, fill_ms = 100 }", 1)
 	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)}, nil)
 	if err != nil {
@@ -238,19 +238,20 @@ func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
 	}
 	plain, tuned := set.Prototypes()[0], set.Prototypes()[1]
 	for atk := range component.CombatAttackTypeCount {
-		var want component.AttackRow // a family no swarm takes leaves its row empty
+		// A family no swarm takes leaves its row empty but for the death
+		want := component.AttackRow{Death: component.DeathScatter}
 		base := profile.Defending(atk, component.CombatEntitySwarm)
 		if base != nil {
-			want = component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+			want.Damage, want.Effects = base.DamageValue, base.EffectMask
 		}
 		if plain.Attacks[atk] != want {
 			t.Errorf("%s: no attacks key takes %+v, want the swarm row's %+v", component.CombatAttackNames[atk], plain.Attacks[atk], want)
 		}
 		switch atk {
 		case component.CombatAttackPulse:
-			want = component.AttackRow{Damage: 0, Effects: base.EffectMask &^ component.CombatEffectStun}
+			want.Damage, want.Effects = 0, base.EffectMask&^component.CombatEffectStun
 		case component.CombatAttackMissile:
-			want.Damage = 9
+			want.Damage, want.Death = 9, component.DeathFlash
 		}
 		if tuned.Attacks[atk] != want {
 			t.Errorf("%s: the tuned row takes %+v, want %+v", component.CombatAttackNames[atk], tuned.Attacks[atk], want)
@@ -423,6 +424,7 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"direct stun", `mass = 2.0`, "mass = 2.0\nattacks = { tracer = { stun = true } }", `program 'warden': prototype: attacks: tracer: only an area hit stuns`, 1},
 		{"knockback", `mass = 2.0`, "mass = 2.0\nattacks = { pulse = { knockback = true } }", `program 'warden': prototype: attacks: pulse: the swarm row takes no knockback from it`, 1},
 		{"negative damage", `mass = 2.0`, "mass = 2.0\nattacks = { ray = { damage = -1 } }", `program 'warden': prototype: attacks: ray: damage -1 is negative`, 1},
+		{"attack death", `mass = 2.0`, "mass = 2.0\nattacks = { ray = { death = \"particle\" } }", `program 'warden': prototype: attacks: ray: death "particle" is not one of none, flash, fadeout, scatter`, 1},
 		{"style timing", `mass = 2.0`, "mass = 2.0\nmaterialize = { fill_ms = -1 }", `program 'warden': prototype: materialize: fill_ms -1 is negative`, 1},
 		{"silent style", `mass = 2.0`, "mass = 2.0\nmaterialize = { fill_ms = 0, hold_ms = 0, recede_ms = 0 }", `program 'warden': prototype: materialize: fill_ms, hold_ms and recede_ms play nothing`, 1},
 		{"two faults", "hp = 40\ncombat = \"swarm\"", "hp = 0\ncombat = \"drain\"", "program 'warden': prototype: hp 0 is not positive", 2},

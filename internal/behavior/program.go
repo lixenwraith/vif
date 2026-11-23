@@ -148,9 +148,10 @@ type physicsDoc struct {
 // attackDoc is one attack family's profile against the species: each key replaces
 // its combat row's, and one left out keeps it
 type attackDoc struct {
-	Damage    *int  `toml:"damage"`
-	Stun      *bool `toml:"stun"`
-	Knockback *bool `toml:"knockback"`
+	Damage    *int   `toml:"damage"`
+	Stun      *bool  `toml:"stun"`
+	Knockback *bool  `toml:"knockback"`
+	Death     string `toml:"death"` // what a kill by this family leaves of the body, in place of the species' death
 }
 
 // styleDoc is the species' materialize style: each key replaces the swarm's
@@ -336,12 +337,13 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 	return p, nil
 }
 
-// attacks fills p's row from its combat row, each family the prototype names
-// taking the damage and effects it gives
+// attacks fills p's row from its combat row and its death, each family the
+// prototype names taking the damage, effects and death it gives
 func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
 	for atk := range component.CombatAttackTypeCount {
+		p.Attacks[atk].Death = p.Death
 		if base := profile.Defending(atk, p.Combat); base != nil {
-			p.Attacks[atk] = component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+			p.Attacks[atk].Damage, p.Attacks[atk].Effects = base.DamageValue, base.EffectMask
 		}
 	}
 	row := component.CombatEntityNames[p.Combat]
@@ -366,6 +368,12 @@ func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
 		own := &p.Attacks[atk]
 		if a.Damage != nil {
 			own.Damage = *a.Damage
+		}
+		if i := slices.Index(component.DeathEffectNames[:component.DeathParticle], a.Death); i >= 0 {
+			own.Death = component.DeathEffect(i)
+		} else if a.Death != "" {
+			errs = append(errs, fmt.Errorf("%s: death %q is not one of %s", family, a.Death,
+				strings.Join(component.DeathEffectNames[:component.DeathParticle], ", ")))
 		}
 		for _, k := range []struct {
 			set *bool
