@@ -158,8 +158,9 @@ func (s *wasapiSpeaker) run(opened chan<- bool) {
 }
 
 // open starts a stream on the default output device and reports whether it runs;
-// what it leaves half made, shut releases. The device is asked to hold two of its
-// periods: one it is playing and one against a render thread woken late.
+// what it leaves half made, shut releases. The buffer is left to the system, as a
+// shared stream fed by event must leave it, and the sink keeps two of the
+// device's periods in it: one being played, one against a render thread woken late.
 func (s *wasapiSpeaker) open() bool {
 	s.opened = time.Now()
 	var enumerator, device *comObject
@@ -179,13 +180,13 @@ func (s *wasapiSpeaker) open() bool {
 	c := s.client
 	format := waveFormat{tag: 1, channels: audio.AudioChannels, rate: audio.AudioSampleRate,
 		bytesPerSec: audio.AudioSampleRate * audio.AudioBytesPerFrame, blockAlign: audio.AudioBytesPerFrame, bits: audio.AudioBitDepth}
-	var period int64 // in 100 ns, as every duration the device is told
+	var period int64 // in 100 ns
 	var size uint32
 	if !ok(syscall.SyscallN(c.table[clientGetDevicePeriod], uintptr(unsafe.Pointer(c)), uintptr(unsafe.Pointer(&period)), 0)) || period <= 0 ||
 		!ok(syscall.SyscallN(c.table[clientInitialize], uintptr(unsafe.Pointer(c)), 0, streamByEvent|streamAutoConvert|streamConvertRate,
-			uintptr(2*period), 0, uintptr(unsafe.Pointer(&format)), 0)) ||
-		!ok(syscall.SyscallN(c.table[clientGetBufferSize], uintptr(unsafe.Pointer(c)), uintptr(unsafe.Pointer(&size)))) ||
+			0, 0, uintptr(unsafe.Pointer(&format)), 0)) ||
 		!ok(syscall.SyscallN(c.table[clientSetEventHandle], uintptr(unsafe.Pointer(c)), uintptr(s.event))) ||
+		!ok(syscall.SyscallN(c.table[clientGetBufferSize], uintptr(unsafe.Pointer(c)), uintptr(unsafe.Pointer(&size)))) ||
 		!ok(syscall.SyscallN(c.table[clientGetService], uintptr(unsafe.Pointer(c)), uintptr(unsafe.Pointer(&iidIAudioRenderClient)), uintptr(unsafe.Pointer(&s.render)))) ||
 		!ok(syscall.SyscallN(c.table[clientStart], uintptr(unsafe.Pointer(c)))) {
 		return false
