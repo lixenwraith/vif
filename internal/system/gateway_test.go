@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // newGatewayWorld is an 80 by 40 terminal's world with its gateway system
@@ -100,5 +101,21 @@ func TestAGatewaySendsOneOfASpeciesWhenAsked(t *testing.T) {
 	}
 	if len(sent) != 1 || sent[0].X != 4 || sent[0].Y != 1 || !w.Components.Gateway.HasEntity(sent[0].Gateway) {
 		t.Fatalf("the send asked for %d swarms, want one at the anchor naming its gateway", len(sent))
+	}
+}
+
+// TestAnInertPylonIsNoTarget: a pylon stood inert is aimed at by no finder, while
+// one stood plain is the nearest target
+func TestAnInertPylonIsNoTarget(t *testing.T) {
+	for _, inert := range []bool{false, true} {
+		w, _ := newGatewayWorld()
+		ready(NewPylonSystem(w)).(*PylonSystem).HandleEvent(event.GameEvent{Type: event.EventPylonSpawnRequest,
+			Payload: &event.PylonSpawnRequestPayload{X: 20, Y: 10, RadiusX: 2, RadiusY: 1, Inert: inert}})
+		if w.Components.Pylon.CountEntities() != 1 {
+			t.Fatal("no pylon stood")
+		}
+		if aimed := len(FindNearestTargets(w, 30, 10, 1, position.ScopeAll, 0)) > 0; aimed == inert {
+			t.Fatalf("a pylon stood inert=%t is aimed at: %t", inert, aimed)
+		}
 	}
 }

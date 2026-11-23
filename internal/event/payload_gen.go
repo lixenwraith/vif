@@ -2062,6 +2062,7 @@ var codecPylonSpawnRequestPayload = structCodec{size: unsafe.Sizeof(PylonSpawnRe
 	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.RadiusY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.MinHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.MaxHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.Inert), kind: kindBool},
 }}
 
 func (p *SnakeSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

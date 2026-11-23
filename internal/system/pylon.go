@@ -228,10 +228,14 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	// Generate disk members
 	members := s.createDiskMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
-	// Header component
+	// An inert pylon is a container, which no finder aims at and combat refuses
+	kind := component.CompositeTypeAblative
+	if payload.Inert {
+		kind = component.CompositeTypeContainer
+	}
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:         component.BehaviorPylon,
-		Type:             component.CompositeTypeAblative,
+		Type:             kind,
 		MemberEntries:    members,
 		SkipPositionSync: true,
 	})
