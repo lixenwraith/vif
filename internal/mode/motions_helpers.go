@@ -416,22 +416,26 @@ func scanBoundsBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds en
 	return cursorX, cursorY
 }
 
-// buttonAt returns the key of the button covering map cell (x, y), zero for none
-// blockAt is the digit key of the magic square's block on a cell, zero for none, with
-// the columns and rows from one block to the next
-func blockAt(ctx *engine.GameContext, x, y int) (digit rune, pitchX, pitchY int) {
+// blockAt is the key a cell of the magic square presses, zero for none: its block's
+// digit, or Enter on the burst meter over it, with the columns and rows from one
+// block to the next
+func blockAt(ctx *engine.GameContext, x, y int) (key rune, pitchX, pitchY int) {
 	ctx.World.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
 		pitchX, pitchY = sq.Width+parameter.SquareBlockGap, sq.Height+parameter.SquareBlockGap
 		for place, d := range sq.Digits {
 			if bx, by := sq.Place(place); x >= bx && x < bx+sq.Width && y >= by && y < by+sq.Height {
-				digit = rune('0' + d)
+				key = rune('0' + d)
 			}
+		}
+		if bx, by := sq.Legend(component.SquareSide - 1); x >= bx && x < bx+sq.Width && y >= by && y <= by+1 {
+			key = '\r'
 		}
 		return false
 	})
-	return digit, pitchX, pitchY
+	return key, pitchX, pitchY
 }
 
+// buttonAt returns the key of the button covering map cell (x, y), zero for none
 func buttonAt(ctx *engine.GameContext, x, y int) rune {
 	config := ctx.World.Resources.Config
 	buttons := ctx.World.Components.Button

@@ -343,6 +343,21 @@ func (c *ConfigResource) FloorMapSize(width, height int) (int, int) {
 	return width, height
 }
 
+// Standing is where a cell that stood still on a map of oldW by oldH stands on this
+// one: as far from the edge whose third of the map it lay in, or from the middle
+func (c *ConfigResource) Standing(x, y, oldW, oldH int) (int, int) {
+	stand := func(v, old, size int) int {
+		switch {
+		case v >= old-old/3:
+			v += size - old
+		case v >= old/3:
+			v += size/2 - old/2
+		}
+		return max(0, min(v, size-1))
+	}
+	return stand(x, oldW, c.MapWidth), stand(y, oldH, c.MapHeight)
+}
+
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
 // the camera crops a map at least as large as the viewport, and the centering
 // offset when the map is smaller. One definition, because the render and pointer

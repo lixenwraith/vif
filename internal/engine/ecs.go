@@ -80,6 +80,13 @@ type System interface {
 	Update()
 }
 
+// Reflower is a system that stands things still on the map. As the map follows a
+// resize it moves each to the cell stand gives its own, before what the new bounds
+// leave outside is cropped.
+type Reflower interface {
+	Reflow(stand func(x, y int) (int, int))
+}
+
 // SystemProfile is what a registration declares about a system.
 type SystemProfile struct {
 	Requires SystemDependencies

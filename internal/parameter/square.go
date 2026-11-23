@@ -11,25 +11,29 @@ const (
 	SquareBlockGap    = 1
 
 	// A line fires its kind again each cooldown, counted from its last fire, while it
-	// holds three of it: the strike at once, the hold and the boost each for half
-	// its cooldown, so neither holds more than half the time
+	// holds three of it: the strike at once, the hold for half its cooldown. The
+	// boost's cooldown leaves what its gust threw the time to walk back
 	SquareStrikeCooldown = 2 * time.Second
 	SquareHoldDuration   = time.Second
 	SquareHoldCooldown   = 2 * time.Second
 	SquareBoostDuration  = time.Second
-	SquareBoostCooldown  = 2 * time.Second
+	SquareBoostCooldown  = 8 * time.Second
 
 	// SquareWindForce is the gust a defense blows out from the square's middle for
 	// SquareWindDuration, fading to nothing SquareWindReach columns past the shield:
-	// it turns back what is near the shield, a light body further than a heavy one
-	SquareWindForce    = 70.0
-	SquareWindReach    = 14.0
-	SquareWindDuration = 400 * time.Millisecond
+	// it throws what stands by the shield back toward the map's edge, a light body
+	// further than a heavy one
+	SquareWindForce    = 1000.0
+	SquareWindReach    = 30.0
+	SquareWindDuration = 500 * time.Millisecond
 
-	// A turn that leaves every row and column summing alike, a magic state, sheds
-	// SquareMagicDust dust from each block, then none for SquareMagicCooldown
-	SquareMagicDust     = 4
-	SquareMagicCooldown = 20 * time.Second
+	// A square's magic meter charges a second a second, and SquareMagicKill for each
+	// kill its cursor makes, up to SquareMagicFull, which a magic state, every row
+	// and column summing alike, fills at once. Its next gust sheds that share of
+	// SquareMagicDust dust round the shield and empties it.
+	SquareMagicFull = 40 * time.Second
+	SquareMagicKill = time.Second
+	SquareMagicDust = 36
 
 	// SquareBoostCap is the most boost the shield over a square banks: a strike's
 	// cooldown, so a strike that kills many covers the wait for the next and no more

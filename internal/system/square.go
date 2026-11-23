@@ -58,6 +58,7 @@ func (s *SquareSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSquareSpawnRequest,
 		event.EventInputPressed,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -81,6 +82,14 @@ func (s *SquareSystem) HandleEvent(ev event.GameEvent) {
 			s.press(e, sq, p.Slot, key)
 			return true
 		})
+	case *event.SpeciesKilledPayload:
+		// A kill its cursor made charges the square's magic
+		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+			if p.KillerEntity != 0 && p.KillerEntity == s.owner(sq) {
+				sq.Magic = min(sq.Magic+parameter.SquareMagicKill, parameter.SquareMagicFull)
+			}
+			return true
+		})
 	}
 }
 
@@ -91,12 +100,22 @@ func (s *SquareSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	s.world.Components.Square.Each(func(e core.Entity, sq *component.SquareComponent) bool {
 		s.cover(sq)
-		sq.Magic = max(sq.Magic-dt, 0)
+		sq.Magic = min(sq.Magic+dt, parameter.SquareMagicFull)
 		for kind := range sq.Effects {
 			effect := &sq.Effects[kind]
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
 		}
 		s.trigger(e, sq)
+		return true
+	})
+}
+
+// Reflow keeps a square by the edge or the middle it stood by as the map resizes
+func (s *SquareSystem) Reflow(stand func(x, y int) (int, int)) {
+	s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+		cx, cy := sq.Center()
+		x, y := stand(cx, cy)
+		sq.X, sq.Y = sq.X+x-cx, sq.Y+y-cy
 		return true
 	})
 }
@@ -277,24 +296,30 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 	}
 	sq.Lines = squareLines(sq)
 	s.trigger(e, sq)
-	if sq.Magic <= 0 && sq.IsMagic() {
-		sq.Magic = parameter.SquareMagicCooldown
-		s.shed(sq)
+	if sq.IsMagic() {
+		sq.Magic = parameter.SquareMagicFull
 	}
 }
 
-// shed has each block throw off dust in its digit, on this instance for its own
-// player: what special fire then detonates
+// shed empties the square's magic meter into dust, the share of SquareMagicDust it
+// held, in the blocks' digits evenly round the shield's rim, on this instance for
+// its own player: what special fire then detonates. A meter short of one keeps it.
 func (s *SquareSystem) shed(sq *component.SquareComponent) {
+	n := int(sq.Magic * parameter.SquareMagicDust / parameter.SquareMagicFull)
+	if n == 0 {
+		return
+	}
+	sq.Magic = 0
+	aspect := s.world.Resources.Config.CellAspect
+	cx, cy := sq.Center()
+	rim := sq.ShieldRadius(aspect) + 1
 	batch := event.ParticleBatchPool.Acquire()
-	for place, digit := range sq.Digits {
-		x, y := sq.Place(place)
-		for i := range parameter.SquareMagicDust {
-			batch.Entries = append(batch.Entries, event.ParticleSpawnEntry{
-				Behavior: component.ParticleDust, Level: component.GlyphBright, Char: rune('0' + digit),
-				X: x + (2*i+1)*sq.Width/(2*parameter.SquareMagicDust), Y: y + i%sq.Height,
-			})
-		}
+	for i := range n {
+		x, y := vmath.AngleToGridPos(float64(i)*vmath.TwoPi/float64(n), cx, cy, rim, aspect.FromCircular(rim))
+		batch.Entries = append(batch.Entries, event.ParticleSpawnEntry{
+			Behavior: component.ParticleDust, Level: component.GlyphBright,
+			Char: rune('0' + sq.Digits[i%len(sq.Digits)]), X: x, Y: y,
+		})
 	}
 	s.world.PushLocal(event.EventParticleSpawnBatch, batch)
 }
@@ -321,8 +346,8 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 }
 
 // fire runs a kind's effect from line as its cursor's: a boost of the shield, as
-// many rewards as its hold is of a kill's, with a gust out from the square, any
-// other kind on the gateways the line faces and the bodies they sent
+// many rewards as its hold is of a kill's, with a gust out from the square that
+// sheds its magic, any other kind on the gateways the line faces and their bodies
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
 	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown}
@@ -339,6 +364,7 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 			Force: spec.Wind, Duration: parameter.SquareWindDuration, Radial: true, X: cx, Y: cy,
 			Reach: sq.ShieldRadius(s.world.Resources.Config.CellAspect) + parameter.SquareWindReach,
 		})
+		s.shed(sq)
 	}
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }

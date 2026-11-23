@@ -65,7 +65,7 @@ type SquareComponent struct {
 	Selected [parameter.MaxPlayers]uint8
 	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of, 0 for none
 	Effects  [SquareKindCount]SquareEffect
-	Magic    time.Duration // left of the wait before a magic state sheds dust again
+	Magic    time.Duration // its magic meter's charge, full at parameter.SquareMagicFull
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells
@@ -88,6 +88,13 @@ func (s *SquareComponent) Size() (w, h int) {
 func (s *SquareComponent) Center() (x, y int) {
 	w, h := s.Size()
 	return s.X + w/2, s.Y + h/2
+}
+
+// Legend is the cell a legend entry over column c of the square starts at: its
+// name's row, its meter's under it, each a block wide
+func (s *SquareComponent) Legend(c int) (x, y int) {
+	x, _ = s.Place(c)
+	return x, s.Y - 3
 }
 
 // KindAt is the kind of the block at place p

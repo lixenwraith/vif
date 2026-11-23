@@ -533,8 +533,16 @@ func (ctx *GameContext) HandleResizeLocked() {
 
 	cropped := config.CropOnResize && ctx.mapSizeLocal()
 	ctx.PublishMapLock()
+	oldW, oldH := config.MapWidth, config.MapHeight
 	if cropped {
 		config.MapWidth, config.MapHeight = config.FloorMapSize(viewportWidth, viewportHeight)
+		// What stands still keeps its place on the new map; the rest past it goes
+		stand := func(x, y int) (int, int) { return config.Standing(x, y, oldW, oldH) }
+		for _, s := range ctx.World.Systems() {
+			if r, ok := s.(Reflower); ok {
+				r.Reflow(stand)
+			}
+		}
 		ctx.World.killOutOfBounds(config.MapWidth, config.MapHeight)
 		// Reset camera
 		config.CameraX = 0
@@ -560,12 +568,16 @@ func (ctx *GameContext) HandleResizeLocked() {
 		return
 	}
 
-	// Clamp every cursor into the new map bounds and free it if the reflow blocked it;
-	// CursorSystem applies the move, which is what re-anchors the camera
+	// Clamp every cursor into the new map bounds, a fixed one standing as what it
+	// stands on does, and free it if the reflow blocked it; CursorSystem applies the
+	// move, which is what re-anchors the camera
 	ctx.World.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
 		pos, ok := ctx.World.Positions.GetPosition(e)
 		if !ok {
 			return true
+		}
+		if config.CursorsFixed {
+			pos.X, pos.Y = config.Standing(pos.X, pos.Y, oldW, oldH)
 		}
 		x, y, _ := ctx.World.ResolveFreeCell(
 			max(0, min(pos.X, config.MapWidth-1)),

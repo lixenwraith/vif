@@ -156,6 +156,27 @@ func (s *PylonSystem) spawnRequest(ev event.GameEvent) (*event.PylonSpawnRequest
 	return nil, false
 }
 
+// Reflow keeps an inert pylon, a post its scenario stood, by the edge or the middle
+// it stood by as the map resizes, its cells with it
+func (s *PylonSystem) Reflow(stand func(x, y int) (int, int)) {
+	s.world.Components.Pylon.Each(func(e core.Entity, pylon *component.PylonComponent) bool {
+		header, ok := s.world.Components.Header.GetPtr(e)
+		if !ok || header.Type != component.CompositeTypeContainer {
+			return true
+		}
+		x, y := stand(pylon.SpawnX, pylon.SpawnY)
+		dx, dy := x-pylon.SpawnX, y-pylon.SpawnY
+		pylon.SpawnX, pylon.SpawnY = x, y
+		s.world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		for _, m := range header.MemberEntries {
+			if at, ok := s.world.Positions.GetPosition(m.Entity); ok && m.Entity != 0 {
+				s.world.Positions.SetPosition(m.Entity, component.PositionComponent{X: at.X + dx, Y: at.Y + dy})
+			}
+		}
+		return true
+	})
+}
+
 func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	radiusX := payload.RadiusX
 	radiusY := payload.RadiusY
