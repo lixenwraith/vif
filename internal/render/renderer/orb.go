@@ -83,6 +83,9 @@ func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuf
 	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
 	aiming := 0
 	for kind, spec := range component.SquareKinds {
+		if since := spec.Cooldown - sq.Effects[kind].Cooldown; spec.Wind > 0 && sq.Effects[kind].Cooldown > 0 && since < parameter.SquareWindDuration {
+			r.squareGust(ctx, buf, sq, kind, float64(since)/float64(parameter.SquareWindDuration))
+		}
 		if spec.Boost {
 			continue
 		}
@@ -100,6 +103,35 @@ func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuf
 		cells, n := sq.Orbs(line, ctx.CellAspect)
 		for _, cell := range cells[:n] {
 			r.squareOrb(ctx, buf, cell, look, spec.Name, 1, burst)
+		}
+	}
+}
+
+// squareGust draws the gust a kind blows as a ring in its glow, blown a share of
+// the way from the shield's edge out to the wind's reach and fading as it goes; a
+// console draws it in dots
+func (r *OrbRenderer) squareGust(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, blown float64) {
+	cx, cy := sq.Center()
+	radius := sq.ShieldRadius(ctx.CellAspect) + blown*parameter.SquareWindReach
+	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, radius+1, ctx.CellAspect.FromCircular(radius+1))
+	if !ok {
+		return
+	}
+	colors, console := &visual.SquareKinds[kind], r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256
+	for y := startY; y <= endY; y++ {
+		dy := ctx.CellAspect.Circular(float64(y - cy))
+		for x := startX; x <= endX; x++ {
+			off := math.Abs(math.Hypot(float64(x-cx), dy) - radius)
+			sx, sy, visible := ctx.MapToScreen(x, y)
+			if off >= visual.SquareGustWidth || !visible {
+				continue
+			}
+			if console {
+				buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
+				continue
+			}
+			alpha := visual.SquareGustAlpha * (1 - blown) * (1 - off/visual.SquareGustWidth)
+			buf.Set(sx, sy, 0, visual.RgbBlack, colors.Glow, render.BlendScreen, alpha, terminal.AttrNone)
 		}
 	}
 }

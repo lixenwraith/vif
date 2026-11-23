@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -142,6 +143,7 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 		event.EventWeaponSetRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
+		event.EventDeathWaveRequest,
 		event.EventGunAimRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -231,6 +233,15 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.WeaponFireRequestPayload); ok {
 			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.fire(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
+			}
+		}
+
+	case event.EventDeathWaveRequest:
+		if payload, ok := ev.Payload.(*event.DeathWaveRequestPayload); ok {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
+				s.deathWave(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
 			}
@@ -1011,6 +1022,22 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 		fired = true
 	}
 	return fired
+}
+
+// deathWave fires component.DeathWave from a cursor's cell, out to the map's corner
+// farthest from it; the pulse system strikes with it as it grows
+func (s *WeaponSystem) deathWave(cursor core.Entity) {
+	at, ok := s.world.Positions.GetPosition(cursor)
+	if !ok {
+		return
+	}
+	cfg := s.world.Resources.Config
+	spec := component.DeathWave
+	spec.Radius = math.Hypot(float64(max(at.X, cfg.MapWidth-1-at.X)),
+		cfg.CellAspect.Circular(float64(max(at.Y, cfg.MapHeight-1-at.Y)))) + 1
+	s.world.Components.Pulse.SetComponent(s.world.CreateEntity(core.DomainPlayer), component.PulseComponent{
+		PulseSpec: spec, X: at.X, Y: at.Y, Owner: cursor, Palette: s.palette(cursor),
+	})
 }
 
 // firePulse fires a pulse that stays on the emitter cell, when a target is inside

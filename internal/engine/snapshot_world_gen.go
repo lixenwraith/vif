@@ -1596,7 +1596,7 @@ func equalLoot(a, b *component.LootComponent) bool {
 }
 
 func equalGateway(a, b *component.GatewayComponent) bool {
-	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Held == b.Held && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
+	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Held == b.Held && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.Wave == b.Wave && a.WaveOut == b.WaveOut && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
 }
 
 func equalEnergy(a, b *component.EnergyComponent) bool {
@@ -1608,7 +1608,7 @@ func equalHeat(a, b *component.HeatComponent) bool {
 }
 
 func equalShield(a, b *component.ShieldComponent) bool {
-	return a.DrainElapsed == b.DrainElapsed && a.BoostCap == b.BoostCap && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active
+	return a.DrainElapsed == b.DrainElapsed && a.BoostCap == b.BoostCap && a.Step == b.Step && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active
 }
 
 func equalBoost(a, b *component.BoostComponent) bool {
@@ -1674,7 +1674,7 @@ func equalMissile(a, b *component.MissileComponent) bool {
 }
 
 func equalMount(a, b *component.MountComponent) bool {
-	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.Damage == b.Damage && math.Float64bits(float64(a.Pulse.Radius)) == math.Float64bits(float64(b.Pulse.Radius)) && a.Pulse.Duration == b.Pulse.Duration && a.Pulse.Sustained == b.Pulse.Sustained && a.Pulse.Grow == b.Pulse.Grow && a.Pulse.HitInterval == b.Pulse.HitInterval && a.Pulse.Style == b.Pulse.Style && a.Pulse.Attack == b.Pulse.Attack && a.Pulse.Charged == b.Pulse.Charged && a.Live == b.Live && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
+	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.Damage == b.Damage && math.Float64bits(float64(a.Pulse.Radius)) == math.Float64bits(float64(b.Pulse.Radius)) && a.Pulse.Duration == b.Pulse.Duration && a.Pulse.Sustained == b.Pulse.Sustained && a.Pulse.Grow == b.Pulse.Grow && math.Float64bits(float64(a.Pulse.Start)) == math.Float64bits(float64(b.Pulse.Start)) && a.Pulse.HitInterval == b.Pulse.HitInterval && a.Pulse.Style == b.Pulse.Style && a.Pulse.Attack == b.Pulse.Attack && a.Pulse.Charged == b.Pulse.Charged && a.Live == b.Live && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
 }
 
 func equalRay(a, b *component.RayComponent) bool {
@@ -1682,7 +1682,7 @@ func equalRay(a, b *component.RayComponent) bool {
 }
 
 func equalPulse(a, b *component.PulseComponent) bool {
-	return math.Float64bits(float64(a.PulseSpec.Radius)) == math.Float64bits(float64(b.PulseSpec.Radius)) && a.PulseSpec.Duration == b.PulseSpec.Duration && a.PulseSpec.Sustained == b.PulseSpec.Sustained && a.PulseSpec.Grow == b.PulseSpec.Grow && a.PulseSpec.HitInterval == b.PulseSpec.HitInterval && a.PulseSpec.Style == b.PulseSpec.Style && a.PulseSpec.Attack == b.PulseSpec.Attack && a.PulseSpec.Charged == b.PulseSpec.Charged && a.X == b.X && a.Y == b.Y && a.Owner == b.Owner && a.Anchor == b.Anchor && a.Hostile == b.Hostile && a.Damage == b.Damage && a.Palette == b.Palette && a.Elapsed == b.Elapsed && a.HitTimer == b.HitTimer
+	return math.Float64bits(float64(a.PulseSpec.Radius)) == math.Float64bits(float64(b.PulseSpec.Radius)) && a.PulseSpec.Duration == b.PulseSpec.Duration && a.PulseSpec.Sustained == b.PulseSpec.Sustained && a.PulseSpec.Grow == b.PulseSpec.Grow && math.Float64bits(float64(a.PulseSpec.Start)) == math.Float64bits(float64(b.PulseSpec.Start)) && a.PulseSpec.HitInterval == b.PulseSpec.HitInterval && a.PulseSpec.Style == b.PulseSpec.Style && a.PulseSpec.Attack == b.PulseSpec.Attack && a.PulseSpec.Charged == b.PulseSpec.Charged && a.X == b.X && a.Y == b.Y && a.Owner == b.Owner && a.Anchor == b.Anchor && a.Hostile == b.Hostile && a.Damage == b.Damage && a.Palette == b.Palette && a.Elapsed == b.Elapsed && a.HitTimer == b.HitTimer
 }
 
 func equalSpirit(a, b *component.SpiritComponent) bool {

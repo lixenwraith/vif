@@ -285,7 +285,13 @@ which concrete renderer produced them:
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
 - strobe supplies a deferred background overlay for otherwise untouched cells;
   a console shows it in one step, in its nearest background, while the envelope
-  is past half its peak.
+  is past half its peak;
+- slide draws a pulse of that style as a sheet of tiles struck at its center: each
+  cell in the `SlideBand` columns behind the pulse's edge is redrawn as a tile
+  part-turned, in block eighths, its face sinking to the cell's foot and lit toward
+  `RgbSlideLight` until edge-on, its shaded underside coming down from the cell's
+  head after, over `RgbSlideGap`; the cell's own colors tint the tile, and cells
+  the band has left are as they were drawn.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.
@@ -383,7 +389,7 @@ also the visual stacking order; exact integer priorities are in
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Overlay effects | `landing`, `button`, `splash`, `marker` |
-| Post-process | `grayout`, `strobe`, `dim` |
+| Post-process | `slide`, `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
 | Debug and telemetry | `flowfield`, `machine`, `pinned_state`, `overlay` |
 

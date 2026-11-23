@@ -44,6 +44,41 @@ func windAcceleration(w *engine.World, entity core.Entity) (float64, float64) {
 	return k.AccelX, k.AccelY
 }
 
+// TestARadialWindBlowsOutFromItsOriginAndFadesOverItsReach: a radial wind pushes a
+// body straight away from its origin, a row as far as a column on screen, by the
+// share of its force left at that distance, and not at all past its reach
+func TestARadialWindBlowsOutFromItsOriginAndFadesOverItsReach(t *testing.T) {
+	w, s := newEnvironmentWorld(0x51A7E)
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Mass: 1}}
+	body := func(x, y int) core.Entity {
+		e := addWindKinetic(w, core.DomainShared)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Behavior.SetComponent(e, component.BehaviorComponent{})
+		return e
+	}
+	// Ten columns right, ten columns' worth of rows below, and past the reach
+	right, below, far := body(50, 20), body(40, 25), body(70, 20)
+	const force = 10.0
+	s.HandleEvent(event.GameEvent{Type: event.EventWindStart, Payload: &event.WindStartPayload{
+		Force: force, Duration: time.Second, Radial: true, X: 40, Y: 20, Reach: 20,
+	}})
+	setEnvironmentDelta(w, 1, parameter.GameUpdateInterval)
+	s.Update()
+
+	rx, ry := windAcceleration(w, right)
+	bx, by := windAcceleration(w, below)
+	half, slack := force/2, force/2*parameter.WindForceVariationRatio
+	if ry != 0 || math.Abs(rx-half) > slack {
+		t.Fatalf("ten of twenty columns out the wind pushes (%v, %v), want half its force straight right", rx, ry)
+	}
+	if bx != 0 || math.Abs(by-w.Resources.Config.CellAspect.FromCircular(rx)) > 1e-9 {
+		t.Fatalf("as far below the wind pushes (%v, %v), want %v's worth of rows straight down", bx, by, rx)
+	}
+	if fx, fy := windAcceleration(w, far); fx != 0 || fy != 0 {
+		t.Fatalf("past its reach the wind pushes (%v, %v), want nothing", fx, fy)
+	}
+}
+
 func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 	w, s := newEnvironmentWorld(0x51A7E)
 

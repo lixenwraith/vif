@@ -1163,6 +1163,12 @@ func encodeColumnsGateway(dst []byte, rows []StoreEntry[component.GatewayCompone
 		dst = appendInt(dst, rows[i].Value.MinInterval)
 	}
 	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Wave)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.WaveOut)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.OffsetX)
 	}
 	for i := range rows {
@@ -1216,6 +1222,12 @@ func decodeColumnsGateway(r *columnReader) []StoreEntry[component.GatewayCompone
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.MinInterval, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Wave, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.WaveOut, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.OffsetX, r)
@@ -1301,6 +1313,9 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 		dst = appendInt(dst, rows[i].Value.BoostCap)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Step)
+	}
+	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.Radius)
 	}
 	for i := range rows {
@@ -1333,6 +1348,9 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.BoostCap, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Step, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.Radius, r)
@@ -2338,6 +2356,9 @@ func encodeColumnsMount(dst []byte, rows []StoreEntry[component.MountComponent])
 		dst = appendInt(dst, rows[i].Value.Pulse.Grow)
 	}
 	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.Pulse.Start)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Pulse.HitInterval)
 	}
 	for i := range rows {
@@ -2412,6 +2433,9 @@ func decodeColumnsMount(r *columnReader) []StoreEntry[component.MountComponent] 
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Pulse.Grow, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.Pulse.Start, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Pulse.HitInterval, r)
@@ -2572,6 +2596,9 @@ func encodeColumnsPulse(dst []byte, rows []StoreEntry[component.PulseComponent])
 		dst = appendInt(dst, rows[i].Value.PulseSpec.Grow)
 	}
 	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.PulseSpec.Start)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.PulseSpec.HitInterval)
 	}
 	for i := range rows {
@@ -2634,6 +2661,9 @@ func decodeColumnsPulse(r *columnReader) []StoreEntry[component.PulseComponent] 
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.PulseSpec.Grow, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.PulseSpec.Start, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.PulseSpec.HitInterval, r)
@@ -3700,6 +3730,9 @@ func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent
 		}
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Magic)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.X)
 	}
 	for i := range rows {
@@ -3710,6 +3743,9 @@ func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Height)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.ShieldStep)
 	}
 	return dst
 }
@@ -3752,6 +3788,9 @@ func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent
 		}
 	}
 	for i := range rows {
+		readInt(&rows[i].Value.Magic, r)
+	}
+	for i := range rows {
 		readInt(&rows[i].Value.X, r)
 	}
 	for i := range rows {
@@ -3762,6 +3801,9 @@ func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Height, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.ShieldStep, r)
 	}
 	return rows
 }
@@ -4032,6 +4074,9 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 		dst = appendUint(dst, rows[i].Value.Gateway)
 	}
 	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Wave)
+	}
+	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Shielded)
 	}
 	for i := range rows {
@@ -4088,6 +4133,9 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Gateway, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Wave, r)
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Shielded, r)

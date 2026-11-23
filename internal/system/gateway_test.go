@@ -104,6 +104,57 @@ func TestAGatewaySendsOneOfASpeciesWhenAsked(t *testing.T) {
 	}
 }
 
+// TestAGatewayAnnouncesItsWaveDefeated: a gateway armed for a wave marks the body it
+// sends, and says the wave is defeated, once and from its anchor's cell, only when it
+// is armed with no wave and the last body it marked is dead
+func TestAGatewayAnnouncesItsWaveDefeated(t *testing.T) {
+	ctx, behaviors, _ := newWardenWorld(t, wardenX+20, wardenY)
+	w := ctx.World
+	gateways := ready(NewGatewaySystem(w)).(*GatewaySystem)
+	anchor := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(anchor, component.PositionComponent{X: 60, Y: 20})
+	arm := func(wave bool, interval time.Duration) {
+		gateways.HandleEvent(event.GameEvent{Type: event.EventGatewaySpawnRequest, Payload: &event.GatewaySpawnRequestPayload{
+			AnchorEntity: anchor, Species: w.Resources.Behaviors[0].Species, BaseIntervalMs: int(interval / time.Millisecond), Wave: wave,
+		}})
+	}
+	var said []*event.GatewayWavePayload
+	step := func() int {
+		said = said[:0]
+		for _, ev := range stepGateways(w, gateways) {
+			behaviors.HandleEvent(ev)
+			if p, ok := ev.Payload.(*event.GatewayWavePayload); ok {
+				said = append(said, p)
+			}
+		}
+		return len(said)
+	}
+
+	arm(true, parameter.GameUpdateInterval)
+	step()
+	var body core.Entity
+	w.Components.Behavior.Each(func(e core.Entity, b *component.BehaviorComponent) bool {
+		if b.Wave {
+			body = e
+		}
+		return true
+	})
+	if body == 0 {
+		t.Fatal("the gateway's wave sent no body marked as its own")
+	}
+	arm(false, time.Hour)
+	if step() != 0 {
+		t.Fatal("a wave is defeated while its body lives")
+	}
+	w.DestroyEntity(body)
+	if step() != 1 || said[0].AnchorEntity != anchor || said[0].X != 60 || said[0].Y != 20 {
+		t.Fatalf("the dead wave was announced %d times, want once from its anchor at (60,20)", len(said))
+	}
+	if step() != 0 {
+		t.Fatal("a defeated wave was announced again")
+	}
+}
+
 // TestAnInertPylonIsNoTarget: a pylon stood inert is aimed at by no finder, while
 // one stood plain is the nearest target
 func TestAnInertPylonIsNoTarget(t *testing.T) {

@@ -142,7 +142,7 @@ var Systems = []SystemDef{
 		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // carries its generator, not a vmath stream, and the cave; pushes both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "square", Constructor: "NewSquareSystem", Domain: "shared", Requires: []string{"cursor"},
-		Optional: []string{"shield", "boost", "combat", "gateway", "lightning"}}, // shared blocks under its cursor's shield; its effects land through combat as that cursor's, its bolts are each instance's own
+		Optional: []string{"shield", "boost", "combat", "gateway", "lightning", "environment", "particle"}}, // shared blocks under its cursor's shield; its effects land through combat as that cursor's, its bolts and dust are each instance's own
 	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake", "swarm"}}, // shared route anchor; gated species are optional
 
 	// --- Entity Behaviors ---
@@ -295,6 +295,7 @@ var Renderers = []RendererDef{
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 
 	// --- Post-Processing ---
+	{"slide", "NewSlideRenderer", "PrioritySlide"},
 	{"grayout", "NewGrayoutRenderer", "PriorityGrayout"},
 	{"strobe", "NewStrobeRenderer", "PriorityStrobe"},
 	{"dim", "NewDimRenderer", "PriorityDim"},

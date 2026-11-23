@@ -28,6 +28,10 @@ type GatewayComponent struct {
 	RateAccelElapsed  time.Duration // Time accumulated toward next acceleration step
 	MinInterval       time.Duration // Floor for interval after acceleration
 
+	// Wave marks its data species a wave, and WaveOut that one it sent is not yet
+	// defeated: the gateway armed with no wave, and none it marked alive
+	Wave, WaveOut bool
+
 	// Spawn position
 	OffsetX int // Offset from anchor position (0 = spawn at anchor)
 	OffsetY int

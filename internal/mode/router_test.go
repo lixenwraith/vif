@@ -297,6 +297,50 @@ func TestEveryPointerPressesAButton(t *testing.T) {
 	}
 }
 
+// TestADraggedBlockTurnsItsLine: a press on a magic square's block presses its digit
+// and holds it, a drag of a block's pitch along its row presses that turn's key, the
+// first turn keeps the drag to the row whatever it does after, and a drag down from
+// a new press turns the column
+func TestADraggedBlockTurnsItsLine(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 40)
+	r := NewRouter(ctx, input.NewMachine())
+	sq := component.SquareComponent{X: 20, Y: 10, Width: 7, Height: 3, Digits: [9]uint8{2, 7, 6, 9, 5, 1, 4, 3, 8}}
+	w.Components.Square.SetComponent(w.CreateEntity(core.DomainShared), sq)
+	ctx.KeyCapture.Set("123456789hjkl", 0, false, false)
+	pitchX, pitchY := sq.Width+parameter.SquareBlockGap, sq.Height+parameter.SquareBlockGap
+	x, y := sq.Place(4)
+	pressed := func() (keys string) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.InputPayload); ok && ev.Type == event.EventInputPressed {
+				keys += p.Key
+			}
+		}
+		return keys
+	}
+	at := func(kind input.IntentType, dx, dy int) *input.Intent {
+		return &input.Intent{Type: kind, X: x + 1 + dx, Y: y + 1 + dy, MapCell: true, Touch: true}
+	}
+
+	r.Handle(at(input.IntentMouseLeftDown, 0, 0))
+	r.Handle(at(input.IntentMouseDrag, pitchX-1, 0))
+	if got := pressed(); got != "5" {
+		t.Fatalf("a press on the middle block and a drag short of its pitch pressed %q, want its digit alone", got)
+	}
+	r.Handle(at(input.IntentMouseDrag, 2*pitchX, 0))
+	r.Handle(at(input.IntentMouseDrag, 2*pitchX, 3*pitchY))
+	r.Handle(at(input.IntentMouseDrag, pitchX, 3*pitchY))
+	if got := pressed(); got != "llh" {
+		t.Fatalf("two pitches right, then down, then one back pressed %q, want llh: the row alone", got)
+	}
+	r.Handle(&input.Intent{Type: input.IntentMouseLeftUp})
+	r.Handle(at(input.IntentMouseLeftDown, 0, 0))
+	r.Handle(at(input.IntentMouseDrag, 1, -pitchY))
+	if got := pressed(); got != "5k" {
+		t.Fatalf("a new press dragged a pitch up pressed %q, want 5k", got)
+	}
+}
+
 // lineWorld is a bare world holding text's lines as the player's glyphs from row 0,
 // the local cursor at column x of the first, and a router fed by keys. It applies
 // what each key asks for before the next, as the systems would, and returns the

@@ -27,6 +27,11 @@ type ShieldComponent struct {
 	// BoostCap is the most boost the shield's cursor banks, zero for no cap
 	BoostCap time.Duration
 
+	// Step is the energy a step of visual.ShieldRamp spans: a shield with one is
+	// colored by what it holds, keeps it with no passive drain, and holds no more
+	// than parameter.ShieldSteps of them; zero is main's
+	Step int64
+
 	Radius float64
 	Color  color.RGB
 

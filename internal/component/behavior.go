@@ -34,6 +34,7 @@ type BehaviorComponent struct {
 	Signals uint8 // the signals raised on it, a bit each in its program's order, until an edge takes one
 
 	Gateway core.Entity // the gateway that sent it, 0 for none
+	Wave    bool        // one of a wave that gateway sent, which it counts out
 
 	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
 	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell

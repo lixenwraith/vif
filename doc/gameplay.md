@@ -185,7 +185,8 @@ request (`:dust`, each gold round of a quasar encounter, a gold sequence destroy
 in `main`, or two storm circles colliding) converting every loose glyph while dark
 ones flash away, and special fire (§7), which converts dark ones too; a glyph hidden
 in rock or a wall carries none, since dust born there would stay. It orbits the
-local cursor while that cursor's energy is nonzero, bounces off walls and bounds,
+local cursor while that cursor's energy is nonzero and it is not fixed where it
+spawned (§2), drifting as thrown otherwise, bounces off walls and bounds,
 nudges the drains it crosses, and lives 2, 4 or 8 s by its glyph's level through
 `TimerComponent`, fading a level each time its remaining life drops below the lower
 level's lifetime. All three behaviors share one deterministic Player-domain RNG
@@ -233,8 +234,10 @@ the meter, and activates the ember phase. A set (`:heat`, `EventHeatSetRequest`,
 never bursts, the gain that fills overheat does. Ember decays heat periodically and
 protects ordinary energy penalties while active. A heat penalty also clears the
 overheat accumulation. A scenario lights or puts out the ember with
-`EventCursorArmRequest`, and an ember that burns its heat out crosses
-`EventEmberSpent`, which a scenario can time a turn by.
+`EventCursorArmRequest`, which sets heat and energy too, or alone with
+`EventHeatEmberRequest`, as one that answers the burst its own way does, and an
+ember that burns its heat out crosses `EventEmberSpent`, which a scenario can time
+a turn by.
 
 Special-attack heat spending consumes overheat before current heat without
 resetting the remaining overheat or triggering the penalty sound.
@@ -265,7 +268,12 @@ aspect makes of it (ten and five on a terminal), not a rectangular grid range. I
 - supplies the bounds Visual mode shows, moves by and edits;
 - drains 1% of current energy every second as passive drain.
 
-Because passive drain converges to zero, keeping a shield active is never free.
+A shield with a `Step`, which a magic square gives its cursor's, counts its energy
+in steps of that many: it takes the color of the steps it holds
+(`visual.ShieldRamp`, gray up to red), drains none passively, and a reward fills it
+to `ShieldSteps` of them, seven, and no further.
+
+Because passive drain converges to zero, keeping a plain shield active is never free.
 The drain interval starts when the shield does, and a stamp ahead of this
 instance's clock (a cursor installed from an authority further along) restarts
 the interval. `energy.passive_count` and `energy.passive_drained` tell a drain
@@ -399,6 +407,14 @@ it under the default mapping. See source and keymap documentation when changing
 this behavior because fire requests, auto-fire, macros, and mouse repeat all
 share timing constraints.
 
+A death wave is a cursor's attack no weapon holds: `EventDeathWaveRequest` runs one
+out from the cursor it names to the map's far corner in 1.5 s, a pulse of the
+`death_wave` family that takes every hit point of each drain, swarm, eye, snake and
+data species on the swarm row as its edge passes, credited to that cursor; a boss
+or a structure has no row and stands through it, and a prototype's `attacks` can
+exempt a body. It draws as a slide ([Rendering §7](rendering.md#7-layer-inventory)).
+What raises it is the scenario's: `magic` wires it to the heat burst.
+
 Tracer visuals are background-only moving trails. They preserve any glyph
 foreground in a traversed cell, use max-background blending so overlapping
 auto-fire does not accumulate into a flash, and shrink the visible tail while
@@ -416,10 +432,10 @@ a blocked tracer drains to its stop point.
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; evolution picks which of the seven types in `parameter.EyeTypeTable` a gateway spawns. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
-| Magic square | Nine blocks laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`), under the shield of the cursor standing on it, which the square sizes to reach past its corners and holds to a banked boost of `SquareBoostCap`. A player selects a block by its digit and turns its row or column a place; a line holding three of a kind fires the kind's effect from `component.SquareKinds` as that cursor's each time its cooldown runs out: a boost of the shield, or a strike or hold from the kind's orb on the gateways the line faces and the bodies they sent. `magic` (§10) is its scenario. |
+| Magic square | Nine blocks laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`), under the shield of the cursor standing on it, which the square sizes to reach past its corners, steps by its `ShieldStep` and holds to a banked boost of `SquareBoostCap`; with that shield down a body on the blocks costs the cursor its touch in heat, is thrown off, and crosses `EventSquareHit`. A player selects a block by its digit and turns its row or column a place, by key or by dragging the block; a line holding three of a kind fires the kind's effect from `component.SquareKinds` as that cursor's each time its cooldown runs out: a boost of the shield with a gust of radial wind, or a strike or hold from the kind's orb on the gateways the line faces and the bodies they sent. A turn into a magic state (`SquareComponent.IsMagic`) sheds dust, once a `SquareMagicCooldown`. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
 | Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, lights where a hit lands, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; its body is no target, and loses what its guts lose, no more than each had, so ten guts cut kill it. Guts are too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
-| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, or lands a data species, each swarm and data species keeping the gateway that sent it. A second request on its anchor re-arms it with another species and pace, `EventGatewaySendRequest` has it send one of a species at once, it holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and it disappears when its anchor is gone. |
+| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, or lands a data species, each swarm and data species keeping the gateway that sent it. A second request on its anchor re-arms it with another species and pace, `EventGatewaySendRequest` has it send one of a species at once, it holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and it disappears when its anchor is gone. Armed with `wave = true` it marks the data species it sends, and `EventGatewayWaveDefeated` names its anchor and cell once it is armed otherwise and the last of them is dead. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
@@ -526,7 +542,9 @@ the current wind and `EventWindCancel` ends it. Each tick varies force by up to
 10% and direction by about five degrees from a deterministic Shared RNG stream,
 then applies `force / mass` to mobile species. Drains, swarm, quasar, eye, snake
 head, storm circles (except while stunned) and a data species whose prototype has
-a `mass` are affected. Cursor kinetics,
+a `mass` are affected. A `radial` start blows straight out from its `x`, `y`
+instead, as far a row as a column on screen, fading to nothing over `reach`
+columns when it has one: a magic square's defense blows such a gust. Cursor kinetics,
 snake body-local deformation, pylons/towers, Kraken, weapons/projectiles/loot,
 dust, and the decay/blossom particle behaviors are not wind targets. See
 [Generic kinetic analysis](generic-kinetic.md) for the motion paths and the
@@ -781,63 +799,80 @@ heat and energy both run out, the stars stop under a red strobe, and the game st
 over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
 fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
-`magic` is for one player, on a map of at least 76 by 36 (a smaller screen scrolls
-over it), whose cursor is fixed at the middle (`[map] cursors = "fixed"`), the keys
-the only input. The square stands there: the Lo Shu square, 2 7 6 over 9 5 1 over
-4 3 8, its digits in three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9 defense, one
-of each along every row and column. The scenario captures 1-9, h j k l and a s d f:
-a digit selects its block, h and l turn the block's row a place left and right, the
-last block round to the first (9 5 1 turned right is 1 9 5), and j and k its column
-down and up; a and f, d and s do the same for the other hand (auto-fire, `a`
-elsewhere, is `:auto` here), and the selection follows its block. A line holding
-three of a kind fires the kind at once, and again each time its cooldown, 2 s from
-its last fire, runs out while the line holds. Since a row turn keeps the row's
-kinds, and the square's rows are turns of one another, aligning one column by row
-turns aligns all three.
+`magic` is for one player, on a map of at least 80 by 40 (a smaller screen scrolls
+over it), whose cursor is fixed at the middle (`[map] cursors = "fixed"`). The
+square stands there: the Lo Shu square, 2 7 6 over 9 5 1 over 4 3 8, its digits in
+three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9 defense, one of each along every
+row and column. The scenario captures 1-9, h j k l and a s d f: a digit selects its
+block, h and l turn the block's row a place left and right, the last block round to
+the first (9 5 1 turned right is 1 9 5), and j and k its column down and up; a and
+f, d and s do the same for the other hand (auto-fire, `a` elsewhere, is `:auto`
+here), and the selection follows its block. A pointer or a finger does both: a
+press on a block selects it, and dragging it a block's width along its row, or its
+height along its column, turns that line a place, the first turn keeping the drag
+to that line. A line holding three of a kind fires the kind at once, and again each
+time its cooldown, 2 s from its last fire, runs out while the line holds. Since a
+row turn keeps the row's kinds, and the square's rows are turns of one another,
+aligning one column by row turns aligns all three.
 
 The square lies under the cursor's own shield, which the square sizes to reach two
-columns past its corners. It is main's shield: energy funds it and drains from it a
-hundredth a second, a body that touches it is knocked back and costs it energy
-unless it is boosted, and a kill boosts it for half a second. Under the square the
-boost banks 2 s at most, a strike's cooldown, so a strike that kills many covers
-the wait for the next and no more. The cursor starts with 40,000 energy and no heat,
-so the game is lost with the last of the energy, under a red strobe as long as
-main's, and starts over on "The shield has fallen", the keys told 2 s in.
+columns past its corners and steps ([Shield](#shield)): a touch costs it 100
+energy at every rank, it drains none on its own, its color counts the touches left
+six to a step, gray, pink, purple, blue, green, yellow, red, and it holds seven
+steps, 4,200. It starts at 3,300, in its yellow. A kill boosts it for half a
+second, and the boost banks 2 s at most, a strike's cooldown. With no energy the
+shield is down and the blocks take the touches: a body on them costs 10 heat, of
+the 100 the cursor starts with, and is thrown off as the shield threw it. The game
+is lost to a touch on the blocks with neither energy nor heat left, under a red
+strobe as long as main's, and starts over on "The square has fallen".
 
 Attack and hold aim: each lands on the gateways its line faces and the bodies they
 sent, a body keeping its gateway. The edges of the middle block, run on across the
 map, cut it in thirds, and a line faces the gateways in its own, the right column
 the three on the right, the middle row those at the left and right. Each has an orb
-on an outer orbit, six columns past the shield and outside the cursor's own orbs,
+on an outer orbit, ten columns past the shield and clear of the cursor's own orbs,
 which circle the shield's edge: it stands at the middle of the side its line faces,
 one at each end for the middle row and column, and turns round the orbit, dim, while
 no line holds its kind. The attack's is a white core between a red and a blue lobe,
 the hold's a cyan core between a gold and a purple. Attack strikes those bodies
 dead whatever they hold, a red bolt flying to each from the orb; hold stuns them
 and holds those gateways' spawns for 1 s, its bolts gold and one to each gateway.
-Defense boosts the shield for 1 s, as two kills would. A firing line's blocks flash
-in the kind's glow, and under the square each kind's name, lit while a line holds
-it, stands over a meter that fills as its cooldown runs, in the glow while the
-effect holds.
+Defense boosts the shield for 1 s, as two kills would, and blows a gust: a radial
+wind (§9) out from the square for 0.4 s that fades to nothing 14 columns past the
+shield, turning back what is near it, a light body further than a heavy one, with
+no knockback and no immunity. A firing line's blocks flash in the kind's glow, and
+under the square each kind's name, lit while a line holds it, stands over a meter
+that fills as its cooldown runs, in the glow while the effect holds.
 
 Eight inert pylons on the corners and the edges' middles each carry a gateway. All
-trickle strays, bodies that home on the cursor and nothing else, a gateway every
-18 s at first; one gateway is in flood, sending a body every 3.2 s, and the flood
-moves one to seven gateways on round the edge after 12 s, 9 s from the third level
-and 6 s from the sixth. Bodies come in four ranks, a rank up heavier, a little
-faster (2.4 to 3 cells a second) and costlier to the shield a touch (60 to 220
-energy). A stray (mote, wisp, imp, golem; 6 to 30 hit points) is worn down by the
-cursor's weapons, a pulse without its stun. A flood's body (spark, shade, hex,
-titan, marked in the attack's red) takes nothing from them, so only a strike ends
-it, and a flood no line faces reaches the shield whole, drawing the weapons' fire
-from the strays as it comes. Players' kills raise the level, 30 for the first and
-half as many again for each after, or 90 s do: the trickle runs a fifth quicker
-down to 4 s, the flood two fifths quicker down to a body every 80 ms, the bodies
-rank up to the fourth, and a swarm comes out of the gateway opposite the flood.
-Where a player's kill ends it, that swarm drops three energy and the next weapon of
-the round launcher, turret, emitter, disruptor; the cursor's own gun is taken as
-the game starts, so its weapons are those drops, fired as in every scenario by main
-fire or auto-fire.
+trickle strays, bodies that home on the cursor and nothing else, and one sends a
+wave, a body every 3.2 s at first, which moves one to seven gateways on round the
+edge after 12 s, 9 s at the third rank and 6 s at the fourth. Bodies come in four
+ranks, a rank up heavier and a little faster (2.4 to 3 cells a second). A stray
+(mote, wisp, imp, golem; 6 to 30 hit points) is worn down by the cursor's weapons,
+a pulse without its stun. A wave's body (spark, shade, hex, titan, marked in the
+attack's red) takes nothing from them, so only a strike ends it. Players' kills
+raise the level, 30 for the first, or 90 s do, and each level is a rank on, small
+to big and round again: within a round the trickle runs a fifth quicker down to
+4 s a gateway, the wave two fifths quicker down to a body every 80 ms, and a level
+asks half as many kills again; the first rank of the next round eases back to where
+the last round's second ran. A level also sends a carrier, a heavy stray in gold,
+out of the gateway opposite the wave, and where a player's kill ends it the next
+weapon of the round launcher, turret, emitter, disruptor drops; the cursor's own
+gun is taken as the game starts, so its weapons are those drops, fired as in every
+scenario by main fire or auto-fire, and lost as in main when the shield falls.
+
+A wave is defeated once its gateway sends strays again and the last of its bodies
+is dead, and it pays from that gateway: a heat drop, 10, and a charge of 300
+energy, three touches, which is all the shield earns. Heat past the meter's 100
+fills overheat (§5), and its burst here runs a death wave (§7) out from the square
+that ends every body on the map, the ember put out and the meter left full. A turn
+that leaves every row and column summing 15 is a magic state, which lines up no
+kind: 36 of them can be reached, the square's four rotations and the turns that
+shift it whole among them. Reaching one sheds four dust from each block in its
+digit, then none for 20 s, a wait drawn over the square's middle column; the dust
+drifts, a fixed cursor pulling none, until special fire detonates it for a heat,
+at once under auto-fire `on`, and the blast wears strays and no wave.
 
 ## 11. System inventory
 

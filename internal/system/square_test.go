@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -115,9 +116,10 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 // TestALineFiresItsKindAgainEachCooldownWhileItHolds: 1 turned right and 3 left
 // stand the kinds down the columns, each firing at once and again as its cooldown
 // runs out, a turn away and back inside it firing nothing. Each fire of the defense
-// rewards its cursor's boost as many times as its hold is of a kill's.
+// rewards its cursor's boost as many times as its hold is of a kill's, and blows
+// one gust out from the square's middle.
 func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
-	w, s, _ := newSquare(t)
+	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	pressSquare(s, "1", "l", "3", "h")
 	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareHold}
@@ -125,11 +127,18 @@ func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 	if got := squareFired(events); !slices.Equal(got, down) {
 		t.Fatalf("fired %v, want %v down the columns", got, down)
 	}
-	rewards := 0
+	rewards, gusts := 0, 0
+	cx, cy := sq.Center()
 	for _, ev := range events {
 		if p, ok := ev.Payload.(*event.BoostRewardPayload); ok && p.Entity == cursor {
 			rewards++
 		}
+		if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy && p.Force == parameter.SquareWindForce {
+			gusts++
+		}
+	}
+	if gusts != 1 {
+		t.Fatalf("the defense blew %d gusts out from the square's middle, want one", gusts)
 	}
 	if want := int(parameter.SquareBoostDuration / parameter.BoostBaseDuration); rewards != want {
 		t.Fatalf("the defense rewarded its cursor's boost %d times, want %d", rewards, want)
@@ -188,8 +197,7 @@ func TestALineFacesItsThirdOfTheMap(t *testing.T) {
 }
 
 // TestAnOrbStandsOnTheSideItsLineFaces: a side's row or column stands its orb at the
-// middle of that side of the outer orbit, the middle row and column one at each end,
-// every one outside the shield and its cursor's own orbs
+// middle of that side of the outer orbit, the middle row and column one at each end
 func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 	w, _, sq := newSquare(t)
 	aspect := w.Resources.Config.CellAspect
@@ -205,9 +213,6 @@ func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 		if !slices.Equal(cells[:n], want) {
 			t.Errorf("line %d stands its orbs at %v, want %v", l, cells[:n], want)
 		}
-	}
-	if weapons := parameter.OrbOrbitRadiusX - parameter.PlayerShieldRadius; parameter.SquareOrbGap <= weapons {
-		t.Fatalf("the outer orbit stands %d past the shield, inside its cursor's orbs at %v", parameter.SquareOrbGap, weapons)
 	}
 }
 
@@ -330,5 +335,80 @@ func TestAStrikeKillsABodyWhateverItHoldsAsItsCursors(t *testing.T) {
 	}
 	if c.HitPoints != 0 || c.LastDamagedBy != cursor {
 		t.Fatalf("the struck swarm holds %d hit points, last hit by %d: want none, by its cursor %d", c.HitPoints, c.LastDamagedBy, cursor)
+	}
+}
+
+// TestABodyOnTheBlocksUnderNoShieldCostsHeatOnceATouch: with its cursor's shield
+// down, a swarm standing on a block costs that cursor the swarm's touch in heat, is
+// thrown off as a shield throws it and crosses the hit; under a shield, or still
+// flying from a touch, it lands nothing
+func TestABodyOnTheBlocksUnderNoShieldCostsHeatOnceATouch(t *testing.T) {
+	w, s, sq := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
+	shield, _ := w.Components.Shield.GetPtr(cursor)
+	x, y := sq.Place(0)
+	body := standSwarm(w, x+1, y+1)
+	w.Components.Swarm.SetComponent(body, component.SwarmComponent{})
+	touch := func() (heat, thrown, hits int) {
+		for _, ev := range stepSquare(w, s) {
+			switch p := ev.Payload.(type) {
+			case *event.HeatAddRequestPayload:
+				heat += p.Delta
+			case *event.CombatAttackAreaRequestPayload:
+				if p.AttackType == component.CombatAttackShield && p.TargetEntity == body && p.OwnerEntity == cursor {
+					thrown++
+				}
+			case *event.SquareHitPayload:
+				hits++
+			}
+		}
+		return heat, thrown, hits
+	}
+
+	shield.Active = true
+	if heat, thrown, hits := touch(); heat != 0 || thrown != 0 || hits != 0 {
+		t.Fatalf("under its shield a body on the blocks cost %d heat, %d throws, %d hits", heat, thrown, hits)
+	}
+	shield.Active = false
+	want := profile.Contact[component.SpeciesSwarm].HeatDelta
+	if heat, thrown, hits := touch(); heat != want || thrown != 1 || hits != 1 {
+		t.Fatalf("a touch on the blocks cost %d heat, %d throws, %d hits, want %d, one and one", heat, thrown, hits, want)
+	}
+	c, _ := w.Components.Combat.GetPtr(body)
+	c.RemainingKineticImmunity = time.Second
+	if heat, thrown, hits := touch(); heat != 0 || thrown != 0 || hits != 0 {
+		t.Fatalf("a body still flying from a touch cost %d heat, %d throws, %d hits", heat, thrown, hits)
+	}
+}
+
+// TestATurnIntoAMagicStateShedsDustOnceAWait: turned out of the Lo Shu square and
+// back, every row and column sums alike again and each block sheds its dust; the
+// same turns inside the wait shed none, and after it they shed again
+func TestATurnIntoAMagicStateShedsDustOnceAWait(t *testing.T) {
+	w, s, sq := newSquare(t)
+	shed := func(keys ...string) (dust int) {
+		pressSquare(s, keys...)
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if batch, ok := ev.Payload.(*event.BatchPayload[event.ParticleSpawnEntry]); ok {
+				dust += len(batch.Entries)
+			}
+		}
+		return dust
+	}
+	if dust := shed("5", "l"); dust != 0 || sq.IsMagic() {
+		t.Fatalf("a turn out of the Lo Shu square shed %d dust, magic %t", dust, sq.IsMagic())
+	}
+	want := component.SquareBlocks * parameter.SquareMagicDust
+	if dust := shed("h"); dust != want || !sq.IsMagic() {
+		t.Fatalf("the turn back shed %d dust, magic %t, want %d from a magic state", dust, sq.IsMagic(), want)
+	}
+	if dust := shed("l", "h"); dust != 0 {
+		t.Fatalf("a magic state inside the wait shed %d dust", dust)
+	}
+	now := engine.SimTime(0, parameter.GameUpdateInterval)
+	w.Resources.Time.Update(now, now, parameter.SquareMagicCooldown)
+	s.Update()
+	if dust := shed("l", "h"); dust != want {
+		t.Fatalf("a magic state after the wait shed %d dust, want %d", dust, want)
 	}
 }

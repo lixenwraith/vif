@@ -36,13 +36,14 @@ type SquareKindSpec struct {
 	Bolt     LightningColorType // the bolt its orb throws at what a fire lands on
 	Boost    bool               // the shield takes no damage while it holds; a kind that does not boost aims
 	Halt     bool               // the gateways the line faces hold their spawns while it holds
+	Wind     float64            // the force of the gust out from the square as it fires, 0 for none
 }
 
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
 	SquareAttack:  {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Bolt: LightningRed},
 	SquareHold:    {Name: "hold", Attack: CombatAttackHold, Duration: parameter.SquareHoldDuration, Cooldown: parameter.SquareHoldCooldown, Bolt: LightningGold, Halt: true},
-	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown, Boost: true},
+	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown, Boost: true, Wind: parameter.SquareWindForce},
 }
 
 // SquareEffect is what is left of one kind's hold and cooldown, both counted from
@@ -64,9 +65,12 @@ type SquareComponent struct {
 	Selected [parameter.MaxPlayers]uint8
 	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of, 0 for none
 	Effects  [SquareKindCount]SquareEffect
+	Magic    time.Duration // left of the wait before a magic state sheds dust again
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells
+
+	ShieldStep int64 // the ShieldComponent.Step it gives its cursor's shield
 }
 
 // Place is the top-left cell of the block at place p
@@ -92,6 +96,21 @@ func (s *SquareComponent) KindAt(p int) SquareKind {
 		return s.Kinds[d-1]
 	}
 	return SquareKindCount
+}
+
+// IsMagic reports a magic state: every row and column of digits summing alike, as
+// the Lo Shu square's do and the turns that shift it whole, which line up no kind
+func (s *SquareComponent) IsMagic() bool {
+	var sums [SquareLines]int
+	for l := range sums {
+		for _, p := range LinePlaces(l) {
+			sums[l] += int(s.Digits[p])
+		}
+		if sums[l] != sums[0] {
+			return false
+		}
+	}
+	return true
 }
 
 // ShieldRadius is the reach, in columns at a cell aspect, of the shield that covers

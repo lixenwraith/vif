@@ -1260,6 +1260,10 @@ type WindStartPayload struct {
 	Force     float64       `toml:"force"`
 	Direction float64       `toml:"direction"`
 	Duration  time.Duration `toml:"duration"`
+	Radial    bool          `toml:"radial"` // blows straight out from X, Y, round on screen, whatever Direction
+	X         int           `toml:"x"`
+	Y         int           `toml:"y"`
+	Reach     float64       `toml:"reach"` // columns over which a radial wind fades to nothing; 0 blows alike everywhere
 }
 
 // DriftStartPayload sets loose glyphs drifting along Direction (radians, as for
@@ -1445,12 +1449,13 @@ type SpeciesCreatedPayload struct {
 
 // SpeciesLandRequestPayload is the species a carrier held, landing with its header
 // on X, Y, the nearest place its footprint fits when that cell does not; a gateway's
-// names it, which a data species keeps
+// names it and whether it is one of its wave, which a data species keeps
 type SpeciesLandRequestPayload struct {
 	Species component.SpeciesType `toml:"species"`
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
 	Gateway core.Entity           `toml:"gateway"`
+	Wave    bool                  `toml:"wave"`
 }
 
 // --- Loot ---
@@ -1815,6 +1820,14 @@ type GatewaySpawnRequestPayload struct {
 	SubType             component.SubType     `toml:"sub_type"`
 	GroupID             uint8                 `toml:"group_id"`        // Target group for spawned entities
 	UseRouteGraph       bool                  `toml:"use_route_graph"` // If true, request route graph computation for this gateway
+	Wave                bool                  `toml:"wave"`            // Its data species are a wave, announced once armed otherwise and all dead
+}
+
+// GatewayWavePayload names the anchor of a gateway whose wave is defeated, and its cell
+type GatewayWavePayload struct {
+	AnchorEntity core.Entity `toml:"anchor_entity"`
+	X            int         `toml:"x"`
+	Y            int         `toml:"y"`
 }
 
 // GatewayHoldRequestPayload holds the spawns and the rate's acceleration of the
@@ -1848,7 +1861,8 @@ type GatewayDespawnedPayload struct {
 
 // SquareSpawnRequestPayload lays a magic square centered on a cell: Layout names the
 // digit of each place row by row, Groups the digits of each kind in SquareKind
-// order. A zero block size takes the default.
+// order. A zero block size takes the default. ShieldStep is the energy a step of
+// its cursor's shield's color spans, zero leaving that shield main's.
 type SquareSpawnRequestPayload struct {
 	X           int      `toml:"x"`
 	Y           int      `toml:"y"`
@@ -1856,6 +1870,7 @@ type SquareSpawnRequestPayload struct {
 	Groups      []string `toml:"groups"`
 	BlockWidth  int      `toml:"block_width"`
 	BlockHeight int      `toml:"block_height"`
+	ShieldStep  int64    `toml:"shield_step"`
 }
 
 // SquareAlignedPayload names the kind that fired and its line: 0 to 2 the rows top
@@ -1863,6 +1878,23 @@ type SquareSpawnRequestPayload struct {
 type SquareAlignedPayload struct {
 	Kind component.SquareKind `toml:"kind"`
 	Line int                  `toml:"line"`
+}
+
+// HeatEmberRequestPayload lights the ember of a cursor or puts it out, as a scenario
+// that answers a heat burst its own way does
+type HeatEmberRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+	Lit    bool        `toml:"lit"`
+}
+
+// DeathWaveRequestPayload names the cursor a death wave runs out from
+type DeathWaveRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
+// SquareHitPayload names the cursor a touch on its square's blocks cost
+type SquareHitPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Genetic ---

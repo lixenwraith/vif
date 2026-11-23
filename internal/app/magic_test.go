@@ -2,20 +2,23 @@ package app
 
 import (
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestMagicFightsThroughACursorFixedOnItsSquare plays the shipped magic on its
-// smallest map: the cursor stands on the square's middle under a shield that covers
-// the square, each side line faces three gateways and each middle one two, and
-// neither a motion nor a pointer press moves the cursor.
-func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
-	t.Parallel()
+// newMagic starts the shipped magic headless on its smallest map and plays it until
+// its keys are the square's
+func newMagic(t *testing.T) *App {
+	t.Helper()
 	opts := resource.Options{Dir: soakRoot, Scenario: "magic"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("magic scenario not present")
@@ -28,8 +31,24 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}
-	defer a.Close()
+	t.Cleanup(a.Close)
+	for range 100 {
+		if a.Context().KeyCapture.Has('h') {
+			return a
+		}
+		a.Tick(1)
+	}
+	t.Fatal("magic never took its keys")
+	return nil
+}
 
+// TestMagicFightsThroughACursorFixedOnItsSquare plays the shipped magic on its
+// smallest map: the cursor stands on the square's middle under a shield that covers
+// the square, each side line faces three gateways and each middle one two, and
+// neither a motion nor a pointer press moves the cursor.
+func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
 	w := a.World()
 	var sq component.SquareComponent
 	var cursor core.Entity
@@ -83,5 +102,53 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 	read()
 	if at.X != cx || at.Y != cy {
 		t.Fatalf("a motion and a pointer press moved the cursor to (%d,%d) from (%d,%d)", at.X, at.Y, cx, cy)
+	}
+}
+
+// TestMagicAnswersAHeatBurstWithADeathWave: heat filling its overheat in the shipped
+// magic runs a death wave out from the cursor, and leaves the meter full with the
+// ember main lights put out
+func TestMagicAnswersAHeatBurstWithADeathWave(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	a.Context().PushEventOrigin(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Entity: cursor, Delta: parameter.HeatMaxOverheat}, event.OriginDebug)
+	a.Settle()
+	a.Tick(3)
+	var heat component.HeatComponent
+	waves := 0
+	w.RunSafe(func() {
+		heat, _ = w.Components.Heat.GetComponent(cursor)
+		w.Components.Pulse.Each(func(_ core.Entity, p *component.PulseComponent) bool {
+			if p.Attack == component.CombatAttackDeathWave && p.Owner == cursor {
+				waves++
+			}
+			return true
+		})
+	})
+	if waves != 1 || heat.Current != parameter.HeatMax || heat.Overheat != 0 || heat.EmberActive {
+		t.Fatalf("after the burst %d death waves run, over heat %d+%d with the ember lit %t; want one, 100+0 and no ember",
+			waves, heat.Current, heat.Overheat, heat.EmberActive)
+	}
+}
+
+// TestMagicsTurnsDriveItsMusic: the shipped magic leaves the music on, and the keys
+// that turn its square count toward the tempo the music follows
+func TestMagicsTurnsDriveItsMusic(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
+	w := a.World()
+	for _, s := range w.Systems() {
+		if toggled, ok := s.(engine.Toggled); ok && s.Name() == "music" && !toggled.Enabled() {
+			t.Fatal("magic runs with its music system off")
+		}
+	}
+	for _, k := range "2h3l" {
+		a.Inject(a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k}))
+	}
+	a.Tick(int(2 * time.Second / parameter.GameUpdateInterval))
+	if apm := w.Resources.Status.Ints.Get("engine.music_apm").Load(); apm == 0 {
+		t.Fatal("four turns of the square left the music's tempo at rest")
 	}
 }
