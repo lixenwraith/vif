@@ -143,7 +143,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"composite":      {Domain: engine.SystemShared, Requires: nil},
 	"wall":           {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation")...)},
 	"tower":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat")...)},
-	"square":         {Domain: engine.SystemShared, Requires: append(engine.Require("cursor"), engine.Optional("shield", "boost", "combat", "gateway", "lightning")...)},
+	"square":         {Domain: engine.SystemShared, Requires: append(engine.Require("cursor"), engine.Optional("shield", "boost", "combat", "gateway", "lightning", "environment", "particle")...)},
 	"gateway":        {Domain: engine.SystemShared, Requires: append(engine.Require("navigation"), engine.Optional("eye", "snake", "swarm")...)},
 	"loot":           {Domain: engine.SystemPlayer, Requires: engine.Optional("death", "energy", "weapon", "heat")},
 	"glyph":          {Domain: engine.SystemPlayer, Requires: engine.Optional("environment")},

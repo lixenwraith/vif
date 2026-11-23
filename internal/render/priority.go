@@ -69,6 +69,7 @@ const (
 	PriorityMarker
 
 	// === Post-Processing (order matters) ===
+	PrioritySlide // Turns whole cells of the map, so every map layer is under it
 	PriorityGrayout
 	PriorityStrobe
 	PriorityDim

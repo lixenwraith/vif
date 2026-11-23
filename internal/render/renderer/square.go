@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
@@ -134,11 +135,11 @@ func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// legend stands each kind under a column of the square, in kind order: its name, lit
-// while a line holds three of the kind, centered over a meter as wide as a block
+// legend stands each kind under a column of the square, in kind order, lit while a
+// line holds three of the kind, and over the middle column the magic state's wait,
+// lit once a magic state would shed dust again
 func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
 	_, h := sq.Size()
-	y := sq.Y + h + 1
 	var aligned [component.SquareKindCount]bool
 	for _, kind := range sq.Lines {
 		if kind != 0 {
@@ -146,20 +147,30 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 		}
 	}
 	for kind := range min(len(component.SquareKinds), component.SquareSide) {
-		spec, colors := &component.SquareKinds[kind], &visual.SquareKinds[kind]
-		tc, console, attr := visual.RgbSquareIdle, visual.ConGray, terminal.AttrNone
-		if aligned[kind] {
-			tc, console, attr = colors.Block, colors.Console, terminal.AttrBold
-		}
 		x, _ := sq.Place(kind)
-		for i := range len(spec.Name) {
-			if sx, sy, visible := ctx.MapToScreen(x+(sq.Width-len(spec.Name))/2+i, y); visible && y < ctx.MapHeight {
-				r.mark(buf, sx, sy, rune(spec.Name[i]), tc, console, attr)
-			}
+		r.entry(ctx, buf, x, sq.Y+h+1, sq.Width, &component.SquareKinds[kind], sq.Effects[kind], &visual.SquareKinds[kind], aligned[kind])
+	}
+	x, _ := sq.Place(component.SquareSide / 2)
+	r.entry(ctx, buf, x, sq.Y-3, sq.Width, &squareMagic, component.SquareEffect{Cooldown: sq.Magic}, &visual.SquareMagic, sq.Magic <= 0)
+}
+
+// squareMagic is the magic state's legend entry: its name and the wait its meter fills over
+var squareMagic = component.SquareKindSpec{Name: "magic", Cooldown: parameter.SquareMagicCooldown}
+
+// entry draws one legend entry at a column: its name, in its color when lit,
+// centered over a meter of cells
+func (r *SquareRenderer) entry(ctx render.RenderContext, buf *render.RenderBuffer, x, y, cells int, spec *component.SquareKindSpec, effect component.SquareEffect, colors *visual.SquareKindColors, lit bool) {
+	tc, console, attr := visual.RgbSquareIdle, visual.ConGray, terminal.AttrNone
+	if lit {
+		tc, console, attr = colors.Block, colors.Console, terminal.AttrBold
+	}
+	for i := range len(spec.Name) {
+		if sx, sy, visible := ctx.MapToScreen(x+(cells-len(spec.Name))/2+i, y); visible && y >= 0 && y < ctx.MapHeight {
+			r.mark(buf, sx, sy, rune(spec.Name[i]), tc, console, attr)
 		}
-		if y+1 < ctx.MapHeight {
-			r.meter(ctx, buf, x, y+1, sq.Width, spec, sq.Effects[kind], colors)
-		}
+	}
+	if y+1 >= 0 && y+1 < ctx.MapHeight {
+		r.meter(ctx, buf, x, y+1, cells, spec, effect, colors)
 	}
 }
 

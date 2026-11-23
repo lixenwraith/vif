@@ -812,7 +812,21 @@ Docs · Libraries · Branches.
 - `TestSystemDomainProfiles` reads a system's file, not its guards: a shared
   system that touches `Boost`, `Energy` or another D-13 store fails it even behind
   `ResolveOwnedCursor`. What it wants of one it leaves where the store's owner
-  reads it, as the square's boost cap rides `ShieldComponent.BoostCap`.
+  reads it, as the square's boost cap and energy step ride `ShieldComponent`. The
+  same test narrows a dual system by what its file creates: `PulseSystem` creating
+  a cursor's pulse reads as player alone, so `WeaponSystem` fires the death wave.
+- Main's swarm is no body for a scenario with a small shield: it charges at its
+  target enraged, which refuses the shield's knockback, and costs 1,000 energy a
+  tick inside it (`profile.Contact`, main's scale). `magic`'s carrier is a declared
+  species for that, its touch the scenario's.
+- `EventCursorArmRequest` sets energy with heat and ember, so a payload that names
+  no energy zeroes the shield; `EventHeatEmberRequest` moves the ember alone.
+- A `[bus]` event needs its row in `crossingRules` (`internal/system/network.go`)
+  and a payload naming the cursor it acts as, or every peer refuses it.
+- A wind long and strong enough to move a homing body holds it off for good: one
+  second in two of a uniform radial wind at force 16 held `magic`'s lightest body
+  six columns out, where it had touched every 4.5 s. The square's gust is short
+  and fades with distance for that; measure a wind by a body's distance a tick.
 
 ## Glyphs and widgets
 
@@ -929,6 +943,9 @@ Docs · Libraries · Branches.
   keys through `a.inputMachine.Process`. Auto-fire is the router's, so the probe
   injects `input.IntentFireMain` every five ticks, and a gateway sends one body a
   tick at most.
+- An effect a second long is caught in a terminal by capturing the pane on a loop
+  (`tmux capture-pane -p -e` every 100 ms to numbered files) and rendering the
+  frames whose text shows it, here the block eighths a slide draws.
 - `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
   without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
   nothing else on the map; a swarm there with no weapon armed lives out its 35 s,

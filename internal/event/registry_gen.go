@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 225
+const EventTypeCount = 229
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -88,11 +88,13 @@ func InitRegistry() {
 	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest)
 	RegisterType("EventGunAimRequest", EventGunAimRequest)
 	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest)
+	RegisterType("EventDeathWaveRequest", EventDeathWaveRequest)
 	RegisterType("EventMountRequest", EventMountRequest)
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest)
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest)
 	RegisterType("EventHeatSpendRequest", EventHeatSpendRequest)
 	RegisterType("EventHeatBurst", EventHeatBurst)
+	RegisterType("EventHeatEmberRequest", EventHeatEmberRequest)
 	RegisterType("EventEmberSpent", EventEmberSpent)
 	RegisterType("EventBoostActivate", EventBoostActivate)
 	RegisterType("EventBoostDeactivate", EventBoostDeactivate)
@@ -231,8 +233,10 @@ func InitRegistry() {
 	RegisterType("EventGatewayDespawned", EventGatewayDespawned)
 	RegisterType("EventGatewayHoldRequest", EventGatewayHoldRequest)
 	RegisterType("EventGatewaySendRequest", EventGatewaySendRequest)
+	RegisterType("EventGatewayWaveDefeated", EventGatewayWaveDefeated)
 	RegisterType("EventSquareSpawnRequest", EventSquareSpawnRequest)
 	RegisterType("EventSquareAligned", EventSquareAligned)
+	RegisterType("EventSquareHit", EventSquareHit)
 	RegisterType("EventGeneticRegisterSpecies", EventGeneticRegisterSpecies)
 	RegisterType("EventGeneticAbandonEval", EventGeneticAbandonEval)
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle)
@@ -319,11 +323,13 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventWeaponFireRequest:               ClassLocal,
 	EventGunAimRequest:                   ClassLocal,
 	EventFireSpecialRequest:              ClassLocal,
+	EventDeathWaveRequest:                ClassLocal,
 	EventMountRequest:                    ClassShared,
 	EventHeatAddRequest:                  ClassLocal,
 	EventHeatSetRequest:                  ClassLocal,
 	EventHeatSpendRequest:                ClassLocal,
 	EventHeatBurst:                       ClassLocal,
+	EventHeatEmberRequest:                ClassLocal,
 	EventEmberSpent:                      ClassBus,
 	EventBoostActivate:                   ClassLocal,
 	EventBoostDeactivate:                 ClassLocal,
@@ -462,8 +468,10 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGatewayDespawned:                ClassShared,
 	EventGatewayHoldRequest:              ClassShared,
 	EventGatewaySendRequest:              ClassShared,
+	EventGatewayWaveDefeated:             ClassShared,
 	EventSquareSpawnRequest:              ClassShared,
 	EventSquareAligned:                   ClassShared,
+	EventSquareHit:                       ClassBus,
 	EventGeneticRegisterSpecies:          ClassShared,
 	EventGeneticAbandonEval:              ClassShared,
 	EventDebugFlowToggle:                 ClassLocal,

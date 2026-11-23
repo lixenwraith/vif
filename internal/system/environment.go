@@ -30,6 +30,9 @@ type EnvironmentSystem struct {
 	windForce     float64
 	windDirection float64
 	windRemaining time.Duration
+	windRadial    bool // out from windX, windY rather than along windDirection
+	windX, windY  int
+	windReach     float64 // columns a radial wind fades out over, 0 for none
 
 	drift driftState
 	// Velocity per level and axis in microcells/second, derived from drift
@@ -204,6 +207,7 @@ func (s *EnvironmentSystem) updateWind(delta time.Duration) {
 		s.windForce = 0
 		s.windDirection = 0
 		s.windRemaining = 0
+		s.windRadial = false
 	}
 }
 
@@ -219,6 +223,7 @@ func (s *EnvironmentSystem) startWind(payload *event.WindStartPayload) {
 	s.windForce = payload.Force
 	s.windDirection = vmath.NormalizeAngle(payload.Direction)
 	s.windRemaining = payload.Duration
+	s.windRadial, s.windX, s.windY, s.windReach = payload.Radial, payload.X, payload.Y, max(payload.Reach, 0)
 	s.publishStatus()
 }
 
@@ -228,7 +233,29 @@ func (s *EnvironmentSystem) cancelWind() {
 	s.windForce = 0
 	s.windDirection = 0
 	s.windRemaining = 0
+	s.windRadial = false
 	s.publishStatus()
+}
+
+// windOn is the tick's wind on one entity: the force as it blows, or for a radial
+// wind that strength straight out from its origin, as far a row as a column on
+// screen, fading to nothing over its reach
+func (s *EnvironmentSystem) windOn(entity core.Entity, forceX, forceY float64) (float64, float64) {
+	at, ok := s.world.Positions.GetPosition(entity)
+	if !s.windRadial || !ok {
+		return forceX, forceY
+	}
+	aspect := s.world.Resources.Config.CellAspect
+	dx, dy := float64(at.X-s.windX), aspect.Circular(float64(at.Y-s.windY))
+	dist := vmath.Magnitude(dx, dy)
+	if dist == 0 || s.windReach > 0 && dist >= s.windReach {
+		return 0, 0
+	}
+	strength := vmath.Magnitude(forceX, forceY) / dist
+	if s.windReach > 0 {
+		strength *= 1 - dist/s.windReach
+	}
+	return strength * dx, aspect.FromCircular(strength * dy)
 }
 
 func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
@@ -244,8 +271,9 @@ func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
 func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 	push := func(entity core.Entity, mass profile.Mass) {
 		if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
-			kinetic.AccelX = forceX / mass
-			kinetic.AccelY = forceY / mass
+			x, y := s.windOn(entity, forceX, forceY)
+			kinetic.AccelX = x / mass
+			kinetic.AccelY = y / mass
 		}
 	}
 	apply := func(entities []core.Entity, mass profile.Mass) {
@@ -287,8 +315,9 @@ func (s *EnvironmentSystem) applyStormWind(forceX, forceY, seconds float64) {
 				continue
 			}
 			if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
-				kinetic.VelX += forceX / profile.MassStorm * seconds
-				kinetic.VelY += forceY / profile.MassStorm * seconds
+				x, y := s.windOn(entity, forceX, forceY)
+				kinetic.VelX += x / profile.MassStorm * seconds
+				kinetic.VelY += y / profile.MassStorm * seconds
 			}
 		}
 	})
@@ -563,6 +592,10 @@ type environmentSnapshot struct {
 	Force     float64       `json:"force"`
 	Direction float64       `json:"direction"`
 	Remaining time.Duration `json:"remaining"`
+	Radial    bool          `json:"radial,omitempty"`
+	X         int           `json:"x,omitempty"`
+	Y         int           `json:"y,omitempty"`
+	Reach     float64       `json:"reach,omitempty"`
 	Drift     driftState    `json:"drift"`
 }
 
@@ -575,6 +608,10 @@ func (s *EnvironmentSystem) SaveShared() ([]byte, error) {
 		Force:     s.windForce,
 		Direction: s.windDirection,
 		Remaining: s.windRemaining,
+		Radial:    s.windRadial,
+		X:         s.windX,
+		Y:         s.windY,
+		Reach:     s.windReach,
 		Drift:     s.drift,
 	})
 }
@@ -603,10 +640,12 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	s.windForce = snap.Force
 	s.windDirection = vmath.NormalizeAngle(snap.Direction)
 	s.windRemaining = snap.Remaining
+	s.windRadial, s.windX, s.windY, s.windReach = snap.Radial, snap.X, snap.Y, max(snap.Reach, 0)
 	if !s.windActive {
 		s.windForce = 0
 		s.windDirection = 0
 		s.windRemaining = 0
+		s.windRadial = false
 	}
 	// A record moves no glyph: this instance's glyphs keep their own history
 	s.endDrift()

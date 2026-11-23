@@ -47,6 +47,9 @@ const (
 
 	// CombatDamageSquareStrike is a magic square's strike: more than any body holds
 	CombatDamageSquareStrike = 1 << 20
+
+	// CombatDamageDeathWave is a death wave's, as much
+	CombatDamageDeathWave = CombatDamageSquareStrike
 )
 
 // Timers
@@ -133,6 +136,13 @@ const (
 
 	// PulseGrowStart is the share of its radius a growing pulse fires at
 	PulseGrowStart = 0.5
+
+	// A death wave runs from DeathWaveStart of the way to the map's far corner out
+	// to it over DeathWaveGrow, and stands DeathWaveLinger more for what a hit's
+	// window spared
+	DeathWaveStart  = 0.02
+	DeathWaveGrow   = 1500 * time.Millisecond
+	DeathWaveLinger = 200 * time.Millisecond
 
 	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration
 	BurnDamage   = 1

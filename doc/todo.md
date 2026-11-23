@@ -224,32 +224,39 @@ Magic holds a magic square under its cursor's shield against eight gateways
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
 built to be play tested; its numbers and rules are what the play test settles.
 
-### Tune magic after its first play test
+### Tune magic after its second play test
 
 - Priority: P1
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
   `internal/parameter/square.go`, `internal/component/square.go` (`SquareKinds`)
 
-To settle: the shield's energy, its drain and what a touch costs, each kind's
-duration and cooldown, the boost a kill gives and the bank's cap, the trickle's and
-the flood's paces and how a level quickens them, how often a swarm brings a weapon,
-and whether one turn may align all three kinds at once, as the Lo Shu rows, each a
-turn of the others, allow by row turns alone. Played headless at 80 by 40, the
-columns aligned once and left lost the shield in 287 s.
+To settle: the shield's start, step and cap and what a touch costs it and the
+blocks, what a defeated wave pays, each kind's duration and cooldown, the gust's
+force and reach, the boost a kill gives and the bank's cap, the paces, how a rank
+and a round quicken them and how long a wave stays, the carrier's weapons, the
+magic state's dust and its wait, and whether one turn may align all three kinds at
+once. Played headless at 80 by 40, a player turned to each wave 5 s after it moved
+lost the square at 204 s.
 
-### Keep the weapons from carrying a late game
+### Give magic's late game an end
 
 - Priority: P2
-- Affected files: `wad/scenario/base/magic/scenario.toml` (`Worn`, `Proof`, the
-  ramp), `internal/system/boost.go`
+- Affected files: `wad/scenario/base/magic/scenario.toml` (`FloodRun`, the ramp)
 
-The cursor's area weapons kill a crowd as fast as it grows, and each kill boosts
-the shield half a second, so bodies they could kill kept it boosted for good: the
-flood's take nothing from them for that reason. A player who faces every flood
-still has the strays' kills and the defense holding the boost up most of the time:
-headless, one turned to each flood 2 s after it moved still stood at 900 s. A
-boost a kill gives that shrinks as kills come faster, or a round of weapons that
-ends, closes it.
+A strike ends a whole wave whatever its size, so past the paces' floors only the
+time a wave stays tests a player: one turned to each wave 3 s after it moved still
+stood at 900 s. A stay that shortens each round, or a second wave from the opposite
+gateway, closes it.
+
+### Leave magic's dust to the player's key
+
+- Priority: P2
+- Affected files: `internal/mode/router.go` (`ProcessInputTick`),
+  `internal/system/particle.go` (`detonateDust`)
+
+Under auto-fire `on`, the default, special fire detonates the dust a magic state
+sheds as it is shed, so only a player on `:auto main` times the blast. A scenario's
+say over auto-fire's special, or dust the automatic special passes over, closes it.
 
 ### Keep the square whole through a resize
 

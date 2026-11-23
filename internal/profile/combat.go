@@ -324,6 +324,21 @@ func init() {
 		Duration:   parameter.SquareHoldDuration,
 	})
 
+	// A death wave ends the species that crowd a map; a boss or a structure, with no
+	// row, stands through it
+	for _, d := range [...]component.CombatEntityType{
+		component.CombatEntityDrain, component.CombatEntitySwarm, component.CombatEntityEye,
+		component.CombatEntitySnakeHead, component.CombatEntitySnakeBody,
+	} {
+		register(&AttackProfile{
+			AttackType:  component.CombatAttackDeathWave,
+			Attacker:    component.CombatEntityCursor,
+			Defender:    d,
+			DamageType:  component.CombatDamageArea,
+			DamageValue: parameter.CombatDamageDeathWave,
+		})
+	}
+
 	// Eye self-destruct: uniform across every target
 	for _, d := range eyeTargets {
 		selfDestructProfiles[d] = AttackProfile{

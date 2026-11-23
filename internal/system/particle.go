@@ -739,8 +739,10 @@ func (s *ParticleSystem) anchors(behavior component.ParticleBehavior) (centers [
 				chase = true
 				s.staggerTick = (s.staggerTick + 1) % 3
 			}
-			// Energy of either sign pulls, as it raises the shield
-			if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
+			// Energy of either sign pulls, as it raises the shield; a fixed cursor pulls
+			// none, so its dust drifts where it was thrown
+			if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 &&
+				!s.world.Resources.Config.CursorsFixed {
 				x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
 				s.centers = append(s.centers, orbitCenter{x: x, y: y, aspect: aspect, anchor: anchor})
 			}

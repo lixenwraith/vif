@@ -14,11 +14,12 @@ const (
 	PulseRing   PulseStyle = iota // ripples running out to its edge, over what it strikes
 	PulseGlow                     // a glow filling its area, under what it strikes
 	PulseHidden                   // not drawn
+	PulseSlide                    // the cells its edge passes are tiles that tilt and flip
 	PulseStyleCount
 )
 
 // PulseStyleNames are what a document calls each PulseStyle
-var PulseStyleNames = [PulseStyleCount]string{PulseRing: "ring", PulseGlow: "glow", PulseHidden: "hidden"}
+var PulseStyleNames = [PulseStyleCount]string{PulseRing: "ring", PulseGlow: "glow", PulseHidden: "hidden", PulseSlide: "slide"}
 
 // PulseSpec is a pulse's shape: its size and life, how often it strikes, its look and
 // the family it strikes under. A kind's row holds its own; a mount overrides it field
@@ -27,11 +28,20 @@ type PulseSpec struct {
 	Radius      float64       // horizontal cells at full size; vertical is half at RefAspect
 	Duration    time.Duration // from firing to its end
 	Sustained   bool          // lasts while its host carries the mount instead
-	Grow        time.Duration // swells from PulseGrowStart to full size over this; zero is full at once
+	Grow        time.Duration // swells from Start to full size over this; zero is full at once
+	Start       float64       // the share of Radius a growing pulse fires at; zero is PulseGrowStart
 	HitInterval time.Duration // between strikes; zero strikes once, as it fires
 	Style       PulseStyle
 	Attack      CombatAttackType // the family it strikes under; zero is its kind's
 	Charged     bool             // strikes as its kind at the charge cap
+}
+
+// DeathWave is the pulse a death wave runs out as, its Radius the reach from its
+// cursor to the map's far corner: it strikes every tick what its edge has passed
+var DeathWave = PulseSpec{
+	Duration: parameter.DeathWaveGrow + parameter.DeathWaveLinger, Grow: parameter.DeathWaveGrow,
+	Start: parameter.DeathWaveStart, HitInterval: parameter.GameUpdateInterval,
+	Style: PulseSlide, Attack: CombatAttackDeathWave,
 }
 
 // PulseComponent is one pulse, an entity of its firer's domain: a cursor's stays on
@@ -55,7 +65,11 @@ func (p *PulseComponent) Size() float64 {
 	if p.Grow <= 0 || p.Elapsed >= p.Grow {
 		return 1
 	}
-	return parameter.PulseGrowStart + (1-parameter.PulseGrowStart)*float64(p.Elapsed)/float64(p.Grow)
+	start := p.Start
+	if start <= 0 {
+		start = parameter.PulseGrowStart
+	}
+	return start + (1-start)*float64(p.Elapsed)/float64(p.Grow)
 }
 
 // Progress runs from zero as it fires to one as it ends; a sustained pulse stays midway

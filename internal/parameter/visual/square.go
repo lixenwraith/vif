@@ -22,6 +22,9 @@ var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
+// SquareMagic is the magic state's legend entry over the square, drawn as a kind's
+var SquareMagic = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
+
 // SquareOrb is an aiming kind's orb on the square's outer orbit: its glyph's color,
 // the two its corona turns in, and a console's
 type SquareOrb struct {
@@ -58,6 +61,11 @@ const (
 
 	// SquareOrbIdle is how bright the orb of a kind no line holds draws, of a held one's
 	SquareOrbIdle = 0.4
+
+	// A gust draws as a ring SquareGustWidth columns either side of its radius, at
+	// most SquareGustAlpha of its kind's glow
+	SquareGustWidth = 1.5
+	SquareGustAlpha = 0.6
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left
