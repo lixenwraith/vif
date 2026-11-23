@@ -141,7 +141,7 @@ const (
 	// the width of its swell past it, out to all of it over DeathWaveGrow, and
 	// stands DeathWaveLinger more for what a hit's window spared
 	DeathWaveStart  = 0.02
-	DeathWaveGrow   = 2400 * time.Millisecond
+	DeathWaveGrow   = 4 * time.Second
 	DeathWaveLinger = 100 * time.Millisecond
 
 	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration

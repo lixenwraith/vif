@@ -317,10 +317,10 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 ) {
 	palette := explosionPalettes[explosionType]
 
-	// Missile uses Screen blend for brighter flash, dust uses Set for glow buildup
-	blendMode := render.BlendAdd
+	// A missile's screens for a brighter flash; dust's adds, for the glow to build
+	mix := color.Add
 	if explosionType == event.ExplosionTypeMissile {
-		blendMode = render.BlendScreen
+		mix = color.Screen
 	}
 
 	for vy := minY; vy <= maxY; vy++ {
@@ -358,8 +358,9 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 				alpha = parameter.ExplosionAlphaMin
 			}
 
+			// Over the theme where nothing has drawn, so the field fades into it
 			screenX := ctx.GameXOffset + vx
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, blendMode, alpha, terminal.AttrNone)
+			buf.SetBgOnly(screenX, screenY, mix(buf.BackgroundAt(screenX, screenY, visual.RgbBackground), c, alpha))
 		}
 	}
 }
