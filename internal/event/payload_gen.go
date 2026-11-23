@@ -190,6 +190,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGatewayDespawnRequest:           func() any { return new(GatewayDespawnRequestPayload) },
 	EventGatewayDespawned:                func() any { return new(GatewayDespawnedPayload) },
 	EventGatewayHoldRequest:              func() any { return new(GatewayHoldRequestPayload) },
+	EventGatewaySendRequest:              func() any { return new(GatewaySendRequestPayload) },
 	EventSquareSpawnRequest:              func() any { return new(SquareSpawnRequestPayload) },
 	EventSquareAligned:                   func() any { return new(SquareAlignedPayload) },
 	EventSquareBlockFallen:               func() any { return new(SquareBlockFallenPayload) },
@@ -375,6 +376,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGatewayDespawnRequest:           &codecGatewayDespawnRequestPayload,
 	EventGatewayDespawned:                &codecGatewayDespawnedPayload,
 	EventGatewayHoldRequest:              &codecGatewayHoldRequestPayload,
+	EventGatewaySendRequest:              &codecGatewaySendRequestPayload,
 	EventSquareSpawnRequest:              &codecSquareSpawnRequestPayload,
 	EventSquareAligned:                   &codecSquareAlignedPayload,
 	EventSquareBlockFallen:               &codecSquareBlockFallenPayload,
@@ -1505,6 +1507,7 @@ var codecSpeciesLandRequestPayload = structCodec{size: unsafe.Sizeof(SpeciesLand
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Gateway), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 var codecFuseSource = structCodec{size: unsafe.Sizeof(FuseSource{}), fields: []field{
@@ -2186,6 +2189,16 @@ func (p *GatewayHoldRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecGatewayHoldRequestPayload = structCodec{size: unsafe.Sizeof(GatewayHoldRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(GatewayHoldRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GatewayHoldRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *GatewaySendRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGatewaySendRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGatewaySendRequestPayload = structCodec{size: unsafe.Sizeof(GatewaySendRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GatewaySendRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GatewaySendRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(GatewaySendRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 }}
 
 func (p *SquareSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

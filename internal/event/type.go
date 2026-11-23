@@ -625,7 +625,7 @@ const (
 
 	// --- Gateway ---
 
-	// EventGatewaySpawnRequest (GatewaySpawnRequestPayload) [shared] signals GatewaySystem to create a gateway entity anchored to a parent
+	// EventGatewaySpawnRequest (GatewaySpawnRequestPayload) [shared] stands a gateway on an anchor, or re-arms the one it carries
 	EventGatewaySpawnRequest
 	// EventGatewayDespawnRequest (GatewayDespawnRequestPayload) [shared] signals GatewaySystem to remove gateway for a specific anchor
 	EventGatewayDespawnRequest
@@ -633,6 +633,8 @@ const (
 	EventGatewayDespawned
 	// EventGatewayHoldRequest (GatewayHoldRequestPayload) [shared] holds one gateway's spawns, or every one's, for a while
 	EventGatewayHoldRequest
+	// EventGatewaySendRequest (GatewaySendRequestPayload) [shared] has one gateway send one of a species now
+	EventGatewaySendRequest
 
 	// --- Square ---
 

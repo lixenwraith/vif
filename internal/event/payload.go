@@ -1444,11 +1444,13 @@ type SpeciesCreatedPayload struct {
 }
 
 // SpeciesLandRequestPayload is the species a carrier held, landing with its header
-// on X, Y, the nearest place its footprint fits when that cell does not
+// on X, Y, the nearest place its footprint fits when that cell does not; a gateway's
+// names it, which a data species keeps
 type SpeciesLandRequestPayload struct {
 	Species component.SpeciesType `toml:"species"`
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
+	Gateway core.Entity           `toml:"gateway"`
 }
 
 // --- Loot ---
@@ -1798,7 +1800,8 @@ type TowerSpawnRequestPayload struct {
 
 // --- Gateway ---
 
-// GatewaySpawnRequestPayload requests creation of a gateway entity
+// GatewaySpawnRequestPayload stands a gateway on AnchorEntity, or re-arms the one it
+// carries with this species and pace
 type GatewaySpawnRequestPayload struct {
 	AnchorEntity        core.Entity           `toml:"anchor_entity"`          // Parent entity (pylon header)
 	BaseIntervalMs      int                   `toml:"base_interval_ms"`       // Spawn interval in milliseconds
@@ -1819,6 +1822,14 @@ type GatewaySpawnRequestPayload struct {
 type GatewayHoldRequestPayload struct {
 	DurationMs   int         `toml:"duration_ms"`
 	AnchorEntity core.Entity `toml:"anchor_entity"`
+}
+
+// GatewaySendRequestPayload has the gateway on AnchorEntity send one of Species now,
+// whatever it spawns at its own pace
+type GatewaySendRequestPayload struct {
+	AnchorEntity core.Entity           `toml:"anchor_entity"`
+	Species      component.SpeciesType `toml:"species"`
+	SubType      component.SubType     `toml:"sub_type"`
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity

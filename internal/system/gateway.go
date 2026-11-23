@@ -12,9 +12,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// GatewaySystem manages gateway entity lifecycle and timed spawn emission
-// Gateways accumulate delta time and emit species spawn requests at configured intervals
-// Anchor liveness validated each tick — gateway despawns if anchor is destroyed
+// GatewaySystem keeps the gateways: each accumulates time and asks its species'
+// system for a spawn at its pace, sends one at once when asked, and goes with its
+// anchor
 type GatewaySystem struct {
 	world    *engine.World
 	gateways []core.Entity // the tick's gateways, detached: despawnGateway destroys mid-iteration
@@ -60,6 +60,7 @@ func (s *GatewaySystem) EventTypes() []event.EventType {
 		event.EventGatewaySpawnRequest,
 		event.EventGatewayDespawnRequest,
 		event.EventGatewayHoldRequest,
+		event.EventGatewaySendRequest,
 	}
 }
 
@@ -98,9 +99,32 @@ func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
 				return true
 			})
 		}
+
+	case event.EventGatewaySendRequest:
+		// One of the species now, a hold or its own pace notwithstanding
+		if payload, ok := ev.Payload.(*event.GatewaySendRequestPayload); ok {
+			if e, gw := s.gatewayOn(payload.AnchorEntity); gw != nil {
+				if at, ok := s.world.Positions.GetPosition(gw.AnchorEntity); ok {
+					s.emitSpawnEvent(e, payload.Species, uint8(payload.SubType), at.X+gw.OffsetX, at.Y+gw.OffsetY, gw.GroupID, 0)
+				}
+			}
+		}
 	}
 }
 
+// gatewayOn is the gateway an anchor carries, nil for none
+func (s *GatewaySystem) gatewayOn(anchor core.Entity) (core.Entity, *component.GatewayComponent) {
+	for _, e := range s.world.Components.Gateway.Entities() {
+		if gw, ok := s.world.Components.Gateway.GetPtr(e); ok && gw.AnchorEntity == anchor {
+			return e, gw
+		}
+	}
+	return 0, nil
+}
+
+// handleSpawnRequest stands a gateway on an anchor, one to an anchor: a request for
+// an anchor that carries one re-arms it with the species and pace it names, what it
+// has accumulated, its hold and its route kept
 func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPayload) {
 	anchorEntity := payload.AnchorEntity
 
@@ -108,16 +132,6 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 	anchorPos, ok := s.world.Positions.GetPosition(anchorEntity)
 	if !ok {
 		return
-	}
-
-	// Enforce single gateway per anchor
-	gatewayEntities := s.world.Components.Gateway.Entities()
-	for _, e := range gatewayEntities {
-		if gw, ok := s.world.Components.Gateway.GetPtr(e); ok {
-			if gw.AnchorEntity == anchorEntity {
-				return
-			}
-		}
 	}
 
 	baseInterval := time.Duration(payload.BaseIntervalMs) * time.Millisecond
@@ -135,21 +149,22 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		minInterval = parameter.GatewayDefaultMinInterval
 	}
 
-	rateAccelInterval := time.Duration(payload.RateAccelIntervalMs) * time.Millisecond
-
 	gwComp := component.GatewayComponent{
 		AnchorEntity:      anchorEntity,
 		Species:           payload.Species,
 		SubType:           uint8(payload.SubType),
 		GroupID:           payload.GroupID,
 		BaseInterval:      baseInterval,
-		Accumulated:       0,
 		RateMultiplier:    rateMultiplier,
-		RateAccelInterval: rateAccelInterval,
-		RateAccelElapsed:  0,
+		RateAccelInterval: time.Duration(payload.RateAccelIntervalMs) * time.Millisecond,
 		MinInterval:       minInterval,
 		OffsetX:           payload.OffsetX,
 		OffsetY:           payload.OffsetY,
+	}
+	if e, standing := s.gatewayOn(anchorEntity); standing != nil {
+		gwComp.Accumulated, gwComp.Held, gwComp.RouteDistID = standing.Accumulated, standing.Held, standing.RouteDistID
+		s.world.Components.Gateway.SetComponent(e, gwComp)
+		return
 	}
 
 	entity := s.world.CreateEntity(core.DomainShared)
@@ -169,20 +184,8 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 }
 
 func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
-	gateways := s.world.Components.Gateway
-	var matched core.Entity
-	for _, e := range gateways.Entities() {
-		gw, ok := gateways.GetPtr(e)
-		if !ok {
-			continue
-		}
-		if gw.AnchorEntity == anchorEntity {
-			matched = e
-			break
-		}
-	}
-	if matched != 0 {
-		s.despawnGateway(matched, anchorEntity)
+	if e, gw := s.gatewayOn(anchorEntity); gw != nil {
+		s.despawnGateway(e, anchorEntity)
 	}
 }
 
@@ -253,8 +256,8 @@ func (s *GatewaySystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
-// emitSpawnEvent routes to the appropriate species spawn request event
-// routeDistID enables per-route assignment from bandit pool
+// emitSpawnEvent asks the species' own system for a spawn, a data species' by the
+// land request its program answers; routeDistID draws an eye's route from its pool
 func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
 	switch species {
 	case component.SpeciesEye:
@@ -308,6 +311,13 @@ func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.Sp
 			TargetGroupID: groupID,
 			Gateway:       gateway,
 		})
+
+	default:
+		if species >= component.SpeciesDataFirst {
+			s.world.PushEvent(event.EventSpeciesLandRequest, &event.SpeciesLandRequestPayload{
+				Species: species, X: x, Y: y, Gateway: gateway,
+			})
+		}
 	}
 }
 
