@@ -18,7 +18,7 @@ type SquareKindColors struct {
 // SquareKinds holds each kind's colors
 var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareAttack:  {Block: color.Vermilion, Glow: color.Coral, Track: color.DarkCrimson, Console: ConRed},
-	component.SquareHold:    {Block: color.Gold, Glow: color.Apricot, Track: color.DarkGold, Console: ConYellow},
+	component.SquareWhirl:   {Block: color.Gold, Glow: color.Apricot, Track: color.DarkGold, Console: ConYellow},
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
@@ -29,18 +29,16 @@ var (
 	SquareBurst = SquareKindColors{Block: color.ElectricViolet, Glow: color.PaleLavender, Track: color.DarkViolet, Console: ConBrightMagenta}
 )
 
-// SquareOrb is an aiming kind's orb on the square's outer orbit: its glyph's color,
-// the two its corona turns in, and a console's
+// SquareOrb is the orb of a kind that strikes, on the square's outer orbit: its
+// glyph's color, the two its corona turns in, and a console's
 type SquareOrb struct {
 	Core, Lobe, Counter color.RGB
 	Console             uint8
 }
 
-// SquareOrbs holds each aiming kind's orb: red, white and blue for the attack, and
-// for the hold the gold, cyan and purple of the game's bolts
+// SquareOrbs holds each striking kind's orb: red, white and blue for the attack
 var SquareOrbs = [component.SquareKindCount]SquareOrb{
 	component.SquareAttack: {Core: color.White, Lobe: color.Red, Counter: color.RoyalBlue, Console: ConBrightRed},
-	component.SquareHold:   {Core: color.VibrantCyan, Lobe: color.Gold, Counter: color.MediumPurple, Console: ConBrightYellow},
 }
 
 // The square's marks: a block's digit, the frame round the viewer's selection, and
@@ -72,6 +70,19 @@ const (
 	SquareSurgeWidth = 6.0
 	SquareSurgeAlpha = 0.95
 	SquareSurgeTurn  = 700 * time.Millisecond
+
+	// A strike that landed tints the third of the map its line faces in the kind's
+	// glow, at most SquareStrikeAlpha, fading over SquareStrikeFlash
+	SquareStrikeFlash = 250 * time.Millisecond
+	SquareStrikeAlpha = 0.15
+
+	// A turning wind draws SquareWhirlStreaks streaks on the outer orbit while it
+	// blows, each SquareWhirlTail columns fading back from a head of at most
+	// SquareWhirlAlpha of the kind's glow, round the orbit once each SquareWhirlTurn
+	SquareWhirlStreaks = 4
+	SquareWhirlTail    = 22
+	SquareWhirlAlpha   = 0.8
+	SquareWhirlTurn    = 2400 * time.Millisecond
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -25,14 +26,9 @@ type EnvironmentSystem struct {
 	world *engine.World
 	rng   *vmath.FastRand
 
-	windActive    bool
-	windApplied   bool
-	windForce     float64
-	windDirection float64
-	windRemaining time.Duration
-	windRadial    bool // out from windX, windY rather than along windDirection
-	windX, windY  int
-	windReach     float64 // columns a radial wind fades out over, 0 for none
+	winds       []wind // every field blowing, in the order they started
+	gusts       []gust // this tick's sample of each
+	windApplied bool
 
 	drift driftState
 	// Velocity per level and axis in microcells/second, derived from drift
@@ -51,6 +47,26 @@ type EnvironmentSystem struct {
 }
 
 const driftLevels = len(parameter.DriftLayerFactor)
+
+// wind is one field of the wind and its D-19 record: uniform along Direction, or
+// about a cell, where Direction turns it from straight out, a quarter turn round
+// the cell clockwise on screen, and Reach is the columns it fades to nothing over
+type wind struct {
+	Force     float64       `json:"force"`
+	Direction float64       `json:"direction"`
+	Remaining time.Duration `json:"remaining"`
+	Radial    bool          `json:"radial,omitempty"`
+	X         int           `json:"x,omitempty"`
+	Y         int           `json:"y,omitempty"`
+	Reach     float64       `json:"reach,omitempty"`
+}
+
+// gust is a field's force as one tick samples it: along the map's axes, or for a
+// radial field out from its cell and round it
+type gust struct {
+	x, y  float64
+	field *wind
+}
 
 // driftState is the whole of a drift, and its D-19 record. Phase is each level's
 // sub-cell remainder per axis, velocity in microcells a second times nanoseconds, so
@@ -91,11 +107,7 @@ func (s *EnvironmentSystem) Init() {
 		s.clearPlanarWind()
 	}
 	s.rng = s.world.Rand(core.DomainShared, s.Name())
-	s.windActive = false
-	s.windApplied = false
-	s.windForce = 0
-	s.windDirection = 0
-	s.windRemaining = 0
+	s.winds, s.windApplied = nil, false
 	s.endDrift()
 	s.driftStep = [driftLevels][2]int{}
 	s.enabled = true
@@ -170,7 +182,7 @@ func (s *EnvironmentSystem) Update() {
 }
 
 func (s *EnvironmentSystem) updateWind(delta time.Duration) {
-	if !s.windActive {
+	if len(s.winds) == 0 {
 		s.clearAppliedWind()
 		return
 	}
@@ -178,100 +190,96 @@ func (s *EnvironmentSystem) updateWind(delta time.Duration) {
 		return
 	}
 
-	// Every active tick consumes exactly two Shared-stream draws, independent of
-	// entity counts or domains: one for force and one for direction.
-	force, direction := s.sampleWind()
-	windSeconds := min(delta, s.windRemaining).Seconds()
+	// Every field draws its two Shared-stream samples each active tick, whatever
+	// entities stand in it: one for force and one for direction
 	motionSeconds := min(delta.Seconds(), parameter.MaxSimulationDeltaSeconds)
-	if windSeconds > motionSeconds {
-		windSeconds = motionSeconds
+	s.gusts = s.gusts[:0]
+	for i := range s.winds {
+		field := &s.winds[i]
+		force := field.Force * (1 + (s.rng.Float64()*2-1)*parameter.WindForceVariationRatio)
+		direction := vmath.NormalizeAngle(field.Direction + (s.rng.Float64()*2-1)*parameter.WindDirectionVariation)
+		// A field ending part-way through a tick contributes only that fraction to
+		// the 2D integrators, which consume acceleration over motionSeconds
+		if blown := min(delta, field.Remaining).Seconds(); blown < motionSeconds {
+			force *= blown / motionSeconds
+		}
+		s.gusts = append(s.gusts, gust{x: force * vmath.Cos(direction), y: force * vmath.Sin(direction), field: field})
+		field.Remaining -= min(delta, field.Remaining)
 	}
-
-	if motionSeconds > 0 && windSeconds > 0 {
-		// A wind ending part-way through a tick contributes only that fraction to
-		// the 2D integrators, which consume acceleration over motionSeconds.
-		force *= windSeconds / motionSeconds
-		forceX := force * vmath.Cos(direction)
-		forceY := force * vmath.Sin(direction)
-
-		s.applyPlanarWind(forceX, forceY)
-		s.applyStormWind(forceX, forceY, motionSeconds)
+	if motionSeconds > 0 {
+		s.applyPlanarWind()
+		s.applyStormWind(motionSeconds)
 		s.windApplied = true
 	}
-
-	s.windRemaining -= min(delta, s.windRemaining)
-	if s.windRemaining <= 0 {
-		// Leave this tick's acceleration in place for the species systems that run
-		// after Environment. The next tick (or a cancel) clears it.
-		s.windActive = false
-		s.windForce = 0
-		s.windDirection = 0
-		s.windRemaining = 0
-		s.windRadial = false
-	}
+	// An ended field leaves this tick's acceleration in place for the species
+	// systems that run after Environment; the next tick, or a cancel, clears it
+	s.gusts = s.gusts[:0]
+	s.winds = slices.DeleteFunc(s.winds, func(f wind) bool { return f.Remaining <= 0 })
 }
 
+// startWind starts a field in place of the one of its form, the uniform one or the
+// radial one about its cell turned its way, and beside every other
 func (s *EnvironmentSystem) startWind(payload *event.WindStartPayload) {
 	if payload == nil || !finite(payload.Force) || payload.Force <= 0 ||
 		!finite(payload.Direction) || payload.Duration <= 0 {
 		return
 	}
-
-	// A new valid start replaces the previous wind completely.
+	field := wind{Force: payload.Force, Direction: vmath.NormalizeAngle(payload.Direction), Remaining: payload.Duration}
+	if payload.Radial {
+		field.Radial, field.X, field.Y, field.Reach = true, payload.X, payload.Y, max(payload.Reach, 0)
+	}
 	s.clearAppliedWind()
-	s.windActive = true
-	s.windForce = payload.Force
-	s.windDirection = vmath.NormalizeAngle(payload.Direction)
-	s.windRemaining = payload.Duration
-	s.windRadial, s.windX, s.windY, s.windReach = payload.Radial, payload.X, payload.Y, max(payload.Reach, 0)
+	same := func(f wind) bool {
+		return f.Radial == field.Radial && (!f.Radial || f.X == field.X && f.Y == field.Y && f.Direction == field.Direction)
+	}
+	if i := slices.IndexFunc(s.winds, same); i >= 0 {
+		s.winds[i] = field
+	} else {
+		s.winds = append(s.winds, field)
+	}
 	s.publishStatus()
 }
 
 func (s *EnvironmentSystem) cancelWind() {
 	s.clearAppliedWind()
-	s.windActive = false
-	s.windForce = 0
-	s.windDirection = 0
-	s.windRemaining = 0
-	s.windRadial = false
+	s.winds = nil
 	s.publishStatus()
 }
 
-// windOn is the tick's wind on one entity: the force as it blows, or for a radial
-// wind that strength straight out from its origin, as far a row as a column on
+// windOn is the tick's wind on one entity: each uniform gust as it blows, and each
+// radial one turned from straight out of its cell, as far a row as a column on
 // screen, fading to nothing over its reach
-func (s *EnvironmentSystem) windOn(entity core.Entity, forceX, forceY float64) (float64, float64) {
-	at, ok := s.world.Positions.GetPosition(entity)
-	if !s.windRadial || !ok {
-		return forceX, forceY
-	}
+func (s *EnvironmentSystem) windOn(entity core.Entity) (x, y float64) {
+	at, placed := s.world.Positions.GetPosition(entity)
 	aspect := s.world.Resources.Config.CellAspect
-	dx, dy := float64(at.X-s.windX), aspect.Circular(float64(at.Y-s.windY))
-	dist := vmath.Magnitude(dx, dy)
-	if dist == 0 || s.windReach > 0 && dist >= s.windReach {
-		return 0, 0
+	for _, g := range s.gusts {
+		if !g.field.Radial {
+			x, y = x+g.x, y+g.y
+			continue
+		}
+		outX, outY := float64(at.X-g.field.X), aspect.Circular(float64(at.Y-g.field.Y))
+		dist := vmath.Magnitude(outX, outY)
+		if !placed || dist == 0 || g.field.Reach > 0 && dist >= g.field.Reach {
+			continue
+		}
+		fade := 1 / dist
+		if g.field.Reach > 0 {
+			fade *= 1 - dist/g.field.Reach
+		}
+		x += fade * (g.x*outX - g.y*outY)
+		y += aspect.FromCircular(fade * (g.x*outY + g.y*outX))
 	}
-	strength := vmath.Magnitude(forceX, forceY) / dist
-	if s.windReach > 0 {
-		strength *= 1 - dist/s.windReach
-	}
-	return strength * dx, aspect.FromCircular(strength * dy)
-}
-
-func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
-	forceSpread := (s.rng.Float64()*2 - 1) * parameter.WindForceVariationRatio
-	directionSpread := (s.rng.Float64()*2 - 1) * parameter.WindDirectionVariation
-	return s.windForce * (1 + forceSpread), vmath.NormalizeAngle(s.windDirection + directionSpread)
+	return x, y
 }
 
 // applyPlanarWind writes acceleration only to the mobile species currently
 // backed by the ordinary 2D integrators. In particular it deliberately does not
 // range every Kinetic component, so tracers, missiles, bullets, loot, weapon
-// orbs, dust, and particle behaviors are excluded.
-func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
+// orbs, dust, and particle behaviors are excluded. With no gust it clears them.
+func (s *EnvironmentSystem) applyPlanarWind() {
 	push := func(entity core.Entity, mass profile.Mass) {
 		if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
-			x, y := s.windOn(entity, forceX, forceY)
+			x, y := s.windOn(entity)
 			kinetic.AccelX = x / mass
 			kinetic.AccelY = y / mass
 		}
@@ -308,14 +316,14 @@ func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 // velocity. Storm folds this delta from Kinetic.Vel into Vel3D at the start of
 // its update. A stunned circle skips that fold, so do not accumulate a hidden
 // impulse while it is frozen.
-func (s *EnvironmentSystem) applyStormWind(forceX, forceY, seconds float64) {
+func (s *EnvironmentSystem) applyStormWind(seconds float64) {
 	s.world.WithDomain(core.DomainShared, func() {
 		for _, entity := range s.world.Components.StormCircle.Entities() {
 			if combat, ok := s.world.Components.Combat.GetPtr(entity); ok && combat.Status[component.StatusStun].Remaining > 0 {
 				continue
 			}
 			if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
-				x, y := s.windOn(entity, forceX, forceY)
+				x, y := s.windOn(entity)
 				kinetic.VelX += x / profile.MassStorm * seconds
 				kinetic.VelY += y / profile.MassStorm * seconds
 			}
@@ -332,7 +340,8 @@ func (s *EnvironmentSystem) clearAppliedWind() {
 }
 
 func (s *EnvironmentSystem) clearPlanarWind() {
-	s.applyPlanarWind(0, 0)
+	s.gusts = s.gusts[:0]
+	s.applyPlanarWind()
 }
 
 // startDrift replaces any drift, easing each layer from how it drifts now
@@ -568,7 +577,7 @@ func (s *EnvironmentSystem) publishStatus() {
 	if running {
 		speed, rate = s.drift.Speed, s.velocities()
 	}
-	s.statWindActive.Store(s.enabled && s.windActive)
+	s.statWindActive.Store(s.enabled && len(s.winds) > 0)
 	s.statDriftActive.Store(running)
 	s.statDriftDirection.Set(s.drift.Direction)
 	s.statDriftSpeed.Set(speed)
@@ -583,37 +592,18 @@ func finite(v float64) bool {
 
 // environmentSnapshot is the D-19 continuation point. Shared capture already
 // includes every shared Kinetic component and the environment RNG stream; this
-// record carries the private base wind, remaining time, whether one tick's
-// acceleration still needs to be replaced or cleared, and the drift.
+// record carries the fields blowing, whether one tick's acceleration still needs
+// to be replaced or cleared, and the drift.
 type environmentSnapshot struct {
-	Active    bool          `json:"active"`
-	Applied   bool          `json:"applied"`
-	Enabled   bool          `json:"enabled"`
-	Force     float64       `json:"force"`
-	Direction float64       `json:"direction"`
-	Remaining time.Duration `json:"remaining"`
-	Radial    bool          `json:"radial,omitempty"`
-	X         int           `json:"x,omitempty"`
-	Y         int           `json:"y,omitempty"`
-	Reach     float64       `json:"reach,omitempty"`
-	Drift     driftState    `json:"drift"`
+	Applied bool       `json:"applied"`
+	Enabled bool       `json:"enabled"`
+	Winds   []wind     `json:"winds,omitempty"`
+	Drift   driftState `json:"drift"`
 }
 
 // SaveShared exports the global environment continuation state (D-19).
 func (s *EnvironmentSystem) SaveShared() ([]byte, error) {
-	return json.Marshal(environmentSnapshot{
-		Active:    s.windActive,
-		Applied:   s.windApplied,
-		Enabled:   s.enabled,
-		Force:     s.windForce,
-		Direction: s.windDirection,
-		Remaining: s.windRemaining,
-		Radial:    s.windRadial,
-		X:         s.windX,
-		Y:         s.windY,
-		Reach:     s.windReach,
-		Drift:     s.drift,
-	})
+	return json.Marshal(environmentSnapshot{Applied: s.windApplied, Enabled: s.enabled, Winds: s.winds, Drift: s.drift})
 }
 
 // LoadShared installs a captured environment continuation point. RNG position
@@ -623,11 +613,10 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("environment: %w", err)
 	}
-	if !finite(snap.Force) || !finite(snap.Direction) || snap.Remaining < 0 {
-		return fmt.Errorf("environment: invalid wind state")
-	}
-	if snap.Active && (snap.Force <= 0 || snap.Remaining <= 0) {
-		return fmt.Errorf("environment: active wind requires positive force and duration")
+	for _, f := range snap.Winds {
+		if !finite(f.Force) || !finite(f.Direction) || !finite(f.Reach) || f.Force <= 0 || f.Remaining <= 0 || f.Reach < 0 {
+			return fmt.Errorf("environment: a wind needs a finite positive force and a duration")
+		}
 	}
 	if err := snap.Drift.validate(s.world.Resources.Config.CellAspect); err != nil {
 		return err
@@ -635,18 +624,7 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 
 	s.clearAppliedWind()
 	s.enabled = snap.Enabled
-	s.windActive = snap.Active
-	s.windApplied = snap.Applied
-	s.windForce = snap.Force
-	s.windDirection = vmath.NormalizeAngle(snap.Direction)
-	s.windRemaining = snap.Remaining
-	s.windRadial, s.windX, s.windY, s.windReach = snap.Radial, snap.X, snap.Y, max(snap.Reach, 0)
-	if !s.windActive {
-		s.windForce = 0
-		s.windDirection = 0
-		s.windRemaining = 0
-		s.windRadial = false
-	}
+	s.winds, s.windApplied = snap.Winds, snap.Applied
 	// A record moves no glyph: this instance's glyphs keep their own history
 	s.endDrift()
 	s.driftStep = [driftLevels][2]int{}

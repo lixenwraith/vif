@@ -607,7 +607,7 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.MainFireCooldown), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunity), kind: kindInt, size: unsafe.Sizeof(int64(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 13, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 12, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldColor), kind: kindStruct, sub: &codecColorRGB},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.EmberActive), kind: kindBool},

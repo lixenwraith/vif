@@ -1608,7 +1608,7 @@ func equalHeat(a, b *component.HeatComponent) bool {
 }
 
 func equalShield(a, b *component.ShieldComponent) bool {
-	return a.DrainElapsed == b.DrainElapsed && a.BoostCap == b.BoostCap && a.Step == b.Step && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active
+	return a.DrainElapsed == b.DrainElapsed && a.BoostCap == b.BoostCap && a.Step == b.Step && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active && a.Stemless == b.Stemless
 }
 
 func equalBoost(a, b *component.BoostComponent) bool {
@@ -1678,7 +1678,7 @@ func equalMount(a, b *component.MountComponent) bool {
 }
 
 func equalRay(a, b *component.RayComponent) bool {
-	return a.Ray.X == b.Ray.X && a.Ray.Y == b.Ray.Y && math.Float64bits(float64(a.Ray.DX)) == math.Float64bits(float64(b.Ray.DX)) && math.Float64bits(float64(a.Ray.DY)) == math.Float64bits(float64(b.Ray.DY)) && a.Ray.Length == b.Ray.Length && a.Ray.Knee == b.Ray.Knee && a.Ray.Near == b.Ray.Near && a.Ray.Far == b.Ray.Far && a.Phase == b.Phase && a.Remaining == b.Remaining && a.Duration == b.Duration && a.HitInterval == b.HitInterval && a.HitTimer == b.HitTimer && a.Scale == b.Scale && a.Hold == b.Hold && a.Palette == b.Palette
+	return a.Ray.X == b.Ray.X && a.Ray.Y == b.Ray.Y && math.Float64bits(float64(a.Ray.DX)) == math.Float64bits(float64(b.Ray.DX)) && math.Float64bits(float64(a.Ray.DY)) == math.Float64bits(float64(b.Ray.DY)) && a.Ray.Length == b.Ray.Length && a.Ray.Knee == b.Ray.Knee && a.Ray.Near == b.Ray.Near && a.Ray.Far == b.Ray.Far && a.Phase == b.Phase && a.Remaining == b.Remaining && a.Duration == b.Duration && a.HitInterval == b.HitInterval && a.HitTimer == b.HitTimer && a.Scale == b.Scale && a.Hold == b.Hold && a.Palette == b.Palette && a.Stemless == b.Stemless
 }
 
 func equalPulse(a, b *component.PulseComponent) bool {

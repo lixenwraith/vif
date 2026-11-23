@@ -285,15 +285,7 @@ which concrete renderer produced them:
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
 - strobe supplies a deferred background overlay for otherwise untouched cells;
   a console shows it in one step, in its nearest background, while the envelope
-  is past half its peak;
-- slide draws a pulse of that style as a swell in the surface: the `SlideBand`
-  columns behind the pulse's edge rise in a ridge `SlideRise` high, its crest
-  nearer the edge, drawn in half cells over a copy of the frame under it. Each
-  half shows the cell `SlideLens` bends into view, a glyph as a glyph, lit by
-  its slope from a lamp up and to the left under a haze from `RgbSlideFront` to
-  `RgbSlideWake`, both near the theme's background, so the swell reads as the
-  scene bending rather than as a ring over it; cells the band has left are as
-  they were drawn.
+  is past half its peak.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.
@@ -387,11 +379,11 @@ also the visual stacking order; exact integer priorities are in
 | Environment/guidance | `wall`, `chargeline` |
 | Base entities | `sigil`, `glyph`, `gold` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it; then `pulse_glow`, a glowing pulse under the species that carries it |
-| Species/structures | `devourer` under every body that crosses it, then `pylon`, `tower`, `square`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
+| Species/structures | `devourer` under every body that crosses it, then `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
-| Overlay effects | `landing`, `button`, `splash`, `marker` |
-| Post-process | `slide`, `grayout`, `strobe`, `dim` |
+| Overlay effects | `square`, opaque over the shield and every field, then `landing`, `button`, `splash`, `marker` |
+| Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
 | Debug and telemetry | `flowfield`, `machine`, `pinned_state`, `overlay` |
 
@@ -410,6 +402,20 @@ splash's color over the background it had; a text console, whose fonts lack them
 draws it a cell a pixel, six cells wide and twelve tall ([Multi-platform
 §4](multi-platform.md#4-platform-matrix)). The splash system places by the same
 packing (`Config.TextConsole`), so a countdown's box is the cells it draws.
+
+The pulse renderer draws a `wave` pulse, a death wave's, as a flat band behind its
+edge: `waveRim` columns of rim and `waveWake` of wake, each one tone screened over
+the backgrounds under it, row by row over the band's columns alone. A cell
+changes only as a tone reaches or leaves it, so the terminal is sent little: over
+one death wave at 130 by 44 it took 0.34 MB, against 0.12 MB idle, where the lit
+swell the wave replaced, a band 26 columns wide redrawn whole each frame, sent
+3.61 MB, 141 cells changed a frame for 1,533, and a frame's draw of it took 4 µs
+for 450.
+
+The square renderer draws all a magic square shows, over the shield and every
+field so no blend reaches its blocks: a boost's glow on the rim, a turning wind's
+streaks on the outer orbit, a strike's flash over the third it landed in and its
+orb, then the blocks, the selection and the legend.
 
 The tracer renderer is intentionally background-only: every sampled trail
 cell writes no rune/foreground, so typeable text remains readable as a tracer

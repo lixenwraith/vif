@@ -261,7 +261,6 @@ var Renderers = []RendererDef{
 	{"devourer", "NewDevourerRenderer", "PriorityDevourer"},
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
 	{"tower", "NewTowerRenderer", "PriorityTower"},
-	{"square", "NewSquareRenderer", "PrioritySquare"},
 	{"eye", "NewEyeRenderer", "PriorityEye"},
 	{"snake", "NewSnakeRenderer", "PrioritySnake"},
 	{"drain", "NewDrainRenderer", "PriorityDrain"},
@@ -289,13 +288,13 @@ var Renderers = []RendererDef{
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
 
 	// --- Overlays ---
+	{"square", "NewSquareRenderer", "PrioritySquare"},
 	{"landing", "NewLandingRenderer", "PriorityLanding"},
 	{"button", "NewButtonRenderer", "PriorityButton"},
 	{"splash", "NewSplashRenderer", "PrioritySplash"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 
 	// --- Post-Processing ---
-	{"slide", "NewSlideRenderer", "PrioritySlide"},
 	{"grayout", "NewGrayoutRenderer", "PriorityGrayout"},
 	{"strobe", "NewStrobeRenderer", "PriorityStrobe"},
 	{"dim", "NewDimRenderer", "PriorityDim"},

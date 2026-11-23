@@ -95,7 +95,11 @@ func (r *RayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 // drawRay draws a ray's cells, a warning's core only, its sides at sides of the core's alpha
 func (r *RayRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer, b *component.RayComponent, alpha, sides float64, warning bool) {
 	positions, carry := r.gameCtx.World.Positions, rockCarry(ctx, r.gameCtx.World)
-	for i := 1; i <= b.Ray.Length; i++ {
+	first := 1
+	if b.Stemless {
+		first = max(b.Ray.Knee, 1)
+	}
+	for i := first; i <= b.Ray.Length; i++ {
 		half := b.Ray.Half(i)
 		if warning {
 			half = 0

@@ -181,19 +181,24 @@ before its final cell is ever committed.
 `EnvironmentSystem` is now a dual-domain gameplay system, distinct from the
 Player-domain transient renderer effects such as grayout and strobe.
 
-`EventWindStart` carries base force, direction in radians, and duration.
-`EventWindCancel` stops the one active wind. A valid start replaces the prior
-wind; invalid/non-finite or non-positive input is ignored. Direction is the vector
+`EventWindStart` carries base force, direction in radians, and duration, and
+starts one field of the wind: the uniform one, or with `radial` one about a cell,
+where the direction turns it from straight out, a quarter turn round the cell
+clockwise on screen, and a `reach` fades it. A valid start replaces the field of
+its form, the uniform one or the radial one about its cell turned its way, and
+blows beside every other, so a magic square's gust and whirl add;
+invalid/non-finite or non-positive input is ignored, and `EventWindCancel` stops
+every field. Direction is the vector
 entities travel toward, not the point the wind originates from. Under the current
 coordinates, a wind from top-right toward bottom-left is a 3π/4 (135°) vector.
 
-Each active tick samples one global gust:
+Each active tick samples one gust a field:
 
 - force uniformly within ±`WindForceVariationRatio` (currently 10%);
 - direction uniformly within ±`WindDirectionVariation` (currently about 5°).
 
-The system consumes exactly two Shared RNG draws per active tick, even when there
-are no species or each participant has a different number of drains. It then
+The system consumes exactly two Shared RNG draws a field per active tick, even when
+there are no species or each participant has a different number of drains. It then
 computes `acceleration = force / profile mass`. Sampling once and applying many
 times prevents entity count, dense-store order, or Player-domain population from
 changing the shared random sequence.
@@ -222,8 +227,8 @@ written acceleration.
 
 Wind start/cancel are `ClassShared` events. When a Shared FSM emits them, it does
 so on every instance from the same transition; `event.OnWire` must not transport
-them or the receiver would apply the same start twice. The base wind and remaining
-duration are private Shared state declared as a D-19 snapshot carrier. Captures
+them or the receiver would apply the same start twice. Each field's base wind and
+remaining duration are private Shared state declared as a D-19 snapshot carrier. Captures
 also carry the shared species' kinetic components and the environment RNG stream
 position.
 

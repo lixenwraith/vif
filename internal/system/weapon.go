@@ -14,7 +14,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -1026,8 +1025,7 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 }
 
 // deathWave fires component.DeathWave from a cursor's cell, out to the map's corner
-// farthest from it and on by a slide's band, which carries its swell off the map;
-// the pulse system strikes with it as it grows
+// farthest from it; the pulse system strikes with it as it grows
 func (s *WeaponSystem) deathWave(cursor core.Entity) {
 	at, ok := s.world.Positions.GetPosition(cursor)
 	if !ok {
@@ -1036,7 +1034,7 @@ func (s *WeaponSystem) deathWave(cursor core.Entity) {
 	cfg := s.world.Resources.Config
 	spec := component.DeathWave
 	spec.Radius = math.Hypot(float64(max(at.X, cfg.MapWidth-1-at.X)),
-		cfg.CellAspect.Circular(float64(max(at.Y, cfg.MapHeight-1-at.Y)))) + visual.SlideBand
+		cfg.CellAspect.Circular(float64(max(at.Y, cfg.MapHeight-1-at.Y))))
 	s.world.Components.Pulse.SetComponent(s.world.CreateEntity(core.DomainPlayer), component.PulseComponent{
 		PulseSpec: spec, X: at.X, Y: at.Y, Owner: cursor, Palette: s.palette(cursor),
 	})
@@ -1098,8 +1096,9 @@ func (s *WeaponSystem) advanceRays(cursor core.Entity, orbs orbSlots, dt time.Du
 }
 
 // layRay runs a ray from the cursor's cell through its orb's: one cell wide up to
-// the orb and RayWidth past it, to the first wall or the map edge. An orb on the
-// cursor's own cell leaves the last ray in place.
+// the orb and RayWidth past it, to the first wall or the map edge, its stem drawn
+// unless the cursor's shield hides it. An orb on the cursor's own cell leaves the
+// last ray in place.
 func (s *WeaponSystem) layRay(cursor, orb core.Entity, ray *component.RayComponent) {
 	from, ok := s.world.CursorCell(cursor)
 	if !ok {
@@ -1115,6 +1114,9 @@ func (s *WeaponSystem) layRay(cursor, orb core.Entity, ray *component.RayCompone
 		Knee: max(vmath.IntAbs(dx), vmath.IntAbs(dy)), Far: (parameter.RayWidth - 1) / 2,
 	}
 	ray.Ray.Length = traceRay(s.world, ray.Ray)
+	if shield, ok := s.world.Components.Shield.GetPtr(cursor); ok {
+		ray.Stemless = shield.Stemless
+	}
 }
 
 // strikeRay hits every combat target group a ray covers once: a drain's locally,
