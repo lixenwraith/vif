@@ -126,10 +126,10 @@ and crosses its geometry (§5); a mount's strikes each cursor inside it through
 `strikeCursor`. `WeaponSpecs` holds the kind's `PulseSpec` and a mount overrides it
 field by field, as it overrides `Damage`: a scenario writes `pulse = { radius,
 duration_ms, sustained, grow_ms, hit_interval_ms, style, attack, charged }`, style
-`ring`, `glow`, `hidden` or `slide`. A death wave is a cursor's pulse no weapon
+`ring`, `glow`, `hidden` or `wave`. A death wave is a cursor's pulse no weapon
 holds, `component.DeathWave`: fired on `EventDeathWaveRequest` from the cursor's
-cell, it grows from nearly nothing (`PulseSpec.Start`) past the map's far corner
-by its slide's band and strikes every tick under the `death_wave` family, whose
+cell, it grows from nearly nothing (`PulseSpec.Start`) to the map's far corner
+and strikes every tick under the `death_wave` family, whose
 rows take every hit point of a drain, a swarm, an eye and a snake, and so of a data
 species on the swarm row. A mount's pulse carries its attack family and charge,
 but the cursors it strikes take only its `CursorDamage` until cursors take a
@@ -187,15 +187,12 @@ Nothing spends the burn family's immunity, so only a ward refuses a burn or its
 tick; a tick spends no window, so a player's own burn never blocks their direct
 hits. The digest names every slot field, so a status is compared state.
 
-A magic square's attacks are those of the cursor standing on it, which owns and
-originates each, so a kill is that cursor's: `strike` takes whatever hit points a
-body on the swarm row holds (`CombatDamageSquareStrike`) and `hold` stuns it as long
-as the hold, a stun lasting its profile's `Duration` (a pulse's
-`PulseStunDuration`), each on the swarms and data species whose gateway
-(`SwarmComponent.Gateway`, `BehaviorComponent.Gateway`) the firing line faces. A
-family lands alike from every attacker, which a data species' row takes as given,
-so the strike and hold are families of their own, and a prototype's `attacks` can
-take a body out of every other family's reach and leave it to the strike. A hit
+A magic square's attack is that of the cursor standing on it, which owns and
+originates it, so a kill is that cursor's: `strike` takes whatever hit points a
+body on the swarm row holds (`CombatDamageSquareStrike`), on every target with a
+member in the third of the map the firing line faces (`SquareSystem.strike`, the
+weapons' own `FindTargetsIn`). A family lands alike from every attacker, which a
+data species' row takes as given, so the strike is a family of its own. A hit
 that takes hit points records its family (`CombatComponent.LastAttack`), and a data
 species killed dies by that row's `death`, its prototype's unless the row names
 one, so a scenario tells its kinds of kill apart. The
@@ -236,10 +233,11 @@ is positive or negative by the cursor's energy, or hostile for a mount; a tracer
 keeps the palette it was fired with and draws as a background-only trail that
 contracts as it drains. A pulse draws from its component in its `PulseStyle`: a
 ring of ripples over what it strikes, a glow under the species that carries it,
-whose hostile color is the storm's green, nothing when hidden, or a slide, which
-the `slide` renderer draws over every map layer. Rays are drawn straight
+whose hostile color is the storm's green, nothing when hidden, or a wave, a flat
+band behind its edge. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
-a mount's warning as its core line alone. Missiles and bullets draw hostile colors
+a mount's warning as its core line alone, and from the orb out where the cursor's
+shield hides the stem (`ShieldComponent.Stemless`, a magic square's). Missiles and bullets draw hostile colors
 from their `Hostile` flag; lightning uses its color table. A bolt's ends name
 entities, each drawn this frame where its entity is, the local cursor at its D-18
 prediction, and a spawn's cells only once the entity is gone. Each has a

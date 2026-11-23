@@ -408,11 +408,10 @@ this behavior because fire requests, auto-fire, macros, and mouse repeat all
 share timing constraints.
 
 A death wave is a cursor's attack no weapon holds: `EventDeathWaveRequest` runs one
-out from the cursor it names, past the map's far corner by its swell's width, in
-4 s: a pulse of the `death_wave` family that takes every hit point of each drain,
+out from the cursor it names to the map's far corner in 4 s: a pulse of the `death_wave` family that takes every hit point of each drain,
 swarm, eye, snake and data species on the swarm row as its edge passes, credited to
 that cursor; a boss or a structure has no row and stands through it, and a
-prototype's `attacks` can exempt a body. It draws as a slide
+prototype's `attacks` can exempt a body. It draws as a flat band behind its edge
 ([Rendering §7](rendering.md#7-layer-inventory)). What raises it is the
 scenario's: `magic` keeps the heat burst for it until Enter.
 

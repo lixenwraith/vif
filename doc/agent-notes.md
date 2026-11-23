@@ -824,7 +824,7 @@ Docs · Libraries · Branches.
 - A family lands alike from every attacker (`TestAFamilyLandsAlikeFromEveryAttacker`),
   since a data species' row sets a family's damage and effects whoever throws it: a
   new attacker that must deal otherwise takes a family of its own, as the magic
-  square's `strike` and `hold` do.
+  square's `strike` does.
 - A target group holds `parameter.MaxTargetsPerGroup` (8) anchors and drops the rest
   in store order, saying nothing: a ninth anchor is no target until one goes.
 - `CompositeSystem.Update` destroys a header holding no member, one at zero hit
@@ -838,8 +838,9 @@ Docs · Libraries · Branches.
   pylon: a loadout shot `magic`'s gateway pylons down, which ended its spawns.
 - A cursor's pulse, ray and blast land on every member they cover, so they kill a
   crowd as fast as it grows, and each kill boosts the shield half a second: a horde
-  those weapons can kill keeps its shield boosted for good. `magic` takes its
-  flood's bodies out of their reach in the prototype's `attacks`.
+  those weapons can kill keeps its shield boosted for good. A row that takes a body
+  out of their reach reads to a player as weapons doing nothing, which `magic`'s
+  wave bodies did: cap the boost, or what pays it, instead.
 - `TestSystemDomainProfiles` reads a system's file, not its guards: a shared
   system that touches `Boost`, `Energy` or another D-13 store fails it even behind
   `ResolveOwnedCursor`. What it wants of one it leaves where the store's owner
@@ -857,20 +858,24 @@ Docs · Libraries · Branches.
 - `CombatAttackType`'s zero is `tracer` and `CombatAttackNone` is -1, so a field of
   it reads tracer until a hit writes it: `CombatComponent.LastAttack` is read only
   on a kill, which a hit that wrote it brought.
-- Under `:god` the cursor's weapons kill `magic`'s strays and leave a wave's red
-  bodies whole: their rows take no damage by design, and only a strike or a death
-  wave ends them. A report of weapons doing nothing there is that.
 - A wind long and strong enough to move a homing body holds it off for good: one
   second in two of a uniform radial wind at force 16 held `magic`'s lightest body
   six columns out, where it had touched every 4.5 s. The square's gust is short
   and fades with distance for that; measure a wind by a body's distance a tick.
+- A wind turned round a cell holds off as one blown out of it does: without pause
+  at force 120 it kept `magic`'s two lightest bodies circling for good, and half
+  the time at 100 it stood a square whose lines never turned past five minutes.
+  Read a whirl by the degrees a body is carried before its first touch, and by
+  when fixed lines fall: a scratch test writes `SquareComponent.Lines` each tick,
+  which only a turn recomputes.
 - A gust's throw does not scale with its force: drag above the cruise speed eats
   the rest, so ten times the force threw `magic`'s bodies three to four times as
   far, and a body thrown onto the map's edge bounces back in at speed unless its
   prototype's `restitution` is 0. A gust that throws well needs a cooldown near
   the time its lightest body takes to walk back, or it is a wall.
-- Species nothing kills gather without bound: idle under `:god`, `magic`'s wave
-  bodies passed 700 in nine minutes and the tick grew with their square. A cap is
+- Species nothing kills gather without bound: with no weapon wearing them,
+  `magic`'s wave bodies passed 700 in nine minutes and the tick grew with their
+  square. A cap is
   the scenario's, a `StatusIntCompare` on `behavior.count` that holds the gateways.
 - What special fire spends comes off the overheat first, so a scenario that keeps
   a full overheat for a key must give the spend back, or one dust blast leaves
@@ -903,9 +908,6 @@ Docs · Libraries · Branches.
 - The explosion field, as any field written with `Set`, blended onto cells nothing
   had painted from black and faded through a blotch darker than the theme: it
   now mixes over `BackgroundAt`'s color and writes with `SetBgOnly`.
-- A renderer that redraws what lies under it reads the frame once before it draws
-  (`SlideRenderer.hold`) and gives a sample off its shape that cell back: a half
-  cell left at the zero color is a black notch along the shape's edge.
 - A row added to a Settings section moves two tests that hold the page by its
   rows: `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound
   section's, and `TestAPressDrivesTheMenu` presses rows by number down to
@@ -1010,7 +1012,13 @@ Docs · Libraries · Branches.
   tick at most.
 - An effect a second long is caught in a terminal by capturing the pane on a loop
   (`tmux capture-pane -p -e` every 100 ms to numbered files) and rendering the
-  frames whose text shows it, here the block eighths a slide draws.
+  frames that show it. A flat tint is one SGR run a row, so its frames are found
+  by one cell's background read from each capture, not by counting sequences.
+- What an effect costs a terminal is its bytes: run the game under `script -qfc
+  '<vif ...>' <file>` in the pane and read the file's size before and after the
+  effect, against an idle window as long. A shape in one tone changes a cell
+  twice, as it comes and as it goes; one shaded across its width changes every
+  cell it covers every frame, 3.6 MB a death wave where two tones sent 0.34.
 - `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
   without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
   nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
