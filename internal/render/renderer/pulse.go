@@ -34,11 +34,10 @@ type pulseLook struct {
 type pulseCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, c color.RGB, entry uint8)
 
 // The ring ripples out from three tenths of its pulse's size to all of it over the
-// first half of its life and fades over the second; the glow fills the size its
-// pulse has swollen to, brightening then fading the same way. A wave is a flat
-// band behind its pulse's edge, waveRim columns of rim and waveWake of wake, each
-// one tone, so a cell changes only as a tone reaches or leaves it; a console draws
-// the rim alone.
+// first half of its life and fades over the second; the glow fills its pulse's
+// size, brightening then fading the same way. A wave is a flat band behind its
+// pulse's edge, waveRim columns of rim and waveWake of wake, each one tone, so a
+// cell changes only as a tone reaches or leaves it; a console draws the rim alone.
 const (
 	ringFrontStart = 0.3
 	ringAlphaMax   = 0.9
