@@ -17,13 +17,14 @@ import (
 )
 
 // The window plays through the system's own mixer, shared with every other
-// program: Windows holds none of the players the engine finds by name
+// program: Windows ships none of the players the engine finds by name
 func init() { speakers = wasapiSpeakers }
 
-// wasapiStall bounds a write the device does not take and Close's wait for the
-// render thread, past which a stream is taken for hung. wasapiWait is the longest
-// the render thread sleeps without asking the device, which is how a stream that
-// stopped asking is found lost, and wasapiRetry the least time between two opens.
+// wasapiStall is how long a device may take nothing before its stream is taken
+// for lost, and a render thread not answer before a write or Close gives it up.
+// wasapiWait is the longest the render thread sleeps without asking the device,
+// which finds a stream that stopped calling, and wasapiRetry the least time
+// between two opens.
 const (
 	wasapiStall = 2 * time.Second
 	wasapiWait  = 200 * time.Millisecond
@@ -107,7 +108,7 @@ type wasapiSpeaker struct {
 	client, render *comObject
 	period, target uint32 // frames the device takes at a time, and the most it is left holding
 	starved        bool
-	opened         time.Time // the last open, made or only tried
+	opened, moved  time.Time // the last open, made or only tried, and when the device last had room
 }
 
 // wasapiSpeakers opens the default output device. Nil, where no device or no
@@ -190,7 +191,7 @@ func (s *wasapiSpeaker) open() bool {
 		return false
 	}
 	s.period = uint32(period * audio.AudioSampleRate / 10_000_000)
-	s.target, s.starved = min(2*s.period, size), true
+	s.target, s.starved, s.moved = min(2*s.period, size), true, s.opened
 	s.mu.Lock()
 	s.playing = !s.closed
 	s.mu.Unlock()
@@ -198,7 +199,7 @@ func (s *wasapiSpeaker) open() bool {
 }
 
 // play gives the device frames each time it asks, until it fails, as one
-// unplugged or no longer the system's does, or the sink closes
+// unplugged does, or the sink closes
 func (s *wasapiSpeaker) play() {
 	for {
 		// A goroutine that leaves the system only to wait in it again never passes
@@ -210,8 +211,9 @@ func (s *wasapiSpeaker) play() {
 		if s.isClosed() || !ok(syscall.SyscallN(s.client.table[clientGetCurrentPadding], uintptr(unsafe.Pointer(s.client)), uintptr(unsafe.Pointer(&queued)))) {
 			return
 		}
-		frames := uint32(0)
-		if room := max(s.target, queued) - queued; room > 0 {
+		frames, room := uint32(0), max(s.target, queued)-queued
+		if room > 0 {
+			s.moved = time.Now()
 			var data *byte
 			if !ok(syscall.SyscallN(s.render.table[renderGetBuffer], uintptr(unsafe.Pointer(s.render)), uintptr(room), uintptr(unsafe.Pointer(&data)))) {
 				return
@@ -226,6 +228,8 @@ func (s *wasapiSpeaker) play() {
 			if !ok(syscall.SyscallN(s.render.table[renderReleaseBuffer], uintptr(unsafe.Pointer(s.render)), uintptr(frames), 0)) {
 				return
 			}
+		} else if time.Since(s.moved) > wasapiStall {
+			return // a device that plays nothing, as one another program took for itself
 		}
 		// Left with less than a period, the device plays silence for the rest of
 		// its next: an underrun, counted once however long it lasts
@@ -280,7 +284,8 @@ func (s *wasapiSpeaker) drop() {
 
 // Write returns once the device has taken b, which paces the mixer by the
 // device's clock; with no stream open it returns at once and the mixer's own
-// ticker paces it. An error is a device that took nothing for wasapiStall.
+// ticker paces it. An error is a render thread that did not answer, which the
+// engine goes silent on: a stream that fails or stalls is reopened, not reported.
 func (s *wasapiSpeaker) Write(b []byte) (int, error) {
 	s.writing.Lock()
 	defer s.writing.Unlock()
@@ -297,12 +302,16 @@ func (s *wasapiSpeaker) Write(b []byte) (int, error) {
 	if !handed {
 		return len(b), nil
 	}
-	s.stall.Reset(wasapiStall)
-	select {
-	case <-s.taken:
-		s.stall.Stop()
-		return len(b), nil
-	case <-s.stall.C:
+	// The bound is waited out twice: the first may pass in no time at all, on a
+	// clock that counted a sleep the render thread is only now waking from
+	for range 2 {
+		s.stall.Reset(wasapiStall)
+		select {
+		case <-s.taken:
+			s.stall.Stop()
+			return len(b), nil
+		case <-s.stall.C:
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
