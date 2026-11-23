@@ -169,17 +169,20 @@ is reached from the node alone. `ws_url` is absent where the deployment publishe
 no browser route, which is what a page keyed on it reads as "this fleet is for
 native clients".
 
-`-web-origin` is one origin, not a list, and `ws_url` is built from it. A site
-answering several hostnames must therefore canonicalize: a page loaded from another
-one of them is handed a `ws_url` whose origin this router refuses, and a page
-that checks the URL it was given against its own location will hide the link rather
-than offer a broken one.
+`-web-origin` lists the origins the browser route answers, comma-separated. The
+first is the site's: `ws_url` is built from it, and only its page signs in by its
+cookie (Admission, below). One after it, another hostname of the site or an
+extension's `chrome-extension://<id>` (32 letters a to p), is placed as the site's
+page is, under the same budgets and refusals, and is given the ticket a dial with
+no sign-in is, whatever cookie its upgrade carries. A page on a listed hostname is
+still handed a `ws_url` on the site's, which its `connect-src` must allow, and one
+that checks the URL it was given against its own location hides the link.
 
 The browser route validates what HTTP must before it upgrades — method, identifier
-syntax, that the request is an upgrade, `Origin` against `-web-origin` (`403`) and
-the handshake itself (`426` for another version, `400` for a bad key) — then answers
-the `101` with `pkg/websocket` and places the stream as the front door places a
-dial, 32 at once: the route frame, the player's join budget (the front door's,
+syntax, that the request is an upgrade, `Origin` against the origins `-web-origin`
+lists (`403`) and the handshake itself (`426` for another version, `400` for a bad
+key) — then answers the `101` with `pkg/websocket` and places the stream as the
+front door places a dial, 32 at once: the route frame, the player's join budget (the front door's,
 below), the session's liveness and readiness in reconciled Kubernetes state,
 `-route-max` connections for that session counted with the front door's, and the
 pod's game port. Each of those is refused as the join reply a page reads, since a
@@ -234,8 +237,9 @@ With `-identity-url` and `-introspect-url` the router publishes the identity
 service's routes (`/vif/api/auth/*`, byte for byte, the player's address in
 `-client-address-header`) and, in the exchange above, asks the service which account
 a sign-in names: the token a native dial sent over TLS (`sign_in` in its answer) or
-the `vif_sign_in` cookie a page's upgrade carried, from the one origin the browser
-route answers. The ticket then names the account (`acct:<id>`) and its name, which
+the `vif_sign_in` cookie the upgrade of the site's own page carried, the page of
+`-web-origin`'s first entry; an origin listed after it signs in by no cookie. The
+ticket then names the account (`acct:<id>`) and its name, which
 the pod copies onto the roster; the token is stripped before the pod, and a token the
 service does not know, or a service that does not answer, mints an anonymous ticket.
 A sign-in also moves the budgets: a signed-in dial's join is charged to the account
@@ -303,7 +307,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-route-selfsign` | off | end TLS on the front door with a certificate made for this run, in place of `-route-cert`; the sessions API carries its fingerprint (`door_fingerprint`), which a dial pins |
 | `-identity-url`, `-introspect-url` | empty | the identity service's two loopback listeners: `/vif/api/auth/` is forwarded to the first byte for byte, the second is asked which account a sign-in names; empty publishes no accounts |
 | `-join-host` | required | the host every `join_target` names |
-| `-web-origin` | empty | the one origin the browser route answers and `ws_url` is built from; empty publishes no browser route |
+| `-web-origin` | empty | the origins the browser route answers, comma-separated: the site's first, which `ws_url` is built from and whose page alone signs in by its cookie, then any other site's or an extension's `chrome-extension://<id>`; empty publishes no browser route |
 | `-image` | required | the session image; `update-vif-image.sh` writes it on the node |
 | `-log-stream-url` | required | the loopback LogWisp stream `/vif/api/logs` proxies |
 | `-players`, `-players-max` | `4`, `-players` | the default guest ceiling and the highest a request may select (at most 16) |

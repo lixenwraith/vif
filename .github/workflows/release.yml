@@ -127,6 +127,25 @@ jobs:
               -o "dist/vif-$label.tar.gz" "$GITHUB_REF_NAME"
           fi
 
+      # The Chrome extension is the page make wasm builds, packed: loaded in Chromium
+      # and held to its start, a frame and a silent network before its zip joins the
+      # payload. The store's upload is a person's (doc/packaging.md §8).
+      - name: Build and check the Chrome extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          label=nightly
+          version=0.0.0
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            label=${GITHUB_REF_NAME#v}
+            version=${label%%-*}
+          fi
+          make extension EXT_VERSION="$version.$GITHUB_RUN_NUMBER" \
+            EXT_DIR="stage/vif-$label-chrome" EXT_ZIP="dist/vif-$label-chrome.zip"
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps --no-shell chromium
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node script/extension-check.mjs "stage/vif-$label-chrome"
+
       - name: Upload release payload
         uses: actions/upload-artifact@v6
         with:
@@ -295,7 +314,7 @@ jobs:
           set -euo pipefail
           version=${GITHUB_REF_NAME#v}
           flags=(--draft --verify-tag)
-          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APKs, arm64 for a phone and x86_64 for an emulator, install over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
+          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APKs, arm64 for a phone and x86_64 for an emulator, install over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
           case $version in
           *-*)
             flags+=(--prerelease)
@@ -316,7 +335,7 @@ jobs:
           git push origin refs/tags/nightly --force
 
           title='Nightly development build (not a release)'
-          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APKs (Android 11 and newer), arm64 for a phone and x86_64 for an emulator, are signed with the repository's debug key and install over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
+          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APKs (Android 11 and newer), arm64 for a phone and x86_64 for an emulator, are signed with the repository's debug key and install over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound. The chrome zip is the browser page as a Chrome extension, loaded unpacked from chrome://extensions."
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly dist/* --clobber
             # The release carries exactly this build, not a renamed or dropped asset.

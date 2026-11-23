@@ -177,3 +177,37 @@ func TestTheBrowserRouteIsPublishedByABareOrigin(t *testing.T) {
 		t.Fatalf("webSocketURL = %q", got)
 	}
 }
+
+// TestTheSiteLeadsTheOriginsTheBrowserRouteAnswers: -web-origin is a list whose
+// first entry is the site, which ws_url is built from; one after it is another
+// site's origin or an extension's, which the first may not be.
+func TestTheSiteLeadsTheOriginsTheBrowserRouteAnswers(t *testing.T) {
+	const site, extension = "https://play.example.com", "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+	parse := func(origins string) (runtimeConfig, error) {
+		return parseConfig([]string{"-image", "vif:test", "-join-host", "play.example.com",
+			"-log-stream-url", "http://127.0.0.1:8081/stream", "-web-origin", origins}, io.Discard)
+	}
+	cfg, err := parse(site + "," + extension + ",https://www.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Allocator.WebOrigin != site ||
+		!slices.Equal(cfg.Allocator.ListedOrigins, []string{extension, "https://www.example.com"}) {
+		t.Fatalf("the site is %q and the route also answers %q", cfg.Allocator.WebOrigin, cfg.Allocator.ListedOrigins)
+	}
+	if got := (&allocator{cfg: cfg.Allocator}).webSocketURL("0123456789abcdef"); got !=
+		"wss://play.example.com/vif/ws/0123456789abcdef" {
+		t.Fatalf("webSocketURL = %q, want the site's", got)
+	}
+	for name, origins := range map[string]string{
+		"an extension where the site goes": extension + "," + site,
+		"an entry left empty":              site + ",",
+		"an id that is not 32 of a to p":   site + ",chrome-extension://abcdefghijklmnopabcdefghijklmnoq",
+		"an extension's page":              site + "," + extension + "/index.html",
+		"a listed site with a path":        site + ",https://www.example.com/vif",
+	} {
+		if _, err := parse(origins); err == nil {
+			t.Errorf("%s published a browser route: %q", name, origins)
+		}
+	}
+}

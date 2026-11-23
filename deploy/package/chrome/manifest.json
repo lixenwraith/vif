@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "vif",
+    "description": "A real-time roguelike typing shooter played with vi-style motions: solo offline, or with others in a game at lixen.com.",
+    "version": "0.0.0",
+    "minimum_chrome_version": "116",
+    "icons": {
+        "16": "icon-16.png",
+        "32": "icon-32.png",
+        "48": "icon-48.png",
+        "128": "icon-128.png"
+    },
+    "action": {},
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    },
+    "optional_host_permissions": [
+        "https://lixen.com/*"
+    ]
+}

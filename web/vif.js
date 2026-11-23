@@ -4,12 +4,14 @@
     /* The files beside the page, by the names web/ gives them. A site that
        publishes them under other names, as content-hashed ones, says so on this
        script's element: data-wasm, data-worker, data-exec (wasm_exec.js) and
-       data-audio (audio-worklet.js). */
+       data-audio (audio-worklet.js). A copy of the page others cannot open by its
+       own address names the page a shared link opens instead: data-share. */
     const files = (document.currentScript && document.currentScript.dataset) || {};
     const WASM_PATH = files.wasm || 'vif.wasm';
     const WORKER_PATH = files.worker || 'worker.js';
     const EXEC_PATH = files.exec || 'wasm_exec.js';
     const AUDIO_PATH = files.audio || 'audio-worklet.js';
+    const SHARE_PAGE = files.share || '';
 
     /* The screen, the keys and the pointer are TerminalPage's, the terminal module's
        script ahead of this one in terminal.js. A cell opens CELL CSS pixels tall and
@@ -478,7 +480,8 @@
         location.replace(url.href);
     }
 
-    // share copies this page's address, which opens the same game as this page did
+    // share copies the address that opens the same game as this page did: this
+    // page's own, or SHARE_PAGE with this page's arguments
     let shareTimer = 0;
     function share() {
         const done = document.getElementById('share-done');
@@ -488,7 +491,12 @@
             clearTimeout(shareTimer);
             shareTimer = setTimeout(function() { done.hidden = true; }, 1500);
         };
-        const url = location.href.split('#')[0];
+        let url = location.href.split('#')[0];
+        if (SHARE_PAGE) {
+            const shared = new URL(SHARE_PAGE, location.href);
+            for (const arg of new URLSearchParams(location.search).getAll('arg')) shared.searchParams.append('arg', arg);
+            url = shared.href;
+        }
         if (!navigator.clipboard) {
             say('Copy needs a secure page');
             return;

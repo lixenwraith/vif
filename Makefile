@@ -25,6 +25,18 @@ PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 NOTICES ?= $(BIN_DIR)/NOTICES
 PAGE_DIR ?= $(WEB_DIR)
+# The Chrome extension: EXT_DIR to load unpacked, EXT_ZIP for the store, EXT_KEY
+# the store item's public key once it has one (doc/packaging.md §8).
+EXT_DIR ?= $(BIN_DIR)/vif-chrome
+EXT_ZIP ?= $(BIN_DIR)/vif-chrome.zip
+EXT_VERSION ?= 0.0.0.1
+EXT_KEY ?=
+# Chrome takes a version of one to four integers up to 65535, not all of them zero.
+EXT_VERSION_AWK = { if (NF > 4) exit 1; zero = 1; for (i = 1; i <= NF; i++) { if ($$i !~ /^(0|[1-9][0-9]*)$$/ || $$i > 65535) exit 1; if ($$i > 0) zero = 0 }; exit zero }
+# The one FROM a file holds becomes TO, both as written; any other count stops the build.
+EXT_SWAP_AWK = BEGIN { from = ENVIRON["FROM"]; to = ENVIRON["TO"] }; \
+	{ out = ""; while ((at = index($$0, from)) > 0) { out = out substr($$0, 1, at - 1) to; $$0 = substr($$0, at + length(from)); n++ }; print out $$0 }; \
+	END { if (n != 1) { print "extension: " FILENAME " holds " (n + 0) " of " from ", want 1" > "/dev/stderr"; exit 1 } }
 RELEASE_TARGET ?= linux-amd64
 RELEASE_LABEL ?= nightly
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
@@ -101,6 +113,8 @@ help:
 	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted), with the page's scripts"
 	@echo "  page     Write the page's terminal.js and worker.js into $(PAGE_DIR), from the terminal module and web/vif.js"
+	@echo "  extension Build wasm, then pack the page as a Chrome extension: $(EXT_DIR) to load unpacked and"
+	@echo "           $(EXT_ZIP) for the store (EXT_VERSION=$(EXT_VERSION); EXT_KEY: the store item's public key)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  router Build the website-to-K3s session router"
@@ -241,6 +255,37 @@ page: check-go
 	mkdir -p '$(PAGE_DIR)'; \
 	cat "$$dir/web/page.js" $(WEB_DIR)/vif.js >'$(PAGE_DIR)/terminal.js'; \
 	install -m 0644 "$$dir/web/worker.js" '$(PAGE_DIR)/worker.js'
+
+.PHONY: extension
+
+# extension packs the page wasm built as a Chrome extension: EXT_DIR to load
+# unpacked, EXT_ZIP for the store. The page is the site's but for the extension's
+# two scripts, the address a shared link opens and the project page's link.
+# EXT_KEY pins the unpacked build's id to the store item's; no zip carries it.
+extension: wasm $(BIN_DIR)
+	@set -eu; out='$(EXT_DIR)'; zip='$(EXT_ZIP)'; site=https://lixen.com; \
+	swap() { FROM=$$2 TO=$$3 awk '$(EXT_SWAP_AWK)' "$$1" >"$$1.swap" && mv "$$1.swap" "$$1"; }; \
+	case "$$out" in ''|/|.|..) echo "extension: refusing to build into '$$out'" >&2; exit 1 ;; esac; \
+	command -v zip >/dev/null 2>&1 || { echo "extension: zip is not installed" >&2; exit 1; }; \
+	printf '%s\n' '$(EXT_VERSION)' | awk -F. '$(EXT_VERSION_AWK)' || \
+		{ echo "extension: EXT_VERSION '$(EXT_VERSION)' is not one to four integers up to 65535, not all zero" >&2; exit 1; }; \
+	rm -rf "$$out"; install -d -m 0755 "$$out" "$$out/fonts"; \
+	for f in index.html terminal.css terminal.js worker.js wasm_exec.js audio-worklet.js $(BINARY).wasm NOTICES; do \
+		install -m 0644 "$(WEB_DIR)/$$f" "$$out/$$f"; done; \
+	for f in $(WEB_DIR)/fonts/*; do install -m 0644 "$$f" "$$out/fonts/"; done; \
+	for f in $(PKG_DIR)/chrome/*; do install -m 0644 "$$f" "$$out/"; done; \
+	install -m 0644 LICENSE "$$out/LICENSE"; \
+	font=$$($(GO) list -m -f '{{.Dir}}' github.com/lixenwraith/terminal); \
+	install -m 0644 "$${font:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" "$$out/LICENSE.font"; \
+	swap "$$out/index.html" '<script src="terminal.js"></script>' \
+		'<script src="extension.js"></script><script src="terminal.js" data-worker="extension-worker.js" data-share="'"$$site"'/vif/wasm/"></script>'; \
+	swap "$$out/index.html" '<a href="/vif/">' '<a href="'"$$site"'/vif/">'; \
+	swap "$$out/manifest.json" '"version": "0.0.0"' '"version": "$(EXT_VERSION)"'; \
+	install -d -m 0755 "$$(dirname "$$zip")"; rm -f "$$zip"; \
+	packed=$$(cd "$$(dirname "$$zip")" && pwd)/$$(basename "$$zip"); \
+	(cd "$$out" && zip -qrX "$$packed" .); \
+	[ -z '$(EXT_KEY)' ] || swap "$$out/manifest.json" '"manifest_version": 3,' '"manifest_version": 3, "key": "$(EXT_KEY)",'; \
+	echo "built $$out and $$zip, version $(EXT_VERSION)"
 
 # windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
