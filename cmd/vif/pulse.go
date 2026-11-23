@@ -23,9 +23,9 @@ const libPulseSimple = "libpulse-simple.so.0"
 
 // The stream's buffer attributes. The server asks its device for half of what the
 // target holds past two requests, 12.5 ms as the engine's pacat line asks, and the
-// stream holds the rest: two default periods and that, so a write waits only
-// behind what a stall queued, and a stall queues no more. The prebuf is that
-// line's too.
+// stream holds the rest: two default periods and that, so a period's write waits
+// only where a stall has filled the stream, and no stall queues more. The prebuf
+// is that line's too.
 const (
 	pulseTarget  = 125 * time.Millisecond
 	pulseRequest = 50 * time.Millisecond
