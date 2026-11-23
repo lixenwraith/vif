@@ -170,6 +170,32 @@ Docs · Libraries · Branches.
   verify against `go.sum` ("checksum mismatch"), `-tags vif_nogui` still builds
   and gates everything else.
 
+- A Windows build runs under Wine: Ubuntu's Wine 9.0 wants `/run/user/0` to
+  exist, a prefix of its own (`WINEPREFIX`, made by `wineboot -u` in 10 s),
+  `WINEDEBUG=-all`, `WINEDLLOVERRIDES="mscoree,mshtml="`, a display (an `Xvfb` of
+  one's own, with openbox for a managed window) and a `wineserver -p` kept up, or
+  every run starts a server and its services. `make windows-package` and `wine
+  bin/vif.exe` from the folder is the game, driven with xdotool as on X11; its
+  sound needs `PULSE_SERVER` naming a private server. A package's Windows tests
+  run there: `GOOS=windows go test -c -tags "vif_gui novlog" -o x.exe ./cmd/vif`,
+  then `wine x.exe -test.run <name>` from the package's directory. An idle
+  prefix still costs 2 % of a core: `wineserver -k` when done.
+- Wine hands a windowsgui program the shell's streams, so what it prints shows
+  with no console attached, and its message box appears only where it has none:
+  `wine bin/vif.exe -cli` from a shell shows the box, the same from a batch file
+  under `wineconsole cmd /c` prints in the console. Windows itself gives such a
+  program no streams from a console, which is why the build attaches.
+- A script that sets `HOME` for a private sound server or Wine prefix moves Go's
+  module and build caches with it: the next `go` command downloads the toolchain
+  and every module again. Run `go` before sourcing it.
+- A COM interface is called through its method table with
+  `syscall.SyscallN(obj.table[slot], uintptr(unsafe.Pointer(obj)), ...)`, every
+  pointer conversion inside that call's own argument list, the one place the
+  runtime holds a local's address still: a helper taking ready-made `uintptr`s
+  is unsafe for locals, and vet does not say so. A stand-in for a COM object in
+  a test is a table of `windows.NewCallback` functions, which take pointer
+  arguments (`cmd/vif/wasapi_test.go`).
+
 ## Events and ticks
 
 - An event a system pushes in its `Update`, a crossing due at the tick and an FSM
@@ -1478,6 +1504,28 @@ Docs · Libraries · Branches.
 - A variant of one file for a measurement is `go build -overlay <json>` from a
   copy outside the tree (`{"Replace":{"<the file>":"<the copy>"}}`), as `go test
   -overlay` is for a mutation: the worktree never holds the variant.
+
+- Go under Wine reads a clock up to 16 ms stale between waits (`time.Now` reads
+  the shared user page, which wineserver refreshes as it wakes): stamp with
+  `QueryPerformanceCounter`, which there is Linux's `CLOCK_MONOTONIC_RAW` in
+  100 ns, so a Linux process beside it stamps on the same clock. Go's sleeps and
+  tickers are sound under Wine.
+- A goroutine that leaves a system call only to wait in the next never passes
+  the scheduler: from 10 ms on `sysmon` takes its P at every wait and goes back
+  to polling every 20 us, 5 % of a core for the polling thread under Wine.
+  `runtime.Gosched()` once a turn stops it; a locked goroutine pays two thread
+  wakes for it.
+- Wine's WASAPI is not Windows': a 30 ms buffer whatever is asked, a 10 ms timer
+  thread for the device, no loopback capture, `IAudioClient3` and `avrt` as
+  stubs. It asks PipeWire for a 128-frame quantum, at which an unprivileged
+  graph misses cycles on a busy machine, and its driver plays behind whatever
+  each miss held back, so its latency grows within a run: read a sink's own part
+  from a trace of its render thread's turns, not from the monitor alone.
+  Stopping its pipewire-pulse is the one way to make it raise
+  `AUDCLNT_E_DEVICE_INVALIDATED`.
+- Go's monotonic clock on Windows counts the time a machine slept, and the
+  runtime wakes every thread at resume: a timeout armed before a sleep fires
+  the moment the machine wakes, before the thread it waits on has run.
 
 ## Settings files
 

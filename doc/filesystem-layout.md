@@ -103,7 +103,7 @@ the same roots in order:
 2. the user configuration root;
 3. the `wad/` beside the `bin/` the binary sits in: a checkout's, so
    `bin/vif -s td` plays the repository uninstalled, and a package's that unpacks
-   as `bin/` and `wad/` in one folder, as the Steam depot does
+   as `bin/` and `wad/` in one folder, as the Steam depots and the Windows zip do
    ([Packaging §9](packaging.md#9-steam));
 4. the system roots `/usr/local/etc/vif` then `/etc/vif`; `VIF_SYSTEM_ROOTS`
    names others in their place, separated as `PATH` is, and set empty names none.

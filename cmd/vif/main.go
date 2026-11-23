@@ -33,6 +33,7 @@ import (
 // Exit codes
 const (
 	exitFailure  = 1
+	exitUsage    = 2  // a flag refused, as the flag package's own exit
 	exitLogSetup = 73 // EX_CANTCREAT: logging requested but unavailable
 	exitRefused  = 76 // EX_PROTOCOL: a session refused the join, saying whether a retry helps
 )
@@ -118,7 +119,11 @@ func init() {
 }
 
 func main() {
-	flag.CommandLine.Parse(botArgs(flag.CommandLine, os.Args[1:]))
+	// Reached only where a build took the parser's own report and exit from it
+	if err := flag.CommandLine.Parse(botArgs(flag.CommandLine, os.Args[1:])); err != nil {
+		complain(err.Error())
+		os.Exit(exitUsage)
+	}
 	if *flagHelp {
 		// Asked for, so it is output rather than a diagnostic: stdout, exit zero,
 		// greppable without redirecting stderr.
@@ -131,7 +136,7 @@ func main() {
 	}
 	var err error
 	if settings, settingsFile, settingsNotes, err = paths.LoadSettings(flagConfig.Dir); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		complain(err.Error())
 		os.Exit(exitFailure)
 	}
 	settingsStore = paths.SettingsFor(flagConfig.Dir, settingsFile)
@@ -161,14 +166,19 @@ func main() {
 		}
 	})
 	if cli {
-		window = false
+		window, asked = false, "-cli"
+	} else if !window {
+		asked = "-g=false"
 	}
-	if window {
-		if openWindow == nil {
-			fmt.Fprintln(os.Stderr, asked+": desktop window unavailable in this build")
-			os.Exit(exitFailure)
-		}
+	switch {
+	case window && openWindow == nil:
+		complain(asked + ": desktop window unavailable in this build")
+		os.Exit(exitFailure)
+	case window:
 		openWindow()
+	case windowOnly:
+		complain(asked + ": terminal unavailable in this build")
+		os.Exit(exitFailure)
 	}
 	requested := flagConfig.Scenario // what a -join site is asked for; vif.toml's is this machine's
 	applySettings(settings, settingsOwn)
@@ -301,7 +311,7 @@ func main() {
 		if settingsNotice != "" && !noticeSaid {
 			fmt.Fprintln(os.Stderr, settingsNotice) // the run may have ended before showing it
 		}
-		fmt.Fprintln(os.Stderr, err)
+		complain(err.Error())
 		os.Exit(exitCode(err))
 	}
 }
@@ -511,7 +521,8 @@ func logRuntimeReport(r core.RuntimeReport) {
 
 // platformHost is the build's platform host, empty on the terminal. openWindow
 // makes it the desktop window, nil without one; windowByDefault opens it unless
-// -g=false, windowMaximized and windowFullscreen the state it opens in; windowSound
+// -g=false, and windowOnly is a build with no terminal to play in instead;
+// windowMaximized and windowFullscreen are the state it opens in; windowSound
 // gives it speakers of its own as a run starts and windowQuiet closes them. pageSettings
 // is where a browser, which has no vif.toml, reads and writes its settings,
 // pagePlaces where it keeps the places its runs return to, across a reload, and
@@ -520,7 +531,7 @@ var (
 	platformHost                      app.Host
 	openWindow                        func()
 	windowSound, windowQuiet          func()
-	windowByDefault                   bool
+	windowByDefault, windowOnly       bool
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
 	pagePlaces                        app.PlaceStore
@@ -528,6 +539,10 @@ var (
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
 )
+
+// complain says why the run ends before or after its screen: on stderr, or in a
+// box where a build has no console to say it on
+var complain = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
 
 // presenting is the platform host of a run that presents: a window's speakers
 // open only here, so a run that draws nothing holds no stream
