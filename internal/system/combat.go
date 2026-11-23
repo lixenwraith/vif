@@ -480,8 +480,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 					spendDamageImmunity(memberCombat, attacker, weapon, parameter.CombatDamageImmunityDuration)
-					memberCombat.LastDamagedBy = damageCursor
-					targetCombatComp.LastDamagedBy = damageCursor
+					memberCombat.LastDamagedBy, memberCombat.LastAttack = damageCursor, attack.AttackType
+					targetCombatComp.LastDamagedBy, targetCombatComp.LastAttack = damageCursor, attack.AttackType
 					damageTargetDead = memberCombat.HitPoints == 0
 				}
 			}
@@ -502,7 +502,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 				targetCombatComp.RemainingHitFlash, targetCombatComp.HitEntity = parameter.CombatHitFlashDuration, hitEntity
 				spendDamageImmunity(targetCombatComp, attacker, weapon, parameter.CombatDamageImmunityDuration)
-				targetCombatComp.LastDamagedBy = damageCursor
+				targetCombatComp.LastDamagedBy, targetCombatComp.LastAttack = damageCursor, attack.AttackType
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
 		}
@@ -663,7 +663,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				spendDamageImmunity(memberCombat, attacker, weapon, parameter.CombatDamageImmunityDuration)
-				memberCombat.LastDamagedBy = damageCursor
+				memberCombat.LastDamagedBy, memberCombat.LastAttack = damageCursor, attack.AttackType
 				damageApplied = true
 				resolved = true
 			}
@@ -709,7 +709,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if damageApplied {
 		resolved = true
 		// Ablative species credit a whole-species kill from the header
-		targetCombatComp.LastDamagedBy = damageCursor
+		targetCombatComp.LastDamagedBy, targetCombatComp.LastAttack = damageCursor, attack.AttackType
 	}
 
 	// Apply kinetic effect
@@ -813,10 +813,10 @@ func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, s
 	c.HitPoints -= dealt
 	s.recordDamage(slot.Attack, component.CombatEntityCursor, c.CombatEntityType, dealt, 0)
 	c.RemainingHitFlash = parameter.CombatHitFlashDuration
-	c.LastDamagedBy = slot.Source
+	c.LastDamagedBy, c.LastAttack = slot.Source, slot.Attack
 	if member, ok := s.world.Components.Member.GetPtr(e); ok {
 		if header, ok := s.world.Components.Combat.GetPtr(member.HeaderEntity); ok {
-			header.LastDamagedBy = slot.Source
+			header.LastDamagedBy, header.LastAttack = slot.Source, slot.Attack
 		}
 	}
 	s.statBurnTicks.Add(1)

@@ -1940,6 +1940,9 @@ func encodeColumnsCombat(dst []byte, rows []StoreEntry[component.CombatComponent
 		dst = appendUint(dst, rows[i].Value.LastDamagedBy)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.LastAttack)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.CombatEntityType)
 	}
 	for i := range rows {
@@ -2013,6 +2016,9 @@ func decodeColumnsCombat(r *columnReader) []StoreEntry[component.CombatComponent
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.LastDamagedBy, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.LastAttack, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.CombatEntityType, r)

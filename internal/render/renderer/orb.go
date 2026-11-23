@@ -107,12 +107,14 @@ func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuf
 	}
 }
 
-// squareGust draws the gust a kind blows as a ring in its glow, blown a share of
-// the way from the shield's edge out to the wind's reach and fading as it goes; a
-// console draws it in dots
+// squareGust draws the gust a kind blows as a front in its color, blown a share of
+// the way from the shield's edge out to the wind's reach: brightest at its edge,
+// trailing off behind it as far as the shield and thinning as it goes, screened
+// over what lies under it; a console draws its edge in dots
 func (r *OrbRenderer) squareGust(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, blown float64) {
 	cx, cy := sq.Center()
-	radius := sq.ShieldRadius(ctx.CellAspect) + blown*parameter.SquareWindReach
+	rim := sq.ShieldRadius(ctx.CellAspect)
+	radius := rim + blown*parameter.SquareWindReach
 	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, radius+1, ctx.CellAspect.FromCircular(radius+1))
 	if !ok {
 		return
@@ -121,17 +123,24 @@ func (r *OrbRenderer) squareGust(ctx render.RenderContext, buf *render.RenderBuf
 	for y := startY; y <= endY; y++ {
 		dy := ctx.CellAspect.Circular(float64(y - cy))
 		for x := startX; x <= endX; x++ {
-			off := math.Abs(math.Hypot(float64(x-cx), dy) - radius)
+			// Columns behind the edge; ahead of it the front ends within one
+			dist := math.Hypot(float64(x-cx), dy)
+			behind := radius - dist
+			shape := 1 - behind/visual.SquareGustWidth
+			if behind < 0 {
+				shape = 1 + behind
+			}
 			sx, sy, visible := ctx.MapToScreen(x, y)
-			if off >= visual.SquareGustWidth || !visible {
+			if shape <= 0 || dist < rim || !visible {
 				continue
 			}
 			if console {
-				buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
+				if behind >= 0 && behind < 1 {
+					buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
+				}
 				continue
 			}
-			alpha := visual.SquareGustAlpha * (1 - blown) * (1 - off/visual.SquareGustWidth)
-			buf.Set(sx, sy, 0, visual.RgbBlack, colors.Glow, render.BlendScreen, alpha, terminal.AttrNone)
+			buf.SetBgScreen(sx, sy, colors.Block, visual.RgbBackground, visual.SquareGustAlpha*(1-blown)*shape*shape)
 		}
 	}
 }

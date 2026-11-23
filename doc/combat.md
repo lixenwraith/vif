@@ -128,9 +128,10 @@ field by field, as it overrides `Damage`: a scenario writes `pulse = { radius,
 duration_ms, sustained, grow_ms, hit_interval_ms, style, attack, charged }`, style
 `ring`, `glow`, `hidden` or `slide`. A death wave is a cursor's pulse no weapon
 holds, `component.DeathWave`: fired on `EventDeathWaveRequest` from the cursor's
-cell, it grows from nearly nothing (`PulseSpec.Start`) to the map's far corner and
-strikes every tick under the `death_wave` family, whose rows take every hit point
-of a drain, a swarm, an eye and a snake, and so of a data species on the swarm row. A mount's pulse carries its attack family and charge,
+cell, it grows from nearly nothing (`PulseSpec.Start`) past the map's far corner
+by its slide's band and strikes every tick under the `death_wave` family, whose
+rows take every hit point of a drain, a swarm, an eye and a snake, and so of a data
+species on the swarm row. A mount's pulse carries its attack family and charge,
 but the cursors it strikes take only its `CursorDamage` until cursors take a
 family's effects (todo: PvP).
 
@@ -194,7 +195,10 @@ as the hold, a stun lasting its profile's `Duration` (a pulse's
 (`SwarmComponent.Gateway`, `BehaviorComponent.Gateway`) the firing line faces. A
 family lands alike from every attacker, which a data species' row takes as given,
 so the strike and hold are families of their own, and a prototype's `attacks` can
-take a body out of every other family's reach and leave it to the strike. The
+take a body out of every other family's reach and leave it to the strike. A hit
+that takes hit points records its family (`CombatComponent.LastAttack`), and a data
+species killed dies by that row's `death`, its prototype's unless the row names
+one, so a scenario tells its kinds of kill apart. The
 square's defense rewards that cursor's boost, and the shield's push and drain are
 the cursor's own; with the shield down the square lands each body on its blocks
 itself, once a touch (`SquareSystem.breach`): the body's contact through

@@ -62,10 +62,10 @@ const (
 	// SquareOrbIdle is how bright the orb of a kind no line holds draws, of a held one's
 	SquareOrbIdle = 0.4
 
-	// A gust draws as a ring SquareGustWidth columns either side of its radius, at
-	// most SquareGustAlpha of its kind's glow
-	SquareGustWidth = 1.5
-	SquareGustAlpha = 0.6
+	// A gust draws as a front trailing off over SquareGustWidth columns behind its
+	// edge, at most SquareGustAlpha of its kind's color
+	SquareGustWidth = 6.0
+	SquareGustAlpha = 0.5
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left

@@ -255,7 +255,11 @@ func (s *BehaviorSystem) Update() {
 				X:            killX,
 				Y:            killY,
 			})
-			s.terminate(header, c.proto.Death)
+			effect := c.proto.Death
+			if a := c.combat.LastAttack; a >= 0 && a < component.CombatAttackTypeCount {
+				effect = c.proto.Attacks[a].Death
+			}
+			s.terminate(header, effect)
 			continue
 		}
 		if timer, ok := s.world.Components.Timer.GetPtr(header); ok && timer.Expired(component.TimerDeadline) {

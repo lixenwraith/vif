@@ -823,6 +823,12 @@ Docs · Libraries · Branches.
   no energy zeroes the shield; `EventHeatEmberRequest` moves the ember alone.
 - A `[bus]` event needs its row in `crossingRules` (`internal/system/network.go`)
   and a payload naming the cursor it acts as, or every peer refuses it.
+- `CombatAttackType`'s zero is `tracer` and `CombatAttackNone` is -1, so a field of
+  it reads tracer until a hit writes it: `CombatComponent.LastAttack` is read only
+  on a kill, which a hit that wrote it brought.
+- Under `:god` the cursor's weapons kill `magic`'s strays and leave a wave's red
+  bodies whole: their rows take no damage by design, and only a strike or a death
+  wave ends them. A report of weapons doing nothing there is that.
 - A wind long and strong enough to move a homing body holds it off for good: one
   second in two of a uniform radial wind at force 16 held `magic`'s lightest body
   six columns out, where it had touched every 4.5 s. The square's gust is short
@@ -848,9 +854,13 @@ Docs · Libraries · Branches.
   string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody sees
   stays ASCII, and a comment after code on its line as code, so that comment
   does too.
-- A glow added (`BlendAdd`) over a cell nothing painted adds onto black, a band
-  darker than the theme's background: blend it with `SetBgScreen` on
-  `visual.RgbBackground`, as the shield's glow does.
+- A glow added (`BlendAdd`) or screened (`BlendScreen`) through `Set` over a cell
+  nothing painted blends onto black, a band darker than the theme's background:
+  blend it with `SetBgScreen` on `visual.RgbBackground`, as the shield's glow and
+  the square's gust do.
+- A renderer that redraws what lies under it reads the frame once before it draws
+  (`SlideRenderer.hold`) and gives a sample off its shape that cell back: a half
+  cell left at the zero color is a black notch along the shape's edge.
 - A row added to a Settings section moves two tests that hold the page by its
   rows: `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound
   section's, and `TestAPressDrivesTheMenu` presses rows by number down to
@@ -915,6 +925,16 @@ Docs · Libraries · Branches.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
+- A game left running in tmux plays on between captures: `magic` unattended falls
+  in half a minute and starts over, so a clock near zero after a change is that,
+  not the change. `:emit DeathWaveRequest {entity = 2}` runs its death wave, its
+  cursor being entity 2.
+- `tmux kill-server` returns before the server is gone: a `new-session` sent at
+  once can land on the dying one and take the next command down with "server
+  exited unexpectedly". Wait a moment, or start under a new `-L` name.
+- A renderer's look iterates fastest off the game: a scratch test draws it into a
+  `render.RenderBuffer` over a stand-in frame, as its own test does, and writes
+  the cells to a PNG, a half block two pixels high.
 - `tmux send-keys` drops a `;`: one alone is its command separator and a trailing
   one in a `-l` string is cut, so `fx;;;;` sends three repeats; send `'\;'` as its
   own argument. A capture shows the cursor on a glyph as the glyph, so read the
