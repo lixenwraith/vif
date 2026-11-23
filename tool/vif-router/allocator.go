@@ -54,13 +54,16 @@ type allocatorConfig struct {
 	LogLevels       []string
 	WadDir          string
 
-	// WebOrigin is the one origin the browser route answers, and publishing it is
-	// what turns that route on; see doc/kubernetes-fleet.md §9.
-	WebOrigin string
-	// RouteMax bounds one session's connections through the front door and the
-	Tunnels int // doors runs may publish through the router at once; 0 publishes none
+	// WebOrigin is the site's origin: publishing it turns the browser route on,
+	// ws_url is built from it and its page's sign-in cookie alone is read. The
+	// route answers ListedOrigins too, as it answers a dial with no sign-in; see
+	// doc/kubernetes-fleet.md §9.
+	WebOrigin     string
+	ListedOrigins []string
+	Tunnels       int // doors runs may publish through the router at once; 0 publishes none
 	// DoorsPerAddress bounds the doors one address holds at once; 0 leaves it to -tunnels.
 	DoorsPerAddress int
+	// RouteMax bounds one session's connections through the front door and the
 	// browser route together; see holds.
 	RouteMax int
 	// Spectators is how many one session is shown to at once through this router,
@@ -887,9 +890,9 @@ func expiresIn(reported string, item job, now time.Time) string {
 	return left.Round(time.Second).String()
 }
 
-// webSocketURL is derived from the origin the route accepts rather than configured
-// beside it: a page handed a URL whose origin this router would refuse is a
-// player told to dial a door that will not open.
+// webSocketURL is derived from the site's origin, which the route accepts, rather
+// than configured beside it: a page handed a URL whose origin this router would
+// refuse is a player told to dial a door that will not open.
 func (a *allocator) webSocketURL(id string) string {
 	if a.cfg.WebOrigin == "" {
 		return ""

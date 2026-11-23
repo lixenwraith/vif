@@ -147,7 +147,7 @@ What bounds a stranger:
   than supplied, a refusal for a session that is not live and ready, and
   `-route-max` connections per session over the two together, each released when
   its splice ends: a write stalled ten seconds ends a direction, and the other then
-  has ten seconds. The browser route adds one `Origin` and the edge's rate limits,
+  has ten seconds. The browser route adds the `Origin`s it lists and the edge's rate limits,
   refused before the upgrade. The front door, the router's one Internet-facing
   socket, places at most 32 connections at once, reads one name-sized frame from
   each within five seconds, and refuses before it dials a pod (§9);
