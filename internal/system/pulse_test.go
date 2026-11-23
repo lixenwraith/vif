@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 )
 
 // TestAGrowingPulseStrikesOnlyItsDrawnSize: a pulse strikes inside the size it has
@@ -67,5 +69,31 @@ func TestAMountRequestShapesItsPulse(t *testing.T) {
 		HitInterval: 100 * time.Millisecond, Style: component.PulseHidden, Attack: component.CombatAttackExplosion}
 	if got.PulseSpec != want || got.Damage != (component.CursorDamage{EnergyDrain: 900, HeatDelta: -parameter.HostedDisruptorHeat}) {
 		t.Fatalf("pulse = %+v damage %+v, want %+v and 900 energy at the kind's heat", got.PulseSpec, got.Damage, want)
+	}
+}
+
+// TestADeathWaveRunsFromItsCursorToTheMapsFarCorner: a request fires one slide pulse
+// of the death wave's family on its cursor's cell, reaching the corner farthest from
+// it; the family ends a swarm and has no row for a quasar
+func TestADeathWaveRunsFromItsCursorToTheMapsFarCorner(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapons := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	weapons.HandleEvent(event.GameEvent{Type: event.EventDeathWaveRequest, Payload: &event.DeathWaveRequestPayload{Entity: cursor}})
+	waves := w.Components.Pulse.Entities()
+	if len(waves) != 1 {
+		t.Fatalf("the request fired %d pulses, want one", len(waves))
+	}
+	wave, _ := w.Components.Pulse.GetComponent(waves[0])
+	at, _ := w.Positions.GetPosition(cursor)
+	cfg := w.Resources.Config
+	corner := math.Hypot(float64(cfg.MapWidth-1-at.X), cfg.CellAspect.Circular(float64(cfg.MapHeight-1-at.Y)))
+	if wave.X != at.X || wave.Y != at.Y || wave.Owner != cursor || wave.Radius < corner ||
+		wave.Style != component.PulseSlide || wave.Attack != component.CombatAttackDeathWave {
+		t.Fatalf("the death wave is %+v, want a slide pulse of its family on (%d,%d) reaching %.1f", wave, at.X, at.Y, corner)
+	}
+	lethal := profile.Attack(component.CombatAttackDeathWave, component.CombatEntityCursor, component.CombatEntitySwarm)
+	if lethal == nil || lethal.DamageValue < parameter.CombatInitialHPSwarm ||
+		profile.Attack(component.CombatAttackDeathWave, component.CombatEntityCursor, component.CombatEntityQuasar) != nil {
+		t.Fatal("the death wave's family does not end a swarm, or has a row for a quasar")
 	}
 }

@@ -105,7 +105,7 @@ func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GatewaySendRequestPayload); ok {
 			if e, gw := s.gatewayOn(payload.AnchorEntity); gw != nil {
 				if at, ok := s.world.Positions.GetPosition(gw.AnchorEntity); ok {
-					s.emitSpawnEvent(e, payload.Species, uint8(payload.SubType), at.X+gw.OffsetX, at.Y+gw.OffsetY, gw.GroupID, 0)
+					s.emitSpawnEvent(e, payload.Species, uint8(payload.SubType), at.X+gw.OffsetX, at.Y+gw.OffsetY, gw.GroupID, 0, false)
 				}
 			}
 		}
@@ -160,9 +160,11 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		MinInterval:       minInterval,
 		OffsetX:           payload.OffsetX,
 		OffsetY:           payload.OffsetY,
+		Wave:              payload.Wave,
 	}
 	if e, standing := s.gatewayOn(anchorEntity); standing != nil {
 		gwComp.Accumulated, gwComp.Held, gwComp.RouteDistID = standing.Accumulated, standing.Held, standing.RouteDistID
+		gwComp.WaveOut = standing.WaveOut
 		s.world.Components.Gateway.SetComponent(e, gwComp)
 		return
 	}
@@ -181,6 +183,15 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 			TargetGroupID: payload.GroupID,
 		})
 	}
+}
+
+// waveLives reports whether a body of a wave this gateway sent still lives
+func (s *GatewaySystem) waveLives(gateway core.Entity) (alive bool) {
+	s.world.Components.Behavior.Each(func(_ core.Entity, b *component.BehaviorComponent) bool {
+		alive = b.Wave && b.Gateway == gateway
+		return !alive
+	})
+	return alive
 }
 
 func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
@@ -215,6 +226,13 @@ func (s *GatewaySystem) Update() {
 			continue
 		}
 
+		if gw.WaveOut && !gw.Wave && !s.waveLives(gwEntity) {
+			gw.WaveOut = false
+			s.world.PushEvent(event.EventGatewayWaveDefeated, &event.GatewayWavePayload{
+				AnchorEntity: anchorEntity, X: anchorPos.X, Y: anchorPos.Y,
+			})
+		}
+
 		if gw.Held > 0 {
 			gw.Held = max(gw.Held-dt, 0)
 			activeCount++
@@ -246,7 +264,8 @@ func (s *GatewaySystem) Update() {
 			spawnX := anchorPos.X + gw.OffsetX
 			spawnY := anchorPos.Y + gw.OffsetY
 
-			s.emitSpawnEvent(gwEntity, gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
+			s.emitSpawnEvent(gwEntity, gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID, gw.Wave)
+			gw.WaveOut = gw.WaveOut || gw.Wave && gw.Species >= component.SpeciesDataFirst
 		}
 
 		activeCount++
@@ -257,8 +276,9 @@ func (s *GatewaySystem) Update() {
 }
 
 // emitSpawnEvent asks the species' own system for a spawn, a data species' by the
-// land request its program answers; routeDistID draws an eye's route from its pool
-func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
+// land request its program answers, marked one of a wave or not; routeDistID draws
+// an eye's route from its pool
+func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32, wave bool) {
 	switch species {
 	case component.SpeciesEye:
 		// Sample GA if available
@@ -315,7 +335,7 @@ func (s *GatewaySystem) emitSpawnEvent(gateway core.Entity, species component.Sp
 	default:
 		if species >= component.SpeciesDataFirst {
 			s.world.PushEvent(event.EventSpeciesLandRequest, &event.SpeciesLandRequestPayload{
-				Species: species, X: x, Y: y, Gateway: gateway,
+				Species: species, X: x, Y: y, Gateway: gateway, Wave: wave,
 			})
 		}
 	}

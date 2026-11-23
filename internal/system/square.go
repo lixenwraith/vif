@@ -22,6 +22,7 @@ import (
 type SquareSystem struct {
 	world *engine.World
 	faced []core.Entity // the gateways a fire's line faces, reused
+	on    []core.Entity // a body's members on the blocks, reused
 	toggle
 }
 
@@ -90,6 +91,7 @@ func (s *SquareSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	s.world.Components.Square.Each(func(e core.Entity, sq *component.SquareComponent) bool {
 		s.cover(sq)
+		sq.Magic = max(sq.Magic-dt, 0)
 		for kind := range sq.Effects {
 			effect := &sq.Effects[kind]
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
@@ -111,7 +113,7 @@ func (s *SquareSystem) spawn(p *event.SquareSpawnRequestPayload) {
 		return
 	}
 	cfg := s.world.Resources.Config
-	sq := component.SquareComponent{Width: p.BlockWidth, Height: p.BlockHeight, Kinds: kinds}
+	sq := component.SquareComponent{Width: p.BlockWidth, Height: p.BlockHeight, Kinds: kinds, ShieldStep: p.ShieldStep}
 	if sq.Width <= 0 {
 		sq.Width = parameter.SquareBlockWidth
 	}
@@ -175,18 +177,66 @@ func (s *SquareSystem) owner(sq *component.SquareComponent) core.Entity {
 	return 0
 }
 
-// cover has its cursor's shield reach past the square's corners and hold its boost
-// to parameter.SquareBoostCap, on the instance that simulates the cursor (D-13)
+// cover has its cursor's shield reach past the square's corners, hold its boost to
+// parameter.SquareBoostCap and step by the square's energy, on the instance that
+// simulates the cursor (D-13). With that shield down the blocks take the touches.
 func (s *SquareSystem) cover(sq *component.SquareComponent) {
-	shield, ok := s.world.Components.Shield.GetPtr(s.world.ResolveOwnedCursor(s.owner(sq)))
+	cursor := s.world.ResolveOwnedCursor(s.owner(sq))
+	shield, ok := s.world.Components.Shield.GetPtr(cursor)
 	if !ok {
 		return
 	}
-	shield.BoostCap = parameter.SquareBoostCap
+	shield.BoostCap, shield.Step = parameter.SquareBoostCap, sq.ShieldStep
 	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); shield.Radius != want {
 		shield.Radius = want
 		s.world.UpdateBoundsRadius()
 	}
+	if !shield.Active {
+		s.breach(sq, cursor)
+	}
+}
+
+// breach lands each body standing on the blocks: its touch costs the cursor heat
+// and it is thrown off as a shield throws it, once a touch, a body still flying
+// from one landing no other
+func (s *SquareSystem) breach(sq *component.SquareComponent, cursor core.Entity) {
+	w, h := sq.Size()
+	land := func(body core.Entity, touch component.CursorDamage) {
+		c, ok := s.world.Components.Combat.GetPtr(body)
+		header, composite := s.world.Components.Header.GetPtr(body)
+		if !ok || !composite || c.RemainingKineticImmunity > 0 {
+			return
+		}
+		s.on = s.on[:0]
+		for _, m := range header.MemberEntries {
+			if at, ok := s.world.Positions.GetPosition(m.Entity); ok && m.Entity != 0 &&
+				at.X >= sq.X && at.X < sq.X+w && at.Y >= sq.Y && at.Y < sq.Y+h {
+				s.on = append(s.on, m.Entity)
+			}
+		}
+		if len(s.on) == 0 {
+			return
+		}
+		s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackShield,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
+			TargetEntity: body,
+			HitEntities:  slices.Clone(s.on),
+		})
+		strikeCursor(s.world, cursor, touch)
+		s.world.PushCrossing(event.EventSquareHit, &event.SquareHitPayload{Entity: cursor})
+	}
+	for _, swarm := range s.world.Components.Swarm.Entities() {
+		land(swarm, profile.Contact[component.SpeciesSwarm])
+	}
+	protos := s.world.Resources.Behaviors
+	s.world.Components.Behavior.Each(func(body core.Entity, b *component.BehaviorComponent) bool {
+		if int(b.Program) < len(protos) {
+			land(body, protos[b.Program].Contact)
+		}
+		return true
+	})
 }
 
 // press selects the block a digit names for the pressing slot, or turns the line of
@@ -227,6 +277,26 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 	}
 	sq.Lines = squareLines(sq)
 	s.trigger(e, sq)
+	if sq.Magic <= 0 && sq.IsMagic() {
+		sq.Magic = parameter.SquareMagicCooldown
+		s.shed(sq)
+	}
+}
+
+// shed has each block throw off dust in its digit, on this instance for its own
+// player: what special fire then detonates
+func (s *SquareSystem) shed(sq *component.SquareComponent) {
+	batch := event.ParticleBatchPool.Acquire()
+	for place, digit := range sq.Digits {
+		x, y := sq.Place(place)
+		for i := range parameter.SquareMagicDust {
+			batch.Entries = append(batch.Entries, event.ParticleSpawnEntry{
+				Behavior: component.ParticleDust, Level: component.GlyphBright, Char: rune('0' + digit),
+				X: x + (2*i+1)*sq.Width/(2*parameter.SquareMagicDust), Y: y + i%sq.Height,
+			})
+		}
+	}
+	s.world.PushLocal(event.EventParticleSpawnBatch, batch)
 }
 
 // squareLines reads the kind each line holds three of
@@ -251,8 +321,8 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 }
 
 // fire runs a kind's effect from line as its cursor's: a boost of the shield, as
-// many rewards as its hold is of a kill's, any other kind on the gateways the line
-// faces and the bodies they sent
+// many rewards as its hold is of a kill's, with a gust out from the square, any
+// other kind on the gateways the line faces and the bodies they sent
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
 	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown}
@@ -263,6 +333,12 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 		for range int(spec.Duration / parameter.BoostBaseDuration) {
 			s.world.PushLocal(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
 		}
+	}
+	if cx, cy := sq.Center(); spec.Wind > 0 {
+		s.world.PushEvent(event.EventWindStart, &event.WindStartPayload{
+			Force: spec.Wind, Duration: parameter.SquareWindDuration, Radial: true, X: cx, Y: cy,
+			Reach: sq.ShieldRadius(s.world.Resources.Config.CellAspect) + parameter.SquareWindReach,
+		})
 	}
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }

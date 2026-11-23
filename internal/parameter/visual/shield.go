@@ -67,6 +67,12 @@ var ShieldLooks = [component.ShieldTypeCount]ShieldLook{
 	},
 }
 
+// ShieldRamp colors a stepped shield (ShieldComponent.Step) by the steps of energy
+// it holds, from under one up
+var ShieldRamp = [parameter.ShieldSteps]color.RGB{
+	color.Gray, color.HotPink, color.DarkViolet, color.RoyalBlue, color.LimeGreen, color.Yellow, color.Red,
+}
+
 // WraithField is the field round a Wraith, at the player shield's radius: the boost's
 // turning glow, pale and slower
 var WraithField = ShieldLook{

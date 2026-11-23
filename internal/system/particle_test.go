@@ -477,3 +477,22 @@ func TestDecayOrbitsKrakenOnlyWhileItSpinsOrCharges(t *testing.T) {
 		t.Fatalf("decay beside an idle Kraken = %+v, velocity (%v, %v); want a straight fall", particle, kinetic.VelX, kinetic.VelY)
 	}
 }
+
+// TestDustCirclesNoFixedCursor: dust circles a cursor that holds energy, and one
+// fixed where it spawned pulls none, so its dust drifts as it was thrown
+func TestDustCirclesNoFixedCursor(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		w, cursor, _ := testCursorWorld(t)
+		w.Resources.Config.CursorsFixed = fixed
+		energy, _ := w.Components.Energy.GetPtr(cursor)
+		energy.Current = 1000
+		particles := ready(NewParticleSystem(w)).(*ParticleSystem)
+		particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 9, Y: 5, Char: 'u', Level: component.GlyphBright}, 5, 5)
+		w.Resources.Time.DeltaTime = 50 * time.Millisecond
+		particles.Update()
+		dust, _ := w.Components.Particle.GetComponent(w.Components.Particle.Entities()[0])
+		if dust.Orbiting == fixed {
+			t.Fatalf("with its cursor fixed %t, the dust circles it: %t", fixed, dust.Orbiting)
+		}
+	}
+}

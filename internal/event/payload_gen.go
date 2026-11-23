@@ -79,11 +79,13 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWeaponFireRequest:               func() any { return new(WeaponFireRequestPayload) },
 	EventGunAimRequest:                   func() any { return new(GunAimRequestPayload) },
 	EventFireSpecialRequest:              func() any { return new(FireSpecialRequestPayload) },
+	EventDeathWaveRequest:                func() any { return new(DeathWaveRequestPayload) },
 	EventMountRequest:                    func() any { return new(MountRequestPayload) },
 	EventHeatAddRequest:                  func() any { return new(HeatAddRequestPayload) },
 	EventHeatSetRequest:                  func() any { return new(HeatSetRequestPayload) },
 	EventHeatSpendRequest:                func() any { return new(HeatSpendRequestPayload) },
 	EventHeatBurst:                       func() any { return new(HeatBurstPayload) },
+	EventHeatEmberRequest:                func() any { return new(HeatEmberRequestPayload) },
 	EventEmberSpent:                      func() any { return new(HeatBurstPayload) },
 	EventBoostActivate:                   func() any { return new(BoostActivatePayload) },
 	EventBoostDeactivate:                 func() any { return new(BoostDeactivatePayload) },
@@ -191,8 +193,10 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGatewayDespawned:                func() any { return new(GatewayDespawnedPayload) },
 	EventGatewayHoldRequest:              func() any { return new(GatewayHoldRequestPayload) },
 	EventGatewaySendRequest:              func() any { return new(GatewaySendRequestPayload) },
+	EventGatewayWaveDefeated:             func() any { return new(GatewayWavePayload) },
 	EventSquareSpawnRequest:              func() any { return new(SquareSpawnRequestPayload) },
 	EventSquareAligned:                   func() any { return new(SquareAlignedPayload) },
+	EventSquareHit:                       func() any { return new(SquareHitPayload) },
 	EventGeneticRegisterSpecies:          func() any { return new(GeneticRegisterSpeciesPayload) },
 	EventGeneticAbandonEval:              func() any { return new(GeneticAbandonEvalPayload) },
 	EventDebugFlowToggle:                 func() any { return new(DebugFlowGroupPayload) },
@@ -264,11 +268,13 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWeaponFireRequest:               &codecWeaponFireRequestPayload,
 	EventGunAimRequest:                   &codecGunAimRequestPayload,
 	EventFireSpecialRequest:              &codecFireSpecialRequestPayload,
+	EventDeathWaveRequest:                &codecDeathWaveRequestPayload,
 	EventMountRequest:                    &codecMountRequestPayload,
 	EventHeatAddRequest:                  &codecHeatAddRequestPayload,
 	EventHeatSetRequest:                  &codecHeatSetRequestPayload,
 	EventHeatSpendRequest:                &codecHeatSpendRequestPayload,
 	EventHeatBurst:                       &codecHeatBurstPayload,
+	EventHeatEmberRequest:                &codecHeatEmberRequestPayload,
 	EventEmberSpent:                      &codecHeatBurstPayload,
 	EventBoostActivate:                   &codecBoostActivatePayload,
 	EventBoostDeactivate:                 &codecBoostDeactivatePayload,
@@ -376,8 +382,10 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGatewayDespawned:                &codecGatewayDespawnedPayload,
 	EventGatewayHoldRequest:              &codecGatewayHoldRequestPayload,
 	EventGatewaySendRequest:              &codecGatewaySendRequestPayload,
+	EventGatewayWaveDefeated:             &codecGatewayWavePayload,
 	EventSquareSpawnRequest:              &codecSquareSpawnRequestPayload,
 	EventSquareAligned:                   &codecSquareAlignedPayload,
+	EventSquareHit:                       &codecSquareHitPayload,
 	EventGeneticRegisterSpecies:          &codecGeneticRegisterSpeciesPayload,
 	EventGeneticAbandonEval:              &codecGeneticAbandonEvalPayload,
 	EventDebugFlowToggle:                 &codecDebugFlowGroupPayload,
@@ -599,7 +607,7 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.MainFireCooldown), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunity), kind: kindInt, size: unsafe.Sizeof(int64(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 12, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 13, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldColor), kind: kindStruct, sub: &codecColorRGB},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.EmberActive), kind: kindBool},
@@ -1000,6 +1008,14 @@ var codecFireSpecialRequestPayload = structCodec{size: unsafe.Sizeof(FireSpecial
 	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
+func (p *DeathWaveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDeathWaveRequestPayload, unsafe.Pointer(p)
+}
+
+var codecDeathWaveRequestPayload = structCodec{size: unsafe.Sizeof(DeathWaveRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DeathWaveRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
 var codecMountPulse = structCodec{size: unsafe.Sizeof(MountPulse{}), fields: []field{
 	{off: unsafe.Offsetof(MountPulse{}.Radius), kind: kindFloat},
 	{off: unsafe.Offsetof(MountPulse{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
@@ -1062,6 +1078,15 @@ func (p *HeatBurstPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecHeatBurstPayload = structCodec{size: unsafe.Sizeof(HeatBurstPayload{}), fields: []field{
 	{off: unsafe.Offsetof(HeatBurstPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *HeatEmberRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecHeatEmberRequestPayload, unsafe.Pointer(p)
+}
+
+var codecHeatEmberRequestPayload = structCodec{size: unsafe.Sizeof(HeatEmberRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(HeatEmberRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(HeatEmberRequestPayload{}.Lit), kind: kindBool},
 }}
 
 func (p *BoostActivatePayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1506,6 +1531,7 @@ var codecSpeciesLandRequestPayload = structCodec{size: unsafe.Sizeof(SpeciesLand
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Gateway), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Wave), kind: kindBool},
 }}
 
 var codecFuseSource = structCodec{size: unsafe.Sizeof(FuseSource{}), fields: []field{
@@ -1619,6 +1645,10 @@ var codecWindStartPayload = structCodec{size: unsafe.Sizeof(WindStartPayload{}),
 	{off: unsafe.Offsetof(WindStartPayload{}.Force), kind: kindFloat},
 	{off: unsafe.Offsetof(WindStartPayload{}.Direction), kind: kindFloat},
 	{off: unsafe.Offsetof(WindStartPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(WindStartPayload{}.Radial), kind: kindBool},
+	{off: unsafe.Offsetof(WindStartPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WindStartPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WindStartPayload{}.Reach), kind: kindFloat},
 }}
 
 func (p *DriftStartPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -2162,6 +2192,7 @@ var codecGatewaySpawnRequestPayload = structCodec{size: unsafe.Sizeof(GatewaySpa
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.UseRouteGraph), kind: kindBool},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.Wave), kind: kindBool},
 }}
 
 func (p *GatewayDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -2200,6 +2231,16 @@ var codecGatewaySendRequestPayload = structCodec{size: unsafe.Sizeof(GatewaySend
 	{off: unsafe.Offsetof(GatewaySendRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 }}
 
+func (p *GatewayWavePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGatewayWavePayload, unsafe.Pointer(p)
+}
+
+var codecGatewayWavePayload = structCodec{size: unsafe.Sizeof(GatewayWavePayload{}), fields: []field{
+	{off: unsafe.Offsetof(GatewayWavePayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GatewayWavePayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewayWavePayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
 func (p *SquareSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecSquareSpawnRequestPayload, unsafe.Pointer(p)
 }
@@ -2211,6 +2252,7 @@ var codecSquareSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SquareSpawn
 	{off: unsafe.Offsetof(SquareSpawnRequestPayload{}.Groups), kind: kindSlice, elem: &field{kind: kindString}, stride: unsafe.Sizeof(""), make: func(p unsafe.Pointer, n int) { *(*[]string)(p) = make([]string, n) }},
 	{off: unsafe.Offsetof(SquareSpawnRequestPayload{}.BlockWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SquareSpawnRequestPayload{}.BlockHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SquareSpawnRequestPayload{}.ShieldStep), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *SquareAlignedPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -2220,6 +2262,14 @@ func (p *SquareAlignedPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecSquareAlignedPayload = structCodec{size: unsafe.Sizeof(SquareAlignedPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SquareAlignedPayload{}.Kind), kind: kindUint, size: unsafe.Sizeof(component.SquareKind(0))},
 	{off: unsafe.Offsetof(SquareAlignedPayload{}.Line), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *SquareHitPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSquareHitPayload, unsafe.Pointer(p)
+}
+
+var codecSquareHitPayload = structCodec{size: unsafe.Sizeof(SquareHitPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SquareHitPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 var codecParameterBoundDef = structCodec{size: unsafe.Sizeof(ParameterBoundDef{}), fields: []field{

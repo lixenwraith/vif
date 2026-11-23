@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/status"
 )
 
@@ -177,6 +178,14 @@ func (s *ShieldSystem) Update() {
 
 		shieldComp, ok := s.world.Components.Shield.GetPtr(e)
 		if !ok || !shieldComp.Active {
+			return true
+		}
+		// A stepped shield shows the steps of energy it holds and drains none of it
+		if shieldComp.Step > 0 {
+			if energy, ok := s.world.Components.Energy.GetComponent(e); ok {
+				steps := min(absI64(energy.Current)/shieldComp.Step, int64(len(visual.ShieldRamp)-1))
+				shieldComp.Color = visual.ShieldRamp[steps]
+			}
 			return true
 		}
 

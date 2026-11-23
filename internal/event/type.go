@@ -231,6 +231,8 @@ const (
 	EventGunAimRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest
+	// EventDeathWaveRequest (DeathWaveRequestPayload) [local] runs a death wave out from a cursor to the map's edges
+	EventDeathWaveRequest
 	// EventMountRequest (MountRequestPayload) [shared] puts a weapon on a Shared host
 	EventMountRequest
 
@@ -244,6 +246,8 @@ const (
 	EventHeatSpendRequest
 	// EventHeatBurst (HeatBurstPayload) [local] signals heat burst notification
 	EventHeatBurst
+	// EventHeatEmberRequest (HeatEmberRequestPayload) [local] lights a cursor's ember or puts it out, its heat as it stands
+	EventHeatEmberRequest
 	// EventEmberSpent (HeatBurstPayload) [bus] carries an owner's ember burning its heat out
 	EventEmberSpent
 
@@ -635,6 +639,8 @@ const (
 	EventGatewayHoldRequest
 	// EventGatewaySendRequest (GatewaySendRequestPayload) [shared] has one gateway send one of a species now
 	EventGatewaySendRequest
+	// EventGatewayWaveDefeated (GatewayWavePayload) [shared] announces the last body of a wave a gateway sent dying, the gateway armed otherwise by then
+	EventGatewayWaveDefeated
 
 	// --- Square ---
 
@@ -642,6 +648,8 @@ const (
 	EventSquareSpawnRequest
 	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds
 	EventSquareAligned
+	// EventSquareHit (SquareHitPayload) [bus] carries a body striking a square's blocks under no shield, from the owner of the cursor it cost
+	EventSquareHit
 
 	// --- Genetic ---
 

@@ -278,6 +278,10 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	switch deltaType {
 	case component.EnergyDeltaReward:
 		s.statRewardCount.Add(1)
+		// A stepped shield holds its steps of energy and no more
+		if shield, ok := s.world.Components.Shield.GetComponent(cursor); ok && shield.Step > 0 {
+			absDelta = min(absDelta, max(shield.Step*parameter.ShieldSteps-absI64(currentEnergy), 0))
+		}
 		// Absolute value increase, can't cross zero
 		if currentEnergy < 0 {
 			newEnergy = currentEnergy - absDelta

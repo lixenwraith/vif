@@ -5,8 +5,10 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
 func TestEnergyRewardKeepsPolarityUntilDrainReachesZero(t *testing.T) {
@@ -144,5 +146,64 @@ func TestARodDrawsItsBoltAsItFires(t *testing.T) {
 	}
 	if !paid {
 		t.Fatal("the rod's hit paid no drain")
+	}
+}
+
+// TestASteppedShieldShowsHoldsAndCapsItsEnergy: a shield with a step takes the color
+// of the steps of energy it holds, asks no passive drain where a plain one does, and
+// a reward fills it to parameter.ShieldSteps of them and no further
+func TestASteppedShieldShowsHoldsAndCapsItsEnergy(t *testing.T) {
+	w, stepped, plain := testCursorWorld(t)
+	shields, energies := ready(NewShieldSystem(w)).(*ShieldSystem), ready(NewEnergySystem(w)).(*EnergySystem)
+	const step = 600
+	for _, cursor := range []core.Entity{stepped, plain} {
+		energy, _ := w.Components.Energy.GetPtr(cursor)
+		shield, _ := w.Components.Shield.GetPtr(cursor)
+		energy.Current, shield.Active = 5*step+step/2, true
+	}
+	shield, _ := w.Components.Shield.GetPtr(stepped)
+	shield.Step = step
+
+	now := engine.SimTime(0, parameter.GameUpdateInterval)
+	w.Resources.Time.Update(now, now, 2*parameter.ShieldPassiveDrainInterval)
+	shields.Update()
+	var drained []core.Entity
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.EnergyAddPayload); ok && p.Type == component.EnergyDeltaPassive {
+			drained = append(drained, p.Entity)
+		}
+	}
+	if len(drained) != 1 || drained[0] != plain {
+		t.Fatalf("passive drain asked of %v, want the plain shield's cursor %d alone", drained, plain)
+	}
+	if shield.Color != visual.ShieldRamp[5] {
+		t.Fatalf("five and a half steps of energy color the shield %v, want the ramp's sixth %v", shield.Color, visual.ShieldRamp[5])
+	}
+
+	energies.addEnergy(stepped, 100*step, false, component.EnergyDeltaReward)
+	if energy, _ := w.Components.Energy.GetPtr(stepped); energy.Current != step*parameter.ShieldSteps {
+		t.Fatalf("a reward leaves a stepped shield %d, want its %d steps of %d", energy.Current, parameter.ShieldSteps, step)
+	}
+}
+
+// TestAnEmberRequestPutsOutTheEmberABurstLit: heat filling its overheat bursts and
+// lights the ember, and an ember request puts it out with the heat where it stood
+func TestAnEmberRequestPutsOutTheEmberABurstLit(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	heats := ready(NewHeatSystem(w)).(*HeatSystem)
+	add := func(delta int) {
+		heats.HandleEvent(event.GameEvent{Type: event.EventHeatAddRequest, Payload: &event.HeatAddRequestPayload{Entity: cursor, Delta: delta}})
+	}
+	add(parameter.HeatMax + parameter.HeatMaxOverheat)
+	heat, _ := w.Components.Heat.GetPtr(cursor)
+	if !heat.EmberActive || countEvents(w.Resources.Event.Queue.Consume(), event.EventHeatBurst) != 1 {
+		t.Fatal("heat filling its overheat did not burst and light the ember")
+	}
+	heats.HandleEvent(event.GameEvent{Type: event.EventHeatEmberRequest, Payload: &event.HeatEmberRequestPayload{Entity: cursor}})
+	now := engine.SimTime(0, parameter.GameUpdateInterval)
+	w.Resources.Time.Update(now, now, 4*parameter.EmberDecayInterval)
+	heats.Update()
+	if heat.EmberActive || heat.Current != parameter.HeatMax {
+		t.Fatalf("after the request the ember burns %t over %d heat, want it out over %d", heat.EmberActive, heat.Current, parameter.HeatMax)
 	}
 }

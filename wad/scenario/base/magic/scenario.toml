@@ -4,19 +4,19 @@ max_players = 1
 
 # The Lo Shu square, 2 7 6 over 9 5 1 over 4 3 8, its digits in three kinds: 2 1 3
 # attack, 6 5 4 hold and 8 7 9 defense, one of each along every row and column. It
-# stands under the shield of a cursor fixed at its middle, lost with that shield's
-# energy. Eight gateways trickle strays the cursor's weapons wear down, and one is
-# in flood, its bodies ended only by a strike; kills raise the level.
+# stands under the shield of a cursor fixed at its middle; a touch costs the shield
+# energy, the blocks heat once it is down, and the game the last of both. Eight
+# gateways trickle strays, and one sends a wave only a strike ends.
 
 # Room for the square's shield, the two orbits round it and the gateways' pylons
 # clear of both; a smaller screen scrolls over the map rather than crop it
 [map]
-min_width = 76
-min_height = 36
+min_width = 80
+min_height = 40
 cursors = "fixed"
 
 [systems]
-only_systems = ["square", "behavior", "cursor", "camera", "energy", "shield", "boost", "weapon", "loot", "composite", "combat", "death", "timer", "swarm", "gateway", "navigation", "pylon", "lightning", "missile", "bullet", "pulse", "explosion", "flash", "fadeout", "spirit", "soft_collision", "transient", "audio"]
+only_systems = ["square", "behavior", "cursor", "camera", "energy", "heat", "shield", "boost", "weapon", "loot", "composite", "combat", "death", "timer", "gateway", "navigation", "pylon", "lightning", "missile", "bullet", "pulse", "explosion", "flash", "fadeout", "spirit", "soft_collision", "environment", "particle", "transient", "audio", "music"]
 
 [regions.magic]
 initial = "Setup"
@@ -29,6 +29,9 @@ background = true
 background = true
 
 [regions.ramp]
+background = true
+
+[regions.reward]
 background = true
 
 # --- The bodies ---
@@ -74,29 +77,33 @@ body = { pulse = { stun = false } }
 doc = "A flood body's rows: no weapon of the cursor's wears, stuns or moves it."
 body = { tracer = { damage = 0, knockback = false }, lightning = { damage = 0 }, missile = { damage = 0 }, explosion = { damage = 0, knockback = false }, pulse = { damage = 0, stun = false }, burn = { damage = 0 }, bullet = { damage = 0 }, ray = { damage = 0 } }
 
-# Four ranks, a stray and a flood body to each. A rank up weighs more, costs the
-# shield more a touch and flies a little faster, and its stray holds more hit points,
-# so the weapons take longer over it. None outruns a strike's 2 s from the nearest
-# gateway, eight rows off.
+# Four ranks, a stray and a wave's body to each. A rank up weighs more and flies a
+# little faster, and its stray holds more hit points, so the weapons take longer
+# over it. A touch costs the same at every rank, 100 energy off the shield or 10
+# heat off the blocks, so the shield's color counts the touches left: six a step.
+[macros.Touch]
+doc = "What a body's touch costs: energy off the shield, heat off the blocks under none."
+body = { energy = 100, heat = 10 }
+
 [macros.Rank1]
 doc = "A first-rank body: light and slow."
 base = "Body"
-with = { hp = 6, mass = 1.0, contact = { energy = 60 }, physics = { speed = 2.4, accel = 9.0, drag = 1.6 } }
+with = { hp = 6, mass = 1.0, contact = { macro = "Touch" }, physics = { speed = 2.4, accel = 9.0, drag = 1.6 } }
 
 [macros.Rank2]
 doc = "A second-rank body."
 base = "Body"
-with = { hp = 12, mass = 1.5, contact = { energy = 100 }, physics = { speed = 2.6, accel = 9.0, drag = 1.6 } }
+with = { hp = 12, mass = 1.5, contact = { macro = "Touch" }, physics = { speed = 2.6, accel = 9.0, drag = 1.6 } }
 
 [macros.Rank3]
 doc = "A third-rank body."
 base = "Body"
-with = { hp = 20, mass = 2.0, contact = { energy = 150 }, physics = { speed = 2.8, accel = 9.0, drag = 1.6 } }
+with = { hp = 20, mass = 2.0, contact = { macro = "Touch" }, physics = { speed = 2.8, accel = 9.0, drag = 1.6 } }
 
 [macros.Rank4]
-doc = "A fourth-rank body: the heaviest, its touch the costliest."
+doc = "A fourth-rank body: the heaviest."
 base = "Body"
-with = { hp = 30, mass = 3.0, contact = { energy = 220 }, physics = { speed = 3.0, accel = 9.0, drag = 1.6 } }
+with = { hp = 30, mass = 3.0, contact = { macro = "Touch" }, physics = { speed = 3.0, accel = 9.0, drag = 1.6 } }
 
 # The strays, a hue to a rank: green motes, violet wisps, orange imps, bone golems
 [behaviors.mote]
@@ -146,7 +153,7 @@ frames = [
     { glyphs = [" [=] ", "[- -]", " /_\\ "], fg = [" 010 ", "01010", " 010 "] },
 ]
 
-# The flood's bodies, each in its rank's hue and marked in the attack's red, the one
+# A wave's bodies, each in its rank's hue and marked in the attack's red, the one
 # thing that ends them: sparks, shades, hexes, titans
 [behaviors.spark]
 macro = "Rank1"
@@ -195,11 +202,34 @@ frames = [
     { glyphs = ["[===]", "[o_o]", "[/|\\]"], fg = ["00000", "01010", "00000"], attr = ["     ", " B B ", "     "] },
 ]
 
-# The swarm a level sends drops energy for the shield where a player's kill ends
-# it, three drops beside the weapon the ramp lays there; a body drops nothing.
-[drops.swarm]
-killer = "player"
-tiers = [{ entries = [{ loot = "energy", rate = 1.0, count = 3 }] }]
+# The carrier a level sends: a heavy stray in gold that the weapons wear slowly, and
+# where a player's kill ends it the ramp lays the next weapon
+[behaviors.carrier]
+macro = "Body"
+attacks = { macro = "Worn" }
+hp = 40
+mass = 3.0
+contact = { macro = "Touch" }
+physics = { speed = 2.2, accel = 9.0, drag = 1.6 }
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 450
+fg = [{ r = 255, g = 200, b = 60 }, { r = 255, g = 255, b = 255 }]
+fg256 = 11
+frames = [
+    { glyphs = ["/===\\", "[ $ ]", "\\===/"], fg = ["00000", "00100", "00000"], attr = ["     ", "  B  ", "     "] },
+    { glyphs = ["/---\\", "[ $ ]", "\\---/"], fg = ["00000", "00100", "00000"], attr = ["     ", "  B  ", "     "] },
+]
+
+# What a defeated wave pays from its gateway beside a heat drop: three touches of
+# energy for the shield
+[loot.charge]
+rune = "+"
+color = { r = 255, g = 255, b = 120 }
+glow = { r = 255, g = 200, b = 0 }
+reward = "energy"
+delta = 300
 
 # --- Macros ---
 
@@ -212,9 +242,10 @@ body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload 
 # The strays in rank order, then the flood's bodies: a gateway's is the one its
 # variable counts to
 [macros.Arm]
-doc = "Arm the gateway on the pylon in `anchor` with the body `body` counts to, one each `pace` ms; a gateway already there is re-armed."
-params = { anchor = "string", body = "string", pace = "string" }
-body = { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, base_interval_ms = 0, rate_multiplier = 1.0 }, payload_vars = { anchor_entity = "${anchor}", base_interval_ms = "${pace}" }, pick = { field = "species", var = "${body}", from = ["mote", "wisp", "imp", "golem", "spark", "shade", "hex", "titan"] } }
+doc = "Arm the gateway on the pylon in `anchor` with the body `body` counts to, one each `pace` ms, as a wave or not; a gateway already there is re-armed."
+params = { anchor = "string", body = "string", pace = "string", wave = "bool" }
+defaults = { wave = false }
+body = { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, base_interval_ms = 0, rate_multiplier = 1.0, wave = "${wave}" }, payload_vars = { anchor_entity = "${anchor}", base_interval_ms = "${pace}" }, pick = { field = "species", var = "${body}", from = ["mote", "wisp", "imp", "golem", "spark", "shade", "hex", "titan"] } }
 
 # A gateway's pylon is small, stands on the edge and is inert: no weapon aims at it
 # or wears it
@@ -232,7 +263,7 @@ body = { parent = "Root", on_enter = [
 ] }
 
 [macros.FloodTo]
-doc = "The flood's move to gateway `gate`, the one flood counts `at`: its pylon and the one opposite, which a level's swarm comes from, kept for the flood's requests."
+doc = "The wave's move to gateway `gate`, the one flood counts `at`: its pylon and the one opposite, which a level's carrier comes from, kept for the wave's requests."
 params = { at = "int", gate = "int", far = "int" }
 body = { trigger = "Tick", target = "FloodRun", guard = "VarEquals", guard_args = { var = "flood", value = "${at}" }, actions = [
     { action = "CopyVar", payload = { name = "anchor_flood", source_var = "anchor${gate}" } },
@@ -242,17 +273,22 @@ body = { trigger = "Tick", target = "FloodRun", guard = "VarEquals", guard_args 
 # --- The square ---
 
 # Boot: the square stands behind the start prompt; the gateways open from the first
-# tick, after the press. The game opens at the first level's paces: a stray a
-# gateway every 18 s, and a body every 3.2 s from the gateway in flood.
+# tick, after the press. The game opens at the first level's paces, a stray a
+# gateway every 18 s and a wave's body every 3.2 s, which each round of the ranks
+# starts from a step quicker (the `_base` variables). The shield steps its color
+# every 600 energy, six touches.
 [states.Setup]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventSquareSpawnRequest", origin = "center", payload = { layout = "276951438", groups = ["213", "654", "879"] } },
+    { action = "EmitEvent", event = "EventSquareSpawnRequest", origin = "center", payload = { layout = "276951438", groups = ["213", "654", "879"], shield_step = 600 } },
     { action = "SetVar", payload = { name = "stray", value = 0 } },
     { action = "SetVar", payload = { name = "tide", value = 4 } },
     { action = "SetVar", payload = { name = "trickle_ms", value = 18000 } },
+    { action = "SetVar", payload = { name = "trickle_base", value = 18000 } },
     { action = "SetVar", payload = { name = "flood_ms", value = 3200 } },
+    { action = "SetVar", payload = { name = "flood_base", value = 3200 } },
     { action = "SetVar", payload = { name = "need", value = 30 } },
+    { action = "SetVar", payload = { name = "need_base", value = 30 } },
 ]
 transitions = [{ trigger = "Tick", target = "Gate1" }]
 
@@ -268,24 +304,26 @@ Gate7 = { macro = "Gate", n = 7, at = "bottom_left", x = 4, y = -1, next = "Gate
 Gate8 = { macro = "Gate", n = 8, at = "left", x = 4, y = 0, next = "Play" }
 
 # Keys are the square's while it stands. The keys are told a while in, so what ended
-# the last game reads first.
+# the last game reads first, and then what the shield's energy is spent and earned by.
 [states.Play]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "123456789hjklasdf" }, reconcile = true },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "1-9 select a block; h l or a f turn its row, k j or s d its column" }, delay_ms = 2000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A touch costs the shield 100; a wave you end pays 300 and 10 heat" }, delay_ms = 12000 },
     { action = "SpawnRegion", region = "flood", initial_state = "FloodPick" },
     { action = "SpawnRegion", region = "ramp", initial_state = "Level" },
+    { action = "SpawnRegion", region = "reward", initial_state = "Pay" },
 ]
 on_exit = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "" }, reconcile = true },
 ]
 
-# --- The flood ---
+# --- The wave ---
 
-# One gateway is in flood, sending the rank's flood body at the flood's pace in
-# place of its stray. It moves one to seven gateways on round the edge, drawn anew
-# each move, after 12 s, 9 s from the third level and 6 s from the sixth.
+# One gateway sends a wave: the rank's wave body at the wave's pace in place of its
+# stray. The wave moves one to seven gateways on round the edge, drawn anew each
+# move, after 12 s, 9 s at the third rank and 6 s at the fourth.
 [states.FloodPick]
 parent = "Root"
 on_enter = [
@@ -301,7 +339,7 @@ transitions = [
 [states.FloodRun]
 parent = "Root"
 on_enter = [
-    { macro = "Arm", anchor = "anchor_flood", body = "tide", pace = "flood_ms" },
+    { macro = "Arm", anchor = "anchor_flood", body = "tide", pace = "flood_ms", wave = true },
 ]
 on_exit = [
     { macro = "Arm", anchor = "anchor_flood", body = "stray", pace = "trickle_ms" },
@@ -309,21 +347,31 @@ on_exit = [
 transitions = [
     { trigger = "Tick", target = "FloodPick", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 6000 } },
-        { name = "VarCompare", args = { var = "level", op = "gte", value = 6 } },
+        { name = "VarCompare", args = { var = "stray", op = "gte", value = 3 } },
     ] } },
     { trigger = "Tick", target = "FloodPick", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 9000 } },
-        { name = "VarCompare", args = { var = "level", op = "gte", value = 3 } },
+        { name = "VarCompare", args = { var = "stray", op = "gte", value = 2 } },
     ] } },
     { trigger = "Tick", target = "FloodPick", guard = "StateTimeExceeds", guard_args = { ms = 12000 } },
 ]
 
+# A wave defeated, its gateway sending its stray again and the last of its bodies
+# dead, pays from that gateway: a heat drop and a charge of energy
+[states.Pay]
+parent = "Root"
+transitions = [
+    { trigger = "EventGatewayWaveDefeated", internal = true, capture_vars = { x = "pay_x", y = "pay_y" }, actions = [
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "heat", x = 0, y = 0 }, payload_vars = { x = "pay_x", y = "pay_y" } },
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "charge", x = 0, y = 0 }, payload_vars = { x = "pay_x", y = "pay_y" } },
+    ] },
+]
+
 # --- The ramp ---
 
-# A level holds until players' kills of its bodies reach its count, 30 at first and
-# half as many again each level, or 90 s. The swarm a level sent drops, where a
-# player's kill ends it, the next weapon of the round launcher, turret, emitter,
-# disruptor.
+# A level holds until players' kills of its bodies reach its count, 30 at first, or
+# 90 s. Where a player's kill ends the carrier a level sent, the next weapon of the
+# round launcher, turret, emitter, disruptor drops.
 [states.Level]
 parent = "Root"
 transitions = [
@@ -332,7 +380,7 @@ transitions = [
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, actions = [{ action = "IncrementVar", payload = { name = "kills" } }] },
     { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
-        { name = "PayloadSpeciesIn", args = { field = "species", names = ["swarm"] } },
+        { name = "PayloadSpeciesIn", args = { field = "species", names = ["carrier"] } },
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, capture_vars = { x = "drop_x", y = "drop_y" }, actions = [
         { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { x = "drop_x", y = "drop_y" }, pick = { field = "type", var = "weapon", from = ["launcher", "turret", "emitter", "disruptor"] } },
@@ -342,36 +390,73 @@ transitions = [
     { trigger = "Tick", target = "LevelUp", guard = "StateTimeExceeds", guard_args = { ms = 90000 } },
 ]
 
-# A level up: the trickle a fifth quicker down to a stray a gateway every 4 s, the
-# flood two fifths quicker down to a body every 80 ms, the bodies a rank up to the
-# fourth, and a swarm out of the gateway opposite the flood.
+# A level up takes the bodies a rank on, small to big and round again: the fourth
+# rank's level is followed by the first's
 [states.LevelUp]
 parent = "Root"
 on_enter = [
     { action = "IncrementVar", payload = { name = "level" } },
     { action = "SetVar", payload = { name = "kills", value = 0 } },
-    { action = "MultiplyVar", payload = { name = "need", delta = 3 } },
-    { action = "DivideVar", payload = { name = "need", delta = 2 } },
+    { action = "CopyVar", payload = { name = "stray", source_var = "level" } },
+    { action = "ModuloVar", payload = { name = "stray", delta = 4 } },
+    { action = "CopyVar", payload = { name = "tide", source_var = "stray" } },
+    { action = "IncrementVar", payload = { name = "tide", delta = 4 } },
+]
+transitions = [
+    { trigger = "Tick", target = "RoundUp", guard = "VarEquals", guard_args = { var = "stray", value = 0 } },
+    { trigger = "Tick", target = "RankUp" },
+]
+
+# Within a round each rank comes quicker and asks more kills: the trickle a fifth
+# quicker down to a stray a gateway every 4 s, the wave two fifths quicker down to
+# a body every 80 ms, the level's kills half as many again
+[states.RankUp]
+parent = "Root"
+on_enter = [
     { action = "MultiplyVar", payload = { name = "trickle_ms", delta = 4 } },
     { action = "DivideVar", payload = { name = "trickle_ms", delta = 5, min = 4000 } },
     { action = "MultiplyVar", payload = { name = "flood_ms", delta = 3 } },
     { action = "DivideVar", payload = { name = "flood_ms", delta = 5, min = 80 } },
-    { action = "CopyVar", payload = { name = "stray", source_var = "level", max = 3 } },
-    { action = "CopyVar", payload = { name = "tide", source_var = "stray" } },
-    { action = "IncrementVar", payload = { name = "tide", delta = 4 } },
+    { action = "MultiplyVar", payload = { name = "need", delta = 3 } },
+    { action = "DivideVar", payload = { name = "need", delta = 2 } },
+]
+transitions = [{ trigger = "Tick", target = "Rearm" }]
+
+# A new round eases back to the first rank at a step up from where the last round
+# started, which is what its second rank ran at
+[states.RoundUp]
+parent = "Root"
+on_enter = [
+    { action = "MultiplyVar", payload = { name = "trickle_base", delta = 4 } },
+    { action = "DivideVar", payload = { name = "trickle_base", delta = 5, min = 4000 } },
+    { action = "MultiplyVar", payload = { name = "flood_base", delta = 3 } },
+    { action = "DivideVar", payload = { name = "flood_base", delta = 5, min = 80 } },
+    { action = "MultiplyVar", payload = { name = "need_base", delta = 3 } },
+    { action = "DivideVar", payload = { name = "need_base", delta = 2 } },
+    { action = "CopyVar", payload = { name = "trickle_ms", source_var = "trickle_base" } },
+    { action = "CopyVar", payload = { name = "flood_ms", source_var = "flood_base" } },
+    { action = "CopyVar", payload = { name = "need", source_var = "need_base" } },
+]
+transitions = [{ trigger = "Tick", target = "Rearm" }]
+
+# The gateways take the level's bodies and paces, the one sending the wave its
+# wave's, and a carrier comes out of the gateway opposite it
+[states.Rearm]
+parent = "Root"
+on_enter = [
     { macro = "Arm", each = { anchor = ["anchor1", "anchor2", "anchor3", "anchor4", "anchor5", "anchor6", "anchor7", "anchor8"] }, body = "stray", pace = "trickle_ms" },
-    { macro = "Arm", anchor = "anchor_flood", body = "tide", pace = "flood_ms" },
-    { action = "EmitEvent", event = "EventGatewaySendRequest", payload = { anchor_entity = 0, species = "swarm" }, payload_vars = { anchor_entity = "anchor_far" } },
+    { macro = "Arm", anchor = "anchor_flood", body = "tide", pace = "flood_ms", wave = true },
+    { action = "EmitEvent", event = "EventGatewaySendRequest", payload = { anchor_entity = 0, species = "carrier" }, payload_vars = { anchor_entity = "anchor_far" } },
     { macro = "Say", message = "Level {}" },
 ]
 transitions = [{ trigger = "Tick", target = "Level" }]
 
 # --- Player: a cursor fixed at the square's middle, the shield its own ---
 
-# No heat, so the shield's energy is all that stands: its last is the game's
+# The shield starts in its yellow, 33 touches of energy, over a full meter of heat
 [states.PlayerBoot]
 parent = "Root"
-on_enter = [{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 0, energy = 40000 } }]
+on_enter = [{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 100, energy = 3300 } }]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
     { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
@@ -383,18 +468,25 @@ transitions = [
     { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# The cursor's own gun stays off the map: its weapons are what the swarms drop
+# The cursor's own gun stays off the map: its weapons are what the carriers drop.
+# Heat past the meter's 100 fills overheat, and at 100 of that it bursts: here a
+# death wave runs out from the square, and the ember main lights is put out.
 [states.PlayerActive]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventWeaponRemoveRequest", payload = { weapon = "gun" }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "Fallen", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    { trigger = "EventSquareHit", target = "Fallen", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    { trigger = "EventHeatBurst", internal = true, actions = [
+        { action = "EmitEvent", event = "EventDeathWaveRequest", payload_vars = { entity = "player_entity" } },
+        { action = "EmitEvent", event = "EventHeatEmberRequest", payload = { lit = false }, payload_vars = { entity = "player_entity" } },
+    ] },
 ]
 
-# A lost game flashes red as long as main's, then starts over; the reset clears the
-# status bar, so the new game opens with what ended the last
+# The game is lost to a touch on the blocks with no energy and no heat left. It
+# flashes red as long as main's, then starts over; the reset clears the status bar,
+# so the new game opens with what ended the last
 [states.Fallen]
 parent = "Root"
 on_enter = [
@@ -408,5 +500,5 @@ transitions = [
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventGameResetRequest" },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "The shield has fallen" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "The square has fallen" } },
 ]

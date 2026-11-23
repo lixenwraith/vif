@@ -107,6 +107,14 @@ type Router struct {
 	// overlayBar is the overlay's scrollbar thumb a left press holds until its release
 	overlayBar tui.ScrollDrag
 
+	// grab is the magic square's block a left press or a finger holds: where the
+	// pointer last stood on it, and once a drag has turned a line, which way
+	grab struct {
+		held, turned, column bool
+		x, y                 int
+		source               event.InputSource
+	}
+
 	// holds are the captured keys and buttons this instance's presses hold down; a
 	// button's release goes to the button pressed, wherever the pointer lets go
 	holds []heldInput
@@ -228,7 +236,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	if isMouseIntent(intent.Type) && (r.inputSuspended() && !(menu && r.heldInPlay()) || r.ctx.MouseDisabled.Load() && !menu) {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
-			r.mouseLeftHeld, r.menuHold = false, false
+			r.mouseLeftHeld, r.menuHold, r.grab.held = false, false, false
 			r.overlayBar.Release()
 			r.releasePointer(false, intent.Type == input.IntentMouseLeftDown)
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
@@ -1420,7 +1428,7 @@ func (r *Router) handleHelp() bool {
 // command and search lines and a menu form are dropped, and keys parse as the overlay's
 func (r *Router) enterOverlay() {
 	r.configForm = nil
-	r.mouseLeftHeld, r.mouseRightHeld = false, false
+	r.mouseLeftHeld, r.mouseRightHeld, r.grab.held = false, false, false
 	r.overlayBar.Release()
 	r.ctx.SetCommandText("")
 	r.ctx.SetSearchText("")
@@ -1441,13 +1449,21 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	}
 	// A press on a button is its key's input whether or not that key is taken now, so
 	// it never moves the cursor onto the button or fires
+	source := event.InputPointer
+	if intent.Touch {
+		source = event.InputTouch
+	}
 	if key := r.buttonUnder(intent); key != 0 {
-		source := event.InputPointer
-		if intent.Touch {
-			source = event.InputTouch
-		}
 		r.pressInput(intent, key, source)
 		return true
+	}
+	// A press on a block of a magic square is its digit's, held to drag the block
+	if x, y, ok := r.pointerCell(intent); ok {
+		if digit, _, _ := blockAt(r.ctx, x, y); digit != 0 {
+			r.pressInput(intent, digit, source)
+			r.grab.held, r.grab.turned, r.grab.x, r.grab.y, r.grab.source = true, false, x, y, source
+			return true
+		}
 	}
 	r.moveMouseCursor(intent)
 	r.ctx.PushLocal(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
@@ -1472,7 +1488,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 }
 
 func (r *Router) handleMouseLeftUp() bool {
-	r.mouseLeftHeld, r.menuHold = false, false
+	r.mouseLeftHeld, r.menuHold, r.grab.held = false, false, false
 	r.overlayBar.Release()
 	r.releasePointer(false, false)
 	return true
@@ -1510,10 +1526,45 @@ func (r *Router) handleMouseDrag(intent *input.Intent) bool {
 		dx, dy := intent.X-r.menuHoldAt[0], intent.Y-r.menuHoldAt[1]
 		r.menuHold = max(dx, -dx) <= parameter.MenuHoldSlack && max(dy, -dy) <= parameter.MenuHoldSlack
 	}
-	if r.mouseLeftHeld {
+	if r.grab.held {
+		r.dragBlock(intent)
+	} else if r.mouseLeftHeld {
 		r.moveMouseCursor(intent)
 	}
 	return true
+}
+
+// dragBlock turns the held block's row or column a place each time the pointer has
+// carried it a block's pitch along it, by the keys that turn it. The first turn
+// settles which of the two the drag is, so a slanted drag turns one line.
+func (r *Router) dragBlock(intent *input.Intent) {
+	x, y, ok := r.pointerCell(intent)
+	_, pitchX, pitchY := blockAt(r.ctx, r.grab.x, r.grab.y)
+	if !ok || pitchX <= 0 || pitchY <= 0 {
+		return
+	}
+	for {
+		dx, dy := x-r.grab.x, y-r.grab.y
+		column := max(dy, -dy)*pitchX > max(dx, -dx)*pitchY
+		if r.grab.turned {
+			column = r.grab.column
+		}
+		key, stepX, stepY := 'l', pitchX, 0
+		switch {
+		case column && dy >= pitchY:
+			key, stepX, stepY = 'j', 0, pitchY
+		case column && -dy >= pitchY:
+			key, stepX, stepY = 'k', 0, -pitchY
+		case !column && -dx >= pitchX:
+			key, stepX = 'h', -pitchX
+		case column || dx < pitchX:
+			return
+		}
+		r.pressInput(intent, key, r.grab.source)
+		r.release(key, r.grab.source, true)
+		r.grab.turned, r.grab.column = true, column
+		r.grab.x, r.grab.y = r.grab.x+stepX, r.grab.y+stepY
+	}
 }
 
 // onStatusBar reports whether a pointer intent names a cell of the rows below the

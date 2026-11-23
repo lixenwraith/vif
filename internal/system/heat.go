@@ -103,6 +103,7 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
 		event.EventHeatSpendRequest,
+		event.EventHeatEmberRequest,
 		event.EventCursorArmRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -161,6 +162,18 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 			}
 			if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok {
 				s.setHeat(cursor, heat.Current+heat.Overheat-p.Amount)
+			}
+		}
+	case event.EventHeatEmberRequest:
+		if p, ok := ev.Payload.(*event.HeatEmberRequestPayload); ok {
+			cursor := s.world.ResolveOwnedCursor(p.Entity)
+			if cursor == 0 {
+				s.rejects.cursor.Add(1)
+				return
+			}
+			if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok && heat.EmberActive != p.Lit {
+				heat.EmberActive, heat.EmberElapsed = p.Lit, 0
+				s.publish(cursor, heat)
 			}
 		}
 	case event.EventCursorArmRequest:
