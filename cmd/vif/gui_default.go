@@ -1,4 +1,4 @@
-//go:build vif_gui && (linux || freebsd) && !vif_headless && !vif_nogui
+//go:build vif_gui && (linux || freebsd || windows) && !vif_headless && !vif_nogui
 
 package main
 

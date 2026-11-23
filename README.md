@@ -61,7 +61,7 @@ where `float64` results can differ.
   gives a link to join from a terminal or the browser.
 - Downloads: the [nightly build](https://github.com/lixenwraith/vif/releases/tag/nightly)
   has Linux and FreeBSD clients, the game server, an Android APK, the browser
-  bundle and an experimental Windows zip, each archive with a README for its
+  bundle and a Windows zip that plays in a window, each archive with a README for its
   platform. It is a development build; no final release exists yet.
 
 ## Build and run

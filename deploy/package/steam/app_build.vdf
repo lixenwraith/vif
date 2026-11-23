@@ -9,5 +9,6 @@
 	"Depots"
 	{
 		"@DEPOT_LINUX@" "depot_build_linux.vdf"
+		"@DEPOT_WINDOWS@" "depot_build_windows.vdf"
 	}
 }

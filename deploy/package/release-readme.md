@@ -12,11 +12,11 @@ This is a nightly build: a development build of one commit, replaced every night
 whose flags, files and formats may change without notice.
 
 <!-- end -->
-<!-- if client headless windows web -->
+<!-- if client headless web -->
 ## In this archive
 
 <!-- end -->
-<!-- if steam -->
+<!-- if steam zip -->
 ## In this folder
 
 <!-- end -->
@@ -26,16 +26,16 @@ whose flags, files and formats may change without notice.
 <!-- if steamlinux -->
 - `bin/vif`: the game, in a window of its own
 <!-- end -->
-<!-- if steam -->
+<!-- if winfolder -->
+- `bin\vif.exe`: the game, in a window of its own
+<!-- end -->
+<!-- if steam zip -->
 - `wad/`: the scenarios, the typing corpus, wall images and the shipped keymaps,
   bot graphs and `vif.toml`, which the game reads from beside its `bin/`
 <!-- end -->
 <!-- if headless -->
 - `vif`: the dedicated game server, a static binary with no terminal, window or
   sound
-<!-- end -->
-<!-- if windows -->
-- `vif.exe`: the game, in a terminal
 <!-- end -->
 <!-- if web -->
 - `index.html`, with its scripts, stylesheet and `fonts/`, the font of its text
@@ -44,7 +44,7 @@ whose flags, files and formats may change without notice.
 <!-- end -->
 - `LICENSE`: vif's license, BSD-3-Clause
 - `NOTICES`: the licenses of Go and of the modules this build links
-<!-- if client steam -->
+<!-- if client steam zip -->
 - `LICENSE.font`: the license of Hack, the font the desktop window draws its cells
   in: MIT, with Bitstream Vera's
 <!-- end -->
@@ -53,7 +53,7 @@ whose flags, files and formats may change without notice.
   `vif.wasm` carries: MIT, with Bitstream Vera's
 <!-- end -->
 
-<!-- if client windows web steam -->
+<!-- if client web steam zip -->
 ## Play
 
 <!-- end -->
@@ -71,6 +71,21 @@ menu, and `:q` quits.
 <!-- if steamlinux -->
 Sound goes to PulseAudio, or to PipeWire through its pulse server, whichever the
 system runs; `-ab <name>` in Launch Options names a player instead.
+
+<!-- end -->
+<!-- if zip -->
+Unzip the archive where you like and open `bin\vif.exe`: the game plays in a
+window of its own, with sound, and reads its scenarios from the `wad\` beside its
+`bin\`, so keep the folder whole. Windows may ask before it runs a program it has
+not seen: this one is not signed. It has no console: started from one it prints
+there, and a mistake on its command line is shown in a box. What a shortcut's
+Target adds is its command line: `-fullscreen` opens it full screen, `-scale 2`
+doubles its font, and `-s td` starts the tower defense map. F11 or Alt+Enter
+toggles full screen, Ctrl with `=` or `-`, or with the wheel, zooms, and Ctrl-0
+puts its font back.
+
+`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the settings
+menu, and `:q` quits. This build keeps no log and no replay journal.
 
 <!-- end -->
 <!-- if client -->
@@ -98,18 +113,6 @@ a HiDPI screen. Ctrl with `=` or `-`, or with the wheel, zooms it, and Ctrl-0
 puts its font back.
 
 <!-- end -->
-<!-- if windows -->
-Unzip the archive, open Windows Terminal in its folder (the default terminal on
-Windows 11), and run `.\vif.exe`, which the commands below call `vif`.
-
-The Windows build is experimental: there is no sound because this build leaves
-audio out, and no logging or replay journal. Played through Windows 10's own
-console host, as Alacritty does unless Windows Terminal's `conpty.dll` and
-`OpenConsole.exe` lie beside `alacritty.exe`, the mouse does nothing and some
-status bar cells flicker as the screen redraws; Windows Terminal has its own
-console host, which passes the mouse and the screen through.
-
-<!-- end -->
 <!-- if web -->
 The page has to come from a web server; opened from disk, it cannot start the
 game. Any static server will do:
@@ -124,7 +127,7 @@ or a key starts the game and `?` lists the mouse and keyboard controls; the game
 plays with the scenario and typing corpus it carries.
 
 <!-- end -->
-<!-- if client windows -->
+<!-- if client -->
 `F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the settings
 menu, `:q` quits, and `vif -h` prints every flag.
 
@@ -178,7 +181,7 @@ Nightly builds of this binary are also the container image
 `ghcr.io/lixenwraith/vif:nightly`. `./vif -h` prints every flag.
 
 <!-- end -->
-<!-- if client windows headless steam -->
+<!-- if client headless steam zip -->
 ## Scenarios and settings
 
 <!-- end -->
@@ -189,6 +192,21 @@ copies of the keymaps, bot graphs and `vif.toml` to read. Steam replaces it at
 every update and the game never writes there, so what is yours lives elsewhere.
 
 <!-- end -->
+<!-- if zip -->
+`wad\` holds the `td`, `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and
+`tutorial` scenarios beside the main one, the full typing corpus, wall images and
+copies of the keymaps, bot graphs and `vif.toml` to read. A later release brings
+its own and the game never writes there, so what is yours lives elsewhere.
+
+<!-- end -->
+<!-- if winfolder -->
+The settings menu saves its choices to `%AppData%\vif\vif.toml`, created at the
+first change. A keymap of your own is `%AppData%\vif\input\keymap.toml`, a
+scenario of your own a folder under `%AppData%\vif\scenario\`, and what your
+bots learn is kept in `%AppData%\vif\bot\`. Recorded music (`-mw`) goes under
+`%LocalAppData%\vif\music\`.
+
+<!-- end -->
 <!-- if steamlinux -->
 The settings menu saves its choices to `~/.config/vif/vif.toml`, created at the
 first change. A keymap of your own is `~/.config/vif/input/keymap.toml`, a scenario
@@ -197,7 +215,7 @@ is kept in `~/.config/vif/bot/`. Logs (`-l`), replay journals (`-j`) and recorde
 music (`-mw`) go under `~/.local/state/vif/`.
 
 <!-- end -->
-<!-- if client windows -->
+<!-- if client -->
 The binary carries the main scenario and a tutorial typing corpus. The `td`,
 `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and `tutorial` scenarios,
 the full corpus, wall images and editable copies of the keymaps, bot graphs and
@@ -219,12 +237,6 @@ tar -xzf vif-@LABEL@-wad.tar.gz -C /usr/local/etc     # for everyone, as root
 ```
 
 <!-- end -->
-<!-- if windows -->
-```powershell
-tar -xzf vif-@LABEL@-wad.tar.gz -C $env:APPDATA
-```
-
-<!-- end -->
 <!-- if client -->
 Then `-s td` plays the tower defense map, and the settings menu saves its sound,
 mouse and HUD choices to `~/.config/vif/vif.toml`, created at the first change
@@ -236,25 +248,17 @@ them. A run reads the ones kept brought up to date and writes those under
 `~/.config` back so; those under `/usr/local/etc` it never writes.
 
 <!-- end -->
-<!-- if windows -->
-Then `-s td` plays the tower defense map, and the settings menu saves its choices
-to `%AppData%\vif\vif.toml`, created at the first change. A later wad unpacked the
-same way replaces your `vif.toml` and keymap: add
-`--exclude vif/vif.toml --exclude vif/input/keymap.toml` to keep them, and the
-next run brings them up to date.
-
-<!-- end -->
 <!-- if headless -->
 Then `-s td` serves the tower defense map, and a player who lacks the scenario is
 sent it on joining. Logs (`-l`) go under `~/.local/state/vif/log/`.
 
 <!-- end -->
 
-<!-- if client windows web steam -->
+<!-- if client web steam zip -->
 ## Play with others
 
 <!-- end -->
-<!-- if steam -->
+<!-- if steam zip -->
 The lobby at https://lixen.com/vif/lobby/ hosts games on demand and lists the
 running ones, each with a link to join it by. In the game, `:join <link>` joins
 one, as the settings menu's Join a session row does, and `:join https://lixen.com`
@@ -266,7 +270,7 @@ from the menu's Nearby games. `:bot add` seats a bot beside you, and
 `:spectate <link>` watches a game and takes no seat in it.
 
 <!-- end -->
-<!-- if client windows -->
+<!-- if client -->
 The lobby at https://lixen.com/vif/lobby/ hosts games on demand and lists the
 running ones, each with a link to join it by:
 

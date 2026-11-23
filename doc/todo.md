@@ -993,20 +993,41 @@ install over a debug-signed one: uninstall first, which drops the app's settings
 A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
 release) is a separate decision.
 
-### Ship the Windows window build and its Steam depot
+### Run the Windows window build on Windows
 
 - Priority: P1
-- Affected files: `cmd/vif/gui.go`, `Makefile`, `.github/workflows/release.yml`,
-  `deploy/package/steam/`, `doc/packaging.md` §9
-- Prerequisite: the terminal module's window opening on Windows, tagged
+- Affected files: `cmd/vif/gui_windows.go`, `cmd/vif/wasapi.go`, the terminal
+  module's `window/window_windows.go`
+- Guide: [Build profiles](multi-platform.md) §4 and §8
 
-Steam's depot is Linux alone, and the Windows zip is the terminal's
-([Build profiles §4](multi-platform.md#4-platform-matrix)). Closes with the
-window build for windows/amd64 (`-H=windowsgui`, an error shown in a message
-box, sound through WASAPI as the window's own speakers), a `steam-windows` depot
-beside `steam-linux` with its launch option and Auto-Cloud root override
-(`WinAppDataRoaming`, `vif`), and that zip in place of the terminal's in a
-release.
+The Windows zip and Steam depot were built and played under Wine 9.0 alone, which
+is not Windows where it matters: one display scale, its own GDI and mixer
+timings, a console every program inherits. Closes with one run on Windows 10 and
+11, what it finds becoming its own item: the zip opened from Explorer and from a
+console (`-version` prints there, `-cli` shows its box only from Explorer),
+sound through speakers and through Bluetooth, a default device switched and
+unplugged mid-game, a display at 125 and 150 %, a second monitor of another
+scale, the terminal module's own Windows checks (its `doc/todo.md`), and a
+launch from the Steam client with its overlay.
+
+### Sign the Windows binary
+
+- Priority: P2
+- Affected files: `.github/workflows/release.yml`
+
+`bin\vif.exe` is unsigned, so SmartScreen asks before a downloaded zip's first
+run; a Steam install is not asked. Closes with the owner's decision on a code
+signing certificate and, with one, a signing step for the zip's and the depot's
+binary whose key the repository never holds.
+
+### Build the Windows window for arm64
+
+- Priority: P3
+- Affected files: `Makefile` (`WINDOW_PACKAGE`), `.github/workflows/release.yml`
+
+The window build cross-compiles for windows/arm64 and is neither released nor
+run; an arm64 Windows machine runs the amd64 zip emulated. Closes with a run on
+one and a second zip.
 
 ### Bind the Steamworks SDK behind a tag of its own
 
@@ -1053,6 +1074,44 @@ partner site takes a native arm64 Linux depot.
 Auto-Cloud syncs `vif.toml` whole, so the zoom a player left on a Steam Deck
 (`[presentation] cell`) opens their desktop at it. Closes with the cell kept in
 the state root, read over `vif.toml`'s.
+
+### Have vif.nvim install and update the game
+
+- Priority: P2
+- Affected files: `vif.nvim` (`lua/vif/init.lua`, `lua/vif/health.lua`,
+  `README.md`, `doc/vif.txt`), `doc/packaging.md` §10
+- Guide: [Packaging §10](packaging.md#10-neovim)
+
+The plugin runs the `vif` it finds and brings none, so on a machine without one
+`:Vif` only says so. Closes with these in the plugin:
+
+- **The first launch installs.** `:Vif` with no `vif` on `PATH` and no `bin` in
+  `setup` fetches the game, then starts it, and `:Vif install` does the same
+  when asked. A first argument that is a bare word is the plugin's, every
+  argument of the game's starting with `-`. Whether that first fetch asks
+  before it downloads, as `vim.pack` asks before it installs a plugin, is the
+  owner's to decide.
+- **`:Vif update`** replaces the game the plugin installed with the newest build
+  and says the version it had and the one it has. Nothing looks for a newer one
+  unasked, at start-up or at `:Vif`. A `vif` on `PATH` or named in `setup`
+  stays first and is never replaced: `:Vif update` then says whose it is.
+- **What it fetches**: the release archive of the machine's system and
+  architecture, of the newest tagged release, or of the nightly where there is
+  none or `setup` asks for it, checked against that release's `SHA256SUMS`
+  before it is unpacked. It goes under `stdpath('data')` as a `bin/` with the
+  wad archive's files as the `wad/` beside it, where the binary finds them
+  ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)), so every
+  scenario comes with it. Where no archive is built for the machine, as on
+  macOS, it says so and names `go install`. `:checkhealth vif` names the binary
+  in use, where it came from and its version.
+- **The free mouse.** The pointer moving with no button held does not reach the
+  game in a Neovim terminal, so the game's cursor does not follow it; Neovim
+  passes it on only under `'mousemoveevent'`. Either the plugin sets the option
+  while the game's window is the current one and puts it back after, or its
+  README and help say so where a player looks first.
+- **The install snippets, in place.** The README shows where each goes: a
+  minimal `init.lua` for lazy.nvim and one for `vim.pack`, each whole with its
+  `setup` call, where it now gives a bare line a visitor has to place.
 
 ### Host the game in Neovim natively
 
@@ -1102,32 +1161,35 @@ deprecated for `android sdk`, which ships in the same package. Switch `setup` to
 once its install, license and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
-### Give the Windows zip sound, and confirm it in Windows Terminal
+### Give the Windows terminal build sound
 
 - Priority: P3
-- Affected files: `Makefile`, `.github/workflows/release.yml`
+- Affected files: `Makefile` (`windows`), `cmd/vif/wasapi.go`
 - Guide: [Build profiles](multi-platform.md) §4
 
-The zip has no sound: try a build without `vif_noaudio` with ffplay on `PATH`.
+The terminal build for Windows has no sound: its speakers are the window's
+alone. Closes with the sink opened for a terminal run as well, which means the
+platform host carrying speakers with no presentation, or with ffplay on `PATH`
+tried in a build without `vif_noaudio`.
 Its mouse comes from Windows 10's own console host, and likely its flicker (§4);
 confirm that Windows Terminal has neither, with the terminal module's synchronized
 frames and re-hidden cursor. `sandbox/termbench` tells hosts apart: `rawin` prints the
 records a mouse report arrives as, `live -lib terminal|tcell` plays a scene on
 each library's own backend.
 
-### Report key releases on Windows
+### Report key releases in a Windows console
 
 - Priority: P3
 - Affected files: the terminal module's Windows backend and key protocol
 - Guide: [Input and modes](input-and-modes.md) §1
 
-A key on Windows is a tap: the console reads as VT input, which carries presses
-alone. A console host with win32-input-mode (Windows Terminal's) reports each
-key's press and release once asked with DECSET 9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _`
-(tcell asks for it and drops the releases). A Windows key source would ask for it
-as the protocol source asks for the key protocol, answer presses where the host
-lacks it, and pair releases through `KeyHolds`. Decide first whether holds on
-Windows are worth it.
+The window build reports releases; in a console a key is still a tap: it reads as
+VT input, which carries presses alone. A console host with win32-input-mode
+(Windows Terminal's) reports each key's press and release once asked with DECSET
+9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _` (tcell asks for it and drops the releases). A
+Windows key source would ask for it as the protocol source asks for the key
+protocol, answer presses where the host lacks it, and pair releases through
+`KeyHolds`. Decide first whether holds in a console are worth it.
 
 ## Fleet
 
@@ -2760,6 +2822,74 @@ and those of stapes (formerly soundlab), the rip's among them, in [its
 own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
 linked from it.
+
+### Measure the Windows sound on Windows
+
+- Priority: P1
+- Affected files: `cmd/vif/wasapi.go`, `doc/multi-platform.md` §8
+- Guide: [Build profiles](multi-platform.md) §8
+
+The window's speakers on Windows were measured under Wine alone: 28 ms from a
+trigger to its sound leaving the device at a 20 ms period, Wine's own path
+behind that. On a Windows 10 and a Windows 11 machine take the latency through
+a loopback of the endpoint, the CPU against the null backend and ten minutes'
+underruns at 50, 20 and 10 ms; unplug, disable and reformat the device mid-run,
+sleep the machine, and play through a Bluetooth and a 44.1 kHz device. The same
+runs settle what was left out for want of them: the multimedia class scheduler
+for the render thread, one device period held instead of two, and
+`IAudioClient3`'s shorter period. The bench that took the figures is not in the
+repository; `sandbox/` is where it would live, built with the sink laid in by
+`go build -overlay`.
+
+### Feed the Windows speakers a shorter period by default
+
+- Priority: P2
+- Affected files: `cmd/vif/gui.go`, `cmd/vif/main.go` (`buildConfig`),
+  `internal/asset/vif.toml`
+- Prerequisite: the measurement above
+
+The mixer's period is `[audio] buffer_ms`, which the shipped `vif.toml` sets to
+50 on every platform. Under Wine the Windows speakers played a trigger 16 ms
+sooner at the median and 34 ms at the worst at 20 ms, for 0.8 % of a core, with
+no underrun in ten minutes; on Linux 20 ms gained nothing on PulseAudio and
+dropped out more under load. Closes with the owner's decision once Windows is
+measured: a period the window's speakers name where a player's `vif.toml` names
+none, which needs the shipped file to stop naming one, or 50 ms kept.
+
+### Follow the default output device on Windows
+
+- Priority: P2
+- Affected files: `cmd/vif/wasapi.go`
+
+A stream opened on the default endpoint stays on its device when Windows'
+default changes while that device remains (a headset plugged in beside working
+speakers): the game plays on the old one until it is restarted. Have the render
+thread ask the enumerator for the default endpoint's id once a second and
+reopen when it is no longer the one it opened.
+
+### Keep the mixer on the device's clock
+
+- Priority: P2
+- Affected files: `lixenwraith/audio` `mixer.go`, `cmd/vif/wasapi.go`,
+  `cmd/vif/pulse.go`
+
+The mixer renders on a ticker, the system's clock, and a device plays on its
+own: one that runs fast drains what its sink holds and plays a period of
+silence every 10 ms / drift, every 100 s at 100 ppm, through any backend, and a
+slow one fills whatever queue is there. Let a host's speakers ask the mixer for
+each period, or have a sink that reports it blocks pace the mixer, so that the
+mixer always waits on the device.
+
+### Render nearer the device's call on Windows
+
+- Priority: P3
+- Affected files: `cmd/vif/wasapi.go`
+
+A write returns as the device takes its last frames, so the mixer renders a
+whole device period before the device asks again. Returning 6 ms later took
+10 ms off the median at a 20 ms period under Wine and cost 30 underruns at
+10 ms, where the device holds no spare period: hold a write only while the
+device keeps one, and measure it on Windows.
 
 ### Hear the window's speakers on real devices
 

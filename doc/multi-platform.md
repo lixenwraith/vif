@@ -21,15 +21,16 @@ host the game.
 
 | Profile | Tags or target | Presentation | Audio | Raw socket sessions | Logging | Intended use |
 |---|---|---|---|---|---|---|
-| Full native | `make release` | Terminal renderer; on Linux and FreeBSD the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
+| Full native | `make release` | Terminal renderer; on Linux, FreeBSD and Windows the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Chrome extension | `make extension`: the `make wasm` bundle, packed | The page, in a tab of its own | The page's | No | Stub | The browser build installed in Chrome: solo play offline, or a session joined at the site once the player allows it (§5) |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time | Included; its own stream on PulseAudio or PipeWire where one answers | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time; on Windows a Win32 window GDI copies each frame to | Included; its own stream on PulseAudio or PipeWire where one answers, or WASAPI's on Windows | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
-| Steam depot | `make steam-linux` | The desktop window, by default | Included | Yes | Included | The `vif_gui` build for linux/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §9](packaging.md#9-steam)) |
-| Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
+| Steam depot | `make steam-linux`, `make steam-windows` | The desktop window, by default | Included | Yes | Included; a stub on Windows | The `vif_gui` build for linux/amd64 or windows/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §9](packaging.md#9-steam)) |
+| Windows window | `make windows-gui`, `make windows-package` / `vif_gui novlog`, linked `-H=windowsgui` | The desktop window alone: a program with no console has no terminal | Included: the window's own speakers, through WASAPI | Yes | Stub | The `windows/amd64` zip and Steam depot, `bin\vif.exe` with the wad beside its `bin\` (§4) |
+| Windows terminal | `make windows` / `novlog vif_noaudio vif_nogui` | Terminal renderer | Omitted | Yes | Stub | Experimental and built from source only: a console program, with the known issues in §4 |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
 `vif_noaudio` removes audio while retaining terminal presentation. The browser
@@ -45,10 +46,13 @@ make headless                # bin/vif-headless
 make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
 make steam-linux             # bin/steam/linux, the Steam depot
+make steam-windows           # bin/steam/windows, the same around bin\vif.exe
 make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
 make wasm                    # web/vif.wasm and the page's scripts
 make extension               # bin/vif-chrome to load unpacked, bin/vif-chrome.zip for the store
-make windows                 # bin/vif.exe
+make windows                 # bin/vif.exe, the terminal alone
+make windows-gui             # bin/vif-gui.exe, the window alone
+make windows-package         # bin/vif-windows-amd64, as a release's zip holds it
 
 go build -tags=vif_noaudio ./cmd/vif
 go build -tags='vif_headless novlog' ./cmd/vif
@@ -112,11 +116,12 @@ not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native, and `vif_gui` | 23,978,247 | 22.87 | baseline for native profiles |
-| `vif_nogui` native | 23,658,656 | 22.56 | 1.33% smaller than full |
-| `vif_noaudio` native | 23,372,039 | 22.29 | 2.53% smaller than full |
-| `vif_headless` native | 21,749,920 | 20.74 | 9.29% smaller than full |
-| Browser (`js/wasm`) | 40,816,175 | 38.93 | — |
+| Full native, and `vif_gui` | 23,986,439 | 22.88 | baseline for native profiles |
+| `vif_nogui` native | 23,666,848 | 22.57 | 1.33% smaller than full |
+| `vif_noaudio` native | 23,384,327 | 22.30 | 2.51% smaller than full |
+| `vif_headless` native | 21,758,112 | 20.75 | 9.29% smaller than full |
+| Windows window (`vif_gui novlog`, windows/amd64) | 24,056,832 | 22.94 | — |
+| Browser (`js/wasm`) | 40,831,891 | 38.94 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that this command prints no renderer or audio-engine package:
@@ -136,7 +141,7 @@ measured for each release.
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
-| Windows amd64 | Experimental; plays in Windows Terminal, and in Alacritty with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
+| Windows amd64 | The window build, run under Wine and owed a run on Windows ([todo](todo.md#run-the-windows-window-build-on-windows)); the terminal build experimental | `CGO_ENABLED=0` and no purego, `golang.org/x/sys/windows` alone; `novlog` by choice, since logging compiles for Windows; the zip and the Steam depot are the window build, the terminal's is built from source |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer over `terminal/android`'s view and `AudioTrack` (§8); the wad as the system root |
 | `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after 30 s, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` and what its bots learned in its storage (`terminal.Page`, `web/vif.js`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Chrome extension | A zip in every nightly and release ([Packaging §8](packaging.md#8-chrome-web-store)) | The `js/wasm` bundle byte for byte, so that row holds; what an extension's origin changes is in §5 |
@@ -167,12 +172,25 @@ build: beside the binary in an archive, under `share/licenses/vif/` once
 installed, beside the page, and on Android as an asset in the APK, which the app
 shows no way to open.
 
-The zip plays in Windows Terminal, Windows 11's default terminal, whose console
-host forwards the game's request for mouse reports and, from 1.22, passes its
-output through as written. Windows 10's own console host, the ConPTY Alacritty
-uses unless a `conpty.dll` and `OpenConsole.exe` from Windows Terminal lie beside
-`alacritty.exe` (Alacritty 0.13+), causes the first two known issues; Windows 10
-is past its end of support, so they leave with it:
+On Windows the release is the window build (`make windows-package`, the zip, and
+`make steam-windows`, the depot): `bin\vif.exe` with the wad beside its `bin\`,
+which it finds as a checkout's ([Filesystem layout §3](filesystem-layout.md)), so
+the folder plays where it is unzipped. It is linked with no console
+(`-H=windowsgui`), and a program with no console has no terminal: `-cli` and
+`-g=false` are refused there (`cmd/vif/gui_windows.go`). Started from a console it
+takes that one (`AttachConsole`) and prints there, `-h`, `-version` and `-check`
+among it; started from Explorer or Steam, which have none, it shows why it ended
+in a message box, a refused flag as much as a window that did not open. The
+window is `terminal/window`'s Win32 host (§8): keys arrive with their releases,
+the cell follows the display's scale, and sound is the window's own speakers.
+
+The terminal build (`make windows`) is a console program and leaves the window
+and the audio out. It plays in Windows Terminal, Windows 11's default terminal,
+whose console host forwards the game's request for mouse reports and, from 1.22,
+passes its output through as written. Windows 10's own console host, the ConPTY
+Alacritty uses unless a `conpty.dll` and `OpenConsole.exe` from Windows Terminal
+lie beside `alacritty.exe` (Alacritty 0.13+), causes the first two known issues;
+Windows 10 is past its end of support, so they leave with it:
 
 - **The mouse does nothing.** The console is read as VT input, where a click
   arrives only if the console host forwards the request for mouse reports to
@@ -181,9 +199,9 @@ is past its end of support, so they leave with it:
   own copy of the screen on its own schedule, the likely cause; the terminal
   module sends each frame as one synchronized update (DEC mode 2026) with the
   cursor hidden again, which a host passing output through delivers whole.
-- **No audio.** The build leaves the engine out. The engine compiles for Windows,
-  and ffplay, one of its pipe players, has a Windows build, so audio there is
-  untried rather than impossible.
+- **No audio.** The build leaves the engine out: on Windows sound is the window's
+  own speakers, and a terminal run has none
+  ([todo](todo.md#give-the-windows-terminal-build-sound)).
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
 Different targets are not promised bit-exact lockstep even when their manifest
@@ -545,8 +563,8 @@ browser draws the same face at any size, from a web font inside `vif.wasm`
 (`atlas.HackWeb()`). The font's license ships as `LICENSE.font`
 ([Packaging §1](packaging.md#1-shared-guidelines)).
 
-The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
-build but `vif_nogui`, sets `Host.Presentation` to a `terminal/window` window, a
+The desktop window is one such host: `cmd/vif/gui.go`, in every Linux, FreeBSD and
+Windows build but `vif_nogui`, sets `Host.Presentation` to a `terminal/window` window, a
 module nested in terminal's repository, when `-g` asks for it, as a `vif_gui` build
 or `vif.toml`'s `[presentation] window` does by default and `-cli` refuses. It opens
 holding the grid `-size` names, 120x40 with none, or maximized or full screen on
@@ -611,6 +629,60 @@ that goes mid-run leaves the run silent
 ([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
 and every figure is a null sink's
 ([todo](todo.md#hear-the-windows-speakers-on-real-devices)).
+
+On Windows the same `gui.go` opens `terminal/window`'s Win32 host, which loads
+nothing through purego: its messages are read on a thread of its own, keys come
+with their repeats and releases, so `terminal.HostKeys` reports holds as on X11,
+the cell is `-scale` times the display's scale and follows the window to a
+monitor of another, F11 and Alt+Enter toggle a borderless full screen, and
+Ctrl-Shift-V and Shift-Insert post the clipboard as one paste. GDI copies each
+frame to the window: a cell that is a whole multiple of its strike is stretched
+to blocks, and any other is drawn by the raster at the cell's own size
+(`Raster.SetCell`), so a display at 125 or 150 % filters nothing. Under Wine 9.0
+a frame of 18x36 cells at 1908x1080 is on screen in 4.7 to 7.9 ms (14 % and all
+of its cells changed), 0.4 to 2.7 ms of it the raster's and the rest Wine's copy,
+and the game holds its 60 frames a second; Windows' own figure is owed
+([todo](todo.md#run-the-windows-window-build-on-windows)).
+
+There the window's speakers are WASAPI's, with cgo off and no library beyond
+the system's (`cmd/vif/wasapi.go`, in every Windows window build with audio):
+each COM interface is called through its method table with `syscall.SyscallN`.
+One thread holds COM and a shared stream on the default output device, opened
+event-driven in the mixer's own 44.1 kHz 16-bit stereo, which Windows converts
+to the device's format, and kept at two of the device's periods, 20 ms. A write
+is handed to that thread, which gives the device a slice of it at each of the
+device's calls, and returns once the device holds it all, so the mixer renders
+its next period as late as the device allows: between a render and its sound
+leaving the device lie 10 to 30 ms whatever the mixer's period, and a device
+that stalls queues nothing behind itself, where a ring of two mixer periods that
+took each write as it fit measured 6 to 16 ms more at the median and kept 17 to
+82 ms more after one 200 ms stall. A stream that fails (its device unplugged,
+disabled or given another format) or takes nothing for two seconds (a program
+holding the device for itself) is opened again on the default device of the
+moment, once a second until one plays; the mixer runs on meanwhile and is told
+nothing, since a write error silences the engine for the run. A default changed
+while the old device stays is not followed
+([todo](todo.md#follow-the-default-output-device-on-windows)). The render loop
+yields to Go's scheduler once a device period: without it the runtime's monitor
+takes the thread's processor at every wait and polls at full rate, which under
+Wine cost 17 % of a core where the speakers now cost 6 %. Measured under Wine
+9.0 on PipeWire's null sink alone, at mixer periods of 50, 20 and 10 ms:
+
+```
+mixer period                                     50 ms    20 ms    10 ms
+trigger to its sound leaving the device, median   44.2     27.8     13.2  ms
+the same, worst                                   71.4     37.6     21.4  ms
+underruns in ten minutes                             0        0       17
+mixer alone, of a core                             4.7      5.5      6.7  %
+render thread, of a core                           0.9     0.95     1.05  %
+```
+
+Wine's own output path, 17 to 19 ms, lies behind each latency. The period is
+`[audio] buffer_ms`, 50 ms as shipped: 20 ms is what these figures favor, and
+whether the Windows window should start there is open
+([todo](todo.md#feed-the-windows-speakers-a-shorter-period-by-default)). The
+figures on Windows are owed
+([todo](todo.md#measure-the-windows-sound-on-windows)).
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
@@ -806,12 +878,14 @@ included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/st
 ## 9. Verification and release concerns
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
-dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
+dedicated, `vif_nogui`, browser and both Windows variants, tests the audio-free and
 dedicated profiles, the `android` module and the window's
 (`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check,
-with two of its kind: `vif_nogui` links neither purego nor the window, and the
-window's speakers build into the Linux window builds alone. That is in addition
-to the normal test and vet gates. A release should also run:
+with others of its kind: `vif_nogui` links neither purego nor the window, on
+Windows either; the Windows window build links no purego and a Linux build none
+of Windows' system calls; and each window's speakers build into the window
+builds of its system alone. That is in addition to the normal test and vet
+gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest
@@ -830,8 +904,8 @@ permission prompt is Chrome's own window, which no headless run answers:
 `script/extension-check.mjs` covers what needs no answer, and the first join at
 the site is checked by hand. Linux and FreeBSD
 release checks should include a real terminal; audio-capable artifacts also need at
-least one real or `null`/WAV backend smoke test. Windows is played by hand, not
-certified on the release path; its known issues are in §4.
+least one real or `null`/WAV backend smoke test. Windows is played by hand, so
+far under Wine alone, not certified on the release path; what it owes is in §4.
 
 Two policy decisions stay separate from transport: browser admission, settled with
 the router as the credential boundary

@@ -296,7 +296,14 @@ directory because Steam installs a depot whole:
 - `LICENSE`, that build's `NOTICES`, `LICENSE.font` (§1) and a `README.md`
   (`release-readme`'s `steam-linux`).
 
-It holds nothing of Valve's: the build links no Steamworks SDK
+`make steam-windows` assembles the Windows depot in `bin/steam/windows/` the same
+way around `bin\vif.exe`: the `vif_gui novlog` build for windows/amd64, linked with
+no console, which loads the system's own libraries alone and plays through the
+system's mixer ([platforms §4](multi-platform.md#4-platform-matrix)). Its
+`README.md` is `release-readme`'s `steam-windows`. A release's Windows zip is the
+same folder (`make windows-package`), with the README of an archive.
+
+Neither holds anything of Valve's: the build links no Steamworks SDK
 ([todo](todo.md#bind-the-steamworks-sdk-behind-a-tag-of-its-own)).
 
 ### In the runtime
@@ -333,12 +340,15 @@ hand.
 `make steam-upload STEAM_APP=<app> STEAM_DEPOT_LINUX=<depot> STEAM_USER=<account>`
 fills the ids into the build scripts of `deploy/package/steam/`, writes them
 beside the depot and runs `steamcmd`, which asks for the builder account's
-password and Steam Guard code itself. It sets nothing live: a build goes to the
-default branch on the partner site's builds page.
+password and Steam Guard code itself. `STEAM_DEPOT_WINDOWS=<depot>` sends the
+Windows depot in the same build, once `make steam-windows` assembled it. It sets
+nothing live: a build goes to the default branch on the partner site's builds
+page.
 
 The release workflow's `steam` job does the same for a tag and is unplugged: it
 runs once the repository variable `STEAM_UPLOAD` is `true`, with `STEAM_APP` and
-`STEAM_DEPOT_LINUX` as variables and two secrets, `STEAM_USER` and
+`STEAM_DEPOT_LINUX` as variables, `STEAM_DEPOT_WINDOWS` where the Windows depot
+goes with it, and two secrets, `STEAM_USER` and
 `STEAM_CONFIG_VDF`, the base64 of the `config/config.vdf` that account's first
 `steamcmd +login` left. The account is a builder's own, holding Edit App Metadata
 and Publish App Changes To Steam and nothing else, since the secret is its login.
@@ -349,10 +359,11 @@ The job has never run: its first run is a tag's, watched.
 Set by hand, and nothing in the repository reads them:
 
 - **Installation, General.** A launch option for Linux: executable `bin/vif`,
-  arguments `-fullscreen`.
+  arguments `-fullscreen`; and one for Windows: executable `bin\vif.exe`, the
+  same arguments.
 - **Installation, Linux Runtime.** Steam Linux Runtime 4.0, offered once a Linux
   launch option exists; left unset, a native game runs in Scout, the first.
-- **Depots.** One for Linux, 64-bit.
+- **Depots.** One for Linux and one for Windows, each 64-bit.
 - **Steam Cloud**, by Auto-Cloud, which needs no SDK: the player's settings,
   keymaps and what their bots learned, each a root path under the user root
   (`os.UserConfigDir`, so `~/.config/vif`), marked cross-platform:
@@ -362,7 +373,9 @@ Set by hand, and nothing in the repository reads them:
     ([Bots](bots.md#the-population-file)).
 
   The root is `LinuxHome`; Valve's list has none for `$XDG_CONFIG_HOME`, so a
-  player who moved it syncs nothing. Logs, journals, recordings and places (the
+  player who moved it syncs nothing. On Windows the user root is `%AppData%\vif`:
+  each path takes a root override for Windows, to `WinAppDataRoaming` with `vif`
+  replacing `.config/vif`. Logs, journals, recordings and places (the
   state root) and `scenario/downloads` stay on the machine. `vif.toml` carries the
   window's zoom (`[presentation] cell`) to a player's other machines with the
   rest.

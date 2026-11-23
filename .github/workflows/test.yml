@@ -49,7 +49,8 @@ jobs:
         CGO_ENABLED=0 go build -o /dev/null ./cmd/vif
         CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std -o /dev/null ./cmd/vif
         GOOS=js GOARCH=wasm go build ./...
-        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags 'novlog vif_noaudio' ./...
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags 'novlog vif_noaudio vif_nogui' ./...
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags 'vif_gui novlog' -ldflags=-H=windowsgui -o /dev/null ./cmd/vif
 
     # A passing package says nothing: the log keeps a failure's output, what a step
     # prints on its own and the race detector's reports.
