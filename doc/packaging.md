@@ -3,7 +3,8 @@
 Steps to publish vif through a distribution repository, and the
 conventions a change must not break while that work is in progress. Section 1
 applies to every commit, §2 is what the release workflow publishes, §3 to §6 are
-checklists to chip away at, and §7 verifies a staged install.
+checklists to chip away at, §7 verifies a staged install, and §8 is the Chrome
+extension with what its store needs done by hand.
 
 ## 1. Shared guidelines
 
@@ -73,13 +74,14 @@ These hold regardless of which repository is targeted first.
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 and arm64
 clients and the amd64 headless server, FreeBSD amd64 client, an experimental
-Windows amd64 zip, the browser bundle, the wad, the Android APK, and
-`SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
+Windows amd64 zip, the browser bundle, the Chrome extension's zip, the wad, the
+Android APK, and `SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
 neither scatters files nor hands them to the builder's uid; each carries `LICENSE`
 and its build's `NOTICES` (§1), a client archive `LICENSE.font` as well, and the
-browser bundle `LICENSE.font` and `fonts/LICENSE`. Each archive's `README.md` is
+browser bundle and the extension's zip `LICENSE.font` and `fonts/LICENSE`. The
+extension's zip is the store's upload, its files at the zip's root (§8). Each archive's `README.md` is
 written for its platform: `make release-readme` renders
 `deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 
@@ -207,3 +209,66 @@ The settings, keymap, content and installed bot-graph lines must name paths unde
 the staged root, and so must the scenario line of the second check. The main
 scenario, the sound and music banks and the `embedded default` bot line are
 embedded by design. That is the packaging contract in two commands.
+
+## 8. Chrome Web Store
+
+`make extension` writes the store's upload, `bin/vif-chrome.zip`, and the same
+files unpacked in `bin/vif-chrome/` for `chrome://extensions` (Developer mode,
+Load unpacked): the bundle `make wasm` built, a manifest, a service worker, two
+scripts and four icons from `deploy/package/chrome/`, and the licenses. All code
+is in the package; the page is generated from `web/index.html` by two
+replacements that stop the build unless each happens exactly once. `node
+script/extension-check.mjs bin/vif-chrome` loads the build headless in
+Playwright's Chromium and holds it to the start screen, a frame, the share link
+and a silent network; the release workflow runs it before the zip joins a
+release ([Platforms §5](multi-platform.md#the-chrome-extension)).
+
+- **Version.** Chrome's is one to four integers up to 65535, not all zero, and an
+  upload must be larger than the last. `EXT_VERSION` is `X.Y.Z.N`: the tag's
+  three, a suffix dropped, then the workflow's run number, as the APK's
+  `versionCode` is. A nightly is `0.0.0.N`, a build by hand `0.0.0.1`.
+- **The id.** The store makes the item's key pair and keeps the private half; the
+  id is the public key's digest, so no key of ours exists to commit. Once the
+  item exists its public key (Developer Dashboard, Package, View public key, its
+  body on one line) is `EXT_KEY`, which `make extension` writes into the unpacked
+  build's manifest and never into the zip, so a build loaded unpacked takes the
+  item's id. With no key an unpacked build's id follows its directory's path. The
+  router lists the item's origin after the site's:
+  `VIF_ROUTER_WEB_ORIGIN=https://lixen.com,chrome-extension://<id>`.
+- **The listing**, entered by hand in the dashboard:
+  - the summary is the manifest's description, 132 characters at most; the
+    description, the README's opening and highlights;
+  - one to five screenshots, 1280x800, full bleed: the start screen, a solo game,
+    the menu, a game with others;
+  - the store icon is the package's `icon-128.png`: 96 px of art inside 16 px of
+    transparent padding, as the store's image guide asks;
+  - single purpose: playing vif in a tab, solo offline or with others at
+    lixen.com;
+  - the one permission, `https://lixen.com/*`, optional: asked for only when the
+    player starts or joins a game with others, so the game can ask lixen.com to
+    make the session or look it up; solo play never asks, and there is no content
+    script and no other host;
+  - remote code: none. lixen.com answers with JSON and the game's own protocol
+    over a WebSocket; `vif.wasm` is in the package, built from this repository by
+    `make wasm`, which the listing should say, since the store's readability rule
+    is a reviewer's to apply to a binary;
+  - data: nothing is collected. Settings, a session's place and what the bots
+    learned stay in the extension's storage on the player's machine. A game with
+    others sends the player's input to that session at lixen.com, which sees the
+    address it comes from as any server does;
+  - a privacy policy's address, which the store asks of an item that handles any
+    user data: a page of the site saying the above.
+- **By hand, once:** the developer account and its one-time fee, the first
+  upload, the listing, the key and the id into `EXT_KEY` and the router's
+  settings, the first submission.
+- **By hand, each release:** upload the tag's zip and submit it with publishing
+  deferred, then publish as the fleet takes the release: a passed review holds
+  for 30 days.
+- **Version skew.** The site's page is the fleet's build the moment both are
+  deployed. The extension is the store's last published upload, and Chrome brings
+  a player a new one hours after it is published; review takes a few days and can
+  take weeks, longer for a new item from a new developer. A session refuses a
+  dial of another wire version, naming both builds, so between a fleet's move to
+  a new version and the extension's the extension's joins are refused and its
+  solo play is untouched. Deferred publishing keeps that to the hours Chrome
+  takes to update.

@@ -854,6 +854,70 @@ Each row of the router's session list names the build its session runs
 lobby can show it, and warn before a Play that would be refused once it knows the
 page's own build, which the release's web bundle does not name yet.
 
+### Sign in from the extension
+
+- Priority: P2
+- Affected files: `internal/app/internal/membership/host.go` (`Login`),
+  `internal/network/session.go` (a sign-in is shown over TLS alone, and a
+  page's `wss://` socket reads as none), `cmd/vif/browser.go` and `web/vif.js`
+  (a kept document for the token, as `places`)
+
+A player signed in at the site joins from the Chrome extension unnamed: the
+router reads the sign-in cookie from the site's origin alone, and Chrome sends
+none on the extension's upgrade, so the ticket names the address, with no
+account, no attested name and no account join budget. Once the site's
+permission is held, `:register` there makes the account; `:login` reads `Signed
+in to lixen.com as <name>` and sets the site's cookie in the browser, which
+signs in the site's own pages and charges the extension's creates to the
+account, and seats nobody by name; `:logout` signs those pages out too. Closes
+with a page that is not its site's signing in as a terminal does: the token kept
+in the page's storage, as its places are, and shown in the admission exchange
+over `wss://`, which the router takes from any origin.
+
+### List the site's games in the extension
+
+- Priority: P2
+- Affected files: `deploy/package/chrome/` (a page and its script), `Makefile`
+  (`extension`)
+
+The extension opens on a solo start screen, and a game at the site is reached by
+typing `:join` or through the menu, so its share button, which shows only behind
+a game the page's address names, never shows. A page of the extension's own
+listing the site's games (`GET /vif/api/sessions`, behind the permission the
+first join asks for), each row opening `index.html?arg=-join=<ws_url>`, gives it
+the site's lobby. Open: its own page or rows on the start screen, as
+[Android's](#offer-lixencom-games-on-the-start-screen); hosting from it.
+
+### Open the extension in Chrome's side panel
+
+- Priority: P3
+- Affected files: `deploy/package/chrome/manifest.json`, `background.js`
+
+The toolbar button opens a tab. Chrome's side panel (`side_panel` and the
+`sidePanel` permission, Chrome 114) would hold the same page beside another, at a
+phone's width. Open before it is built: whether the map reads at 360 px on a
+desktop's cell, which entry the button takes, and the store's rule that a side
+panel serve the page beside it, which a game does not.
+
+### Word a failed socket by where the page stands
+
+- Priority: P3
+- Affected files: `pkg/network/websocket_wasm.go` (`connectionFailed`)
+
+In the Chrome extension the page's host is its id, so every `wss://` host is
+another's, and a join the site's own route refused ends with the hint for a
+player's self-signed door. Closes with the hint kept from a route its site lists,
+which the lookup that follows a failed dial already knows.
+
+### Keep the menu off the start screen after two quick Backs
+
+- Priority: P3
+- Affected files: `web/vif.js` (`showAway`, `applyMenu`)
+
+The first Back's Escape opens the menu a frame after the second Back looked for
+one to close, so the menu's window stands over the start screen. Closes with
+`applyMenu` closing a menu that arrives while the page is away.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).

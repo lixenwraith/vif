@@ -43,3 +43,15 @@ These print what they measured and are not part of `all`.
 that play a fixed host or guest against a person, or against each other headless;
 [Development](../doc/development.md#a-scripted-participant) has the commands.
 `go test ./internal/journal` compiles every `script/*.toml`.
+
+## The extension
+
+`node script/extension-check.mjs <dir>` loads the unpacked Chrome extension
+`make extension` wrote in Playwright's Chromium, headless, and prints a line a
+check, stopping at the first that fails with its reason: the extension loads, its
+toolbar button opens the game's one tab, the start screen asks for the start, a
+press starts the game, a frame draws, nothing breaks the page's Content Security
+Policy, the share link is the site's, and solo play asks nothing of a network. It
+needs `playwright` (1.63.0 is the version it is held to) and that version's
+Chromium (`npx playwright install --no-shell chromium`), and reaches no network:
+the browser's one proxy is the script's own, which refuses everything.

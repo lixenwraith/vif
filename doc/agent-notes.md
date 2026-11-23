@@ -153,7 +153,9 @@ Docs · Libraries · Branches.
   its own outside the tree: its `go.mod` takes this module's `go` line, a lower
   one asking for a toolchain nothing serves, and its `go.sum` a copy of this
   one's, and `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module
-  cache with no network.
+  cache with no network. A dependency of that dependency stops it on the older
+  version it names unless the scratch `go.mod` requires this module's too, as
+  `golang.org/x/crypto` for `lixenwraith/auth`.
 - `make notices NOTICES_OF=android` lists `./game` from `android/`, so under a
   `GOWORK` that leaves `android/` out it stops ("main module ... does not contain
   package .../android/game"): run it with `GOWORK=off`. A scratch copy of the tree
@@ -1024,6 +1026,35 @@ Docs · Libraries · Branches.
   in a container whose environment is large, Go's `wasm_exec.js` refuses it ("total
   length of command line and environment variables exceeds limit"): run it under
   `env -i` with `HOME`, `PATH`, `GOCACHE` and `GOMODCACHE`.
+- The Chrome extension loads in Playwright's Chromium headless only as a
+  persistent context of the full browser: `chromium.launchPersistentContext` with
+  `channel: 'chromium'` and both `--load-extension=<dir>` and
+  `--disable-extensions-except=<dir>`. Its id is the host of
+  `context.serviceWorkers()[0].url()`, and `worker.evaluate(() =>
+  chrome.action.onClicked.dispatch({}))` presses its toolbar button.
+  `script/extension-check.mjs` is the pattern.
+- Chrome's permission prompt is the browser's window, not the page's: a headless
+  run leaves `chrome.permissions.request` pending for good. Under `Xvfb` with
+  `headless: false` it shows, `import -window root` captures it and `xdotool
+  mousemove <x> <y> click 1` answers it. A stubbed `chrome.permissions` covers the
+  page's logic, and a scratch manifest holding the host as `host_permissions` the
+  fetches a grant would allow.
+- `page.evaluate` and `page.waitForFunction` run as a user gesture: a test that
+  polls a page keeps `navigator.userActivation.isActive` true. A path that must
+  find no gesture needs six seconds with no evaluate, an ask sent from the service
+  worker, or a stubbed `userActivation`.
+- Chromium on Linux takes its proxy from the environment, so in a container whose
+  `HTTPS_PROXY` is set its own calls home, and any stray request of a test, leave
+  through it. `--proxy-server=http://127.0.0.1:<port>` naming a local server that
+  answers 502 to everything keeps a run on loopback, which is never proxied, and
+  its record is what the browser tried. Chromium also keeps a singleton socket
+  under `TMPDIR` and stops on a long one (`Socket path too long`): a session's
+  scratchpad path is too long, `/tmp` is not.
+- A stand-in for the site is a few lines of node: `GET` and `POST
+  /vif/api/sessions` answering a `ws_url`, and an `upgrade` handler that writes
+  the request on to a native `vif -host ws://127.0.0.1:<port> -name <id> -bot 2`.
+  The name must be the route's last segment, or the host answers `this address is
+  not serving the session that was dialed`.
 - An init script wrapping `window.Worker` hears the worker's `frame` messages
   before the page does: each record's second word is its cell's rune, so the
   records, kept as terminal's `applyFrame` keeps them, give the screen's text. The
