@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -19,9 +20,11 @@ var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 // wsRouter carries one browser connection to the session it names: it terminates
 // the WebSocket and places its payload with the front door's own placement, so the
-// two routes share a budget, a ceiling and their refusals.
+// two routes share a budget, a ceiling and their refusals. origin is the site's,
+// whose page signs in by its cookie; listed are the others the route answers.
 type wsRouter struct {
 	origin string
+	listed []string
 	route  *tcpRouter
 }
 
@@ -81,9 +84,10 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 	}
 	// A browser sends Origin on every WebSocket handshake and cannot forge it.
 	// Nothing else admits a caller here, so this is the whole of same-origin.
-	if r.Header.Get("Origin") != s.ws.origin {
+	origin := r.Header.Get("Origin")
+	if origin != s.ws.origin && !slices.Contains(s.ws.listed, origin) {
 		writeAPIError(w, http.StatusForbidden, "origin_refused",
-			"This session route answers one origin")
+			"This session route does not answer this origin")
 		return
 	}
 	handshake, err := websocket.Check(w, r)
@@ -97,7 +101,12 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		s.log.Warn("session socket upgrade failed", "session", id, "error", err)
 		return
 	}
-	// The page's sign-in rides the upgrade as the cookie the identity service set on
-	// this origin, which the Origin check above made the page's own.
-	s.ws.route.route(client, s.clientAddr(r), signInOf(r))
+	// The site's page signs in by the cookie the identity service set on the site's
+	// origin, which rides the upgrade. A listed origin's upgrade may carry it too, and
+	// is not that page: it is placed as a dial that shows no sign-in.
+	signIn := ""
+	if origin == s.ws.origin {
+		signIn = signInOf(r)
+	}
+	s.ws.route.route(client, s.clientAddr(r), signIn)
 }

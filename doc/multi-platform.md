@@ -25,6 +25,7 @@ host the game.
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
+| Chrome extension | `make extension`: the `make wasm` bundle, packed | The page, in a tab of its own | The page's | No | Stub | The browser build installed in Chrome: solo play offline, or a session joined at the site once the player allows it (§5) |
 | Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
@@ -44,6 +45,7 @@ make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
 make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
 make wasm                    # web/vif.wasm and the page's scripts
+make extension               # bin/vif-chrome to load unpacked, bin/vif-chrome.zip for the store
 make windows                 # bin/vif.exe
 
 go build -tags=vif_noaudio ./cmd/vif
@@ -134,6 +136,7 @@ measured for each release.
 | Windows amd64 | Experimental; plays in Windows Terminal, and in Alacritty with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer over `terminal/android`'s view and `AudioTrack` (§8); the wad as the system root |
 | `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after 30 s, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` and what its bots learned in its storage (`terminal.Page`, `web/vif.js`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| Chrome extension | A zip in every nightly and release ([Packaging §8](packaging.md#8-chrome-web-store)) | The `js/wasm` bundle byte for byte, so that row holds; what an extension's origin changes is in §5 |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `terminal/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
@@ -301,7 +304,12 @@ flowchart LR
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
 a frame. The router checks the method, the identifier's syntax, that the request
-is an upgrade and the `Origin` before it answers the upgrade. The address's join
+is an upgrade and that its `Origin` is one `-web-origin` lists before it answers
+the upgrade. The first origin listed is the site's: `ws_url` is built from it and
+its page alone signs in by its cookie. One listed after it, as the Chrome
+extension's `chrome-extension://<id>`, is placed as a dial that shows no sign-in
+([Auth and session design §3.6](auth-session-design.md#36-admission-tickets-and-accounts)).
+The address's join
 budget, the session's liveness and readiness in reconciled Kubernetes state and its
 own per-session ceiling follow in the stream, as the front door's do, so a page reads
 why it was refused; it never accepts an upstream a caller named.
@@ -321,6 +329,39 @@ network blocks it; a native client's `Origin` is the URL's own.
 The router owns routing and admission as well as allocation; keep those duties
 behind explicit interfaces so the process can be renamed or split without moving
 Kubernetes lifecycle code into the game.
+
+### The Chrome extension
+
+`make extension` packs the bundle `make wasm` built, byte for byte, as a Manifest
+V3 extension ([Packaging §8](packaging.md#8-chrome-web-store)). Its toolbar
+button opens the page in a tab, or returns to the tab that has it. The page plays
+with no network and keeps `[play]`, its places and what its bots learned in the
+extension's own storage, apart from the site's. Three things differ from the
+site's page, each forced by the page's origin being `chrome-extension://<id>`:
+
+- **Its address is nobody else's.** The share button copies the site's page with
+  this page's arguments (`data-share`, §6). As on the site it shows only behind a
+  game the page's address names, which nothing in the extension opens yet
+  ([todo](todo.md#list-the-sites-games-in-the-extension)).
+- **The site is another origin.** A request to it, a site join's create, a link
+  looked up in its list, an account command, is CORS's to refuse until the
+  extension holds the host permission its manifest leaves optional. The program's
+  thread asks the page before each such request (`extension-worker.js`, the Worker
+  `data-worker` names, in front of `worker.js`), and the page (`extension.js`)
+  asks the player: Chrome's prompt, inside the key press or click that made the
+  request, or after a window of the page's own where that gesture is more than a
+  few seconds old. Refused, the request fails with `reaching <site> was not
+  allowed; try again and choose Allow`, on the status line or the exit screen,
+  nothing is sent, and the game plays on. Allowed, Chrome keeps it.
+- **A join carries no sign-in.** A `ws(s)://` join asks nothing of Chrome: its
+  upgrade carries the extension's `Origin`, which the router answers once
+  `-web-origin` lists it and otherwise refuses, which a page reads as a
+  connection that failed. The router reads no cookie from a listed origin and
+  Chrome sends none on that upgrade, so a signed-in player joins unnamed
+  ([todo](todo.md#sign-in-from-the-extension)).
+
+A release reaches the extension's players after the store's review, not at the
+deploy ([Packaging §8](packaging.md#8-chrome-web-store)).
 
 ## 6. Browser launch arguments
 
@@ -350,7 +391,9 @@ A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
 editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js`,
 `data-exec` for `wasm_exec.js` and `data-audio` for `audio-worklet.js`. Each one
-unnamed is the file beside the page.
+unnamed is the file beside the page. `data-share` names the page a shared link
+opens, for a copy of the page others cannot open by its own address, as the
+extension's.
 
 ```html
 <script src="/vif/wasm/terminal.4f1c….js" data-wasm="/vif/vif.9a2e….wasm"
@@ -720,10 +763,14 @@ go vet ./...
 ./script/test.sh all
 make wasm    # writes web/terminal.js and worker.js; node checks one file a call
 for f in vif audio-worklet terminal worker; do node --check web/$f.js; done
+make extension && node script/extension-check.mjs bin/vif-chrome
 ```
 
 Compilation is not runtime certification. A hidden tab's leave and return (§5) is
-checked by hand in a browser, since no test harness hides a tab. Linux and FreeBSD
+checked by hand in a browser, since no test harness hides a tab. The extension's
+permission prompt is Chrome's own window, which no headless run answers:
+`script/extension-check.mjs` covers what needs no answer, and the first join at
+the site is checked by hand. Linux and FreeBSD
 release checks should include a real terminal; audio-capable artifacts also need at
 least one real or `null`/WAV backend smoke test. Windows is played by hand, not
 certified on the release path; its known issues are in §4.

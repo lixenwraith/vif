@@ -99,7 +99,8 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
 	}
 	if cfg.WebOrigin != "" {
-		server.ws = &wsRouter{origin: cfg.WebOrigin, route: newTCPRouter(allocator, held, joins, logger)}
+		server.ws = &wsRouter{origin: cfg.WebOrigin, listed: cfg.ListedOrigins,
+			route: newTCPRouter(allocator, held, joins, logger)}
 	}
 	// A session nobody joins expires after -first-join, so this bounds how many of
 	// the fleet's unclaimed sessions one address, or one account, can hold.

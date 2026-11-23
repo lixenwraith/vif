@@ -111,7 +111,7 @@ location = /vif/api/logs {
 # socket to its session's game port.
 #
 # Origin is forwarded unchanged, because it is the whole of same-origin here and
-# the router compares it against its -web-origin. Do not set it.
+# the router compares it against the origins its -web-origin lists. Do not set it.
 #
 # A proxy_set_header in a location replaces every one inherited from the server,
 # so the three below are all this route sets. That is correct here: the router
