@@ -7,10 +7,10 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// KeyCapture is the set of printable ASCII keys a scenario takes from play-mode
-// parsing, the modes it takes them in, whether a sequence already pending keeps a
-// key, and whether it asks a console keyboard for their releases. Written under
-// the world lock, read by the parser outside it.
+// KeyCapture is the set of keys, printable ASCII and Enter, a scenario takes from
+// play-mode parsing, the modes it takes them in, whether a sequence already pending
+// keeps a key, and whether it asks a console keyboard for their releases. Written
+// under the world lock, read by the parser outside it.
 type KeyCapture struct {
 	bits     [2]atomic.Uint64
 	modes    atomic.Uint32
@@ -19,13 +19,25 @@ type KeyCapture struct {
 }
 
 // Capturable reports whether a scenario can take r: printable ASCII, which every
-// terminal sends as itself
-func Capturable(r rune) bool { return r >= ' ' && r <= '~' }
+// terminal sends as itself, or Enter as a carriage return
+func Capturable(r rune) bool { return r == '\r' || r >= ' ' && r <= '~' }
+
+// capturable is the rune a key names to a capture: its own, or Enter's carriage
+// return; false for any other key
+func capturable(ev terminal.Event) (rune, bool) {
+	switch ev.Key {
+	case terminal.KeyRune:
+		return ev.Rune, true
+	case terminal.KeyEnter:
+		return '\r', true
+	}
+	return 0, false
+}
 
 // Set replaces the captured keys; an empty string releases them all. modes are
 // the play modes the capture holds in, every one when zero, and idle leaves a key
 // to an operator, prefix or label pending, dropping a lone count. It reports the
-// runes it refused, which lie outside printable ASCII.
+// runes it refused, which no scenario can take.
 func (c *KeyCapture) Set(keys string, modes core.ModeMask, idle, releases bool) (refused string) {
 	var bits [2]uint64
 	for _, r := range keys {
@@ -208,8 +220,8 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 	// A captured key's release ends the hold the router keeps for it, in any mode,
 	// since the router ends holds as play stops; any other key's release is nothing
 	if ev.Action == terminal.KeyRelease {
-		if ev.Key == terminal.KeyRune && m.capture.Has(ev.Rune) {
-			return &Intent{Type: IntentKeyRelease, Char: ev.Rune, Count: 1, Lost: ev.Lost}
+		if r, ok := capturable(ev); ok && m.capture.Has(r) {
+			return &Intent{Type: IntentKeyRelease, Char: r, Count: 1, Lost: ev.Lost}
 		}
 		return nil
 	}
@@ -273,13 +285,13 @@ func (m *Machine) pressKey(ev terminal.Event) *Intent {
 	case ModeNormal, ModeVisual, ModeInsert:
 		// A captured key outranks any pending grammar, unless its capture is idle and a
 		// sequence waits on the next key, q's label among them; it drops a lone count
-		if ev.Key == terminal.KeyRune && m.capture.Takes(ev.Rune, m.mode, m.state != StateIdle && m.state != StateCount) {
+		if r, ok := capturable(ev); ok && m.capture.Takes(r, m.mode, m.state != StateIdle && m.state != StateCount) {
 			if ev.Action == terminal.KeyRepeat {
 				return nil // its hold is down already
 			}
 			m.Reset()
-			m.last = string(ev.Rune)
-			return &Intent{Type: IntentKeyPress, Char: ev.Rune, Count: 1, Command: m.last}
+			m.last = string(r)
+			return &Intent{Type: IntentKeyPress, Char: r, Count: 1, Command: m.last}
 		}
 		if m.mode == ModeInsert {
 			return m.processInsert(ev)

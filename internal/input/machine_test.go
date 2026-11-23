@@ -8,17 +8,22 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// TestCapturedKeyOutranksPlayGrammar asserts a captured key reaches the scenario
-// from Normal mid-count and from Insert, while text entry still types it
+// TestCapturedKeyOutranksPlayGrammar asserts a captured key, Enter among them,
+// reaches the scenario from Normal mid-count and from Insert, while text entry still
+// types it
 func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 	var capture KeyCapture
-	if refused := capture.Set("15é", 0, false, false); refused != "é" {
+	if refused := capture.Set("15é\r", 0, false, false); refused != "é" {
 		t.Fatalf("refused %q, want the non-ASCII rune", refused)
 	}
 	m := NewMachine()
 	m.SetCapture(&capture)
 	key := func(r rune) *Intent {
 		return m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	enter := func() *Intent { return m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}) }
+	if in := enter(); in == nil || in.Type != IntentKeyPress || in.Char != '\r' {
+		t.Fatalf("captured Enter in Normal = %+v, want IntentKeyPress of a carriage return", in)
 	}
 
 	if in := key('2'); in != nil {
@@ -44,6 +49,9 @@ func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 	m.SetMode(ModeInsert)
 	if in := key('1'); in == nil || in.Type != IntentTextChar {
 		t.Fatalf("released key in Insert = %+v, want IntentTextChar", in)
+	}
+	if in := enter(); in == nil || in.Type != IntentFireMain {
+		t.Fatalf("released Enter in Insert = %+v, want main fire", in)
 	}
 }
 
