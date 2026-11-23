@@ -52,9 +52,10 @@ own design is in [its repository](https://github.com/lixenwraith/identity).
   nothing, has the router ask the identity service which account the token names,
   mint a ticket naming that account or the dialer's address and the key the dialer
   proved, and forward the key, its proof and the ticket; the token never reaches the
-  pod and crosses TLS alone. On the browser route the page's sign-in cookie on the
-  upgrade is the token, same-origin, `SameSite=Strict` and `Origin`-checked. One
-  connection and one exchange on every host, native and page alike.
+  pod and crosses TLS alone. On the browser route the site's page's sign-in cookie
+  on the upgrade is the token, same-origin, `SameSite=Strict` and
+  `Origin`-checked; an origin the route answers beside the site's (§3.6) shows
+  none. One connection and one exchange on every host, native and page alike.
 - **D6. Pods verify.** A fleet pod runs `-admit ticket` with the router's public key
   in its Job's arguments and refuses a new admission that shows none; a pass is its
   own and needs no router. The router stays stateless, and a pod trusts no splice.
@@ -148,10 +149,10 @@ What each surface checks, and what it trusts:
   forwarded byte for byte with the player's address. `network.RequestSession` shows
   a refusal's message.
 - **The browser route**, `wss://<site>/vif/ws/<session>` (`handleSessionSocket`):
-  the method, the id's syntax, the upgrade and an exact `Origin` (`-web-origin`).
-  TLS ends at the site's edge; the stream is then placed as the front door places
-  one, the admission exchange run through the router, the page's `vif_sign_in`
-  cookie on the upgrade naming its account.
+  the method, the id's syntax, the upgrade and an `Origin` that `-web-origin`
+  lists. TLS ends at the site's edge; the stream is then placed as the front door
+  places one, the admission exchange run through the router, the site's page's
+  `vif_sign_in` cookie on the upgrade naming its account.
 - **The front door**, TCP 7777: plaintext `vif://`, `vifs://` where TLS fronts it,
   ended at the site's edge (`-route-secure`), which writes a PROXY header the router
   reads first (`-route-proxy-protocol`), or by the router itself (`-route-cert`,
@@ -440,6 +441,19 @@ a bearer with a session request to an https site. The coordinator copies the
 account's id and name onto the roster entry, the cursor and the pass (D15), a drop
 keeps the account out beside its keys, and a revoked sign-in stops new tickets.
 
+A **listed origin** is one `-web-origin` names after the site's: another hostname
+of the site, or a browser extension's `chrome-extension://<id>`. The browser route
+answers its upgrade, places it under the budgets and ceilings the site's page is
+placed under, and mints it the ticket of a dial that shows no sign-in, naming its
+address; a watch dial is served as any is. Its cookie is not read, whatever its
+browser sent, so it holds no account ticket, no attested name and no account
+budget, and `ws_url` never names it. It gains nothing a native dial lacks: outside
+a browser `Origin` is the dialer's to write, so the check only ever kept a foreign
+page off a signed-in player's cookie, and that it still does. The sessions API and
+the account routes check no `Origin` and never did: no CORS header and
+`SameSite=Strict` guard them, and an extension reads them only once its user
+grants it the site ([Platforms §5](multi-platform.md#the-chrome-extension)).
+
 ### 3.7 Budgets
 
 Every budget is a fixed window per key (`AdmissionLimiter`), the key an address's
@@ -508,8 +522,8 @@ to wait.
 - The router forwards `/vif/api/auth/` byte for byte (`log_proxy.go`'s shape) with
   the player's address in `-client-address-header`, and asks introspection once per
   account ticket. A page's sign-in is a cookie scoped to `/vif/`, which the
-  `/vif/ws/` upgrade carries, and the router mints from a cookie only on a request
-  whose `Origin` is `-web-origin`.
+  `/vif/ws/` upgrade carries, and the router mints from a cookie only on an upgrade
+  whose `Origin` is the site's, the first `-web-origin` lists.
 - The public log stream carries the sessions' logs, which name a participant by
   slot, never by account; the service's logs stay off it and hold no credential.
 - The site's edge, beside [Deploying §12](kube-docker-deploy.md#12-the-sites-edge):

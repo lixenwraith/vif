@@ -137,8 +137,9 @@ func (s *apiServer) handleAuth(w http.ResponseWriter, r *http.Request) {
 	s.accounts.forward.ServeHTTP(w, r)
 }
 
-// signInOf is the sign-in a browser's upgrade carries, the cookie the identity
-// service set on this origin; empty for none. The origin was checked before this.
+// signInOf is the sign-in a browser's request carries, the cookie the identity
+// service set on the site's origin; empty for none. An upgrade's is read only
+// once its Origin was found to be the site's.
 func signInOf(r *http.Request) string {
 	if c, err := r.Cookie(signInCookie); err == nil && c.Value != "" && !errors.Is(c.Valid(), errors.ErrUnsupported) {
 		return c.Value

@@ -354,8 +354,8 @@ the edge in front of 9080:
   `/healthz`, `/readyz` and any later router path stay on the node.
 - **Forward `Upgrade` and `Connection` on `/vif/ws/<session>`.** The router answers
   the WebSocket handshake itself and splices the socket to the pod.
-- **Leave `Origin` untouched.** The router compares it with `VIF_ROUTER_WEB_ORIGIN`
-  and refuses any other.
+- **Leave `Origin` untouched.** The router compares it with the origins
+  `VIF_ROUTER_WEB_ORIGIN` lists and refuses any other.
 - **Limit open sockets and handshakes per player on `/vif/ws/<session>`.** The
   router's join budget counts dials a minute, `VIF_ROUTER_ROUTE_MAX` a session's
   players' connections and `VIF_ROUTER_SPECTATORS_PER_ADDRESS` an address's

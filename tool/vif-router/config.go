@@ -24,6 +24,8 @@ var (
 	// scenario/ on the read-only volume. Anything with a separator in it would be a
 	// caller choosing a path, which is not a choice this router offers.
 	scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	// An extension page's Origin, as Chrome sends it: the id is 32 letters a to p.
+	extensionOriginPattern = regexp.MustCompile(`^chrome-extension://[a-p]{32}$`)
 )
 
 // defaultWadDir is where deploy/guest/update-vif-wad.sh installs the volume.
@@ -86,6 +88,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	var empty string
 	var drain string
 	var logLevelMin string
+	var webOrigins string
 
 	set := flag.NewFlagSet("vif-router", flag.ContinueOnError)
 	set.SetOutput(output)
@@ -131,8 +134,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&empty, "empty", "90s", "empty roster grace")
 	set.StringVar(&drain, "drain", "20s", "termination drain deadline")
 	set.StringVar(&cfg.Allocator.JoinHost, "join-host", "", "public raw-TCP host returned to players (required)")
-	set.StringVar(&cfg.Allocator.WebOrigin, "web-origin", "",
-		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
+	set.StringVar(&webOrigins, "web-origin", "",
+		"origins allowed to open a browser session, comma-separated: the site's first, e.g. https://example.com, which ws_url is built from and whose sign-in cookie alone is read, then any further one, another site's or chrome-extension://<id>; empty publishes no WebSocket route")
 	set.IntVar(&cfg.Allocator.Tunnels, "tunnels", 16,
 		"doors runs may publish through this router at once, reached by name as a pod is; 0 publishes none (at most 64)")
 	set.IntVar(&cfg.Allocator.DoorsPerAddress, "doors-per-address", 4,
@@ -166,6 +169,10 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
 	cfg.Allocator.Workload.Drain = drain
+	if webOrigins != "" {
+		listed := strings.Split(webOrigins, ",")
+		cfg.Allocator.WebOrigin, cfg.Allocator.ListedOrigins = listed[0], listed[1:]
+	}
 	if cfg.RouteCert != "" || cfg.RouteSelfSign {
 		cfg.Allocator.RouteSecure = true
 	}
@@ -323,19 +330,29 @@ func validateConfig(cfg runtimeConfig) error {
 	return nil
 }
 
-// validateWebRoute: -web-origin publishes the browser route, and empty publishes none.
+// validateWebRoute: -web-origin publishes the browser route, and empty publishes
+// none. The site's origin leads the list, since ws_url is built from it; one after
+// it may be an extension's, which no URL could be.
 func validateWebRoute(cfg allocatorConfig) error {
-	if cfg.WebOrigin == "" {
+	if cfg.WebOrigin == "" && len(cfg.ListedOrigins) == 0 {
 		return nil
 	}
-	origin, err := url.Parse(cfg.WebOrigin)
-	if err != nil || origin.Host == "" || (origin.Scheme != "https" && origin.Scheme != "http") {
-		return fmt.Errorf("-web-origin must be an absolute http or https origin")
+	if !siteOrigin(cfg.WebOrigin) {
+		return fmt.Errorf("-web-origin must open with the site's origin, a bare http(s)://host[:port]")
 	}
-	if origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
-		return fmt.Errorf("-web-origin must be a bare scheme://host[:port] origin")
+	for _, listed := range cfg.ListedOrigins {
+		if !siteOrigin(listed) && !extensionOriginPattern.MatchString(listed) {
+			return fmt.Errorf("-web-origin lists %q, neither a bare http(s)://host[:port] origin nor chrome-extension://<id>", listed)
+		}
 	}
 	return nil
+}
+
+// siteOrigin reports an absolute http or https origin with nothing after its host.
+func siteOrigin(raw string) bool {
+	origin, err := url.Parse(raw)
+	return err == nil && origin.Host != "" && (origin.Scheme == "https" || origin.Scheme == "http") &&
+		origin.Path == "" && origin.RawQuery == "" && origin.Fragment == "" && origin.User == nil
 }
 
 // validateLoopbackURL admits an absolute http URL on a loopback address with a port

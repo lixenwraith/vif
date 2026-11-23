@@ -591,13 +591,9 @@ func TestTheFrontDoorReadsTheEdgesHeaderAndEndsTLS(t *testing.T) {
 	}
 }
 
-// TestASignInNamesTheTicketsAccountOverTLSAlone: a dial that holds a site's sign-in
-// shows it to a TLS front door, the router asks the identity service which account
-// it names and the ticket names that account; over a plain stream the dial keeps the
-// token back and the ticket names the address; a token the service does not know
-// names the address too, and the pod never sees the token.
-// The route frame charges the address; a sign-in moves the charge to the account,
-// which has a budget of its own, so the address keeps only its anonymous dials.
+// TestASignedInJoinIsChargedToTheAccountNotTheAddress: the route frame charges the
+// address; a sign-in moves the charge to the account, which has a budget of its
+// own, so the address keeps only its anonymous dials.
 func TestASignedInJoinIsChargedToTheAccountNotTheAddress(t *testing.T) {
 	router := network.NewKey()
 	pod := startAskingPod(t, router)
@@ -644,6 +640,11 @@ func TestASignedInJoinIsChargedToTheAccountNotTheAddress(t *testing.T) {
 	}
 }
 
+// TestASignInNamesTheTicketsAccountOverTLSAlone: a dial that holds a site's sign-in
+// shows it to a TLS front door, the router asks the identity service which account
+// it names and the ticket names that account; over a plain stream the dial keeps the
+// token back and the ticket names the address; a token the service does not know
+// names the address too, and the pod never sees the token.
 func TestASignInNamesTheTicketsAccountOverTLSAlone(t *testing.T) {
 	router := network.NewKey()
 	pod := startAskingPod(t, router)
@@ -702,6 +703,51 @@ func TestASignInNamesTheTicketsAccountOverTLSAlone(t *testing.T) {
 		<-pod.keys
 		if ticket.Subject != tt.subject || ticket.Name != tt.who {
 			t.Fatalf("%s: the ticket names %q as %q, want %q as %q", name, ticket.Subject, ticket.Name, tt.subject, tt.who)
+		}
+	}
+}
+
+// TestTheSignInCookieCountsFromTheSitesOriginAlone: the browser route answers the
+// site and each origin listed after it, and reads the sign-in cookie on the site's
+// upgrade alone, so a listed origin whose upgrade carries the same cookie is given
+// the ticket a dial with no sign-in is: its address's.
+func TestTheSignInCookieCountsFromTheSitesOriginAlone(t *testing.T) {
+	const extension = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+	router := network.NewKey()
+	pod := startAskingPod(t, router)
+	var origin atomic.Value
+	server := httptest.NewUnstartedServer(nil)
+	site := "http://" + server.Listener.Addr().String()
+	api := newAPIServer(&fakeSessionAllocator{podIP: "127.0.0.1"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: site, ListedOrigins: []string{extension}}, newHolds(2), nil)
+	_, api.ws.route.game, _ = net.SplitHostPort(pod.addr)
+	api.admitWith(router)
+	api.serveAccounts(introspecting(t, map[string]string{"tok": "7"}))
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("Origin", origin.Load().(string))
+		r.AddCookie(&http.Cookie{Name: signInCookie, Value: "tok"})
+		api.ServeHTTP(w, r)
+	})
+	server.Start()
+	t.Cleanup(server.Close)
+	for _, tc := range []struct{ origin, subject string }{{site, "acct:7"}, {extension, "addr:127.0.0.1"}} {
+		origin.Store(tc.origin)
+		cfg := network.DebugConfig(link.RolePeer, "")
+		cfg.SessionName = routedID
+		cfg.Dial = func() (net.Conn, error) {
+			return websocket.Dial(t.Context(), "ws://"+server.Listener.Addr().String()+wsRoutePrefix+routedID, nil)
+		}
+		pending, _, err := network.DialSession("ws://unused/", cfg)
+		if err == nil {
+			_ = pending.Close()
+		}
+		if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+			t.Fatalf("the upgrade from %s ended %v, want the stand-in's refusal past its ticket", tc.origin, err)
+		}
+		ticket := <-pod.tickets
+		<-pod.keys
+		if ticket.Subject != tc.subject {
+			t.Errorf("the ticket for %s names %q, want %q", tc.origin, ticket.Subject, tc.subject)
 		}
 	}
 }

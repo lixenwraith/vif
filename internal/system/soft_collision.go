@@ -383,8 +383,10 @@ func (s *SoftCollisionSystem) processCollisionPair(
 		for j := range targets {
 			tgt := &targets[j]
 
-			// Skip self-collision for same-species interactions
-			if src.entity == tgt.entity {
+			// Itself, or apart as most pairs are, which the cached cells say with no
+			// store read: a crowd's pairs number its square
+			if src.entity == tgt.entity || !rule.MemberFootprint &&
+				!vmath.EllipseContainsPoint(tgt.x, tgt.y, src.x, src.y, rule.SourceInvRx, rule.SourceInvRy) {
 				continue
 			}
 

@@ -83,8 +83,8 @@ func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuf
 	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
 	aiming := 0
 	for kind, spec := range component.SquareKinds {
-		if since := spec.Cooldown - sq.Effects[kind].Cooldown; spec.Wind > 0 && sq.Effects[kind].Cooldown > 0 && since < parameter.SquareWindDuration {
-			r.squareGust(ctx, buf, sq, kind, float64(since)/float64(parameter.SquareWindDuration))
+		if left := sq.Effects[kind].Active; spec.Boost && left > 0 {
+			r.squareSurge(ctx, buf, sq, kind, float64(left)/float64(spec.Duration))
 		}
 		if spec.Boost {
 			continue
@@ -107,40 +107,44 @@ func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuf
 	}
 }
 
-// squareGust draws the gust a kind blows as a front in its color, blown a share of
-// the way from the shield's edge out to the wind's reach: brightest at its edge,
-// trailing off behind it as far as the shield and thinning as it goes, screened
-// over what lies under it; a console draws its edge in dots
-func (r *OrbRenderer) squareGust(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, blown float64) {
+// squareSurge lights the shield's rim for a boosting kind, held a share of its
+// boost's time: a band in the kind's glow inside the rim, heaviest in two lobes
+// that turn round it, screened over the shield and fading over the boost's last
+// third; a console draws the rim in dots
+func (r *OrbRenderer) squareSurge(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, held float64) {
 	cx, cy := sq.Center()
 	rim := sq.ShieldRadius(ctx.CellAspect)
-	radius := rim + blown*parameter.SquareWindReach
-	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, radius+1, ctx.CellAspect.FromCircular(radius+1))
+	startX, endX, startY, endY, ok := effectBounds(ctx, cx, cy, rim+1, ctx.CellAspect.FromCircular(rim+1))
 	if !ok {
 		return
 	}
+	period := int64(visual.SquareSurgeTurn)
+	lobeX, lobeY := math.Sincos(2 * float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi)
 	colors, console := &visual.SquareKinds[kind], r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256
 	for y := startY; y <= endY; y++ {
 		dy := ctx.CellAspect.Circular(float64(y - cy))
 		for x := startX; x <= endX; x++ {
-			// Columns behind the edge; ahead of it the front ends within one
-			dist := math.Hypot(float64(x-cx), dy)
-			behind := radius - dist
-			shape := 1 - behind/visual.SquareGustWidth
-			if behind < 0 {
-				shape = 1 + behind
+			// Columns inside the rim; past it the band ends within one
+			dx := float64(x - cx)
+			distSq := dx*dx + dy*dy
+			depth := rim - math.Sqrt(distSq)
+			shape := 1 - depth/visual.SquareSurgeWidth
+			if depth < 0 {
+				shape = 1 + depth
 			}
 			sx, sy, visible := ctx.MapToScreen(x, y)
-			if shape <= 0 || dist < rim || !visible {
+			if shape <= 0 || distSq == 0 || !visible {
 				continue
 			}
 			if console {
-				if behind >= 0 && behind < 1 {
+				if depth >= 0 && depth < 1 {
 					buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
 				}
 				continue
 			}
-			buf.SetBgScreen(sx, sy, colors.Block, visual.RgbBackground, visual.SquareGustAlpha*(1-blown)*shape*shape)
+			// The cosine of twice the cell's angle from the lobes', which puts two on the rim
+			lobe := ((dx*dx-dy*dy)*lobeY + 2*dx*dy*lobeX) / distSq
+			buf.SetBgScreen(sx, sy, colors.Glow, visual.RgbBackground, visual.SquareSurgeAlpha*min(3*held, 1)*shape*(0.6+0.4*lobe))
 		}
 	}
 }

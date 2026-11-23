@@ -22,8 +22,12 @@ var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
-// SquareMagic is the magic state's legend entry over the square, drawn as a kind's
-var SquareMagic = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
+// SquareMagic and SquareBurst are the legend entries over the square, its magic
+// meter and its cursor's overheat, each drawn as a kind's
+var (
+	SquareMagic = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
+	SquareBurst = SquareKindColors{Block: color.ElectricViolet, Glow: color.PaleLavender, Track: color.DarkViolet, Console: ConBrightMagenta}
+)
 
 // SquareOrb is an aiming kind's orb on the square's outer orbit: its glyph's color,
 // the two its corona turns in, and a console's
@@ -62,10 +66,12 @@ const (
 	// SquareOrbIdle is how bright the orb of a kind no line holds draws, of a held one's
 	SquareOrbIdle = 0.4
 
-	// A gust draws as a front trailing off over SquareGustWidth columns behind its
-	// edge, at most SquareGustAlpha of its kind's color
-	SquareGustWidth = 6.0
-	SquareGustAlpha = 0.5
+	// A boosting kind lights the shield's rim while its boost holds: a band
+	// SquareSurgeWidth columns deep, at most SquareSurgeAlpha of the kind's glow,
+	// heaviest in two lobes that turn once each SquareSurgeTurn
+	SquareSurgeWidth = 6.0
+	SquareSurgeAlpha = 0.95
+	SquareSurgeTurn  = 700 * time.Millisecond
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left

@@ -804,7 +804,9 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 A magic square takes the presses of the keys a state captures for it: a digit
 selects the block it names for the pressing slot, h and l or a and f turn that
 block's row a place, and j and k or d and s its column; a press on a block is its
-digit's, and a drag of it the turn keys'. `EventSquareSpawnRequest { x, y, layout,
+digit's, a drag of it the turn keys', and a press on the burst meter over the
+square Enter's, which a scenario captures as `\r` to spend its cursor's overheat
+as it likes. `EventSquareSpawnRequest { x, y, layout,
 groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
 attack, hold and defense; one square stands at a time, and it fights through the
