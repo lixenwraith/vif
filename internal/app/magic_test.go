@@ -114,6 +114,24 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 	}
 }
 
+// TestMagicsWeaponsWearEveryBody: no body the shipped magic declares refuses the
+// damage of a weapon's family or of a blast
+func TestMagicsWeaponsWearEveryBody(t *testing.T) {
+	t.Parallel()
+	w := newMagic(t).World()
+	families := []component.CombatAttackType{component.CombatAttackExplosion}
+	for _, spec := range component.WeaponSpecs {
+		families = append(families, spec.Attack)
+	}
+	for _, body := range w.Resources.Behaviors {
+		for _, atk := range families {
+			if body.Attacks[atk].Damage <= 0 {
+				t.Errorf("%s takes %d from %s", body.Name, body.Attacks[atk].Damage, component.CombatAttackNames[atk])
+			}
+		}
+	}
+}
+
 // TestMagicKeepsAHeatBurstForEnter: heat filling its overheat in the shipped magic
 // leaves the overheat full with the ember main lights put out, whole through what
 // special fire spends, and Enter then runs a death wave out from the cursor and
