@@ -19,6 +19,10 @@ const (
 	SquareBoostDuration  = time.Second
 	SquareBoostCooldown  = 2 * time.Second
 
+	// SquareBoostCap is the most boost the shield over a square banks: a strike's
+	// cooldown, so a strike that kills many covers the wait for the next and no more
+	SquareBoostCap = SquareStrikeCooldown
+
 	// SquareShieldMargin is the columns the shield over the square reaches past its
 	// corners, and SquareOrbGap the columns from that shield out to the orbit the
 	// kinds' orbs stand on, outside the orbit of the cursor's own

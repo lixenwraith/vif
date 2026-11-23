@@ -81,17 +81,24 @@ func standSwarm(w *engine.World, x, y int) core.Entity {
 	return header
 }
 
-// TestATurnTurnsTheSelectedBlocksLineAPlace: 951 turned right is 195, and the
-// selection follows its block into the column it turns next
+// TestATurnTurnsTheSelectedBlocksLineAPlace: 951 turned right is 195, the selection
+// follows its block into the column it turns next, and a d s f turn as h j k l do
 func TestATurnTurnsTheSelectedBlocksLineAPlace(t *testing.T) {
-	_, s, sq := newSquare(t)
-	pressSquare(s, "5", "l")
-	if got := squareDigits(sq); got != "276195438" {
-		t.Fatalf("5 turned right: %s, want 276195438", got)
-	}
-	pressSquare(s, "j")
-	if got := squareDigits(sq); got != "278196435" {
-		t.Fatalf("then turned down: %s, want 278196435", got)
+	for _, keys := range [2][4]string{{"h", "j", "k", "l"}, {"a", "d", "s", "f"}} {
+		left, down, up, right := keys[0], keys[1], keys[2], keys[3]
+		_, s, sq := newSquare(t)
+		pressSquare(s, "5", right)
+		if got := squareDigits(sq); got != "276195438" {
+			t.Fatalf("5 turned right by %s: %s, want 276195438", right, got)
+		}
+		pressSquare(s, down)
+		if got := squareDigits(sq); got != "278196435" {
+			t.Fatalf("then turned down by %s: %s, want 278196435", down, got)
+		}
+		pressSquare(s, up, left)
+		if got := squareDigits(sq); got != "276951438" {
+			t.Fatalf("then back up by %s and left by %s: %s, want 276951438", up, left, got)
+		}
 	}
 }
 
@@ -205,11 +212,19 @@ func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 }
 
 // TestASquareSizesItsCursorsShieldToCoverIt: the cursor standing on the square
-// takes a shield reaching past the square's corners, and its orbs' orbit with it
+// takes a shield reaching past the square's corners, its orbs' orbit with it, and
+// banks no more boost than the square's cap however many kills reward it
 func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	stepSquare(w, s)
+	boosts := ready(NewBoostSystem(w)).(*BoostSystem)
+	for range 10 {
+		boosts.HandleEvent(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: cursor}})
+	}
+	if boost, _ := w.Components.Boost.GetComponent(cursor); !boost.Active || boost.Remaining != parameter.SquareBoostCap {
+		t.Fatalf("ten rewards bank %v of boost under the square, want its cap of %v", boost.Remaining, parameter.SquareBoostCap)
+	}
 	shield, _ := w.Components.Shield.GetPtr(cursor)
 	aspect := w.Resources.Config.CellAspect
 	width, height := sq.Size()
@@ -222,12 +237,11 @@ func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	}
 }
 
-// TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent: gateways at the top left,
-// the top and the right each send a swarm, which keeps its gateway. With the kinds
-// down the columns, attack in the left column strikes the top left's swarm alone and
-// hold in the right column stuns the right's alone and holds that gateway alone, each
-// hit its cursor's, a bolt in the kind's color flying from the line's orb to each
-// body, and for the hold to each gateway.
+// TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent: of swarms sent from the
+// top left, the top and the right, attack in the left column strikes the top left's
+// alone, and hold in the right column stuns the right's alone and holds that gateway
+// alone. Each hit is its cursor's, with a bolt in the kind's color from the line's
+// orb to each body, and for the hold to each gateway.
 func TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)

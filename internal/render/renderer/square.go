@@ -134,47 +134,39 @@ func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// legend writes each kind's name and meter on the row under the square, the name
-// lit while a line holds three of the kind
+// legend stands each kind under a column of the square, in kind order: its name, lit
+// while a line holds three of the kind, centered over a meter as wide as a block
 func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
-	w, h := sq.Size()
+	_, h := sq.Size()
 	y := sq.Y + h + 1
-	if y >= ctx.MapHeight {
-		return
-	}
 	var aligned [component.SquareKindCount]bool
 	for _, kind := range sq.Lines {
 		if kind != 0 {
 			aligned[kind-1] = true
 		}
 	}
-	total := (len(component.SquareKinds) - 1) * visual.SquareLegendGap
-	for _, spec := range component.SquareKinds {
-		total += len(spec.Name) + 1 + visual.SquareMeterCells
-	}
-
-	x := sq.X + (w-total)/2
-	for kind := range component.SquareKinds {
+	for kind := range min(len(component.SquareKinds), component.SquareSide) {
 		spec, colors := &component.SquareKinds[kind], &visual.SquareKinds[kind]
 		tc, console, attr := visual.RgbSquareIdle, visual.ConGray, terminal.AttrNone
 		if aligned[kind] {
 			tc, console, attr = colors.Block, colors.Console, terminal.AttrBold
 		}
+		x, _ := sq.Place(kind)
 		for i := range len(spec.Name) {
-			if sx, sy, visible := ctx.MapToScreen(x+i, y); visible {
+			if sx, sy, visible := ctx.MapToScreen(x+(sq.Width-len(spec.Name))/2+i, y); visible && y < ctx.MapHeight {
 				r.mark(buf, sx, sy, rune(spec.Name[i]), tc, console, attr)
 			}
 		}
-		x += len(spec.Name) + 1
-		r.meter(ctx, buf, x, y, spec, sq.Effects[kind], colors)
-		x += visual.SquareMeterCells + visual.SquareLegendGap
+		if y+1 < ctx.MapHeight {
+			r.meter(ctx, buf, x, y+1, sq.Width, spec, sq.Effects[kind], colors)
+		}
 	}
 }
 
-// meter fills a kind's bar as its cooldown runs, full once it is ready, in its glow
-// while its effect holds; an eighth of a cell at a time in true color, a whole cell
-// on a console
-func (r *SquareRenderer) meter(ctx render.RenderContext, buf *render.RenderBuffer, x, y int, spec *component.SquareKindSpec, effect component.SquareEffect, colors *visual.SquareKindColors) {
+// meter fills a kind's bar of cells as its cooldown runs, full once it is ready, in
+// its glow while its effect holds; an eighth of a cell at a time in true color, a
+// whole cell on a console
+func (r *SquareRenderer) meter(ctx render.RenderContext, buf *render.RenderBuffer, x, y, cells int, spec *component.SquareKindSpec, effect component.SquareEffect, colors *visual.SquareKindColors) {
 	share := 1.0
 	if effect.Cooldown > 0 && spec.Cooldown > 0 {
 		share = 1 - float64(effect.Cooldown)/float64(spec.Cooldown)
@@ -184,8 +176,8 @@ func (r *SquareRenderer) meter(ctx render.RenderContext, buf *render.RenderBuffe
 		fill = colors.Glow
 	}
 	track := color.Lerp(visual.RgbBackground, colors.Track, visual.SquareMeterTrack)
-	eighths := int(share*float64(8*visual.SquareMeterCells) + 0.5)
-	for i := range visual.SquareMeterCells {
+	eighths := int(share*float64(8*cells) + 0.5)
+	for i := range cells {
 		sx, sy, visible := ctx.MapToScreen(x+i, y)
 		if !visible {
 			continue

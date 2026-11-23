@@ -15,8 +15,8 @@ import (
 )
 
 // SquareSystem keeps a magic square: nine blocks a player selects by digit and turns
-// a row or column at a time with h, j, k and l, under the shield of the cursor
-// standing on it, which it sizes to cover them. A line holding three blocks of a
+// a row or column at a time (squareTurns), under the shield of the cursor standing
+// on it, which it sizes to cover them. A line holding three blocks of a
 // kind fires the kind's effect (component.SquareKinds) as that cursor's each time
 // its cooldown runs out.
 type SquareSystem struct {
@@ -26,12 +26,16 @@ type SquareSystem struct {
 }
 
 // squareTurns are the keys that turn the selected block's line a place: its row
-// left and right, its column up and down
+// left and right on h and l, its column down and up on j and k, and for the other
+// hand a and f, d and s
 var squareTurns = [...]struct {
 	key    rune
 	column bool
 	step   int
-}{{'h', false, -1}, {'l', false, 1}, {'k', true, -1}, {'j', true, 1}}
+}{
+	{'h', false, -1}, {'j', true, 1}, {'k', true, -1}, {'l', false, 1},
+	{'a', false, -1}, {'d', true, 1}, {'s', true, -1}, {'f', false, 1},
+}
 
 func NewSquareSystem(world *engine.World) engine.System {
 	return &SquareSystem{world: world}
@@ -171,10 +175,15 @@ func (s *SquareSystem) owner(sq *component.SquareComponent) core.Entity {
 	return 0
 }
 
-// cover has its cursor's shield reach past the square's corners
+// cover has its cursor's shield reach past the square's corners and hold its boost
+// to parameter.SquareBoostCap, on the instance that simulates the cursor (D-13)
 func (s *SquareSystem) cover(sq *component.SquareComponent) {
-	shield, ok := s.world.Components.Shield.GetPtr(s.owner(sq))
-	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); ok && shield.Radius != want {
+	shield, ok := s.world.Components.Shield.GetPtr(s.world.ResolveOwnedCursor(s.owner(sq)))
+	if !ok {
+		return
+	}
+	shield.BoostCap = parameter.SquareBoostCap
+	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); shield.Radius != want {
 		shield.Radius = want
 		s.world.UpdateBoundsRadius()
 	}

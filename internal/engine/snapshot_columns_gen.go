@@ -1298,6 +1298,9 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 		dst = appendInt(dst, rows[i].Value.DrainElapsed)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.BoostCap)
+	}
+	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.Radius)
 	}
 	for i := range rows {
@@ -1327,6 +1330,9 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	readEntityColumn(rows, r)
 	for i := range rows {
 		readInt(&rows[i].Value.DrainElapsed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.BoostCap, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.Radius, r)

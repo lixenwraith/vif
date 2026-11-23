@@ -52,12 +52,9 @@ const (
 	// line fires
 	SquareFireFlash = 400 * time.Millisecond
 
-	// The legend gives each kind its name and a meter of SquareMeterCells, its empty
-	// cells SquareMeterTrack of the way from the background to the kind's track color,
-	// SquareLegendGap cells parting two kinds
-	SquareMeterCells = 6
+	// SquareMeterTrack is how far a legend meter's empty cells stand from the
+	// background toward the kind's track color
 	SquareMeterTrack = 0.3
-	SquareLegendGap  = 3
 
 	// SquareOrbIdle is how bright the orb of a kind no line holds draws, of a held one's
 	SquareOrbIdle = 0.4
