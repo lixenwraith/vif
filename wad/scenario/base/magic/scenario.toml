@@ -50,7 +50,7 @@ states = { Seek = { on_update = [{ action = "Home" }] } }
 
 [macros.Body.body.prototype]
 combat = "swarm"
-death = "flash"
+death = "scatter"
 attacks = "${attacks}"
 width = "${width}"
 height = "${height}"
@@ -66,24 +66,24 @@ fg256 = "${fg256}"
 bg256 = 0
 
 # What the cursor's own weapons do to a body. A stray they wear down, a pulse
-# without its stun, which is the hold's. A flood's body takes nothing from them, so
-# only a strike ends it: a flood no line faces reaches the shield whole, drawing
-# their fire from the strays as it comes.
+# without its stun, which is the hold's. A wave's body takes nothing from them, so
+# only a strike ends it. A strike's kill flashes; any other scatters the body, the
+# species' own death.
 [macros.Worn]
-doc = "A stray's rows: every weapon wears it, and a pulse does not stun it."
-body = { pulse = { stun = false } }
+doc = "A stray's rows: every weapon wears it, a pulse does not stun it, and a bolt's kill flashes."
+body = { pulse = { stun = false }, strike = { death = "flash" }, lightning = { death = "flash" } }
 
 [macros.Proof]
-doc = "A flood body's rows: no weapon of the cursor's wears, stuns or moves it."
-body = { tracer = { damage = 0, knockback = false }, lightning = { damage = 0 }, missile = { damage = 0 }, explosion = { damage = 0, knockback = false }, pulse = { damage = 0, stun = false }, burn = { damage = 0 }, bullet = { damage = 0 }, ray = { damage = 0 } }
+doc = "A wave body's rows: no weapon of the cursor's wears, stuns or moves it."
+body = { tracer = { damage = 0, knockback = false }, lightning = { damage = 0 }, missile = { damage = 0 }, explosion = { damage = 0, knockback = false }, pulse = { damage = 0, stun = false }, burn = { damage = 0 }, bullet = { damage = 0 }, ray = { damage = 0 }, strike = { death = "flash" } }
 
 # Four ranks, a stray and a wave's body to each. A rank up weighs more and flies a
 # little faster, and its stray holds more hit points, so the weapons take longer
-# over it. A touch costs the same at every rank, 100 energy off the shield or 10
-# heat off the blocks, so the shield's color counts the touches left: six a step.
+# over it. A touch costs the same at every rank, 2,500 energy off the shield or 10
+# heat off the blocks, so the shield's color counts the touches left: 25 a step.
 [macros.Touch]
 doc = "What a body's touch costs: energy off the shield, heat off the blocks under none."
-body = { energy = 100, heat = 10 }
+body = { energy = 2500, heat = 10 }
 
 [macros.Rank1]
 doc = "A first-rank body: light and slow."
@@ -222,15 +222,6 @@ frames = [
     { glyphs = ["/---\\", "[ $ ]", "\\---/"], fg = ["00000", "00100", "00000"], attr = ["     ", "  B  ", "     "] },
 ]
 
-# What a defeated wave pays from its gateway beside a heat drop: three touches of
-# energy for the shield
-[loot.charge]
-rune = "+"
-color = { r = 255, g = 255, b = 120 }
-glow = { r = 255, g = 200, b = 0 }
-reward = "energy"
-delta = 300
-
 # --- Macros ---
 
 [macros.Say]
@@ -272,15 +263,18 @@ body = { trigger = "Tick", target = "FloodRun", guard = "VarEquals", guard_args 
 
 # --- The square ---
 
-# Boot: the square stands behind the start prompt; the gateways open from the first
-# tick, after the press. The game opens at the first level's paces, a stray a
-# gateway every 18 s and a wave's body every 3.2 s, which each round of the ranks
-# starts from a step quicker (the `_base` variables). The shield steps its color
-# every 600 energy, six touches.
+# Boot: the square stands behind the start prompt, and the gateways open after the
+# press at the first level's paces, a stray a gateway every 18 s and a wave's body
+# every 3.2 s, which each round of the ranks starts a step quicker (the `_base`
+# variables). The shield steps its color every 62,500 energy. The map holds its
+# size for the game: a resize moves the view and leaves the gateways on its edges.
 [states.Setup]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventSquareSpawnRequest", origin = "center", payload = { layout = "276951438", groups = ["213", "654", "879"], shield_step = 600 } },
+    { action = "ConfigToVar", payload = { field = "map_width", name = "map_w" } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "map_h" } },
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, crop_on_resize = false }, payload_vars = { width = "map_w", height = "map_h" } },
+    { action = "EmitEvent", event = "EventSquareSpawnRequest", origin = "center", payload = { layout = "276951438", groups = ["213", "654", "879"], shield_step = 62500 } },
     { action = "SetVar", payload = { name = "stray", value = 0 } },
     { action = "SetVar", payload = { name = "tide", value = 4 } },
     { action = "SetVar", payload = { name = "trickle_ms", value = 18000 } },
@@ -304,13 +298,15 @@ Gate7 = { macro = "Gate", n = 7, at = "bottom_left", x = 4, y = -1, next = "Gate
 Gate8 = { macro = "Gate", n = 8, at = "left", x = 4, y = 0, next = "Play" }
 
 # Keys are the square's while it stands. The keys are told a while in, so what ended
-# the last game reads first, and then what the shield's energy is spent and earned by.
+# the last game reads first, then what the shield's energy is spent and earned by,
+# then what the weapons are for.
 [states.Play]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "123456789hjklasdf" }, reconcile = true },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "1-9 select a block; h l or a f turn its row, k j or s d its column" }, delay_ms = 2000 },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A touch costs the shield 100; a wave you end pays 300 and 10 heat" }, delay_ms = 12000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A touch costs the shield 2,500; a wave you end pays 10,000 and 10 heat" }, delay_ms = 12000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Weapons wear down strays, not a wave's red bodies: those take a strike" }, delay_ms = 22000 },
     { action = "SpawnRegion", region = "flood", initial_state = "FloodPick" },
     { action = "SpawnRegion", region = "ramp", initial_state = "Level" },
     { action = "SpawnRegion", region = "reward", initial_state = "Pay" },
@@ -357,13 +353,13 @@ transitions = [
 ]
 
 # A wave defeated, its gateway sending its stray again and the last of its bodies
-# dead, pays from that gateway: a heat drop and a charge of energy
+# dead, pays from that gateway: a heat drop and an energy drop, four touches' worth
 [states.Pay]
 parent = "Root"
 transitions = [
     { trigger = "EventGatewayWaveDefeated", internal = true, capture_vars = { x = "pay_x", y = "pay_y" }, actions = [
         { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "heat", x = 0, y = 0 }, payload_vars = { x = "pay_x", y = "pay_y" } },
-        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "charge", x = 0, y = 0 }, payload_vars = { x = "pay_x", y = "pay_y" } },
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "energy", x = 0, y = 0 }, payload_vars = { x = "pay_x", y = "pay_y" } },
     ] },
 ]
 
@@ -453,10 +449,10 @@ transitions = [{ trigger = "Tick", target = "Level" }]
 
 # --- Player: a cursor fixed at the square's middle, the shield its own ---
 
-# The shield starts in its yellow, 33 touches of energy, over a full meter of heat
+# The shield starts in its yellow, 32 touches of energy, over a full meter of heat
 [states.PlayerBoot]
 parent = "Root"
-on_enter = [{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 100, energy = 3300 } }]
+on_enter = [{ action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "center", payload = { heat = 100, energy = 80000 } }]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
     { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },

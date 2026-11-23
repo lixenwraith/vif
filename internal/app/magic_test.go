@@ -152,3 +152,57 @@ func TestMagicsTurnsDriveItsMusic(t *testing.T) {
 		t.Fatal("four turns of the square left the music's tempo at rest")
 	}
 }
+
+// TestMagicHoldsItsMapThroughAResize: a resize leaves the shipped magic's map and
+// its eight gateways as they stood, a screen smaller than the map looks at the
+// square from its middle, and the next game takes the screen's size
+func TestMagicHoldsItsMapThroughAResize(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
+	w := a.World()
+	cfg := w.Resources.Config
+	var mapW, mapH, viewW, viewH, gates int
+	var seen vmath.Point
+	read := func() {
+		w.RunSafe(func() {
+			mapW, mapH, viewW, viewH = cfg.MapWidth, cfg.MapHeight, cfg.ViewportWidth, cfg.ViewportHeight
+			gates = w.Components.Gateway.CountEntities()
+			at, _ := w.Positions.GetPosition(w.Resources.Player.Slot(0))
+			seen = vmath.Point{X: at.X - cfg.CameraX, Y: at.Y - cfg.CameraY}
+		})
+	}
+	open := func() {
+		t.Helper()
+		for range 200 {
+			if read(); gates == 8 {
+				return
+			}
+			a.Tick(1)
+		}
+		t.Fatalf("%d gateways opened, want eight", gates)
+	}
+	open()
+	wasW, wasH := mapW, mapH
+
+	a.Resize(60, 30)
+	a.Tick(2)
+	read()
+	if mapW != wasW || mapH != wasH || gates != 8 {
+		t.Fatalf("a smaller screen left a %dx%d map with %d gateways, want the %dx%d it was and eight", mapW, mapH, gates, wasW, wasH)
+	}
+	if dx, dy := seen.X-(viewW-1)/2, seen.Y-(viewH-1)/2; dx < -1 || dx > 1 || dy < -1 || dy > 1 {
+		t.Fatalf("the square's middle shows at (%d,%d) of a %dx%d view, want its middle", seen.X, seen.Y, viewW, viewH)
+	}
+
+	a.Resize(140, 60)
+	a.Tick(2)
+	if read(); mapW != wasW || mapH != wasH || gates != 8 {
+		t.Fatalf("a larger screen left a %dx%d map with %d gateways, want the %dx%d it was and eight", mapW, mapH, gates, wasW, wasH)
+	}
+	a.Reset(false)
+	a.Tick(2)
+	open()
+	if mapW != viewW || mapH != viewH {
+		t.Fatalf("the next game plays a %dx%d map on a %dx%d view, want the view's size", mapW, mapH, viewW, viewH)
+	}
+}

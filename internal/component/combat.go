@@ -134,6 +134,9 @@ type CombatComponent struct {
 	// Zero means the last damaging attack was not owned by a live cursor.
 	LastDamagedBy core.Entity
 
+	// LastAttack is the family of that damage, which a kill's effect can turn on
+	LastAttack CombatAttackType
+
 	// CombatEntityType
 	CombatEntityType CombatEntityType
 

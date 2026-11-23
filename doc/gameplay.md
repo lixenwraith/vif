@@ -270,8 +270,8 @@ aspect makes of it (ten and five on a terminal), not a rectangular grid range. I
 
 A shield with a `Step`, which a magic square gives its cursor's, counts its energy
 in steps of that many: it takes the color of the steps it holds
-(`visual.ShieldRamp`, gray up to red), drains none passively, and a reward fills it
-to `ShieldSteps` of them, seven, and no further.
+(`visual.ShieldRamp`, red, its danger, up to light gray), drains none passively,
+and a reward fills it to `ShieldSteps` of them, seven, and no further.
 
 Because passive drain converges to zero, keeping a plain shield active is never free.
 The drain interval starts when the shield does, and a stamp ahead of this
@@ -408,12 +408,13 @@ this behavior because fire requests, auto-fire, macros, and mouse repeat all
 share timing constraints.
 
 A death wave is a cursor's attack no weapon holds: `EventDeathWaveRequest` runs one
-out from the cursor it names to the map's far corner in 1.5 s, a pulse of the
-`death_wave` family that takes every hit point of each drain, swarm, eye, snake and
-data species on the swarm row as its edge passes, credited to that cursor; a boss
-or a structure has no row and stands through it, and a prototype's `attacks` can
-exempt a body. It draws as a slide ([Rendering §7](rendering.md#7-layer-inventory)).
-What raises it is the scenario's: `magic` wires it to the heat burst.
+out from the cursor it names, past the map's far corner by its swell's width, in
+2.4 s: a pulse of the `death_wave` family that takes every hit point of each drain,
+swarm, eye, snake and data species on the swarm row as its edge passes, credited to
+that cursor; a boss or a structure has no row and stands through it, and a
+prototype's `attacks` can exempt a body. It draws as a slide
+([Rendering §7](rendering.md#7-layer-inventory)). What raises it is the
+scenario's: `magic` wires it to the heat burst.
 
 Tracer visuals are background-only moving trails. They preserve any glyph
 foreground in a traversed cell, use max-background blending so overlapping
@@ -799,8 +800,10 @@ heat and energy both run out, the stars stop under a red strobe, and the game st
 over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
 fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
-`magic` is for one player, on a map of at least 80 by 40 (a smaller screen scrolls
-over it), whose cursor is fixed at the middle (`[map] cursors = "fixed"`). The
+`magic` is for one player, on a map of at least 80 by 40, whose cursor is fixed at
+the middle (`[map] cursors = "fixed"`). The map holds the size the game started at
+(`crop_on_resize = false`): a resize moves the view, which a screen smaller than
+the map keeps on the square, and the next game takes the screen's size. The
 square stands there: the Lo Shu square, 2 7 6 over 9 5 1 over 4 3 8, its digits in
 three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9 defense, one of each along every
 row and column. The scenario captures 1-9, h j k l and a s d f: a digit selects its
@@ -816,10 +819,10 @@ row turn keeps the row's kinds, and the square's rows are turns of one another,
 aligning one column by row turns aligns all three.
 
 The square lies under the cursor's own shield, which the square sizes to reach two
-columns past its corners and steps ([Shield](#shield)): a touch costs it 100
+columns past its corners and steps ([Shield](#shield)): a touch costs it 2,500
 energy at every rank, it drains none on its own, its color counts the touches left
-six to a step, gray, pink, purple, blue, green, yellow, red, and it holds seven
-steps, 4,200. It starts at 3,300, in its yellow. A kill boosts it for half a
+25 to a step, red, yellow, green, blue, purple, pink, light gray, and it holds
+seven steps, 437,500. It starts at 80,000, in its yellow. A kill boosts it for half a
 second, and the boost banks 2 s at most, a strike's cooldown. With no energy the
 shield is down and the blocks take the touches: a body on them costs 10 heat, of
 the 100 the cursor starts with, and is thrown off as the shield threw it. The game
@@ -840,7 +843,8 @@ and holds those gateways' spawns for 1 s, its bolts gold and one to each gateway
 Defense boosts the shield for 1 s, as two kills would, and blows a gust: a radial
 wind (§9) out from the square for 0.4 s that fades to nothing 14 columns past the
 shield, turning back what is near it, a light body further than a heavy one, with
-no knockback and no immunity. A firing line's blocks flash in the kind's glow, and
+no knockback and no immunity; it draws as a front in the defense's color running
+out from the shield's edge. A firing line's blocks flash in the kind's glow, and
 under the square each kind's name, lit while a line holds it, stands over a meter
 that fills as its cooldown runs, in the glow while the effect holds.
 
@@ -851,7 +855,8 @@ edge after 12 s, 9 s at the third rank and 6 s at the fourth. Bodies come in fou
 ranks, a rank up heavier and a little faster (2.4 to 3 cells a second). A stray
 (mote, wisp, imp, golem; 6 to 30 hit points) is worn down by the cursor's weapons,
 a pulse without its stun. A wave's body (spark, shade, hex, titan, marked in the
-attack's red) takes nothing from them, so only a strike ends it. Players' kills
+attack's red) takes nothing from them, so only a strike ends it. A strike's kill
+flashes its body where it stood and any other scatters it. Players' kills
 raise the level, 30 for the first, or 90 s do, and each level is a rank on, small
 to big and round again: within a round the trickle runs a fifth quicker down to
 4 s a gateway, the wave two fifths quicker down to a body every 80 ms, and a level
@@ -863,8 +868,8 @@ gun is taken as the game starts, so its weapons are those drops, fired as in eve
 scenario by main fire or auto-fire, and lost as in main when the shield falls.
 
 A wave is defeated once its gateway sends strays again and the last of its bodies
-is dead, and it pays from that gateway: a heat drop, 10, and a charge of 300
-energy, three touches, which is all the shield earns. Heat past the meter's 100
+is dead, and it pays from that gateway: a heat drop, 10, and an energy drop,
+10,000, four touches, which is all the shield earns. Heat past the meter's 100
 fills overheat (§5), and its burst here runs a death wave (§7) out from the square
 that ends every body on the map, the ember put out and the meter left full. A turn
 that leaves every row and column summing 15 is a magic state, which lines up no

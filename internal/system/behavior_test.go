@@ -927,6 +927,33 @@ func TestADataSpeciesTakesEachAttackByItsOwnRow(t *testing.T) {
 	}
 }
 
+// TestAKillLeavesTheDeathItsFamilysRowNames: a data species dies by the death of the
+// row whose family dealt its last hit, its own death where that row names none
+func TestAKillLeavesTheDeathItsFamilysRowNames(t *testing.T) {
+	program := strings.Replace(wardenProgram, "mass = 2.0", "mass = 2.0\nattacks = { bullet = { death = \"flash\" } }", 1)
+	for attack, want := range map[component.CombatAttackType]component.DeathEffect{
+		component.CombatAttackBullet: component.DeathFlash, component.CombatAttackTracer: component.DeathScatter,
+	} {
+		ctx, s, header := newProgramWorld(t, program, wardenX+4, wardenY)
+		w := ctx.World
+		combat := ready(NewCombatSystem(w)).(*CombatSystem)
+		cursor := w.CreateEntity(core.DomainPlayer)
+		w.Components.Combat.SetComponent(cursor, component.CombatComponent{CombatEntityType: component.CombatEntityCursor})
+		c, _ := w.Components.Combat.GetPtr(header)
+		c.HitPoints = 1
+		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{OwnerEntity: cursor, TargetEntity: header, HitEntity: header, AttackType: attack})
+		left := component.DeathEffectCount
+		for _, ev := range stepBehaviors(w, s) {
+			if p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok && p.HeaderEntity == header {
+				left = p.Effect
+			}
+		}
+		if left != want {
+			t.Errorf("a kill by %s leaves death %d, want %d", component.CombatAttackNames[attack], left, want)
+		}
+	}
+}
+
 // TestASpawnSpeciesLandsAnySharedSpecies: the verb asks the species it names, a
 // program's among them, to land at the header plus its offset, and a species that is
 // not Shared fails the compile

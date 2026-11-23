@@ -286,12 +286,13 @@ which concrete renderer produced them:
 - strobe supplies a deferred background overlay for otherwise untouched cells;
   a console shows it in one step, in its nearest background, while the envelope
   is past half its peak;
-- slide draws a pulse of that style as a sheet of tiles struck at its center: each
-  cell in the `SlideBand` columns behind the pulse's edge is redrawn as a tile
-  part-turned, in block eighths, its face sinking to the cell's foot and lit toward
-  `RgbSlideLight` until edge-on, its shaded underside coming down from the cell's
-  head after, over `RgbSlideGap`; the cell's own colors tint the tile, and cells
-  the band has left are as they were drawn.
+- slide draws a pulse of that style as a swell in the surface: the `SlideBand`
+  columns behind the pulse's edge rise in a ridge `SlideRise` high, its crest
+  nearer the edge, drawn in half cells over a copy of the frame under it. Each
+  half is lit by its slope from a lamp up and to the left, with a highlight where
+  the slope mirrors it, glows from `RgbSlideFront` to `RgbSlideWake`, and shows
+  the cell `SlideLens` bends into view, a glyph as a glyph; cells the band has
+  left are as they were drawn.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.

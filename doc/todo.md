@@ -224,7 +224,7 @@ Magic holds a magic square under its cursor's shield against eight gateways
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
 built to be play tested; its numbers and rules are what the play test settles.
 
-### Tune magic after its second play test
+### Tune magic after its third play test
 
 - Priority: P1
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
@@ -236,7 +236,7 @@ force and reach, the boost a kill gives and the bank's cap, the paces, how a ran
 and a round quicken them and how long a wave stays, the carrier's weapons, the
 magic state's dust and its wait, and whether one turn may align all three kinds at
 once. Played headless at 80 by 40, a player turned to each wave 5 s after it moved
-lost the square at 204 s.
+lost the square at 235 s.
 
 ### Give magic's late game an end
 
@@ -258,14 +258,15 @@ Under auto-fire `on`, the default, special fire detonates the dust a magic state
 sheds as it is shed, so only a player on `:auto main` times the blast. A scenario's
 say over auto-fire's special, or dust the automatic special passes over, closes it.
 
-### Keep the square whole through a resize
+### Lay magic out again on a resize
 
 - Priority: P3
-- Affected files: `internal/system/square.go`, `wad/scenario/base/magic/scenario.toml`
+- Affected files: `internal/system/square.go`, `internal/system/pylon.go`,
+  `wad/scenario/base/magic/scenario.toml`
 
-A map following its screen keeps the square, its fixed cursor and the pylons where
-they were laid: a grown screen leaves them off the middle and the edges. Moving
-them as the map resizes, or a fixed map, closes it.
+Magic's map holds its size for the game, so a grown screen shows it in the middle
+of a void until the next game. An event a scenario hears as its screen resizes, and
+requests that move a pylon and a square, neither of which exists, close it.
 
 ## Devourer
 

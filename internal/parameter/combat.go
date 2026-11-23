@@ -137,12 +137,12 @@ const (
 	// PulseGrowStart is the share of its radius a growing pulse fires at
 	PulseGrowStart = 0.5
 
-	// A death wave runs from DeathWaveStart of the way to the map's far corner out
-	// to it over DeathWaveGrow, and stands DeathWaveLinger more for what a hit's
-	// window spared
+	// A death wave runs from DeathWaveStart of its reach, the map's far corner and
+	// the width of its swell past it, out to all of it over DeathWaveGrow, and
+	// stands DeathWaveLinger more for what a hit's window spared
 	DeathWaveStart  = 0.02
-	DeathWaveGrow   = 1500 * time.Millisecond
-	DeathWaveLinger = 200 * time.Millisecond
+	DeathWaveGrow   = 2400 * time.Millisecond
+	DeathWaveLinger = 100 * time.Millisecond
 
 	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration
 	BurnDamage   = 1

@@ -1227,7 +1227,12 @@ func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) bool {
 // Caller MUST hold updateMutex
 func (w *World) FollowLocalCursor() {
 	if pos, ok := w.CursorCell(w.Resources.Player.Viewed()); ok {
-		w.Resources.Config.FollowCamera(pos.X, pos.Y, w.CameraEdge())
+		// A cursor that never moves is looked at from the middle of the view
+		edge := w.CameraEdge()
+		if w.Resources.Config.CursorsFixed {
+			edge = parameter.CameraEdgeMost
+		}
+		w.Resources.Config.FollowCamera(pos.X, pos.Y, edge)
 	}
 }
 
