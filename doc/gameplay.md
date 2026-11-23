@@ -37,7 +37,9 @@ participant's lands where that request placed its own; `CursorSystem` places it 
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
 shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an
-off-map cursor that only holds its player's slot. Each cursor owns an independent
+off-map cursor that only holds its player's slot. Under `cursors = "fixed"` a
+cursor is equipped whole but stands where it spawned: no key, pointer or touch
+moves it, and neither it nor its crosshair is drawn. Each cursor owns an independent
 copy of that state. A roster slot records whether this instance or a remote peer
 drives the cursor and, for a bot, which participant holds it. One selected local
 slot receives this instance's input and anchors the camera/UI.
@@ -248,7 +250,9 @@ one, and lifecycle deaths or unowned attacks carry no cursor and grant no boost.
 A typing error deactivates the typing cursor's boost.
 
 While active, boost doubles the per-character heat gain and prevents ordinary
-energy penalties. Passive drain and explicit spends remain effective.
+energy penalties. Passive drain and explicit spends remain effective. A cursor
+banks no more boost than its shield's `BoostCap`, which a magic square sets and
+zero leaves unbounded.
 
 ### Shield
 
@@ -408,14 +412,14 @@ a blocked tracer drains to its stop point.
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the main campaign. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. A blinking cell marks where a charge or teleport lands, from the lock until it does. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area that swells over its first half second, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |
-| Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
+| Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. One spawned `inert` is a post no weapon aims at or wears, as a gateway's in `magic`. |
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; evolution picks which of the seven types in `parameter.EyeTypeTable` a gateway spawns. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
-| Magic square | Nine ablative blocks of equal-HP cells laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`). A player selects a block by its digit and turns its row or column a place; a line holding three of a kind fires the kind's effect from `component.SquareKinds` each time its cooldown runs out, on the gateways it faces and their swarms or, for the shield, over the square, and a swarm wears the cells it covers. Its cells are towers to the combat matrix, and a fallen block still turns and aligns but is no target. `magic` (§10) is its scenario. |
+| Magic square | Nine blocks laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`), under the shield of the cursor standing on it, which the square sizes to reach past its corners and holds to a banked boost of `SquareBoostCap`. A player selects a block by its digit and turns its row or column a place; a line holding three of a kind fires the kind's effect from `component.SquareKinds` as that cursor's each time its cooldown runs out: a boost of the shield, or a strike or hold from the kind's orb on the gateways the line faces and the bodies they sent. `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
 | Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, lights where a hit lands, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; its body is no target, and loses what its guts lose, no more than each had, so ten guts cut kill it. Guts are too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
-| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and disappears when its anchor is gone. |
+| Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, or lands a data species, each swarm and data species keeping the gateway that sent it. A second request on its anchor re-arms it with another species and pace, `EventGatewaySendRequest` has it send one of a species at once, it holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and it disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
@@ -620,7 +624,8 @@ authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
 `tutorial` teaches the game's vi-style typing and editing a lesson at a time,
 `cave` is a side-scroller whose raiders are species its own behavior programs
 define, `armada` is a vertical scroller whose ranks, squadrons and flagship
-are seven more, and `magic` is a magic square held against a swarm. Each entry has
+are seven more, and `magic` is a magic square held under its shield against eight
+gateways. Each entry has
 a short `description` for scenario listings.
 
 `tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
@@ -776,37 +781,63 @@ heat and energy both run out, the stars stop under a red strobe, and the game st
 over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
 fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
-`magic` plays on a map with no cursor (`[map] cursors = false`), its players' keys
-their only input. The square stands in the middle: the Lo Shu square, 2 7 6 over
-9 5 1 over 4 3 8, its digits in three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9
-defense, one of each along every row and column. The scenario captures 1-9 and h, j,
-k and l: a digit selects its block for the pressing slot, h and l turn the block's
-row a place left and right, the last block round to the first (9 5 1 turned right
-is 1 9 5), and k and j its column up and down; the selection follows its block. A
-line holding three of a kind fires the kind at once, and again each time its
-cooldown, 2 s from its last fire, runs out while the line holds. Attack and hold
-land on the gateways the line faces and the swarms they sent, a swarm keeping its
-gateway: the edges of the middle block, run on across the map, cut it in thirds,
-and a line faces the gateways in its own, the right column the three on the right,
-the middle row those at the left and right. Attack strikes those swarms dead, a red
-bolt flying to each and to each gateway from the line's block nearest it; hold
-stuns them and holds those gateways' spawns for 1 s, its bolts gold. Defense covers
-the whole square, warding every cell and pushing off the swarms its shield, an
-ellipse a margin past the square's corners, covers, for 1 s: left aligned, it holds
-half the time. A firing line's blocks flash in the kind's glow, and a legend under
-the square gives each kind its name, lit while a line holds it, and a meter that
-fills as its cooldown runs, in the glow while the effect holds. Since a row turn
-keeps the row's kinds, and the square's rows are turns of one another, aligning
-one column by row turns aligns all three. Eight pylons on the corners and the
-edges' middles each carry a gateway of swarms homing on target group 1, each on an
-interval of its own, faster by a tenth every 20 s down to one in 3 s. The cell of
-each standing block nearest its middle holds the group's anchor, so a swarm wears
-a block down to its last cell; a group holds eight, so while all nine stand the
-middle block, which the others ring, holds none. A swarm's body costs each block
-cell it covers a hit point a damage window (the `contact` family). A block with no
-cell left falls, still turning and aligning; the game is lost with the last, under
-a red strobe as long as main's, and starts over on "The square has fallen", the
-keys told 2 s in.
+`magic` is for one player, on a map of at least 76 by 36 (a smaller screen scrolls
+over it), whose cursor is fixed at the middle (`[map] cursors = "fixed"`), the keys
+the only input. The square stands there: the Lo Shu square, 2 7 6 over 9 5 1 over
+4 3 8, its digits in three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9 defense, one
+of each along every row and column. The scenario captures 1-9, h j k l and a s d f:
+a digit selects its block, h and l turn the block's row a place left and right, the
+last block round to the first (9 5 1 turned right is 1 9 5), and j and k its column
+down and up; a and f, d and s do the same for the other hand (auto-fire, `a`
+elsewhere, is `:auto` here), and the selection follows its block. A line holding
+three of a kind fires the kind at once, and again each time its cooldown, 2 s from
+its last fire, runs out while the line holds. Since a row turn keeps the row's
+kinds, and the square's rows are turns of one another, aligning one column by row
+turns aligns all three.
+
+The square lies under the cursor's own shield, which the square sizes to reach two
+columns past its corners. It is main's shield: energy funds it and drains from it a
+hundredth a second, a body that touches it is knocked back and costs it energy
+unless it is boosted, and a kill boosts it for half a second. Under the square the
+boost banks 2 s at most, a strike's cooldown, so a strike that kills many covers
+the wait for the next and no more. The cursor starts with 40,000 energy and no heat,
+so the game is lost with the last of the energy, under a red strobe as long as
+main's, and starts over on "The shield has fallen", the keys told 2 s in.
+
+Attack and hold aim: each lands on the gateways its line faces and the bodies they
+sent, a body keeping its gateway. The edges of the middle block, run on across the
+map, cut it in thirds, and a line faces the gateways in its own, the right column
+the three on the right, the middle row those at the left and right. Each has an orb
+on an outer orbit, six columns past the shield and outside the cursor's own orbs,
+which circle the shield's edge: it stands at the middle of the side its line faces,
+one at each end for the middle row and column, and turns round the orbit, dim, while
+no line holds its kind. The attack's is a white core between a red and a blue lobe,
+the hold's a cyan core between a gold and a purple. Attack strikes those bodies
+dead whatever they hold, a red bolt flying to each from the orb; hold stuns them
+and holds those gateways' spawns for 1 s, its bolts gold and one to each gateway.
+Defense boosts the shield for 1 s, as two kills would. A firing line's blocks flash
+in the kind's glow, and under the square each kind's name, lit while a line holds
+it, stands over a meter that fills as its cooldown runs, in the glow while the
+effect holds.
+
+Eight inert pylons on the corners and the edges' middles each carry a gateway. All
+trickle strays, bodies that home on the cursor and nothing else, a gateway every
+18 s at first; one gateway is in flood, sending a body every 3.2 s, and the flood
+moves one to seven gateways on round the edge after 12 s, 9 s from the third level
+and 6 s from the sixth. Bodies come in four ranks, a rank up heavier, a little
+faster (2.4 to 3 cells a second) and costlier to the shield a touch (60 to 220
+energy). A stray (mote, wisp, imp, golem; 6 to 30 hit points) is worn down by the
+cursor's weapons, a pulse without its stun. A flood's body (spark, shade, hex,
+titan, marked in the attack's red) takes nothing from them, so only a strike ends
+it, and a flood no line faces reaches the shield whole, drawing the weapons' fire
+from the strays as it comes. Players' kills raise the level, 30 for the first and
+half as many again for each after, or 90 s do: the trickle runs a fifth quicker
+down to 4 s, the flood two fifths quicker down to a body every 80 ms, the bodies
+rank up to the fourth, and a swarm comes out of the gateway opposite the flood.
+Where a player's kill ends it, that swarm drops three energy and the next weapon of
+the round launcher, turret, emitter, disruptor; the cursor's own gun is taken as
+the game starts, so its weapons are those drops, fired as in every scenario by main
+fire or auto-fire.
 
 ## 11. System inventory
 

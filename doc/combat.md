@@ -65,7 +65,9 @@ gun included, for a region fought without it, and `EventWeaponSetRequest` (`:w`)
 sets a kind's charges, capped at its maximum, 0 taking it. Aimed deliveries
 share one nearest-target query from the cursor, sized to the largest ready
 loadout; every shot leaves from its kind's orb, or the cursor while the orb is
-unplaced or the kind has none. Spread draws from the Player stream.
+unplaced or the kind has none. The orbs circle two columns past their cursor's
+shield, whatever its radius (`WeaponSystem.orbit`). Spread draws from the Player
+stream.
 
 Tracers are the weapon system's own, as rays are: the gun's volley spawns one
 per direction and lane, and every tick each sweeps its row or column cell by
@@ -180,16 +182,17 @@ Nothing spends the burn family's immunity, so only a ward refuses a burn or its
 tick; a tick spends no window, so a player's own burn never blocks their direct
 hits. The digest names every slot field, so a status is compared state.
 
-A magic square's attacks are a tower's (`CombatEntityTower` attacking), each kind's
-family landing where the matrix has a row for it: `strike` takes a swarm's hit
-points and `hold` stuns it as long as the hold, a stun lasting its profile's
-`Duration` (a pulse's `PulseStunDuration`), each on the swarms whose gateway
-(`SwarmComponent.Gateway`) the firing line faces, and its shield's push is the
-cursor shield's row. A family lands alike from every attacker, which a data species' row
-takes as given, so the square's strike and hold are families of their own. The
-`contact` family is a swarm's body wearing the tower cells it covers, area damage
-the square raises for each body and block; the square's shield wards every cell
-while it holds.
+A magic square's attacks are those of the cursor standing on it, which owns and
+originates each, so a kill is that cursor's: `strike` takes whatever hit points a
+body on the swarm row holds (`CombatDamageSquareStrike`) and `hold` stuns it as long
+as the hold, a stun lasting its profile's `Duration` (a pulse's
+`PulseStunDuration`), each on the swarms and data species whose gateway
+(`SwarmComponent.Gateway`, `BehaviorComponent.Gateway`) the firing line faces. A
+family lands alike from every attacker, which a data species' row takes as given,
+so the strike and hold are families of their own, and a prototype's `attacks` can
+take a body out of every other family's reach and leave it to the strike. The
+square's defense rewards that cursor's boost, and the shield's push and drain are
+the cursor's own.
 
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields

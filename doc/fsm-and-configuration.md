@@ -143,7 +143,7 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `bots` | The bot documents made for the scenario's map, files of its own listed in order and named by their files; the first is the bot a seat that names no graph plays ([Bots: Writing a graph](bots.md#writing-a-graph)). |
 | `systems.disabled_systems` | Systems the baseline leaves off. Names are validated against runtime `System.Name()` values. |
-| `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
+| `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. `behavior` toggles too, so a list that narrows names it to run data species. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
 | `navigation.field_refresh_ticks` | How often, in ticks, a navigator or drop out of sight reads its flow field, holding the way it read between ([Navigation §4](navigation-design.md#4-throttle-phase-and-laziness)); 1, every tick, when unset. |

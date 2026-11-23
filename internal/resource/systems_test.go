@@ -126,6 +126,21 @@ initial = "Root"
 	}
 }
 
+// TestCheckSystemsLetsANarrowingListNameAContextSystem: behavior toggles as any
+// system does, so an only_systems list names it to keep its data species running
+func TestCheckSystemsLetsANarrowingListNameAContextSystem(t *testing.T) {
+	m := loadSystemsConfig(t, `
+[systems]
+only_systems = ["behavior", "composite", "timer", "death"]
+
+[regions.main]
+initial = "Root"
+`)
+	if err := checkSystems(m); err != nil {
+		t.Fatalf("checkSystems refused a list naming behavior: %v", err)
+	}
+}
+
 // TestCheckSystemsHoldsRegionOnlySystemsClosed asserts a region's only_systems is
 // judged alone, as the root's is, and attributed to its region
 func TestCheckSystemsHoldsRegionOnlySystemsClosed(t *testing.T) {
