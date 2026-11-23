@@ -116,11 +116,12 @@ not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native, and `vif_gui` | 23,978,247 | 22.87 | baseline for native profiles |
-| `vif_nogui` native | 23,658,656 | 22.56 | 1.33% smaller than full |
-| `vif_noaudio` native | 23,372,039 | 22.29 | 2.53% smaller than full |
-| `vif_headless` native | 21,749,920 | 20.74 | 9.29% smaller than full |
-| Browser (`js/wasm`) | 40,816,175 | 38.93 | — |
+| Full native, and `vif_gui` | 23,986,439 | 22.88 | baseline for native profiles |
+| `vif_nogui` native | 23,666,848 | 22.57 | 1.33% smaller than full |
+| `vif_noaudio` native | 23,384,327 | 22.30 | 2.51% smaller than full |
+| `vif_headless` native | 21,758,112 | 20.75 | 9.29% smaller than full |
+| Windows window (`vif_gui novlog`, windows/amd64) | 24,056,832 | 22.94 | — |
+| Browser (`js/wasm`) | 40,831,891 | 38.94 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that this command prints no renderer or audio-engine package:
@@ -629,6 +630,60 @@ that goes mid-run leaves the run silent
 and every figure is a null sink's
 ([todo](todo.md#hear-the-windows-speakers-on-real-devices)).
 
+On Windows the same `gui.go` opens `terminal/window`'s Win32 host, which loads
+nothing through purego: its messages are read on a thread of its own, keys come
+with their repeats and releases, so `terminal.HostKeys` reports holds as on X11,
+the cell is `-scale` times the display's scale and follows the window to a
+monitor of another, F11 and Alt+Enter toggle a borderless full screen, and
+Ctrl-Shift-V and Shift-Insert post the clipboard as one paste. GDI copies each
+frame to the window: a cell that is a whole multiple of its strike is stretched
+to blocks, and any other is drawn by the raster at the cell's own size
+(`Raster.SetCell`), so a display at 125 or 150 % filters nothing. Under Wine 9.0
+a frame of 18x36 cells at 1908x1080 is on screen in 4.7 to 7.9 ms (14 % and all
+of its cells changed), 0.4 to 2.7 ms of it the raster's and the rest Wine's copy,
+and the game holds its 60 frames a second; Windows' own figure is owed
+([todo](todo.md#run-the-windows-window-build-on-windows)).
+
+There the window's speakers are WASAPI's, with cgo off and no library beyond
+the system's (`cmd/vif/wasapi.go`, in every Windows window build with audio):
+each COM interface is called through its method table with `syscall.SyscallN`.
+One thread holds COM and a shared stream on the default output device, opened
+event-driven in the mixer's own 44.1 kHz 16-bit stereo, which Windows converts
+to the device's format, and kept at two of the device's periods, 20 ms. A write
+is handed to that thread, which gives the device a slice of it at each of the
+device's calls, and returns once the device holds it all, so the mixer renders
+its next period as late as the device allows: between a render and its sound
+leaving the device lie 10 to 30 ms whatever the mixer's period, and a device
+that stalls queues nothing behind itself, where a ring of two mixer periods that
+took each write as it fit measured 6 to 16 ms more at the median and kept 17 to
+82 ms more after one 200 ms stall. A stream that fails (its device unplugged,
+disabled or given another format) or takes nothing for two seconds (a program
+holding the device for itself) is opened again on the default device of the
+moment, once a second until one plays; the mixer runs on meanwhile and is told
+nothing, since a write error silences the engine for the run. A default changed
+while the old device stays is not followed
+([todo](todo.md#follow-the-default-output-device-on-windows)). The render loop
+yields to Go's scheduler once a device period: without it the runtime's monitor
+takes the thread's processor at every wait and polls at full rate, which under
+Wine cost 17 % of a core where the speakers now cost 6 %. Measured under Wine
+9.0 on PipeWire's null sink alone, at mixer periods of 50, 20 and 10 ms:
+
+```
+mixer period                                     50 ms    20 ms    10 ms
+trigger to its sound leaving the device, median   44.2     27.8     13.2  ms
+the same, worst                                   71.4     37.6     21.4  ms
+underruns in ten minutes                             0        0       17
+mixer alone, of a core                             4.7      5.5      6.7  %
+render thread, of a core                           0.9     0.95     1.05  %
+```
+
+Wine's own output path, 17 to 19 ms, lies behind each latency. The period is
+`[audio] buffer_ms`, 50 ms as shipped: 20 ms is what these figures favor, and
+whether the Windows window should start there is open
+([todo](todo.md#feed-the-windows-speakers-a-shorter-period-by-default)). The
+figures on Windows are owed
+([todo](todo.md#measure-the-windows-sound-on-windows)).
+
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
 its Worker, hands the page one frame at a time, the cells changed since the one it
@@ -823,12 +878,14 @@ included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/st
 ## 9. Verification and release concerns
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
-dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
+dedicated, `vif_nogui`, browser and both Windows variants, tests the audio-free and
 dedicated profiles, the `android` module and the window's
 (`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check,
-with two of its kind: `vif_nogui` links neither purego nor the window, and the
-window's speakers build into the Linux window builds alone. That is in addition
-to the normal test and vet gates. A release should also run:
+with others of its kind: `vif_nogui` links neither purego nor the window, on
+Windows either; the Windows window build links no purego and a Linux build none
+of Windows' system calls; and each window's speakers build into the window
+builds of its system alone. That is in addition to the normal test and vet
+gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest
@@ -847,8 +904,8 @@ permission prompt is Chrome's own window, which no headless run answers:
 `script/extension-check.mjs` covers what needs no answer, and the first join at
 the site is checked by hand. Linux and FreeBSD
 release checks should include a real terminal; audio-capable artifacts also need at
-least one real or `null`/WAV backend smoke test. Windows is played by hand, not
-certified on the release path; its known issues are in §4.
+least one real or `null`/WAV backend smoke test. Windows is played by hand, so
+far under Wine alone, not certified on the release path; what it owes is in §4.
 
 Two policy decisions stay separate from transport: browser admission, settled with
 the router as the credential boundary

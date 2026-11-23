@@ -83,10 +83,12 @@ What vif sets of the engine:
   through: Android's is its `AudioTrack`; the browser's posts each buffer that
   sounds to the page, which plays it through an AudioWorklet; the desktop
   window's is a stream on PulseAudio or on PipeWire's pulse server, opened where
-  one answers and `-ab` names no backend ([platforms
+  one answers and `-ab` names no backend, and on Windows a shared WASAPI stream
+  on the default output device ([platforms
   §8](multi-platform.md#8-adding-another-renderer-or-android-host)). A sink
-  stands in for detection, so one that fails mid-run leaves the run silent
-  ([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)).
+  stands in for detection: the first, failing mid-run, leaves the run silent
+  ([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
+  and the second opens its stream again by itself.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {
@@ -251,6 +253,8 @@ events and keep the sequencer unaware of gameplay concepts.
   README and its own source map (library
   [§11](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#11-source-map))
 - Game service: `internal/service/adapter_audio.go`
+- The desktop window's speakers: `cmd/vif/pulse.go`, and on Windows
+  `cmd/vif/wasapi.go` with its stand-in device in `wasapi_test.go`
 - Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
   holds the mask both publish and the handover; `audio_none.go` the null systems
 - Mode and build selection, replay default: `internal/app/internal/config`,

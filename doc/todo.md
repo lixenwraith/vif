@@ -2823,6 +2823,74 @@ own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
 linked from it.
 
+### Measure the Windows sound on Windows
+
+- Priority: P1
+- Affected files: `cmd/vif/wasapi.go`, `doc/multi-platform.md` §8
+- Guide: [Build profiles](multi-platform.md) §8
+
+The window's speakers on Windows were measured under Wine alone: 28 ms from a
+trigger to its sound leaving the device at a 20 ms period, Wine's own path
+behind that. On a Windows 10 and a Windows 11 machine take the latency through
+a loopback of the endpoint, the CPU against the null backend and ten minutes'
+underruns at 50, 20 and 10 ms; unplug, disable and reformat the device mid-run,
+sleep the machine, and play through a Bluetooth and a 44.1 kHz device. The same
+runs settle what was left out for want of them: the multimedia class scheduler
+for the render thread, one device period held instead of two, and
+`IAudioClient3`'s shorter period. The bench that took the figures is not in the
+repository; `sandbox/` is where it would live, built with the sink laid in by
+`go build -overlay`.
+
+### Feed the Windows speakers a shorter period by default
+
+- Priority: P2
+- Affected files: `cmd/vif/gui.go`, `cmd/vif/main.go` (`buildConfig`),
+  `internal/asset/vif.toml`
+- Prerequisite: the measurement above
+
+The mixer's period is `[audio] buffer_ms`, which the shipped `vif.toml` sets to
+50 on every platform. Under Wine the Windows speakers played a trigger 16 ms
+sooner at the median and 34 ms at the worst at 20 ms, for 0.8 % of a core, with
+no underrun in ten minutes; on Linux 20 ms gained nothing on PulseAudio and
+dropped out more under load. Closes with the owner's decision once Windows is
+measured: a period the window's speakers name where a player's `vif.toml` names
+none, which needs the shipped file to stop naming one, or 50 ms kept.
+
+### Follow the default output device on Windows
+
+- Priority: P2
+- Affected files: `cmd/vif/wasapi.go`
+
+A stream opened on the default endpoint stays on its device when Windows'
+default changes while that device remains (a headset plugged in beside working
+speakers): the game plays on the old one until it is restarted. Have the render
+thread ask the enumerator for the default endpoint's id once a second and
+reopen when it is no longer the one it opened.
+
+### Keep the mixer on the device's clock
+
+- Priority: P2
+- Affected files: `lixenwraith/audio` `mixer.go`, `cmd/vif/wasapi.go`,
+  `cmd/vif/pulse.go`
+
+The mixer renders on a ticker, the system's clock, and a device plays on its
+own: one that runs fast drains what its sink holds and plays a period of
+silence every 10 ms / drift, every 100 s at 100 ppm, through any backend, and a
+slow one fills whatever queue is there. Let a host's speakers ask the mixer for
+each period, or have a sink that reports it blocks pace the mixer, so that the
+mixer always waits on the device.
+
+### Render nearer the device's call on Windows
+
+- Priority: P3
+- Affected files: `cmd/vif/wasapi.go`
+
+A write returns as the device takes its last frames, so the mixer renders a
+whole device period before the device asks again. Returning 6 ms later took
+10 ms off the median at a 20 ms period under Wine and cost 30 underruns at
+10 ms, where the device holds no spare period: hold a write only while the
+device keeps one, and measure it on Windows.
+
 ### Hear the window's speakers on real devices
 
 - Priority: P1
