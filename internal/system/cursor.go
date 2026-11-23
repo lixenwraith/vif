@@ -438,7 +438,7 @@ func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
 	w := s.world
 	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
-	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: true})
+	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: !w.Resources.Config.CursorsFixed})
 	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
 	w.Components.Shield.SetComponent(e, component.ShieldComponent{Radius: parameter.PlayerShieldRadius})

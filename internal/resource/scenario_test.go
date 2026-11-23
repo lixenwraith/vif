@@ -378,17 +378,20 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 }
 
 // TestAMapPlacesCursorsUnlessItSaysNot: [map] cursors = false takes the cursors off
-// the map, true or no key leaves them on it, and anything but a boolean is refused.
+// the map, "fixed" stands them unmoved, true or no key leaves them free on it, and
+// anything else is refused.
 func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
 	for _, c := range []struct {
-		table   string
-		offMap  bool
-		refused bool
+		table         string
+		offMap, fixed bool
+		refused       bool
 	}{
-		{"", false, false},
-		{"[map]\ncursors = true\n", false, false},
-		{"[map]\ncursors = false\n", true, false},
-		{"[map]\ncursors = 0\n", false, true},
+		{"", false, false, false},
+		{"[map]\ncursors = true\n", false, false, false},
+		{"[map]\ncursors = false\n", true, false, false},
+		{"[map]\ncursors = \"fixed\"\n", false, true, false},
+		{"[map]\ncursors = 0\n", false, false, true},
+		{"[map]\ncursors = \"free\"\n", false, false, true},
 	} {
 		entry := "[regions.main]\nfile = \"main.toml\"\n" + c.table
 		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
@@ -402,8 +405,8 @@ func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%q: %v", c.table, err)
 		}
-		if s.CursorsOffMap != c.offMap {
-			t.Errorf("%q: cursors off the map %t, want %t", c.table, s.CursorsOffMap, c.offMap)
+		if s.CursorsOffMap != c.offMap || s.CursorsFixed != c.fixed {
+			t.Errorf("%q: cursors off the map %t and fixed %t, want %t and %t", c.table, s.CursorsOffMap, s.CursorsFixed, c.offMap, c.fixed)
 		}
 	}
 }

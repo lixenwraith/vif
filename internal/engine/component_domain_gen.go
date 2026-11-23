@@ -48,7 +48,6 @@ var componentDomains = map[uint64]componentRule{
 	EyeBit:          {"Eye", core.DomainShared},
 	TowerBit:        {"Tower", core.DomainShared},
 	SquareBit:       {"Square", core.DomainShared},
-	BlockBit:        {"Block", core.DomainShared},
 	KrakenBit:       {"Kraken", core.DomainShared},
 	DevourerBit:     {"Devourer", core.DomainShared},
 	DevourerGutBit:  {"DevourerGut", core.DomainShared},

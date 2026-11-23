@@ -52,8 +52,10 @@ type Scenario struct {
 	// its map holds throughout, for front-ends; its level setups are what hold it
 	MapFixedWidth, MapFixedHeight int
 	// CursorsOffMap is [map] cursors = false: a player holds a roster slot with no
-	// cursor on the map, and plays through the keys and buttons the scenario takes
-	CursorsOffMap bool
+	// cursor on the map, and plays through the keys and buttons the scenario takes.
+	// CursorsFixed is cursors = "fixed": each stands where the scenario spawned it,
+	// unmoved by its player and undrawn.
+	CursorsOffMap, CursorsFixed bool
 	// NavRefreshTicks and NavRebuildTicks are [navigation] field_refresh_ticks and
 	// route_rebuild_ticks, zero when the scenario sets none
 	NavRefreshTicks, NavRebuildTicks int
@@ -615,10 +617,10 @@ func (s *Scenario) readMap(v any) error {
 	for key, value := range table {
 		if key == "cursors" {
 			cursors, ok := value.(bool)
-			if !ok {
-				return errors.New("map.cursors must be true or false")
+			if s.CursorsFixed = value == "fixed"; !ok && !s.CursorsFixed {
+				return errors.New(`map.cursors must be true, false or "fixed"`)
 			}
-			s.CursorsOffMap = !cursors
+			s.CursorsOffMap = ok && !cursors
 			continue
 		}
 		if key == "fixed" {

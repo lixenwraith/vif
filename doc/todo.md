@@ -220,7 +220,7 @@ follow the terrain.
 
 ## Magic
 
-Magic holds a magic square against a swarm
+Magic holds a magic square under its cursor's shield against eight gateways
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
 built to be play tested; its numbers and rules are what the play test settles.
 
@@ -230,44 +230,35 @@ built to be play tested; its numbers and rules are what the play test settles.
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
   `internal/parameter/square.go`, `internal/component/square.go` (`SquareKinds`)
 
-To settle: the cells' hit points and the contact damage, each kind's duration and
-cooldown, the gateways' pace; and whether one turn may align all three kinds at
-once, as the Lo Shu rows, each a turn of the others, allow by row turns alone, or
-the layout mixes them. The columns aligned once and left lost the square in 208 s
-of play, against 34 s untouched.
+To settle: the shield's energy, its drain and what a touch costs, each kind's
+duration and cooldown, the boost a kill gives and the bank's cap, the trickle's and
+the flood's paces and how a level quickens them, how often a swarm brings a weapon,
+and whether one turn may align all three kinds at once, as the Lo Shu rows, each a
+turn of the others, allow by row turns alone. Played headless at 80 by 40, the
+columns aligned once and left lost the shield in 287 s.
 
-### Give the square's shield a direction
+### Keep the weapons from carrying a late game
 
 - Priority: P2
-- Affected files: `internal/system/square.go` (`shove`, `ward`),
-  `internal/component/square.go` (`SquareKinds`, `ShieldRadii`),
-  `internal/render/renderer/square.go` (`shield`)
+- Affected files: `wad/scenario/base/magic/scenario.toml` (`Worn`, `Proof`, the
+  ramp), `internal/system/boost.go`
 
-Attack and hold land on the gateways a line faces, but the shield still wards every
-block and pushes off all its ellipse covers, held to 1 s in every 2 so it is not the
-one kind worth aligning. It owes the same direction: block entry and knock back only
-in the slice of the ellipse the line faces. A slice test where the shield's push
-takes the whole circle closes it; what it means for the cursor shield, which shares
-the push, is for that session.
-
-### Let a target group anchor more than eight
-
-- Priority: P3
-- Affected files: `internal/parameter/navigation.go` (`MaxTargetsPerGroup`),
-  `internal/system/square.go` (`anchor`)
-
-A group holds eight anchors, so the square's middle block holds none while all nine
-stand, and a larger square would leave more out. A cap of 16 closes it, and cursor
-groups past eight players with it.
+The cursor's area weapons kill a crowd as fast as it grows, and each kill boosts
+the shield half a second, so bodies they could kill kept it boosted for good: the
+flood's take nothing from them for that reason. A player who faces every flood
+still has the strays' kills and the defense holding the boost up most of the time:
+headless, one turned to each flood 2 s after it moved still stood at 900 s. A
+boost a kill gives that shrinks as kills come faster, or a round of weapons that
+ends, closes it.
 
 ### Keep the square whole through a resize
 
 - Priority: P3
 - Affected files: `internal/system/square.go`, `wad/scenario/base/magic/scenario.toml`
 
-A map following its screen keeps the square where it was laid: a grown screen
-leaves it off the middle and a shrunk one ends the cells past the edge. Moving it
-to the middle as the map resizes, or a fixed map, closes it.
+A map following its screen keeps the square, its fixed cursor and the pylons where
+they were laid: a grown screen leaves them off the middle and the edges. Moving
+them as the map resizes, or a fixed map, closes it.
 
 ## Devourer
 
@@ -2331,6 +2322,14 @@ lowers each shield its owner simulates as the command turns the system off, as
 `setActive` does (D-2).
 
 ## Species
+
+### Let a target group anchor more than eight
+
+- Priority: P3
+- Affected files: `internal/parameter/navigation.go` (`MaxTargetsPerGroup`)
+
+A group holds eight anchors, so past eight players the cursor group leaves cursors
+out. A cap of 16 closes it.
 
 ### Let a player mechanic or a program fuse composites
 

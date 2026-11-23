@@ -56,7 +56,6 @@ const (
 	EyeBit
 	TowerBit
 	SquareBit
-	BlockBit
 	KrakenBit
 	DevourerBit
 	DevourerGutBit
@@ -122,7 +121,6 @@ type Component struct {
 	Eye          *Store[component.EyeComponent]
 	Tower        *Store[component.TowerComponent]
 	Square       *Store[component.SquareComponent]
-	Block        *Store[component.BlockComponent]
 	Kraken       *Store[component.KrakenComponent]
 	Devourer     *Store[component.DevourerComponent]
 	DevourerGut  *Store[component.DevourerGutComponent]
@@ -187,7 +185,6 @@ func initComponents(w *World) {
 	w.Components.Eye = NewStore[component.EyeComponent](w, EyeBit)
 	w.Components.Tower = NewStore[component.TowerComponent](w, TowerBit)
 	w.Components.Square = NewStore[component.SquareComponent](w, SquareBit)
-	w.Components.Block = NewStore[component.BlockComponent](w, BlockBit)
 	w.Components.Kraken = NewStore[component.KrakenComponent](w, KrakenBit)
 	w.Components.Devourer = NewStore[component.DevourerComponent](w, DevourerBit)
 	w.Components.DevourerGut = NewStore[component.DevourerGutComponent](w, DevourerGutBit)
@@ -358,9 +355,6 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&SquareBit != 0 {
 		w.Components.Square.RemoveEntity(e, true)
-	}
-	if mask&BlockBit != 0 {
-		w.Components.Block.RemoveEntity(e, true)
 	}
 	if mask&KrakenBit != 0 {
 		w.Components.Kraken.RemoveEntity(e, true)
@@ -561,9 +555,6 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&SquareBit != 0 {
 		w.Components.Square.RemoveBatch(entities, true)
 	}
-	if union&BlockBit != 0 {
-		w.Components.Block.RemoveBatch(entities, true)
-	}
 	if union&KrakenBit != 0 {
 		w.Components.Kraken.RemoveBatch(entities, true)
 	}
@@ -661,7 +652,6 @@ func (w *World) wipeAll() {
 	w.Components.Eye.ClearAllComponents()
 	w.Components.Tower.ClearAllComponents()
 	w.Components.Square.ClearAllComponents()
-	w.Components.Block.ClearAllComponents()
 	w.Components.Kraken.ClearAllComponents()
 	w.Components.Devourer.ClearAllComponents()
 	w.Components.DevourerGut.ClearAllComponents()
@@ -729,7 +719,6 @@ type componentCopies struct {
 	Eye          storeCopy[component.EyeComponent]
 	Tower        storeCopy[component.TowerComponent]
 	Square       storeCopy[component.SquareComponent]
-	Block        storeCopy[component.BlockComponent]
 	Kraken       storeCopy[component.KrakenComponent]
 	Devourer     storeCopy[component.DevourerComponent]
 	DevourerGut  storeCopy[component.DevourerGutComponent]
@@ -794,7 +783,6 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Eye = w.Components.Eye.copyOut(reuse.Eye)
 	c.Tower = w.Components.Tower.copyOut(reuse.Tower)
 	c.Square = w.Components.Square.copyOut(reuse.Square)
-	c.Block = w.Components.Block.copyOut(reuse.Block)
 	c.Kraken = w.Components.Kraken.copyOut(reuse.Kraken)
 	c.Devourer = w.Components.Devourer.copyOut(reuse.Devourer)
 	c.DevourerGut = w.Components.DevourerGut.copyOut(reuse.DevourerGut)
@@ -860,7 +848,6 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Eye.copyIn(c.Eye)
 	w.Components.Tower.copyIn(c.Tower)
 	w.Components.Square.copyIn(c.Square)
-	w.Components.Block.copyIn(c.Block)
 	w.Components.Kraken.copyIn(c.Kraken)
 	w.Components.Devourer.copyIn(c.Devourer)
 	w.Components.DevourerGut.copyIn(c.DevourerGut)

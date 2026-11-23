@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -13,18 +14,21 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// newSquare lays the Lo Shu square in the middle of an 80 by 40 world
+// newSquare lays the Lo Shu square in the middle of an 80 by 40 world, a cursor
+// standing on its middle cell
 func newSquare(t *testing.T) (*engine.World, *SquareSystem, *component.SquareComponent) {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
 	s := ready(NewSquareSystem(w)).(*SquareSystem)
 	s.HandleEvent(event.GameEvent{Type: event.EventSquareSpawnRequest, Payload: &event.SquareSpawnRequestPayload{
-		X: 40, Y: 18, Layout: "276951438", Groups: []string{"213", "654", "879"}, TargetGroupID: 1,
+		X: 40, Y: 18, Layout: "276951438", Groups: []string{"213", "654", "879"},
 	}})
+	ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{X: 40, Y: 18, Control: uint8(component.ControlLocal)}})
 	squares := w.Components.Square.Entities()
-	if len(squares) != 1 {
-		t.Fatalf("%d squares, want one", len(squares))
+	if len(squares) != 1 || w.Resources.Player.Slot(0) == 0 {
+		t.Fatalf("%d squares and cursor %d, want one of each", len(squares), w.Resources.Player.Slot(0))
 	}
 	sq, _ := w.Components.Square.GetPtr(squares[0])
 	w.Resources.Event.Queue.Consume()
@@ -45,23 +49,12 @@ func stepSquare(w *engine.World, s *SquareSystem) []event.GameEvent {
 }
 
 // squareDigits reads the square's digits by place
-func squareDigits(w *engine.World, sq *component.SquareComponent) string {
+func squareDigits(sq *component.SquareComponent) string {
 	var out []byte
-	for _, block := range sq.Places {
-		b, _ := w.Components.Block.GetPtr(block)
-		out = append(out, '0'+b.Digit)
+	for _, d := range sq.Digits {
+		out = append(out, '0'+d)
 	}
 	return string(out)
-}
-
-// blockAt is the block whose digit is d
-func blockAt(w *engine.World, sq *component.SquareComponent, d uint8) core.Entity {
-	for _, block := range sq.Places {
-		if b, _ := w.Components.Block.GetPtr(block); b.Digit == d {
-			return block
-		}
-	}
-	return 0
 }
 
 // standSwarm stands a bare swarm composite with its header at (x, y)
@@ -89,29 +82,22 @@ func standSwarm(w *engine.World, x, y int) core.Entity {
 }
 
 // TestATurnTurnsTheSelectedBlocksLineAPlace: 951 turned right is 195, the selection
-// follows its block into the column it turns next, and every cell moves with its
-// block
+// follows its block into the column it turns next, and a d s f turn as h j k l do
 func TestATurnTurnsTheSelectedBlocksLineAPlace(t *testing.T) {
-	w, s, sq := newSquare(t)
-	pressSquare(s, "5", "l")
-	if got := squareDigits(w, sq); got != "276195438" {
-		t.Fatalf("5 turned right: %s, want 276195438", got)
-	}
-	pressSquare(s, "j")
-	if got := squareDigits(w, sq); got != "278196435" {
-		t.Fatalf("then turned down: %s, want 278196435", got)
-	}
-	for p, block := range sq.Places {
-		x, y := sq.Place(p)
-		at, _ := w.Positions.GetPosition(block)
-		header, _ := w.Components.Header.GetPtr(block)
-		if at.X != x+sq.Width/2 || at.Y != y+sq.Height/2 {
-			t.Fatalf("place %d's block stands at %v, not its middle", p, at)
+	for _, keys := range [2][4]string{{"h", "j", "k", "l"}, {"a", "d", "s", "f"}} {
+		left, down, up, right := keys[0], keys[1], keys[2], keys[3]
+		_, s, sq := newSquare(t)
+		pressSquare(s, "5", right)
+		if got := squareDigits(sq); got != "276195438" {
+			t.Fatalf("5 turned right by %s: %s, want 276195438", right, got)
 		}
-		for _, m := range header.MemberEntries {
-			if pos, _ := w.Positions.GetPosition(m.Entity); pos.X != at.X+m.OffsetX || pos.Y != at.Y+m.OffsetY {
-				t.Fatalf("place %d's cell at %v, off its block", p, pos)
-			}
+		pressSquare(s, down)
+		if got := squareDigits(sq); got != "278196435" {
+			t.Fatalf("then turned down by %s: %s, want 278196435", down, got)
+		}
+		pressSquare(s, up, left)
+		if got := squareDigits(sq); got != "276951438" {
+			t.Fatalf("then back up by %s and left by %s: %s, want 276951438", up, left, got)
 		}
 	}
 }
@@ -128,24 +114,25 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 
 // TestALineFiresItsKindAgainEachCooldownWhileItHolds: 1 turned right and 3 left
 // stand the kinds down the columns, each firing at once and again as its cooldown
-// runs out, a turn away and back inside it firing nothing. The shield wards every
-// cell for its duration and pushes the swarm it covers only while it holds.
+// runs out, a turn away and back inside it firing nothing. Each fire of the defense
+// rewards its cursor's boost as many times as its hold is of a kill's.
 func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
-	w, s, sq := newSquare(t)
-	width, _ := sq.Size()
-	swarm := standSwarm(w, sq.X+width/2, sq.Y-2)
+	w, s, _ := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
 	pressSquare(s, "1", "l", "3", "h")
 	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareHold}
-	if got := squareFired(w.Resources.Event.Queue.Consume()); !slices.Equal(got, down) {
+	events := slices.Clone(w.Resources.Event.Queue.Consume())
+	if got := squareFired(events); !slices.Equal(got, down) {
 		t.Fatalf("fired %v, want %v down the columns", got, down)
 	}
-	for _, block := range sq.Places {
-		header, _ := w.Components.Header.GetPtr(block)
-		for _, m := range header.MemberEntries {
-			if c, _ := w.Components.Combat.GetPtr(m.Entity); c.Status[component.StatusWard].Remaining != parameter.SquareShieldDuration {
-				t.Fatal("a cell is unwarded under the shield")
-			}
+	rewards := 0
+	for _, ev := range events {
+		if p, ok := ev.Payload.(*event.BoostRewardPayload); ok && p.Entity == cursor {
+			rewards++
 		}
+	}
+	if want := int(parameter.SquareBoostDuration / parameter.BoostBaseDuration); rewards != want {
+		t.Fatalf("the defense rewarded its cursor's boost %d times, want %d", rewards, want)
 	}
 	pressSquare(s, "l", "h")
 	if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {
@@ -154,21 +141,14 @@ func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 
 	ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
 	var again [component.SquareKindCount]int
-	last, pushes := 0, 0
+	last := 0
 	for _, spec := range component.SquareKinds {
 		last = max(last, ticks(spec.Cooldown))
 	}
 	for tick := 1; tick <= last; tick++ {
-		events := stepSquare(w, s)
-		for _, kind := range squareFired(events) {
+		for _, kind := range squareFired(stepSquare(w, s)) {
 			if again[kind] == 0 {
 				again[kind] = tick
-			}
-		}
-		for _, ev := range events {
-			p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload)
-			if ok && p.TargetEntity == swarm && p.AttackType == component.CombatAttackShield && tick <= ticks(parameter.SquareShieldCooldown) {
-				pushes++
 			}
 		}
 	}
@@ -176,9 +156,6 @@ func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 		if again[kind] != ticks(spec.Cooldown) {
 			t.Errorf("%s fired again at tick %d, want %d", spec.Name, again[kind], ticks(spec.Cooldown))
 		}
-	}
-	if pushes != ticks(parameter.SquareShieldDuration) {
-		t.Fatalf("the shield pushed %d ticks of its cooldown, want %d", pushes, ticks(parameter.SquareShieldDuration))
 	}
 }
 
@@ -188,8 +165,7 @@ func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 func TestALineFacesItsThirdOfTheMap(t *testing.T) {
 	w, _, sq := newSquare(t)
 	right, bottom := w.Resources.Config.MapWidth-1, w.Resources.Config.MapHeight-1
-	width, height := sq.Size()
-	cx, cy := sq.X+width/2, sq.Y+height/2
+	cx, cy := sq.Center()
 	for _, c := range []struct {
 		name  string
 		x, y  int
@@ -211,28 +187,72 @@ func TestALineFacesItsThirdOfTheMap(t *testing.T) {
 	}
 }
 
-// TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent: gateways at the top left,
-// the top and the right each send a swarm, which keeps its gateway. With the kinds
-// down the columns, attack in the left column strikes the top left's swarm alone and
-// hold in the right column stuns the right's alone and holds that gateway alone, a
-// bolt in the kind's color flying to each gateway and swarm it lands on.
-func TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent(t *testing.T) {
+// TestAnOrbStandsOnTheSideItsLineFaces: a side's row or column stands its orb at the
+// middle of that side of the outer orbit, the middle row and column one at each end,
+// every one outside the shield and its cursor's own orbs
+func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
+	w, _, sq := newSquare(t)
+	aspect := w.Resources.Config.CellAspect
+	cx, cy := sq.Center()
+	reach := sq.ShieldRadius(aspect) + parameter.SquareOrbGap
+	rx, ry := int(math.Round(reach)), int(math.Round(aspect.FromCircular(reach)))
+	top, bottom := vmath.Point{X: cx, Y: cy - ry}, vmath.Point{X: cx, Y: cy + ry}
+	left, right := vmath.Point{X: cx - rx, Y: cy}, vmath.Point{X: cx + rx, Y: cy}
+	for l, want := range [component.SquareLines][]vmath.Point{
+		{top}, {left, right}, {bottom}, {left}, {top, bottom}, {right},
+	} {
+		cells, n := sq.Orbs(l, aspect)
+		if !slices.Equal(cells[:n], want) {
+			t.Errorf("line %d stands its orbs at %v, want %v", l, cells[:n], want)
+		}
+	}
+	if weapons := parameter.OrbOrbitRadiusX - parameter.PlayerShieldRadius; parameter.SquareOrbGap <= weapons {
+		t.Fatalf("the outer orbit stands %d past the shield, inside its cursor's orbs at %v", parameter.SquareOrbGap, weapons)
+	}
+}
+
+// TestASquareSizesItsCursorsShieldToCoverIt: the cursor standing on the square
+// takes a shield reaching past the square's corners, its orbs' orbit with it, and
+// banks no more boost than the square's cap however many kills reward it
+func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	w, s, sq := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
+	stepSquare(w, s)
+	boosts := ready(NewBoostSystem(w)).(*BoostSystem)
+	for range 10 {
+		boosts.HandleEvent(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: cursor}})
+	}
+	if boost, _ := w.Components.Boost.GetComponent(cursor); !boost.Active || boost.Remaining != parameter.SquareBoostCap {
+		t.Fatalf("ten rewards bank %v of boost under the square, want its cap of %v", boost.Remaining, parameter.SquareBoostCap)
+	}
+	shield, _ := w.Components.Shield.GetPtr(cursor)
+	aspect := w.Resources.Config.CellAspect
+	width, height := sq.Size()
+	if corner := vmath.Magnitude(float64(width)/2, aspect.Circular(float64(height)/2)); shield.Radius <= corner {
+		t.Fatalf("the shield reaches %v, short of the square's corner at %v", shield.Radius, corner)
+	}
+	weapons := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	if rx, _ := weapons.orbit(cursor); rx != shield.Radius+parameter.OrbOrbitRadiusX-parameter.PlayerShieldRadius {
+		t.Fatalf("its orbs circle at %v, not as far past a shield of %v as the default orbit past the default", rx, shield.Radius)
+	}
+}
+
+// TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent: of swarms sent from the
+// top left, the top and the right, attack in the left column strikes the top left's
+// alone, and hold in the right column stuns the right's alone and holds that gateway
+// alone. Each hit is its cursor's, with a bolt in the kind's color from the line's
+// orb to each body, and for the hold to each gateway.
+func TestALineLandsOnTheGatewaysItFacesAndTheBodiesTheySent(t *testing.T) {
+	w, s, sq := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
 	gateways := ready(NewGatewaySystem(w)).(*GatewaySystem)
 	swarms := ready(NewSwarmSystem(w)).(*SwarmSystem)
-	width, height := sq.Size()
+	cx, cy := sq.Center()
 	var anchors [3]core.Entity
-	for i, at := range [3]vmath.Point{{X: 4, Y: 1}, {X: sq.X + width/2, Y: 1}, {X: w.Resources.Config.MapWidth - 4, Y: sq.Y + height/2}} {
-		anchors[i] = w.CreateEntity(core.DomainShared)
-		w.Positions.SetPosition(anchors[i], component.PositionComponent{X: at.X, Y: at.Y})
-		gateways.HandleEvent(event.GameEvent{Type: event.EventGatewaySpawnRequest, Payload: &event.GatewaySpawnRequestPayload{
-			AnchorEntity: anchors[i], Species: component.SpeciesSwarm, GroupID: 1, BaseIntervalMs: 1,
-		}})
+	for i, at := range [3]vmath.Point{{X: 4, Y: 1}, {X: cx, Y: 1}, {X: w.Resources.Config.MapWidth - 4, Y: cy}} {
+		anchors[i] = standGateway(w, gateways, at.X, at.Y, component.SpeciesSwarm, parameter.GameUpdateInterval)
 	}
-	w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
-		engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
-	gateways.Update()
-	for _, ev := range w.Resources.Event.Queue.Consume() {
+	for _, ev := range stepGateways(w, gateways) {
 		swarms.HandleEvent(ev)
 	}
 	var sent [3]core.Entity
@@ -251,13 +271,17 @@ func TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent(t *testing.T) {
 	events := slices.Clone(w.Resources.Event.Queue.Consume())
 	var struck, stunned, held []core.Entity
 	type bolt struct {
-		tint component.LightningColorType
-		x, y int
+		tint   component.LightningColorType
+		from   vmath.Point
+		tx, ty int
 	}
 	var bolts []bolt
 	for _, ev := range events {
 		switch p := ev.Payload.(type) {
 		case *event.CombatAttackAreaRequestPayload:
+			if p.OwnerEntity != cursor || p.OriginEntity != cursor {
+				t.Fatalf("a %s lands as %d's from %d, want its cursor's", component.CombatAttackNames[p.AttackType], p.OwnerEntity, p.OriginEntity)
+			}
 			if p.AttackType == component.CombatAttackStrike {
 				struck = append(struck, p.TargetEntity)
 			} else if p.AttackType == component.CombatAttackHold {
@@ -266,100 +290,45 @@ func TestALineLandsOnTheGatewaysItFacesAndTheSwarmsTheySent(t *testing.T) {
 		case *event.GatewayHoldRequestPayload:
 			held = append(held, p.AnchorEntity)
 		case *event.LightningSpawnRequestPayload:
-			bolts = append(bolts, bolt{p.ColorType, p.TargetX, p.TargetY})
+			bolts = append(bolts, bolt{p.ColorType, vmath.Point{X: p.OriginX, Y: p.OriginY}, p.TargetX, p.TargetY})
 		}
 	}
 	if !slices.Equal(struck, sent[:1]) || !slices.Equal(stunned, sent[2:]) || !slices.Equal(held, anchors[2:]) {
 		t.Fatalf("struck %v, stunned %v, held %v: want %v, %v and %v", struck, stunned, held, sent[:1], sent[2:], anchors[2:])
 	}
+	aspect := w.Resources.Config.CellAspect
+	attack, _ := sq.Orbs(component.SquareSide, aspect)
+	hold, _ := sq.Orbs(component.SquareLines-1, aspect)
 	var want []bolt
 	for _, b := range []struct {
 		tint component.LightningColorType
+		from vmath.Point
 		e    core.Entity
-	}{{component.LightningRed, anchors[0]}, {component.LightningRed, sent[0]}, {component.LightningGold, anchors[2]}, {component.LightningGold, sent[2]}} {
+	}{{component.LightningRed, attack[0], sent[0]}, {component.LightningGold, hold[0], anchors[2]}, {component.LightningGold, hold[0], sent[2]}} {
 		at, _ := w.Positions.GetPosition(b.e)
-		want = append(want, bolt{b.tint, at.X, at.Y})
+		want = append(want, bolt{b.tint, b.from, at.X, at.Y})
 	}
 	if !slices.Equal(bolts, want) {
 		t.Fatalf("bolts %v, want %v", bolts, want)
 	}
-
-	for _, ev := range events {
-		gateways.HandleEvent(ev)
-	}
-	w.Components.Gateway.Each(func(_ core.Entity, g *component.GatewayComponent) bool {
-		if (g.Held > 0) != (g.AnchorEntity == anchors[2]) {
-			t.Fatalf("the gateway on %d holds for %v", g.AnchorEntity, g.Held)
-		}
-		return true
-	})
 }
 
-// TestAFallenBlockStillAlignsButHoldsNoAnchor: nine standing blocks fill a target
-// group but the middle one; a block worn through falls, told with the count still
-// standing, gives up its anchor to the middle block and still aligns
-func TestAFallenBlockStillAlignsButHoldsNoAnchor(t *testing.T) {
+// TestAStrikeKillsABodyWhateverItHoldsAsItsCursors: combat lands a square's strike
+// as a cursor's on a swarm of any hit points, taking them all and crediting it
+func TestAStrikeKillsABodyWhateverItHoldsAsItsCursors(t *testing.T) {
 	w, s, sq := newSquare(t)
-	stepSquare(w, s)
-	middle, _ := w.Components.Block.GetPtr(sq.Places[component.SquareBlocks/2])
-	if n := w.Components.TargetAnchor.CountEntities(); n != parameter.MaxTargetsPerGroup || middle.Anchor != 0 {
-		t.Fatalf("%d anchors, the middle block's %d: want %d and none", n, middle.Anchor, parameter.MaxTargetsPerGroup)
+	cursor := w.Resources.Player.Slot(0)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	swarm := standSwarm(w, sq.X, sq.Y-6)
+	c, _ := w.Components.Combat.GetPtr(swarm)
+	c.HitPoints = 100 * parameter.CombatInitialHPSwarm
+	if !s.hit(&component.SquareKinds[component.SquareAttack], cursor, vmath.Point{X: sq.X, Y: sq.Y - 2}, swarm) {
+		t.Fatal("the strike found no row for a cursor on a swarm")
 	}
-
-	two := blockAt(w, sq, 2)
-	header, _ := w.Components.Header.GetPtr(two)
-	for _, m := range header.MemberEntries {
-		c, _ := w.Components.Combat.GetPtr(m.Entity)
-		c.HitPoints = 0
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		combat.HandleEvent(ev)
 	}
-	events := stepSquare(w, s)
-	if n := countEvents(events, event.EventCompositeMemberDestroyed); n != len(header.MemberEntries) {
-		t.Fatalf("%d cells ended, want %d", n, len(header.MemberEntries))
-	}
-	var fallen []event.SquareBlockFallenPayload
-	for _, ev := range events {
-		if p, ok := ev.Payload.(*event.SquareBlockFallenPayload); ok {
-			fallen = append(fallen, *p)
-		}
-	}
-	if len(fallen) != 1 || fallen[0] != (event.SquareBlockFallenPayload{Digit: 2, Remaining: 8}) {
-		t.Fatalf("falls told %v, want block 2 with 8 standing", fallen)
-	}
-	if b, _ := w.Components.Block.GetPtr(two); b.Anchor != 0 || middle.Anchor == 0 {
-		t.Fatal("the fallen block keeps its anchor, or the middle block takes none")
-	}
-
-	pressSquare(s, "1", "l", "3", "h")
-	if n := countEvents(w.Resources.Event.Queue.Consume(), event.EventSquareAligned); n != int(component.SquareKindCount) {
-		t.Fatalf("%d kinds fired with block 2 fallen, want %d", n, component.SquareKindCount)
-	}
-}
-
-// TestABodyWearsTheBlockCellsItCovers: a swarm on a block's corner lands one
-// contact on that block, naming each cell it covers once, its header's included
-func TestABodyWearsTheBlockCellsItCovers(t *testing.T) {
-	w, s, sq := newSquare(t)
-	x, y := sq.Place(0)
-	foot := component.Footprints[component.SpeciesSwarm]
-	swarm := standSwarm(w, x+foot.HeaderX, y+foot.HeaderY)
-
-	var contacts []*event.CombatAttackAreaRequestPayload
-	for _, ev := range stepSquare(w, s) {
-		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && p.AttackType == component.CombatAttackContact {
-			contacts = append(contacts, p)
-		}
-	}
-	if len(contacts) != 1 || contacts[0].OriginEntity != swarm || contacts[0].TargetEntity != sq.Places[0] {
-		t.Fatalf("%d contacts, want one from the swarm on the corner block", len(contacts))
-	}
-	header, _ := w.Components.Header.GetPtr(sq.Places[0])
-	var covered []core.Entity
-	for _, m := range header.MemberEntries {
-		if pos, _ := w.Positions.GetPosition(m.Entity); pos.Y < y+foot.Height && pos.X < x+foot.Width {
-			covered = append(covered, m.Entity)
-		}
-	}
-	if !slices.Equal(contacts[0].HitEntities, covered) {
-		t.Fatalf("contact names %v, want the covered cells %v", contacts[0].HitEntities, covered)
+	if c.HitPoints != 0 || c.LastDamagedBy != cursor {
+		t.Fatalf("the struck swarm holds %d hit points, last hit by %d: want none, by its cursor %d", c.HitPoints, c.LastDamagedBy, cursor)
 	}
 }

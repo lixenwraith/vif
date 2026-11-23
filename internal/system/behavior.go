@@ -189,7 +189,7 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 				s.programs[i].lifecycle.spawnFailures.Add(1)
 				return
 			}
-			s.spawn(i, payload.X, payload.Y)
+			s.spawn(i, payload.X, payload.Y, payload.Gateway)
 		}
 
 	case *event.BehaviorCancelRequestPayload:
@@ -326,7 +326,7 @@ func (s *BehaviorSystem) request(i, x, y int) {
 	case s.set.Prototypes()[i].Entrance == component.EntranceMaterialize:
 		s.enter(i, x, y)
 	default:
-		s.spawn(i, x, y)
+		s.spawn(i, x, y, 0)
 	}
 }
 
@@ -407,9 +407,9 @@ func (s *BehaviorSystem) countNow(i int) {
 }
 
 // spawn builds program i's composite with its header at the cell, or the nearest
-// place its footprint fits (findFootprint); an entrance's landing searches again,
-// for rock may have come over the footprint it materialized on
-func (s *BehaviorSystem) spawn(i, x, y int) {
+// place its footprint fits (findFootprint), keeping the gateway that sent it; an
+// entrance's landing searches again, for rock may have come over its footprint
+func (s *BehaviorSystem) spawn(i, x, y int, gateway core.Entity) {
 	p := &s.set.Prototypes()[i]
 	left, top, found := s.findFootprint(p, x, y)
 	if !found {
@@ -425,7 +425,9 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	s.world.Components.Protection.SetComponent(header, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
-	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{Program: uint8(i), PostX: headerX, PostY: headerY})
+	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{
+		Program: uint8(i), PostX: headerX, PostY: headerY, Gateway: gateway,
+	})
 
 	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	s.world.Components.Kinetic.SetComponent(header, component.KineticComponent{

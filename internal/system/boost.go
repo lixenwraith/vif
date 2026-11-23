@@ -158,16 +158,24 @@ func (s *BoostSystem) reward(cursor core.Entity) {
 		return
 	}
 	if boostComp.Active {
-		boostComp.Remaining += parameter.BoostExtensionDuration
+		boostComp.Remaining = s.held(cursor, boostComp.Remaining+parameter.BoostExtensionDuration)
 		if boostComp.Remaining > boostComp.TotalDuration {
 			boostComp.TotalDuration = boostComp.Remaining
 		}
 	} else {
 		boostComp.Active = true
-		boostComp.Remaining = parameter.BoostBaseDuration
-		boostComp.TotalDuration = parameter.BoostBaseDuration
+		boostComp.Remaining = s.held(cursor, parameter.BoostBaseDuration)
+		boostComp.TotalDuration = boostComp.Remaining
 	}
 	s.publish(cursor, boostComp)
+}
+
+// held is a length of boost under the cap of its cursor's shield, which banks no more
+func (s *BoostSystem) held(cursor core.Entity, d time.Duration) time.Duration {
+	if shield, ok := s.world.Components.Shield.GetComponent(cursor); ok && shield.BoostCap > 0 {
+		return min(d, shield.BoostCap)
+	}
+	return d
 }
 
 // Update decrements each cursor's boost by delta time
@@ -208,6 +216,7 @@ func (s *BoostSystem) activate(cursor core.Entity, duration time.Duration) {
 		return // CursorSystem attaches BoostComponent, so a miss is not a cursor
 	}
 
+	duration = s.held(cursor, duration)
 	// An explicit activate shortening a live boost is a producer bug, not a reward
 	if boostComp.Active && boostComp.Remaining > duration {
 		s.statTruncated.Add(1)
@@ -237,7 +246,7 @@ func (s *BoostSystem) extend(cursor core.Entity, duration time.Duration) {
 		return
 	}
 
-	boostComp.Remaining += duration
+	boostComp.Remaining = s.held(cursor, boostComp.Remaining+duration)
 	if boostComp.Remaining > boostComp.TotalDuration {
 		boostComp.TotalDuration = boostComp.Remaining
 	}

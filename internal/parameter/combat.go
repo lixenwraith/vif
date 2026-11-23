@@ -45,11 +45,8 @@ const (
 	// CombatDamageRay is damage per member a ray covers, times its charges
 	CombatDamageRay = 1
 
-	// CombatDamageContact is what a swarm's body deals each cell of a block it covers
-	CombatDamageContact = 1
-
-	// CombatDamageSquareStrike is a magic square's strike on a swarm: all it has
-	CombatDamageSquareStrike = CombatInitialHPSwarm
+	// CombatDamageSquareStrike is a magic square's strike: more than any body holds
+	CombatDamageSquareStrike = 1 << 20
 )
 
 // Timers

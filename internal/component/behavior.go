@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
@@ -31,6 +32,8 @@ type BehaviorComponent struct {
 	PostX, PostY     int // the cell its header spawned on, which `to = "post"` aims at
 
 	Signals uint8 // the signals raised on it, a bit each in its program's order, until an edge takes one
+
+	Gateway core.Entity // the gateway that sent it, 0 for none
 
 	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
 	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell
