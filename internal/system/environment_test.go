@@ -44,38 +44,65 @@ func windAcceleration(w *engine.World, entity core.Entity) (float64, float64) {
 	return k.AccelX, k.AccelY
 }
 
-// TestARadialWindBlowsOutFromItsOriginAndFadesOverItsReach: a radial wind pushes a
-// body straight away from its origin, a row as far as a column on screen, by the
-// share of its force left at that distance, and not at all past its reach
-func TestARadialWindBlowsOutFromItsOriginAndFadesOverItsReach(t *testing.T) {
-	w, s := newEnvironmentWorld(0x51A7E)
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Mass: 1}}
-	body := func(x, y int) core.Entity {
-		e := addWindKinetic(w, core.DomainShared)
-		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
-		w.Components.Behavior.SetComponent(e, component.BehaviorComponent{})
-		return e
-	}
-	// Ten columns right, ten columns' worth of rows below, and past the reach
-	right, below, far := body(50, 20), body(40, 25), body(70, 20)
+// TestARadialWindBlowsAboutItsCellAndFadesOverItsReach: a radial wind pushes a body
+// straight away from its cell, or round it clockwise once turned a quarter, a row
+// as far as a column on screen, by the share of its force left at that distance,
+// and not at all past its reach
+func TestARadialWindBlowsAboutItsCellAndFadesOverItsReach(t *testing.T) {
 	const force = 10.0
-	s.HandleEvent(event.GameEvent{Type: event.EventWindStart, Payload: &event.WindStartPayload{
-		Force: force, Duration: time.Second, Radial: true, X: 40, Y: 20, Reach: 20,
-	}})
-	setEnvironmentDelta(w, 1, parameter.GameUpdateInterval)
-	s.Update()
+	half, slack := force/2, force/2*(parameter.WindForceVariationRatio+parameter.WindDirectionVariation)
+	for _, turn := range []float64{0, math.Pi / 2} {
+		w, s := newEnvironmentWorld(0x51A7E)
+		w.Resources.Behaviors = []component.BehaviorPrototype{{Mass: 1}}
+		body := func(x, y int) core.Entity {
+			e := addWindKinetic(w, core.DomainShared)
+			w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+			w.Components.Behavior.SetComponent(e, component.BehaviorComponent{})
+			return e
+		}
+		// Ten columns right, ten columns' worth of rows below, and past the reach
+		right, below, far := body(50, 20), body(40, 25), body(70, 20)
+		s.HandleEvent(event.GameEvent{Type: event.EventWindStart, Payload: &event.WindStartPayload{
+			Force: force, Direction: turn, Duration: time.Second, Radial: true, X: 40, Y: 20, Reach: 20,
+		}})
+		setEnvironmentDelta(w, 1, parameter.GameUpdateInterval)
+		s.Update()
 
-	rx, ry := windAcceleration(w, right)
-	bx, by := windAcceleration(w, below)
-	half, slack := force/2, force/2*parameter.WindForceVariationRatio
-	if ry != 0 || math.Abs(rx-half) > slack {
-		t.Fatalf("ten of twenty columns out the wind pushes (%v, %v), want half its force straight right", rx, ry)
+		// Out from the cell and clockwise round it, as the body right of it reads them
+		rx, ry := windAcceleration(w, right)
+		bx, by := windAcceleration(w, below)
+		rows := w.Resources.Config.CellAspect.FromCircular
+		out, round := rx, ry
+		wantOut, wantRound := half*math.Cos(turn), rows(half*math.Sin(turn))
+		if math.Abs(out-wantOut) > slack || math.Abs(round-wantRound) > rows(slack) {
+			t.Fatalf("turned %.2f, ten of twenty columns right the wind pushes (%v, %v), want (%v, %v)", turn, rx, ry, wantOut, wantRound)
+		}
+		// Below the cell out is down and clockwise is left
+		if math.Abs(by-rows(out)) > 1e-9 || math.Abs(bx+ry/float64(w.Resources.Config.CellAspect)) > 1e-9 {
+			t.Fatalf("turned %.2f, as far below the wind pushes (%v, %v), want the push at the right a quarter turn on", turn, bx, by)
+		}
+		if fx, fy := windAcceleration(w, far); fx != 0 || fy != 0 {
+			t.Fatalf("past its reach the wind pushes (%v, %v), want nothing", fx, fy)
+		}
 	}
-	if bx != 0 || math.Abs(by-w.Resources.Config.CellAspect.FromCircular(rx)) > 1e-9 {
-		t.Fatalf("as far below the wind pushes (%v, %v), want %v's worth of rows straight down", bx, by, rx)
+}
+
+// TestAWindStartsBesideEveryFieldButTheOneOfItsForm: a radial wind blows beside the
+// uniform one and beside a radial one turned another way, and a start of either
+// form replaces only the field of that form
+func TestAWindStartsBesideEveryFieldButTheOneOfItsForm(t *testing.T) {
+	_, s := newEnvironmentWorld(7)
+	start := func(p event.WindStartPayload) { s.startWind(&p) }
+	start(event.WindStartPayload{Force: 8, Duration: time.Second})
+	start(event.WindStartPayload{Force: 5, Duration: time.Second, Radial: true, X: 4, Y: 4})
+	start(event.WindStartPayload{Force: 6, Direction: math.Pi / 2, Duration: time.Second, Radial: true, X: 4, Y: 4})
+	if len(s.winds) != 3 {
+		t.Fatalf("%d fields blow after a uniform start and two radial ones turned apart, want three", len(s.winds))
 	}
-	if fx, fy := windAcceleration(w, far); fx != 0 || fy != 0 {
-		t.Fatalf("past its reach the wind pushes (%v, %v), want nothing", fx, fy)
+	start(event.WindStartPayload{Force: 9, Direction: 1, Duration: time.Second})
+	start(event.WindStartPayload{Force: 7, Direction: math.Pi / 2, Duration: 2 * time.Second, Radial: true, X: 4, Y: 4})
+	if len(s.winds) != 3 || s.winds[0].Force != 9 || s.winds[1].Force != 5 || s.winds[2].Force != 7 || s.winds[2].Remaining != 2*time.Second {
+		t.Fatalf("a second start of two forms leaves %+v, want each in its form's place", s.winds)
 	}
 }
 
@@ -198,15 +225,14 @@ func TestWindOverrideExpiryAndCancel(t *testing.T) {
 	s.HandleEvent(event.GameEvent{Type: event.EventWindStart, Payload: &event.WindStartPayload{
 		Force: 10, Direction: -math.Pi / 2, Duration: 150 * time.Millisecond,
 	}})
-	if !s.windActive || !s.statWindActive.Load() || math.Abs(s.windDirection-3*math.Pi/2) > 1e-12 {
-		t.Fatalf("start did not normalize and activate wind: active=%t direction=%v metric=%t",
-			s.windActive, s.windDirection, s.statWindActive.Load())
+	if len(s.winds) != 1 || !s.statWindActive.Load() || math.Abs(s.winds[0].Direction-3*math.Pi/2) > 1e-12 {
+		t.Fatalf("start did not normalize and activate wind: %+v metric=%t", s.winds, s.statWindActive.Load())
 	}
 
 	setEnvironmentDelta(w, 1, 50*time.Millisecond)
 	s.Update()
-	if s.windRemaining != 100*time.Millisecond {
-		t.Fatalf("remaining = %v, want 100ms", s.windRemaining)
+	if s.winds[0].Remaining != 100*time.Millisecond {
+		t.Fatalf("remaining = %v, want 100ms", s.winds[0].Remaining)
 	}
 	if x, y := windAcceleration(w, drain); x == 0 && y == 0 {
 		t.Fatal("active wind set no acceleration")
@@ -215,8 +241,8 @@ func TestWindOverrideExpiryAndCancel(t *testing.T) {
 	s.HandleEvent(event.GameEvent{Type: event.EventWindStart, Payload: &event.WindStartPayload{
 		Force: 25, Direction: math.Pi, Duration: 20 * time.Millisecond,
 	}})
-	if s.windForce != 25 || s.windRemaining != 20*time.Millisecond {
-		t.Fatalf("replacement state = force %v remaining %v", s.windForce, s.windRemaining)
+	if len(s.winds) != 1 || s.winds[0].Force != 25 || s.winds[0].Remaining != 20*time.Millisecond {
+		t.Fatalf("replacement state = %+v", s.winds)
 	}
 	if x, y := windAcceleration(w, drain); x != 0 || y != 0 {
 		t.Fatalf("replacement left old acceleration (%v,%v)", x, y)
@@ -224,9 +250,8 @@ func TestWindOverrideExpiryAndCancel(t *testing.T) {
 
 	setEnvironmentDelta(w, 2, 50*time.Millisecond)
 	s.Update()
-	if s.windActive || s.windRemaining != 0 || s.statWindActive.Load() {
-		t.Fatalf("expired wind stayed active: active=%t remaining=%v metric=%t",
-			s.windActive, s.windRemaining, s.statWindActive.Load())
+	if s.publishStatus(); len(s.winds) != 0 || s.statWindActive.Load() {
+		t.Fatalf("expired wind stayed active: %+v metric=%t", s.winds, s.statWindActive.Load())
 	}
 	if x, y := windAcceleration(w, drain); x == 0 && y == 0 {
 		t.Fatal("final partial tick was cleared before species integration")
@@ -243,7 +268,7 @@ func TestWindOverrideExpiryAndCancel(t *testing.T) {
 	}})
 	s.Update()
 	s.HandleEvent(event.GameEvent{Type: event.EventWindCancel})
-	if s.windActive || s.windApplied || s.windForce != 0 || s.windRemaining != 0 || s.statWindActive.Load() {
+	if len(s.winds) != 0 || s.windApplied || s.statWindActive.Load() {
 		t.Fatalf("cancel left state: %+v", *s)
 	}
 	if x, y := windAcceleration(w, drain); x != 0 || y != 0 {
@@ -255,9 +280,8 @@ func TestInvalidWindDoesNotReplaceActiveWind(t *testing.T) {
 	_, s := newEnvironmentWorld(7)
 	s.startWind(&event.WindStartPayload{Force: 8, Direction: 1, Duration: time.Second})
 	s.startWind(&event.WindStartPayload{Force: math.NaN(), Direction: 2, Duration: 2 * time.Second})
-	if !s.windActive || s.windForce != 8 || s.windDirection != 1 || s.windRemaining != time.Second {
-		t.Fatalf("invalid event replaced active wind: active=%t force=%v direction=%v remaining=%v",
-			s.windActive, s.windForce, s.windDirection, s.windRemaining)
+	if len(s.winds) != 1 || s.winds[0] != (wind{Force: 8, Direction: 1, Remaining: time.Second}) {
+		t.Fatalf("invalid event replaced active wind: %+v", s.winds)
 	}
 }
 

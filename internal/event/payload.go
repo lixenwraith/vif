@@ -1252,15 +1252,16 @@ type MapLayRequestPayload struct {
 
 // --- Environment ---
 
-// WindStartPayload configures a global gameplay wind. Direction is the direction
-// of travel in radians in terminal-map coordinates: zero points right and pi/2
-// points down. Force is expressed in relative-mass cells/second squared; each
-// affected species receives acceleration Force / its profile mass.
+// WindStartPayload starts one field of the gameplay wind, in place of the field of
+// its form and beside every other: the uniform one, which blows along Direction, in
+// radians on the map, zero right and pi/2 down, or the radial one about X, Y turned
+// by Direction. Force is in relative-mass cells/second squared; each affected
+// species receives acceleration Force / its profile mass.
 type WindStartPayload struct {
 	Force     float64       `toml:"force"`
 	Direction float64       `toml:"direction"`
 	Duration  time.Duration `toml:"duration"`
-	Radial    bool          `toml:"radial"` // blows straight out from X, Y, round on screen, whatever Direction
+	Radial    bool          `toml:"radial"` // blows about X, Y, round on screen: Direction 0 straight out, pi/2 round it clockwise
 	X         int           `toml:"x"`
 	Y         int           `toml:"y"`
 	Reach     float64       `toml:"reach"` // columns over which a radial wind fades to nothing; 0 blows alike everywhere

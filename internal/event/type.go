@@ -450,9 +450,9 @@ const (
 
 	// --- Environment ---
 
-	// EventWindStart (WindStartPayload) [shared] starts or replaces the global wind
+	// EventWindStart (WindStartPayload) [shared] starts a field of the wind, in place of the one of its form
 	EventWindStart
-	// EventWindCancel [shared] cancels the global wind
+	// EventWindCancel [shared] cancels every field of the wind
 	EventWindCancel
 	// EventDriftStart (DriftStartPayload) [shared] starts or replaces the global glyph drift, at once or eased
 	EventDriftStart
