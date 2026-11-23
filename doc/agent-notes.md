@@ -1022,6 +1022,40 @@ Docs · Libraries · Branches.
   a cell being 12x24 until a zoom, which the scratch `vif.toml`'s `[presentation]
   cell` reads back, `xdotool windowsize` resizes it, and the run's size is its
   log's `init completed` line (`-l=<dir> -lv debug`).
+- Steam's launch runs with no Steam client and no Docker
+  ([Packaging §9](packaging.md#in-the-runtime)): `SteamLinuxRuntime_4/run --
+  <binary> <args>` is pressure-vessel, which works as root in a cloud container,
+  under `Xvfb` with `LIBGL_ALWAYS_SOFTWARE=1`. It takes the machine's graphics
+  libraries (`/usr/lib/pressure-vessel/overrides`), so what the runtime itself
+  lacks shows only in its platform image
+  (`com.valvesoftware.SteamRuntime.Platform-amd64,i386-steamrt4-sysroot.tar.gz`,
+  beside the archive) unpacked and entered with `chroot`: mount `/proc` in it,
+  since `os.Executable` reads `/proc/self/exe` and the wad beside `bin/` is found
+  by it, and reach an `Xvfb` of the machine by its display number, an abstract
+  socket no chroot hides. `repo.steampowered.com` serves both with a `SHA256SUMS`.
+- Neovim comes from the Nix cache where apt is off limits: `nix-build -E 'with
+  import (fetchTarball "https://channels.nixos.org/<channel>/nixexprs.tar.xz")
+  {}; neovim-unwrapped' -o <dir>/nvim` (0.11.7 on `nixos-25.11`, 0.12.6 on
+  `nixpkgs-unstable`), and `neovim-unwrapped.src` is its source where github.com
+  is blocked. Run it in Alacritty with `--listen <sock>`: `nvim --server <sock>
+  --remote-send` types, and `--remote-expr` reads `mode()` or a terminal buffer's
+  text, with no screenshot; it blocks while a `Press ENTER` prompt stands, so
+  bound it with `timeout`.
+- Neovim's terminal confirms every key protocol flag pushed and sends no release:
+  a text key taps, and Escape, an arrow or an F-key stays held in the terminal
+  module's table until its next press. Read a hold from the game's log (`-lv
+  trace -ls input+push`: `IntentKeyPress`, `IntentKeyRelease`) on a scratch
+  scenario that captures a key at boot. Neovim 0.12 inside apt's Alacritty 0.13.2
+  also gets Escape, Enter, Tab and Backspace twice, in Neovim itself too; 0.11
+  and Alacritty 0.17.0 (Nix's) are not affected.
+- Frames that reach a screen are counted from the X server: `ffmpeg -f x11grab
+  -framerate 120 -video_size <WxH> -i :<n>+<x>,<y> -t <s> -f framecrc <file>`
+  writes a checksum a sample, and the changes between neighbors are the distinct
+  frames. The game changes its picture some 20.5 times a second at the default
+  tick, whatever `engine.fps` reads, and every frame at `-speed 4`.
+- With `-l` the game prints `logging enabled: ...` on stdout before its screen,
+  and a mistyped flag prints its error first and the usage after it: what a
+  wrapper shows of an exit is the whole main screen, not its last line.
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
@@ -1081,6 +1115,24 @@ Docs · Libraries · Branches.
   frame after a return against the last before it tells whether the game ran
   while away. `page.goBack({ waitUntil: 'commit' })` is the Back button, landing
   on the entries the page pushes in a gesture, which a key `press` in the game is.
+
+- A private sound server for a test: `pipewire`, `wireplumber` and
+  `pipewire-pulse` under `dbus-run-session` with `XDG_RUNTIME_DIR`, `HOME` and
+  `PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native` in a scratch directory;
+  wireplumber gives it a null sink, `auto_null`, and `pw-top -b` reads the
+  quantum. The runtime directory's path must leave room for `pipewire-0-manager`
+  inside a socket address's 107 bytes. On Ubuntu 24.04 `pipewire-pulse`
+  conflicts with the `pulseaudio` daemon and installing it removes the other:
+  unpack the daemon's package (`dpkg-deb -x`) and run it as `pulseaudio -n -F
+  <file> -p <its modules>` with its two library directories on
+  `LD_LIBRARY_PATH`; as root it only warns. Its idle null sink renders 2 s
+  blocks and takes over a second to start a stream: keep a silent `pacat
+  --latency-msec=50 /dev/zero` on it.
+- The window's keys under Xvfb with no window manager: `xdotool search --name
+  '^vif$'`, `windowfocus`, then `key`.
+- A build inside an unpacked Steam runtime runs under `chroot <root>` with the
+  sound server outside: hard-link the server's socket file under the root, the
+  root's own path being too long to bind a socket in.
 
 ## Measuring
 
@@ -1404,6 +1456,28 @@ Docs · Libraries · Branches.
   -F '#{client_discarded}'`; a rising count means the client is repainted every
   100 ms. To count what a client saw, replay its byte stream through `pyte`,
   sampling 60 times a second, and count the samples where a pane changed.
+
+- A recorder on a sink's monitor must not set the graph's pace: on PipeWire
+  `stdbuf -o0 pw-record --target <sink> -P stream.capture.sink=true --latency 2s
+  ... -` (a `parec --latency-msec` there asks a quantum of its own, and
+  pw-record's stdout is otherwise buffered by 4096 bytes); on PulseAudio `parec
+  --process-time-msec=5`. Stamp each read and anchor the sample clock on the
+  least (arrival - frames/rate). PulseAudio's rewinds rewrite frames the monitor
+  already gave, so time a sound there by the read that brought it.
+- A pipe player's queue is the pipe's unread bytes: `FIONREAD` on the write end
+  reads it. It only grows, to the pipe's 64 KiB (371 ms of 44.1 kHz stereo s16),
+  which is latency no stat line shows.
+- A goroutine waiting more than a few milliseconds inside a purego (or cgo) call
+  costs the runtime's sysmon some 58 wakeups a call:
+  `/proc/<pid>/task/*/schedstat` by thread shows one thread switching a thousand
+  times a second. A write that blocks every period cost 0.9 to 2 % of a core
+  that way.
+- On a machine other jobs share, read `/proc/stat` over each run and keep the
+  share of all cores busy with the reading: a batch splits into quiet runs and
+  the rest afterwards, where a repeat may not find the machine quiet either.
+- A variant of one file for a measurement is `go build -overlay <json>` from a
+  copy outside the tree (`{"Replace":{"<the file>":"<the copy>"}}`), as `go test
+  -overlay` is for a mutation: the worktree never holds the variant.
 
 ## Settings files
 

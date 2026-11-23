@@ -101,8 +101,10 @@ the same roots in order:
 
 1. `-config-dir <root>`;
 2. the user configuration root;
-3. the checkout's `wad/`, when the binary sits in that checkout's `bin/`, so
-   `bin/vif -s td` plays the repository uninstalled;
+3. the `wad/` beside the `bin/` the binary sits in: a checkout's, so
+   `bin/vif -s td` plays the repository uninstalled, and a package's that unpacks
+   as `bin/` and `wad/` in one folder, as the Steam depot does
+   ([Packaging §9](packaging.md#9-steam));
 4. the system roots `/usr/local/etc/vif` then `/etc/vif`; `VIF_SYSTEM_ROOTS`
    names others in their place, separated as `PATH` is, and set empty names none.
 
@@ -212,7 +214,7 @@ first change as a copy of the one it read, brought up to date with its relative
 paths made absolute, which every later run reads in its place but one whose
 `-config-dir` holds the file it copied
 ([TODO](todo.md#let-a-run-on-a-shared-config-root-keep-its-changes)). A file in
-the checkout's `wad/` or a system root is never written, whatever names it,
+the `wad/` beside the binary's `bin/` or in a system root is never written, whatever names it,
 `-config-dir` included, and neither is a special file such as a link to
 `/dev/null` or a pipe: a run reads it brought up to date and leaves it as it is,
 and only an install brings a system root's up to date (§4). A write replaces the

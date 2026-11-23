@@ -993,6 +993,97 @@ install over a debug-signed one: uninstall first, which drops the app's settings
 A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
 release) is a separate decision.
 
+### Ship the Windows window build and its Steam depot
+
+- Priority: P1
+- Affected files: `cmd/vif/gui.go`, `Makefile`, `.github/workflows/release.yml`,
+  `deploy/package/steam/`, `doc/packaging.md` §9
+- Prerequisite: the terminal module's window opening on Windows, tagged
+
+Steam's depot is Linux alone, and the Windows zip is the terminal's
+([Build profiles §4](multi-platform.md#4-platform-matrix)). Closes with the
+window build for windows/amd64 (`-H=windowsgui`, an error shown in a message
+box, sound through WASAPI as the window's own speakers), a `steam-windows` depot
+beside `steam-linux` with its launch option and Auto-Cloud root override
+(`WinAppDataRoaming`, `vif`), and that zip in place of the terminal's in a
+release.
+
+### Bind the Steamworks SDK behind a tag of its own
+
+- Priority: P2
+- Affected files: a new binding package, `cmd/vif`, `Makefile` (`steam-linux`,
+  `verify`), `doc/packaging.md` §9
+- Prerequisite: Lixen's go, and a design for controller glyphs in the help and
+  prompts, which every host shares
+
+The depot links nothing of Valve's, so a Steam build has no rich presence, no
+join from a friend, no achievements, and on a Deck no text entry or glyphs, which
+Verified wants. Closes with a flat-API binding of vif's own under `vif_steam`,
+passed by the depot targets alone, with `make verify` holding that no other
+build lists it:
+
+- `SteamAPI_InitFlat`, `RunCallbacks` and `Shutdown`; `ISteamFriends` rich
+  presence; `ISteamUtils` `ShowFloatingGamepadTextInput`; `ISteamUserStats`
+  achievements; later `ISteamInput` action sets and glyphs. It loads
+  `libsteam_api.so` beside the binary with purego, and on Windows
+  `steam_api64.dll`.
+- A friend's join reads rich presence's `connect`, which holds a router session
+  link, never a player's own door address, and maps to `-join`.
+- The floating text input opens on entering Insert or Command mode in Big
+  Picture or on a Deck; achievements come from scenario events.
+
+Not go-steamworks, whose repository carries Valve's binaries: none of Valve's
+headers or binaries enters this repository or a GitHub archive, only a depot. No
+`SteamAPI_RestartAppIfNecessary`, and no DRM.
+
+### Build the Steam depot for linux/arm64
+
+- Priority: P3
+- Affected files: `Makefile` (`steam-linux`), `deploy/package/steam/`
+
+Steam Linux Runtime 4.0 publishes an arm64 platform, and the depot is amd64
+alone. Closes with `steam-linux` assembling an arm64 depot beside it once the
+partner site takes a native arm64 Linux depot.
+
+### Keep the window's zoom on its machine under Steam Cloud
+
+- Priority: P3
+- Affected files: `internal/paths` (`SaveCell`), `doc/packaging.md` §9
+
+Auto-Cloud syncs `vif.toml` whole, so the zoom a player left on a Steam Deck
+(`[presentation] cell`) opens their desktop at it. Closes with the cell kept in
+the state root, read over `vif.toml`'s.
+
+### Host the game in Neovim natively
+
+- Priority: P3
+- Affected files: a presentation beside `terminal/window` and the page
+  (`app.Host`), `vif.nvim`
+- Guide: [Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+
+`vif.nvim` plays the terminal build in a terminal buffer, which every Neovim UI
+draws. A native host would have vif speak msgpack-RPC to `$NVIM` as a
+presentation, behind a tag of its own: each frame's changed cells written to a
+buffer with extmark highlights, keys read through `vim.on_key`, the mouse through
+maps. One or two weeks, for little: Neovim has no key release to hand a plugin
+either, and the terminal buffer already shows every frame the game changes (20.5
+of 20.5 a second). Worth it only if Neovim's terminal becomes the limit.
+
+### Tell a Neovim player their keys tap
+
+- Priority: P3
+- Affected files: the terminal module's `keyprotocol.go`, or Neovim's
+  `src/nvim/vterm/state.c`
+- Guide: [Input and modes](input-and-modes.md) §1
+
+Neovim's terminal (0.11.7, 0.12.6) answers the key protocol's query with every
+flag pushed (`CSI ? 31 u`) and implements `disambiguate` alone, so the module
+reports releases where every key taps: no hold sticks, but `EventInputReport`
+says `releases` and the notice a `releases = true` capture owes never shows.
+Closes with Neovim's query naming only the flags its terminal acts on, reported
+upstream; failing that, the module declining the protocol where `$NVIM` is set,
+which goes by the environment where it now goes by answers.
+
 ### Publish a development AUR package
 
 - Priority: P3
@@ -1358,6 +1449,10 @@ so the site can say when the fleet is full and offer a hosted session instead.
 Joins and creates are budgeted by account where a sign-in names one; a publication
 is budgeted by address alone, and its `Resume` token is the last bearer secret on
 the wire ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
+
+Steam Networking Sockets and its datagram relay would hide a player-hosted
+session's addresses too, and tie hosting to Steam: an option beside this one, not
+part of it.
 
 What the feature itself needs, best shaped by deploying it step by step:
 - `-host vif://<site>:7777` opening the door through the router rather than binding
@@ -2665,6 +2760,37 @@ and those of stapes (formerly soundlab), the rip's among them, in [its
 own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
 linked from it.
+
+### Hear the window's speakers on real devices
+
+- Priority: P1
+- Affected files: `cmd/vif/pulse.go`, `doc/multi-platform.md`
+
+The window's speakers were measured on null sinks in a container. Owed, each
+beside `-ab pacat`: an hour of play on an ALSA device under PipeWire and under
+PulseAudio with the stream's latency read every minute (`pactl list
+sink-inputs`), which shows a device clock's drift (a pipe should creep toward
+its 371 ms on a slow one, the window stop at 112 ms); a Bluetooth sink; the
+first seconds after the device was suspended; ten minutes with nothing else
+running, counting dropouts; the game's CPU on a GPU; the game started by Steam,
+on a PulseAudio host, a PipeWire host and a Steam Deck (the runtime was checked
+in a chroot); FreeBSD without `/dev/dsp`.
+
+### Bring the window's speakers back when their server returns
+
+- Priority: P2
+- Affected files: `cmd/vif/pulse.go`
+- Guide: [platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+
+A sound server that goes mid-run (a session manager restarting it, a user
+stopping `pipewire-pulse`) fails the stream's write, and a host sink is the
+engine's only candidate: the run is silent until it ends. Smallest: in
+`pulseSpeaker.Write`, free a stream whose write failed and report the buffer
+written, then at most once a second try `pa_simple_new` again before dropping
+the next; the status bar needs a word of its own for it, since the engine no
+longer hears of the loss. With it, give `Close` a drain that gives up: a server
+that stops answering in the tenth of a second before a quit, after the mixer's
+last write returned, holds the exit in `pa_simple_drain`.
 
 ### Bring stapes to Android (stapes mobile)
 

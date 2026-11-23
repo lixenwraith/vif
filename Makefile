@@ -39,6 +39,13 @@ EXT_SWAP_AWK = BEGIN { from = ENVIRON["FROM"]; to = ENVIRON["TO"] }; \
 	END { if (n != 1) { print "extension: " FILENAME " holds " (n + 0) " of " from ", want 1" > "/dev/stderr"; exit 1 } }
 RELEASE_TARGET ?= linux-amd64
 RELEASE_LABEL ?= nightly
+# A Steam depot is assembled under STEAM_DIR, a directory a platform; steam-upload
+# takes the app, the depot and the builder account as the partner site names them.
+STEAM_DIR ?= $(BIN_DIR)/steam
+STEAM_APP ?=
+STEAM_DEPOT_LINUX ?=
+STEAM_USER ?=
+STEAMCMD ?= steamcmd
 # Keeps each if-to-end block of the README source one of whose tags is the target's,
 # drops other comments, squeezes blank lines and fills in the target's names.
 RELEASE_README_AWK = BEGIN { keep = 1 }; \
@@ -130,6 +137,9 @@ help:
 	@echo "  purge    Beside an install goal, as make install-config purge: first remove what an earlier"
 	@echo "           install put in its root, a player's bot files, keymap.toml and vif.toml with it"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
+	@echo "  steam-linux Assemble the Linux Steam depot in $(STEAM_DIR)/linux: bin/vif opening its window by"
+	@echo "           default, the wad beside its bin/, the licenses and a README"
+	@echo "  steam-upload Send the assembled depot to Steam with steamcmd (STEAM_APP, STEAM_DEPOT_LINUX, STEAM_USER)"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  notices  Write the licenses of Go and of every module the build links as $(NOTICES), as release does"
 	@echo "           for install (GOOS, GOARCH, TAGS: another build's; NOTICES_OF=android: the Android library's)"
@@ -321,6 +331,17 @@ verify: generate test
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|lixenwraith/audio$$'; then \
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
+	@if GOOS=linux GOARCH=amd64 $(GO) list -deps -tags vif_nogui $(SRC) | grep -Eq 'ebitengine/purego|lixenwraith/terminal/window$$'; then \
+		echo "FAIL: vif_nogui links purego or the desktop window, so it is no static binary"; exit 1; \
+	fi
+	@for tags in '' vif_nogui vif_noaudio vif_headless; do \
+		files=$$(GOOS=linux GOARCH=amd64 $(GO) list -f '{{.GoFiles}}' -tags "$$tags" $(SRC)) || exit 1; \
+		case "$$tags:$$files" in \
+		:*pulse.go*) ;; \
+		:*) echo "FAIL: the Linux window build lacks its speakers"; exit 1 ;; \
+		*pulse.go*) echo "FAIL: $$tags builds the desktop window's speakers"; exit 1 ;; \
+		esac; \
+	done
 	$(GO) vet ./...
 	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui github.com/lixenwraith/terminal/window $(SRC)
 
@@ -376,6 +397,42 @@ wad-archive: $(BIN_DIR)
 	tar -C "$$stage" $(TAR_ROOT_OWNER) -czf $(WAD_ARCHIVE) vif; \
 	echo "packed $(WAD_ARCHIVE)"
 
+.PHONY: steam-linux steam-upload
+
+# steam-linux assembles the Linux depot, which Steam installs whole, from an empty
+# directory: the window build as bin/vif, the wad beside that bin/, where the binary
+# finds it as a checkout's does (doc/filesystem-layout.md §3), and what an archive
+# carries. The build is linux/amd64 whatever the host, which needs no GUI_GCFLAGS.
+steam-linux: check-go
+	@set -eu; $(INSTALL_FUNCS); depot='$(STEAM_DIR)/linux'; \
+	[ -n '$(STEAM_DIR)' ] || { echo "steam-linux: STEAM_DIR names no directory" >&2; exit 1; }; \
+	rm -rf "$$depot"; install -d -m 0755 "$$depot/bin"; \
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o "$$depot/bin/$(BINARY)" $(SRC); \
+	root="$$depot/wad"; { $(INSTALL_ROOT); } >/dev/null; \
+	install -m 0644 LICENSE "$$depot/LICENSE"; \
+	GOOS=linux GOARCH=amd64 $(MAKE) -s notices TAGS='vif_gui $(TAGS)' NOTICES="$$depot/NOTICES" >/dev/null; \
+	dir=$$($(GO) list -m -f '{{.Dir}}' github.com/lixenwraith/terminal); \
+	install -m 0644 "$${dir:-vendor/github.com/lixenwraith/terminal}/atlas/LICENSE" "$$depot/LICENSE.font"; \
+	$(MAKE) -s release-readme RELEASE_TARGET=steam-linux >"$$depot/README.md"; \
+	echo "assembled $$depot"
+
+# steam-upload hands steamcmd (STEAMCMD) the depot steam-linux assembled, as the
+# builder account STEAM_USER, with the build scripts of deploy/package/steam filled
+# in. steamcmd asks for the password and Steam Guard code itself, unless a login it
+# saved is in place (doc/packaging.md §9).
+steam-upload:
+	@set -eu; dir="$$(cd '$(STEAM_DIR)' 2>/dev/null && pwd)" || { echo "steam-upload: make steam-linux first" >&2; exit 1; }; \
+	[ -x "$$dir/linux/bin/$(BINARY)" ] || { echo "steam-upload: make steam-linux first" >&2; exit 1; }; \
+	for v in STEAM_APP='$(STEAM_APP)' STEAM_DEPOT_LINUX='$(STEAM_DEPOT_LINUX)' STEAM_USER='$(STEAM_USER)'; do \
+		case "$$v" in *=) echo "steam-upload: set $${v%=}, as in make steam-upload STEAM_APP=... STEAM_DEPOT_LINUX=... STEAM_USER=..." >&2; exit 1 ;; esac; \
+	done; \
+	desc="$$(git describe --tags --always --dirty 2>/dev/null || echo unknown)"; \
+	for f in app_build depot_build_linux; do \
+		sed -e 's/@APP@/$(STEAM_APP)/g' -e 's/@DEPOT_LINUX@/$(STEAM_DEPOT_LINUX)/g' -e "s/@DESC@/$$desc/g" \
+			$(PKG_DIR)/steam/$$f.vdf >"$$dir/$$f.vdf"; \
+	done; \
+	'$(STEAMCMD)' +login '$(STEAM_USER)' +run_app_build "$$dir/app_build.vdf" +quit
+
 # release-readme prints the README a release archive carries, rendered from
 # deploy/package/release-readme.md with the blocks tagged for RELEASE_TARGET.
 release-readme:
@@ -385,6 +442,7 @@ release-readme:
 	linux-amd64-headless) tags=headless name='Linux amd64, the game server' ;; \
 	freebsd-amd64) tags='freebsd client' name='FreeBSD amd64' ;; \
 	windows-amd64) tags=windows name='Windows amd64' ;; \
+	steam-linux) tags='steam steamlinux' name='Steam on Linux' ;; \
 	web) tags=web name='the browser' ;; \
 	*) echo "release-readme: no README for RELEASE_TARGET=$(RELEASE_TARGET)" >&2; exit 1 ;; \
 	esac; \

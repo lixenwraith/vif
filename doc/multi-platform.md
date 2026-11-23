@@ -26,8 +26,9 @@ host the game.
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Chrome extension | `make extension`: the `make wasm` bundle, packed | The page, in a tab of its own | The page's | No | Stub | The browser build installed in Chrome: solo play offline, or a session joined at the site once the player allows it (§5) |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time | Included; its own stream on PulseAudio or PipeWire where one answers | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
+| Steam depot | `make steam-linux` | The desktop window, by default | Included | Yes | Included | The `vif_gui` build for linux/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §9](packaging.md#9-steam)) |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -43,6 +44,7 @@ make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
+make steam-linux             # bin/steam/linux, the Steam depot
 make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
 make wasm                    # web/vif.wasm and the page's scripts
 make extension               # bin/vif-chrome to load unpacked, bin/vif-chrome.zip for the store
@@ -104,16 +106,17 @@ gameplay code by platform.
 
 ## 3. Reference artifact measurements
 
-Measured with Go 1.27.2 and the release workflow's flags: `CGO_ENABLED=0`,
+Measured with Go 1.27.4 and the release workflow's flags: `CGO_ENABLED=0`,
 `-trimpath`, `-ldflags='-s -w'`, `linux/amd64` for the native profiles. They are
 not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native | 17,219,847 | 16.42 | baseline for native profiles |
-| `vif_noaudio` native | 16,810,247 | 16.03 | 2.38% smaller than full |
-| `vif_headless` native | 15,704,224 | 14.98 | 8.80% smaller than full |
-| Browser (`js/wasm`) | 29,683,569 | 28.31 | — |
+| Full native, and `vif_gui` | 23,978,247 | 22.87 | baseline for native profiles |
+| `vif_nogui` native | 23,658,656 | 22.56 | 1.33% smaller than full |
+| `vif_noaudio` native | 23,372,039 | 22.29 | 2.53% smaller than full |
+| `vif_headless` native | 21,749,920 | 20.74 | 9.29% smaller than full |
+| Browser (`js/wasm`) | 40,816,175 | 38.93 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that this command prints no renderer or audio-engine package:
@@ -144,6 +147,20 @@ A text console (Linux's or FreeBSD vt's, 256 colors, `Config.TextConsole`) draws
 with fonts that lack the half blocks, so the small splash face, which packs two
 pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
 twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
+
+A Neovim terminal buffer ([vif.nvim](https://github.com/lixenwraith/vif.nvim),
+Neovim 0.11 and later) plays the terminal build with three differences its
+terminal forces. It shows 24-bit color only with `termguicolors`, which the
+environment does not say, a terminal's own variables passing through Neovim, so
+the plugin starts the game with `-color true` or `-color 256`. It passes on no key
+release while confirming every key protocol flag the game pushes, so the terminal
+module reports releases there and a held key is a run of taps whose notice never
+shows ([todo](todo.md#tell-a-neovim-player-their-keys-tap)). And it passes on the
+pointer moving with no button down only under Neovim's `mousemoveevent`, so the
+cursor follows the pointer only then. The picture keeps the terminal's rate: of
+the 60 frames a second the game draws at 120x40, the 20.5 that change all reach
+the screen in Neovim 0.11.7 and 0.12.6 as in Alacritty alone, on `main` and on
+`td`.
 
 The About overlay's `notices` row names `NOTICES`, which travels with every
 build: beside the binary in an archive, under `share/licenses/vif/` once
@@ -549,12 +566,51 @@ page's wheel notch within Android's range (`glyph.Zoom`, `-scale` the density),
 never under the smallest strike and filtered where the cell is no whole multiple
 of its strike; the grid follows as a resize, and the run keeps the cell in
 `[presentation] cell` and opens at it. The window's libraries (`libX11.so.6`,
-`libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so the binary builds with
-`CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which the
-Makefile's release targets pass (`GUI_GCFLAGS`). It runs on Wayland through
-XWayland. purego's `fakecgo` links the binary to the system libc, so a Linux
-client binary needs glibc and runs neither on musl nor under Termux; `vif_nogui`
-and `vif_headless` binaries stay static.
+`libEGL.so.1`, and `libGLESv2.so.2` or, where that does not load, desktop
+OpenGL's `libOpenGL.so.0` or `libGL.so.1`) are opened with purego, so the binary
+builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std,
+which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on Wayland
+through XWayland. purego's `fakecgo` links the binary to the system libc, so a
+Linux client binary needs glibc and runs neither on musl nor under Termux;
+`vif_nogui` and `vif_headless` binaries stay static.
+
+The window's speakers are its own (`cmd/vif/pulse.go`, in every window build
+that has audio). As a run starts in the window with no `-ab`, `speakers` opens a
+playback stream through `libpulse-simple.so.0`, loaded with purego as the
+window's libraries are, and the engine plays through it as `Host.Audio`:
+PulseAudio answers it, and PipeWire through its pulse server. Where the library
+or one of its four symbols is missing, or no server takes the stream, it is nil
+and a backend is found by name as on a terminal; on FreeBSD `/dev/dsp` keeps OSS
+first. So the window sounds on a machine holding none of the engine's players,
+Steam's runtime among them, whose one player is a `pw-cat` the engine's
+arguments do not start. The stream asks of the device what the engine's `pacat`
+line asks, 12.5 ms, and holds 112.5 ms itself (`tlength` 125 ms, `minreq` 50 ms,
+`prebuf` 25 ms): a period's write returns at once on a quiet stream and waits
+once a stall has filled it, so what a stalled server, a waking device or a slow
+device clock queues stops there, where a pipe to `pacat` keeps up to 371 ms more
+until the run ends. Measured against `pacat` on its pipe, the engine alone at a
+50 ms period on a null sink (PipeWire 1.0.5, PulseAudio 16.1), a busy machine's
+starts set aside:
+
+```
+                                          pacat on its pipe   the window's speakers
+trigger to the server playing it, ms
+  PipeWire, median / worst                51.1 / 78.6         45.6 / 77.5
+  PulseAudio, median / worst              26.4 / 51.1         26.1 / 51.4
+game and player, % of a core
+  PipeWire / PulseAudio                   4.21 / 4.38         4.21 / 3.93
+queued by a 200 ms stall of the server    +196 to +232 ms     +60 to +80 ms
+queued by 5 min of a clock 2000 ppm slow  +286 ms             +43 ms
+ten minutes on a loaded machine
+  PipeWire: gaps, queue at the end        11, 307 ms          6, 90 ms
+  PulseAudio: gaps                        9                   12
+```
+
+Latency and CPU are the pipe's; the bound is what the window gains. A server
+that goes mid-run leaves the run silent
+([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
+and every figure is a null sink's
+([todo](todo.md#hear-the-windows-speakers-on-real-devices)).
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
@@ -752,8 +808,10 @@ included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/st
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
 dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
 dedicated profiles, the `android` module and the window's
-(`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check in
-addition to the normal test and vet gates. A release should also run:
+(`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check,
+with two of its kind: `vif_nogui` links neither purego nor the window, and the
+window's speakers build into the Linux window builds alone. That is in addition
+to the normal test and vet gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest

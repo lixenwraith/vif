@@ -247,19 +247,19 @@ func main() {
 	case *flagReplay != "":
 		err = app.PlayJournal(buildConfig(), *flagReplay)
 	case *flagScript != "":
-		cfg := buildConfig()
+		cfg, host := buildConfig(), platformHost
 		if *flagWatch {
-			cfg.Mode = app.ModeScript
+			cfg.Mode, host = app.ModeScript, presenting()
 		} else {
 			sayNotice()
 		}
-		_, err = app.RunScript(cfg, platformHost, *flagScript)
+		_, err = app.RunScript(cfg, host, *flagScript)
 	case (*flagWatch || *flagHeadless) && bots > 0:
-		cfg := buildConfig()
+		cfg, host := buildConfig(), platformHost
 		graph := cfg.Membership.Bots[0]
 		cfg.Membership.Bots = cfg.Membership.Bots[1:]
 		if *flagWatch {
-			cfg.Mode = app.ModeScript
+			cfg.Mode, host = app.ModeScript, presenting()
 		} else {
 			sayNotice()
 			botNotice(cfg, graph)
@@ -268,7 +268,7 @@ func main() {
 			}
 		}
 		var st bot.Stats
-		if st, err = app.RunBot(cfg, platformHost, graph); err == nil && !*flagWatch {
+		if st, err = app.RunBot(cfg, host, graph); err == nil && !*flagWatch {
 			games := ""
 			if st.Games > 1 {
 				games = fmt.Sprintf("%d games, ", st.Games)
@@ -289,7 +289,10 @@ func main() {
 		sayNotice()
 		err = app.RunServer(buildConfig())
 	default:
-		err = app.Run(buildConfig(), platformHost)
+		err = app.Run(buildConfig(), presenting())
+	}
+	if windowQuiet != nil {
+		windowQuiet()
 	}
 
 	shutdownDiagnostics()
@@ -508,13 +511,15 @@ func logRuntimeReport(r core.RuntimeReport) {
 
 // platformHost is the build's platform host, empty on the terminal. openWindow
 // makes it the desktop window, nil without one; windowByDefault opens it unless
-// -g=false, windowMaximized and windowFullscreen the state it opens in. pageSettings
+// -g=false, windowMaximized and windowFullscreen the state it opens in; windowSound
+// gives it speakers of its own as a run starts and windowQuiet closes them. pageSettings
 // is where a browser, which has no vif.toml, reads and writes its settings,
 // pagePlaces where it keeps the places its runs return to, across a reload, and
 // pagePopulations where it keeps what its bots learn.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
+	windowSound, windowQuiet          func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
@@ -523,6 +528,15 @@ var (
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
 )
+
+// presenting is the platform host of a run that presents: a window's speakers
+// open only here, so a run that draws nothing holds no stream
+func presenting() app.Host {
+	if windowSound != nil {
+		windowSound()
+	}
+	return platformHost
+}
 
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
