@@ -300,8 +300,10 @@ type ConfigResource struct {
 	MapMinHeight int `toml:"-"`
 
 	// CursorsOffMap is the scenario's [map] cursors = false: a rostered cursor is its
-	// slot, owner and control alone, with no cell or anything a cell carries
+	// slot, owner and control alone, with no cell or anything a cell carries.
+	// CursorsFixed is its cursors = "fixed": no input moves a cursor, and none is drawn.
 	CursorsOffMap bool `toml:"-"`
+	CursorsFixed  bool `toml:"-"`
 
 	// ContentBlocks is the scenario's [content] blocks: the spawner lays a corpus
 	// block's lines together where a slot holds them, else a line at a time

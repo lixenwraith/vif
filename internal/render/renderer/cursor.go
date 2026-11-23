@@ -38,9 +38,9 @@ func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	}
 }
 
-// IsVisible returns true when a local cursor exists and the mode draws it
+// IsVisible returns true when a local cursor exists and the map and the mode draw it
 func (r *CursorRenderer) IsVisible() bool {
-	return r.gameCtx.World.Resources.Player.Valid() &&
+	return r.gameCtx.World.Resources.Player.Valid() && !r.gameCtx.World.Resources.Config.CursorsFixed &&
 		!r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode()
 }
 

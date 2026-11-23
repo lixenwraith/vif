@@ -1139,8 +1139,8 @@ func (w *World) CursorCell(e core.Entity) (component.PositionComponent, bool) {
 // Placement and its local prediction must be emitted together (D-18).
 // Caller MUST hold updateMutex.
 func (w *World) PushCursorMove(e core.Entity, x, y int) {
-	if w.Resources.Config.CursorsOffMap {
-		return // no cursor has a cell to move to
+	if w.Resources.Config.CursorsOffMap || w.Resources.Config.CursorsFixed {
+		return // no cursor has a cell to move to, or none leaves its own
 	}
 	if w.predictCursorMove(e, x, y, false) {
 		w.notePrediction(e, x, y, false)
@@ -1167,7 +1167,7 @@ func (w *World) PushInputRelease(p *event.InputPayload) {
 // so a sweep crosses its newest cell once a tick rather than every cell it passed.
 // Caller MUST hold updateMutex
 func (w *World) PushPointerMove(e core.Entity, x, y int) {
-	if w.Resources.Config.CursorsOffMap {
+	if w.Resources.Config.CursorsOffMap || w.Resources.Config.CursorsFixed {
 		return
 	}
 	if !w.predictCursorMove(e, x, y, true) {
