@@ -14,12 +14,12 @@ const (
 	PulseRing   PulseStyle = iota // ripples running out to its edge, over what it strikes
 	PulseGlow                     // a glow filling its area, under what it strikes
 	PulseHidden                   // not drawn
-	PulseSlide                    // the cells its edge passes are tiles that tilt and flip
+	PulseWave                     // a flat band running out behind its edge, over what it strikes
 	PulseStyleCount
 )
 
 // PulseStyleNames are what a document calls each PulseStyle
-var PulseStyleNames = [PulseStyleCount]string{PulseRing: "ring", PulseGlow: "glow", PulseHidden: "hidden", PulseSlide: "slide"}
+var PulseStyleNames = [PulseStyleCount]string{PulseRing: "ring", PulseGlow: "glow", PulseHidden: "hidden", PulseWave: "wave"}
 
 // PulseSpec is a pulse's shape: its size and life, how often it strikes, its look and
 // the family it strikes under. A kind's row holds its own; a mount overrides it field
@@ -41,7 +41,7 @@ type PulseSpec struct {
 var DeathWave = PulseSpec{
 	Duration: parameter.DeathWaveGrow + parameter.DeathWaveLinger, Grow: parameter.DeathWaveGrow,
 	Start: parameter.DeathWaveStart, HitInterval: parameter.GameUpdateInterval,
-	Style: PulseSlide, Attack: CombatAttackDeathWave,
+	Style: PulseWave, Attack: CombatAttackDeathWave,
 }
 
 // PulseComponent is one pulse, an entity of its firer's domain: a cursor's stays on

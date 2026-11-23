@@ -52,7 +52,6 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "button", Renderer: renderer.NewButtonRenderer(ctx), Priority: render.PriorityButton},
 		{Name: "splash", Renderer: renderer.NewSplashRenderer(ctx), Priority: render.PrioritySplash},
 		{Name: "marker", Renderer: renderer.NewMarkerRenderer(ctx), Priority: render.PriorityMarker},
-		{Name: "slide", Renderer: renderer.NewSlideRenderer(ctx), Priority: render.PrioritySlide},
 		{Name: "grayout", Renderer: renderer.NewGrayoutRenderer(ctx), Priority: render.PriorityGrayout},
 		{Name: "strobe", Renderer: renderer.NewStrobeRenderer(ctx), Priority: render.PriorityStrobe},
 		{Name: "dim", Renderer: renderer.NewDimRenderer(ctx), Priority: render.PriorityDim},

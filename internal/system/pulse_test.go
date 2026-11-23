@@ -88,8 +88,8 @@ func TestADeathWaveRunsFromItsCursorToTheMapsFarCorner(t *testing.T) {
 	cfg := w.Resources.Config
 	corner := math.Hypot(float64(cfg.MapWidth-1-at.X), cfg.CellAspect.Circular(float64(cfg.MapHeight-1-at.Y)))
 	if wave.X != at.X || wave.Y != at.Y || wave.Owner != cursor || wave.Radius < corner ||
-		wave.Style != component.PulseSlide || wave.Attack != component.CombatAttackDeathWave {
-		t.Fatalf("the death wave is %+v, want a slide pulse of its family on (%d,%d) reaching %.1f", wave, at.X, at.Y, corner)
+		wave.Style != component.PulseWave || wave.Attack != component.CombatAttackDeathWave {
+		t.Fatalf("the death wave is %+v, want a wave pulse of its family on (%d,%d) reaching %.1f", wave, at.X, at.Y, corner)
 	}
 	lethal := profile.Attack(component.CombatAttackDeathWave, component.CombatEntityCursor, component.CombatEntitySwarm)
 	if lethal == nil || lethal.DamageValue < parameter.CombatInitialHPSwarm ||

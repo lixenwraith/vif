@@ -137,9 +137,9 @@ const (
 	// PulseGrowStart is the share of its radius a growing pulse fires at
 	PulseGrowStart = 0.5
 
-	// A death wave runs from DeathWaveStart of its reach, the map's far corner and
-	// the width of its swell past it, out to all of it over DeathWaveGrow, and
-	// stands DeathWaveLinger more for what a hit's window spared
+	// A death wave runs from DeathWaveStart of its reach, the map's far corner, out
+	// to all of it over DeathWaveGrow, and stands DeathWaveLinger more for what a
+	// hit's window spared
 	DeathWaveStart  = 0.02
 	DeathWaveGrow   = 4 * time.Second
 	DeathWaveLinger = 100 * time.Millisecond

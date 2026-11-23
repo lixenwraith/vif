@@ -295,7 +295,6 @@ var Renderers = []RendererDef{
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 
 	// --- Post-Processing ---
-	{"slide", "NewSlideRenderer", "PrioritySlide"},
 	{"grayout", "NewGrayoutRenderer", "PriorityGrayout"},
 	{"strobe", "NewStrobeRenderer", "PriorityStrobe"},
 	{"dim", "NewDimRenderer", "PriorityDim"},
