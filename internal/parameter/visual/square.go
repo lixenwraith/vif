@@ -7,62 +7,60 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 )
 
-// SquareKindColors are what a magic square's blocks of one kind draw in: a cell
-// whole and worn to nothing, the glow its line fires and its effect holds in, and a
+// SquareKindColors are what a magic square's blocks of one kind draw in: a block,
+// the glow its line fires and its effect holds in, the legend's empty meter, and a
 // console's color
 type SquareKindColors struct {
-	Whole, Worn color.RGB
-	Glow        color.RGB
-	Console     uint8
+	Block, Glow, Track color.RGB
+	Console            uint8
 }
 
 // SquareKinds holds each kind's colors
 var SquareKinds = [component.SquareKindCount]SquareKindColors{
-	component.SquareAttack:  {Whole: color.Vermilion, Worn: color.DarkCrimson, Glow: color.Coral, Console: ConRed},
-	component.SquareHold:    {Whole: color.Gold, Worn: color.DarkGold, Glow: color.Apricot, Console: ConYellow},
-	component.SquareDefense: {Whole: color.BrightCyan, Worn: color.Teal, Glow: color.SkyTeal, Console: ConCyan},
+	component.SquareAttack:  {Block: color.Vermilion, Glow: color.Coral, Track: color.DarkCrimson, Console: ConRed},
+	component.SquareHold:    {Block: color.Gold, Glow: color.Apricot, Track: color.DarkGold, Console: ConYellow},
+	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
-// The square's marks: a standing block's digit, the frame round the viewer's
-// selection, a fallen block's outline and a kind no line holds in the legend under it
+// SquareOrb is an aiming kind's orb on the square's outer orbit: its glyph's color,
+// the two its corona turns in, and a console's
+type SquareOrb struct {
+	Core, Lobe, Counter color.RGB
+	Console             uint8
+}
+
+// SquareOrbs holds each aiming kind's orb: red, white and blue for the attack, and
+// for the hold the gold, cyan and purple of the game's bolts
+var SquareOrbs = [component.SquareKindCount]SquareOrb{
+	component.SquareAttack: {Core: color.White, Lobe: color.Red, Counter: color.RoyalBlue, Console: ConBrightRed},
+	component.SquareHold:   {Core: color.VibrantCyan, Lobe: color.Gold, Counter: color.MediumPurple, Console: ConBrightYellow},
+}
+
+// The square's marks: a block's digit, the frame round the viewer's selection, and
+// in the legend under it a kind no line holds
 var (
-	RgbSquareDigit  = color.Black
-	RgbSquareFrame  = color.White
-	RgbSquareFallen = color.DarkGray
+	RgbSquareDigit = color.Black
+	RgbSquareFrame = color.White
+	RgbSquareIdle  = color.Gray
 )
 
 const (
-	// SquareFallenChar dots a fallen block's edge, and a console's empty meter cell
-	SquareFallenChar = '·'
-
-	// SquareWornChar256 shades a cell a console shows worn: one below SquareWorn256
-	// of its hit points
-	SquareWornChar256 = '▒'
-	SquareWorn256     = 0.5
-
-	// SquareHitFlash is how far a cell a hit just landed on goes toward white
-	SquareHitFlash = 0.5
+	// SquareMeterEmpty256 is a console's empty meter cell
+	SquareMeterEmpty256 = '·'
 
 	// SquareFireFlash is how long a kind's blocks take to fade from its glow as its
 	// line fires
 	SquareFireFlash = 400 * time.Millisecond
 
 	// The legend gives each kind its name and a meter of SquareMeterCells, its empty
-	// cells SquareMeterTrack of the way from the background to the kind's worn color,
+	// cells SquareMeterTrack of the way from the background to the kind's track color,
 	// SquareLegendGap cells parting two kinds
 	SquareMeterCells = 6
 	SquareMeterTrack = 0.3
 	SquareLegendGap  = 3
 
-	// The shield's glow pulses between these intensities each period, fading over
-	// SquareShieldGlowBand of its radius inward from its rim
-	SquareShieldGlowMin      = 0.15
-	SquareShieldGlowMax      = 0.45
-	SquareShieldGlowPeriodMs = 900
-	SquareShieldGlowBand     = 0.35
-
-	// SquareShieldRim256 is the share of the band's glow a console shows as the rim
-	SquareShieldRim256 = 0.6
+	// SquareOrbIdle is how bright the orb of a kind no line holds draws, of a held one's
+	SquareOrbIdle = 0.4
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left

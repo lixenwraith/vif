@@ -10,21 +10,23 @@ const (
 	SquareBlockHeight = 3
 	SquareBlockGap    = 1
 
-	// SquareBlockHP is every block cell's hit points
-	SquareBlockHP = 12
-
 	// A line fires its kind again each cooldown, counted from its last fire, while it
-	// holds three of it: the strike at once, the hold and the shield each for half
+	// holds three of it: the strike at once, the hold and the boost each for half
 	// its cooldown, so neither holds more than half the time
 	SquareStrikeCooldown = 2 * time.Second
 	SquareHoldDuration   = time.Second
 	SquareHoldCooldown   = 2 * time.Second
-	SquareShieldDuration = time.Second
-	SquareShieldCooldown = 2 * time.Second
+	SquareBoostDuration  = time.Second
+	SquareBoostCooldown  = 2 * time.Second
 
-	// SquareShieldMargin is the cells the shield reaches past the ellipse through
-	// the square's corners
+	// SquareShieldMargin is the columns the shield over the square reaches past its
+	// corners, and SquareOrbGap the columns from that shield out to the orbit the
+	// kinds' orbs stand on, outside the orbit of the cursor's own
 	SquareShieldMargin = 2
+	SquareOrbGap       = 6
+
+	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds
+	SquareOrbIdlePeriod = 8 * time.Second
 
 	// SquareBoltDuration is how long a fire's bolt stays drawn
 	SquareBoltDuration = 300 * time.Millisecond

@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"math"
+	"unicode"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -14,7 +15,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// OrbRenderer draws weapon orbs with corona glow (TrueColor) or simple sigil (256)
+// OrbRenderer draws weapon orbs, and a magic square's on its outer orbit, with corona
+// glow (TrueColor) or simple sigil (256)
 type OrbRenderer struct {
 	gameCtx   *engine.GameContext
 	renderOrb orbRenderFunc
@@ -50,23 +52,81 @@ func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 // orbRenderFunc draws one orb whose map cell is visible
 type orbRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune)
 
-// Render draws all weapon orbs
+// Render draws every orb
 func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	orbs := r.gameCtx.World.Components.Orb
-	if orbs.CountEntities() == 0 {
+	world := r.gameCtx.World
+	if world.Components.Orb.CountEntities() == 0 && world.Components.Square.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
-		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+	world.Components.Orb.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
+		pos, ok := world.Positions.GetPosition(entity)
 		if !ok || !ctx.IsInViewport(pos.X, pos.Y) {
 			return true
 		}
 		r.renderOrb(ctx, buf, pos.X, pos.Y, orbComp, r.chargeGlyph(orbComp))
 		return true
 	})
+	world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+		r.squareOrbs(ctx, buf, sq)
+		return true
+	})
+}
+
+// squareOrbs draws each aiming kind's orb on the square's outer orbit: at the middle
+// of the side its line faces, bursting as the line fires, or dim and turning round
+// the orbit while no line holds the kind, the kinds half a turn apart
+func (r *OrbRenderer) squareOrbs(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
+	period := int64(parameter.SquareOrbIdlePeriod)
+	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
+	aiming := 0
+	for kind, spec := range component.SquareKinds {
+		if spec.Boost {
+			continue
+		}
+		look, phase := &visual.SquareOrbs[kind], float64(aiming)*math.Pi
+		aiming++
+		line := sq.Line(component.SquareKind(kind))
+		if line < 0 {
+			r.squareOrb(ctx, buf, sq.OrbAt(turn+phase, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
+			continue
+		}
+		burst := 0.0
+		if since := spec.Cooldown - sq.Effects[kind].Cooldown; sq.Effects[kind].Cooldown > 0 && since < parameter.OrbFlashDuration {
+			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
+		}
+		cells, n := sq.Orbs(line, ctx.CellAspect)
+		for _, cell := range cells[:n] {
+			r.squareOrb(ctx, buf, cell, look, spec.Name, 1, burst)
+		}
+	}
+}
+
+// squareOrb draws one orb of a square's at a cell: its glyph in its core color under
+// a corona of its other two, at a share of full light, or bursting as its line fires;
+// a console draws its kind's initial in the kind's color
+func (r *OrbRenderer) squareOrb(ctx render.RenderContext, buf *render.RenderBuffer, at vmath.Point, look *visual.SquareOrb, name string, light, burst float64) {
+	if !ctx.IsInViewport(at.X, at.Y) {
+		return
+	}
+	screenX, screenY, _ := ctx.MapToScreen(at.X, at.Y)
+	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		attr := terminal.AttrFg256
+		if light >= 1 {
+			attr |= terminal.AttrBold
+		}
+		buf.SetFgOnly(screenX, screenY, unicode.ToUpper(rune(name[0])), color.RGB{R: look.Console}, attr)
+		return
+	}
+	if burst > 0 {
+		r.renderBurst(ctx, buf, at.X, at.Y, look.Lobe, visual.CircleBlock, burst)
+		return
+	}
+	angle := float64(ctx.GameTime.UnixMilli()%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
+	r.renderCorona(ctx, buf, at.X, at.Y, look.Lobe, look.Counter, vmath.Cos(angle), vmath.Sin(angle), light)
+	buf.SetFgOnly(screenX, screenY, visual.CircleBlock, color.Lerp(visual.RgbBackground, look.Core, light), terminal.AttrNone)
 }
 
 // chargeGlyph is the digit of a charge count below the cap, or the bullseye at it
@@ -109,7 +169,8 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 		angle = float64(gameTimeMs%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
 	}
-	r.renderCorona(ctx, buf, mapX, mapY, orbPalette[orb.WeaponType].corona, vmath.Cos(angle), vmath.Sin(angle))
+	corona := orbPalette[orb.WeaponType].corona
+	r.renderCorona(ctx, buf, mapX, mapY, corona, corona, vmath.Cos(angle), vmath.Sin(angle), 1)
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {
@@ -117,8 +178,9 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 	}
 }
 
-// renderCorona draws rotating directional glow around orb center
-func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, c color.RGB, rotDirX, rotDirY float64) {
+// renderCorona draws the glow turning round an orb's center: a lobe along the turn's
+// direction and its counter opposite, each in its color, at a share of full light
+func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, lobe, counter color.RGB, rotDirX, rotDirY, light float64) {
 	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
 		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			if dx == 0 && dy == 0 {
@@ -140,18 +202,16 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			// Dual-direction glow using vector normalization
+			// A lobe each way along the turn, the cell lit by the one it faces
 			cellDirX, cellDirY := vmath.Normalize2D(dxF, dyF)
-			dot1 := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY)
-			dot2 := vmath.DotProduct(cellDirX, cellDirY, -rotDirX, -rotDirY)
-			dot := max(dot1, dot2)
-			if dot <= 0.0 {
-				continue
+			dot, c := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY), lobe
+			if dot < 0 {
+				dot, c = -dot, counter
 			}
 
 			edgeFactor := distSq
 			intensity := dot * edgeFactor
-			alpha := intensity * parameter.OrbCoronaIntensity
+			alpha := intensity * parameter.OrbCoronaIntensity * light
 
 			if alpha < 0.05 {
 				continue

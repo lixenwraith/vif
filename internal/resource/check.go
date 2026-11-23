@@ -190,6 +190,10 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 	for _, p := range profiles {
 		valid[p.Name] = true
 	}
+	// A context system toggles as any other, so a list that narrows names it
+	for _, def := range manifest.ContextSystems {
+		valid[def.Name] = true
+	}
 
 	var unknown []string
 	check := func(where string, names []string) {

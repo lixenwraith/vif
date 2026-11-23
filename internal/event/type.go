@@ -642,8 +642,6 @@ const (
 	EventSquareSpawnRequest
 	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds
 	EventSquareAligned
-	// EventSquareBlockFallen (SquareBlockFallenPayload) [shared] announces a block that lost its last cell
-	EventSquareBlockFallen
 
 	// --- Genetic ---
 

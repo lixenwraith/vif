@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -26,16 +25,16 @@ const (
 	SquareLines  = 2 * SquareSide // the rows top down, then the columns left to right
 )
 
-// SquareKindSpec is what a line of one kind fires each time its cooldown runs out:
-// a shield over the whole square, any other kind its family on the swarms of the
-// gateways the line faces, where the combat matrix lets a tower strike with it
+// SquareKindSpec is what a line of one kind fires each time its cooldown runs out: a
+// boost of the shield over the square, any other kind its family from its orb on the
+// bodies the gateways the line faces sent, where the combat matrix has a cursor's row
 type SquareKindSpec struct {
 	Name     string
 	Attack   CombatAttackType
 	Duration time.Duration      // how long the effect holds once fired
 	Cooldown time.Duration      // from a fire until the line fires again
-	Bolt     LightningColorType // the bolt to each gateway and swarm a fire lands on
-	Shield   bool               // the blocks refuse every hit and push off what it covers while it holds
+	Bolt     LightningColorType // the bolt its orb throws at what a fire lands on
+	Boost    bool               // the shield takes no damage while it holds; a kind that does not boost aims
 	Halt     bool               // the gateways the line faces hold their spawns while it holds
 }
 
@@ -43,7 +42,7 @@ type SquareKindSpec struct {
 var SquareKinds = [SquareKindCount]SquareKindSpec{
 	SquareAttack:  {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Bolt: LightningRed},
 	SquareHold:    {Name: "hold", Attack: CombatAttackHold, Duration: parameter.SquareHoldDuration, Cooldown: parameter.SquareHoldCooldown, Bolt: LightningGold, Halt: true},
-	SquareDefense: {Name: "defense", Attack: CombatAttackShield, Duration: parameter.SquareShieldDuration, Cooldown: parameter.SquareShieldCooldown, Shield: true},
+	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown, Boost: true},
 }
 
 // SquareEffect is what is left of one kind's hold and cooldown, both counted from
@@ -56,18 +55,18 @@ type SquareEffect struct {
 // Ready reports whether its line fires it now
 func (e SquareEffect) Ready() bool { return e.Active <= 0 && e.Cooldown <= 0 }
 
-// SquareComponent is a magic square, on an entity of its own: the block headers at
-// its places, row by row, which a shift permutes, the block each roster slot has
-// selected, the kind each line holds three of and each kind's effect
+// SquareComponent is a magic square, on an entity of its own: the digit of the block
+// at each place, row by row, which a turn permutes, each digit's kind, the digit each
+// roster slot has selected, the kind each line holds three of and each kind's effect
 type SquareComponent struct {
-	Places   [SquareBlocks]core.Entity
-	Selected [parameter.MaxPlayers]core.Entity
+	Digits   [SquareBlocks]uint8
+	Kinds    [SquareBlocks]SquareKind // by digit, less one
+	Selected [parameter.MaxPlayers]uint8
 	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of, 0 for none
 	Effects  [SquareKindCount]SquareEffect
 
-	X, Y          int   // the top-left cell
-	Width, Height int   // a block's cells
-	Group         uint8 // the target group its standing blocks anchor
+	X, Y          int // the top-left cell
+	Width, Height int // a block's cells
 }
 
 // Place is the top-left cell of the block at place p
@@ -81,12 +80,62 @@ func (s *SquareComponent) Size() (w, h int) {
 		SquareSide*s.Height + (SquareSide-1)*parameter.SquareBlockGap
 }
 
-// ShieldRadii are the radii of the square's shield at a cell aspect: an ellipse
-// through its corners, a margin wider
-func (s *SquareComponent) ShieldRadii(aspect vmath.Aspect) (rx, ry float64) {
+// Center is the square's middle cell, where the cursor it fights through stands
+func (s *SquareComponent) Center() (x, y int) {
 	w, h := s.Size()
-	return float64(w)/2*math.Sqrt2 + parameter.SquareShieldMargin,
-		float64(h)/2*math.Sqrt2 + aspect.Y(parameter.SquareShieldMargin/2.0)
+	return s.X + w/2, s.Y + h/2
+}
+
+// KindAt is the kind of the block at place p
+func (s *SquareComponent) KindAt(p int) SquareKind {
+	if d := int(s.Digits[p]); d >= 1 && d <= SquareBlocks {
+		return s.Kinds[d-1]
+	}
+	return SquareKindCount
+}
+
+// ShieldRadius is the reach, in columns at a cell aspect, of the shield that covers
+// the square: through its corners, a margin wider
+func (s *SquareComponent) ShieldRadius(aspect vmath.Aspect) float64 {
+	w, h := s.Size()
+	return math.Hypot(float64(w)/2, aspect.Circular(float64(h)/2)) + parameter.SquareShieldMargin
+}
+
+// Line is the line that holds three of a kind, -1 when none does
+func (s *SquareComponent) Line(kind SquareKind) int {
+	for l, held := range s.Lines {
+		if held == uint8(kind)+1 {
+			return l
+		}
+	}
+	return -1
+}
+
+// OrbAt is the cell on the square's outer orbit at an angle, 0 the right and a
+// quarter turn the bottom
+func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect) vmath.Point {
+	cx, cy := s.Center()
+	rx := s.ShieldRadius(aspect) + parameter.SquareOrbGap
+	x, y := vmath.AngleToGridPos(angle, cx, cy, rx, aspect.FromCircular(rx))
+	return vmath.Point{X: x, Y: y}
+}
+
+// Orbs are the cells a line's orb stands at on the outer orbit, the middle of the
+// side the line faces: one for a side's row or column, one at each end for the
+// middle row and column, which face both
+func (s *SquareComponent) Orbs(l int, aspect vmath.Aspect) (cells [2]vmath.Point, n int) {
+	at := func(quarter int) vmath.Point { return s.OrbAt(float64(quarter)*math.Pi/2, aspect) }
+	// Quarter turns from the right: right, bottom, left, top
+	switch i, column := l%SquareSide, l >= SquareSide; {
+	case i == 1 && column:
+		return [2]vmath.Point{at(3), at(1)}, 2
+	case i == 1:
+		return [2]vmath.Point{at(2), at(0)}, 2
+	case column:
+		return [2]vmath.Point{at(2 - i)}, 1
+	default:
+		return [2]vmath.Point{at(3 - i)}, 1
+	}
 }
 
 // Faces reports whether a cell lies in line l's third of the map, cut by the edges
@@ -121,16 +170,4 @@ func LinePlaces(l int) (places [SquareSide]int) {
 		}
 	}
 	return places
-}
-
-// BlockComponent is a block of a magic square, on its composite's header. A fallen
-// block has lost every cell: it still turns with its line and aligns, but nothing
-// targets it
-type BlockComponent struct {
-	Square core.Entity
-	Anchor core.Entity // the cell holding its target anchor, 0 for none
-	Digit  uint8       // 1 to 9, the key that selects it
-	Kind   SquareKind
-	HP     int // what each cell started with
-	Fallen bool
 }

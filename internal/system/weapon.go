@@ -554,14 +554,13 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	orbEntity := s.world.CreateEntity(core.DomainPlayer)
 
 	orbComp := component.OrbComponent{
-		WeaponType:   weaponType,
-		OwnerEntity:  ownerEntity,
-		OrbitAngle:   0,
-		TargetAngle:  0,
-		OrbitRadiusX: parameter.OrbOrbitRadiusX,
-		OrbitRadiusY: s.world.Resources.Config.CellAspect.Y(parameter.OrbOrbitRadiusY),
-		OrbitSpeed:   parameter.OrbOrbitSpeed,
+		WeaponType:  weaponType,
+		OwnerEntity: ownerEntity,
+		OrbitAngle:  0,
+		TargetAngle: 0,
+		OrbitSpeed:  parameter.OrbOrbitSpeed,
 	}
+	orbComp.OrbitRadiusX, orbComp.OrbitRadiusY = s.orbit(ownerEntity)
 
 	// Initial position at angle 0
 	gridX, gridY := vmath.AngleToGridPos(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
@@ -584,6 +583,16 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: gridX, Y: gridY})
 
 	return orbEntity
+}
+
+// orbit is the radii a cursor's orbs circle at: as far past its shield's reach as
+// the default orbit stands past the default shield, rows by the cell aspect
+func (s *WeaponSystem) orbit(cursor core.Entity) (rx, ry float64) {
+	rx = parameter.OrbOrbitRadiusX
+	if shield, ok := s.world.Components.Shield.GetPtr(cursor); ok && shield.Radius > 0 {
+		rx += shield.Radius - parameter.PlayerShieldRadius
+	}
+	return rx, s.world.Resources.Config.CellAspect.Y(rx * parameter.OrbOrbitRadiusY / parameter.OrbOrbitRadiusX)
 }
 
 // updateOrbs handles one cursor's orbital motion with arc-aware collision avoidance
@@ -609,13 +618,12 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		return
 	}
 
-	// Use first orb's radius (all of one owner's orbs share the same orbit).
+	// One owner's orbs share an orbit, which follows its shield as that is resized
 	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0])
 	if !ok {
 		return
 	}
-	radiusX := firstOrb.OrbitRadiusX
-	radiusY := firstOrb.OrbitRadiusY
+	radiusX, radiusY := s.orbit(cursor)
 
 	// Sample orbital ellipse for blockage, on the stack: it is read every tick
 	var cellBuf [vmath.EllipseSampleCount][2]int
@@ -663,6 +671,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 			continue
 		}
 		targetAngle := targetAngles[i]
+		orb.OrbitRadiusX, orb.OrbitRadiusY = radiusX, radiusY
 
 		// All orbs must finish together before free rotation preserves their spacing.
 		if redistribute {

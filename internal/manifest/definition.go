@@ -90,7 +90,6 @@ var Components = []ComponentDef{
 	{"Eye", "EyeComponent", "shared"},
 	{"Tower", "TowerComponent", "shared"},
 	{"Square", "SquareComponent", "shared"},
-	{"Block", "BlockComponent", "shared"},
 	{"Kraken", "KrakenComponent", "shared"},
 	{"Devourer", "DevourerComponent", "shared"},
 	{"DevourerGut", "DevourerGutComponent", "shared"},
@@ -142,8 +141,8 @@ var Systems = []SystemDef{
 	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Snapshot: "state",
 		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // carries its generator, not a vmath stream, and the cave; pushes both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
-	{Name: "square", Constructor: "NewSquareSystem", Domain: "shared", Requires: []string{"composite"},
-		Optional: []string{"navigation", "combat", "gateway", "lightning"}}, // shared composite blocks; its effects land through combat, its bolts are each instance's own
+	{Name: "square", Constructor: "NewSquareSystem", Domain: "shared", Requires: []string{"cursor"},
+		Optional: []string{"shield", "boost", "combat", "gateway", "lightning"}}, // shared blocks under its cursor's shield; its effects land through combat as that cursor's, its bolts are each instance's own
 	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake", "swarm"}}, // shared route anchor; gated species are optional
 
 	// --- Entity Behaviors ---

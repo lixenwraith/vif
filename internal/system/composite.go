@@ -329,13 +329,6 @@ func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.Hea
 			return b, false
 		}
 		return ground(visual.RgbDevourerGut, visual.Devourer256Gut, bodyShell{})
-	case component.BehaviorBlock:
-		block, ok := c.Block.GetPtr(headerEntity)
-		if !ok || int(block.Kind) >= len(visual.SquareKinds) {
-			return b, false
-		}
-		colors := &visual.SquareKinds[block.Kind]
-		return ground(colors.Worn, colors.Console, bodyShell{})
 	case component.BehaviorTower:
 		tower, ok := c.Tower.GetPtr(headerEntity)
 		if !ok || int(tower.Type) >= len(visual.TowerTypes) {

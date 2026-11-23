@@ -1847,16 +1847,14 @@ type GatewayDespawnedPayload struct {
 
 // SquareSpawnRequestPayload lays a magic square centered on a cell: Layout names the
 // digit of each place row by row, Groups the digits of each kind in SquareKind
-// order. A zero block size or hit points takes the default.
+// order. A zero block size takes the default.
 type SquareSpawnRequestPayload struct {
-	X             int      `toml:"x"`
-	Y             int      `toml:"y"`
-	Layout        string   `toml:"layout"`
-	Groups        []string `toml:"groups"`
-	HP            int      `toml:"hp"`
-	BlockWidth    int      `toml:"block_width"`
-	BlockHeight   int      `toml:"block_height"`
-	TargetGroupID uint8    `toml:"target_group_id"` // the group its standing blocks anchor
+	X           int      `toml:"x"`
+	Y           int      `toml:"y"`
+	Layout      string   `toml:"layout"`
+	Groups      []string `toml:"groups"`
+	BlockWidth  int      `toml:"block_width"`
+	BlockHeight int      `toml:"block_height"`
 }
 
 // SquareAlignedPayload names the kind that fired and its line: 0 to 2 the rows top
@@ -1864,13 +1862,6 @@ type SquareSpawnRequestPayload struct {
 type SquareAlignedPayload struct {
 	Kind component.SquareKind `toml:"kind"`
 	Line int                  `toml:"line"`
-}
-
-// SquareBlockFallenPayload names a fallen block by its digit, with the count of
-// blocks still standing
-type SquareBlockFallenPayload struct {
-	Digit     int `toml:"digit"`
-	Remaining int `toml:"remaining"`
 }
 
 // --- Genetic ---
