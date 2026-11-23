@@ -348,6 +348,11 @@ four before the FSM boots. While `World.SessionShared()` is true, a terminal
 resize changes only local viewport/camera state; it cannot crop the map or announce
 a Shared cursor move. A scenario's `[map]` floor bounds every one of these writes
 from below; it travels with the scenario, so every instance holds the same one.
+A crop first moves what stands still on the map, then tags what the new bounds
+leave outside: each `engine.Reflower` (an inert pylon's system, a magic square's)
+and a fixed cursor take the cell `ConfigResource.Standing` gives theirs, as far
+from the edge whose third of the map it stood in, or from the middle, so a
+layout laid from the map's anchors stands as a new game would lay it.
 
 The session-shared latch survives lobby wait, disconnect, and journal replay. A
 map script asking for `viewport_width`/`viewport_height` is asking for the extent it

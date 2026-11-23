@@ -31,8 +31,9 @@ the pointer cell (terminal coordinates, or a map cell when `MapCell` is set),
 captured command text, and a flag identifying macro playback. This boundary makes
 the parser testable without constructing an ECS world.
 
-A scenario can take printable ASCII keys away from the play grammar, for a game
-whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
+A scenario can take printable ASCII keys, and Enter as `\r`, away from the play
+grammar, for a game whose buttons are keys. An FSM state emits
+`EventKeyCaptureRequest { keys = "12345" }`
 (empty `keys` releases them; `entity` scopes the capture to one cursor's instance;
 `modes` names the play modes it holds in, every one when unset; `idle = true`
 leaves a key to an operator, prefix or label already pending; `releases = true`
@@ -55,7 +56,8 @@ A captured key is the scenario's one input hook, whatever produces it:
 - **Sources.** A typed key, a press of the left or right button, a finger or a
   wheel notch on the button of that key (§7), a press on a magic square's block,
   which is its digit's, with the turn keys a drag of that block along its row or
-  column presses (`Router.dragBlock`), and a bot or script naming the
+  column presses (`Router.dragBlock`), or on its burst meter, which is Enter's,
+  and a bot or script naming the
   `press` action with the key as its `char` all reach the router, which crosses
   `EventInputPressed { slot, key, source, tick }` so the shared FSM sees it on every
   instance: `slot` is the presser's roster slot, `source` 0 a key, 1 the left

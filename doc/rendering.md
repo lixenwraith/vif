@@ -289,10 +289,11 @@ which concrete renderer produced them:
 - slide draws a pulse of that style as a swell in the surface: the `SlideBand`
   columns behind the pulse's edge rise in a ridge `SlideRise` high, its crest
   nearer the edge, drawn in half cells over a copy of the frame under it. Each
-  half is lit by its slope from a lamp up and to the left, with a highlight where
-  the slope mirrors it, glows from `RgbSlideFront` to `RgbSlideWake`, and shows
-  the cell `SlideLens` bends into view, a glyph as a glyph; cells the band has
-  left are as they were drawn.
+  half shows the cell `SlideLens` bends into view, a glyph as a glyph, lit by
+  its slope from a lamp up and to the left under a haze from `RgbSlideFront` to
+  `RgbSlideWake`, both near the theme's background, so the swell reads as the
+  scene bending rather than as a ring over it; cells the band has left are as
+  they were drawn.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.

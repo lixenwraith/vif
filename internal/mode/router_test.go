@@ -341,6 +341,29 @@ func TestADraggedBlockTurnsItsLine(t *testing.T) {
 	}
 }
 
+// TestAPressOnTheBurstMeterIsEnters: a press on the burst meter over a magic square
+// presses Enter where a scenario takes it, and holds no block for a drag to turn
+func TestAPressOnTheBurstMeterIsEnters(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 40)
+	r := NewRouter(ctx, input.NewMachine())
+	sq := component.SquareComponent{X: 20, Y: 10, Width: 7, Height: 3, Digits: [9]uint8{2, 7, 6, 9, 5, 1, 4, 3, 8}}
+	w.Components.Square.SetComponent(w.CreateEntity(core.DomainShared), sq)
+	ctx.KeyCapture.Set("123456789hjkl\r", 0, false, false)
+	x, y := sq.Legend(component.SquareSide - 1)
+	r.Handle(&input.Intent{Type: input.IntentMouseLeftDown, X: x + 1, Y: y + 1, MapCell: true, Touch: true})
+	r.Handle(&input.Intent{Type: input.IntentMouseDrag, X: x + 1 + 2*sq.Width, Y: y + 1, MapCell: true, Touch: true})
+	keys := ""
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.InputPayload); ok && ev.Type == event.EventInputPressed {
+			keys += p.Key
+		}
+	}
+	if keys != "\r" {
+		t.Fatalf("a press on the burst meter dragged on pressed %q, want Enter alone", keys)
+	}
+}
+
 // lineWorld is a bare world holding text's lines as the player's glyphs from row 0,
 // the local cursor at column x of the first, and a router fed by keys. It applies
 // what each key asks for before the next, as the systems would, and returns the

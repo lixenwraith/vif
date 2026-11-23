@@ -235,6 +235,9 @@ Docs · Libraries · Branches.
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient
   origin diverges every replay whose recording made it.
+- The dispatch hands an event to the FSM before its systems, so a transition on
+  `EventScreenResize` acts on the map as it stood: what must follow a resize is
+  an engine hook (`engine.Reflower`), not a scenario's transition.
 
 ## Sessions
 
@@ -833,6 +836,17 @@ Docs · Libraries · Branches.
   second in two of a uniform radial wind at force 16 held `magic`'s lightest body
   six columns out, where it had touched every 4.5 s. The square's gust is short
   and fades with distance for that; measure a wind by a body's distance a tick.
+- A gust's throw does not scale with its force: drag above the cruise speed eats
+  the rest, so ten times the force threw `magic`'s bodies three to four times as
+  far, and a body thrown onto the map's edge bounces back in at speed unless its
+  prototype's `restitution` is 0. A gust that throws well needs a cooldown near
+  the time its lightest body takes to walk back, or it is a wall.
+- Species nothing kills gather without bound: idle under `:god`, `magic`'s wave
+  bodies passed 700 in nine minutes and the tick grew with their square. A cap is
+  the scenario's, a `StatusIntCompare` on `behavior.count` that holds the gateways.
+- What special fire spends comes off the overheat first, so a scenario that keeps
+  a full overheat for a key must give the spend back, or one dust blast leaves
+  it a point short of full.
 
 ## Glyphs and widgets
 
@@ -858,6 +872,9 @@ Docs · Libraries · Branches.
   nothing painted blends onto black, a band darker than the theme's background:
   blend it with `SetBgScreen` on `visual.RgbBackground`, as the shield's glow and
   the square's gust do.
+- The explosion field, as any field written with `Set`, blended onto cells nothing
+  had painted from black and faded through a blotch darker than the theme: it
+  now mixes over `BackgroundAt`'s color and writes with `SetBgOnly`.
 - A renderer that redraws what lies under it reads the frame once before it draws
   (`SlideRenderer.hold`) and gives a sample off its shape that cell back: a half
   cell left at the zero color is a black notch along the shape's edge.
