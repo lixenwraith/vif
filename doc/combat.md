@@ -126,7 +126,11 @@ and crosses its geometry (§5); a mount's strikes each cursor inside it through
 `strikeCursor`. `WeaponSpecs` holds the kind's `PulseSpec` and a mount overrides it
 field by field, as it overrides `Damage`: a scenario writes `pulse = { radius,
 duration_ms, sustained, grow_ms, hit_interval_ms, style, attack, charged }`, style
-`ring`, `glow` or `hidden`. A mount's pulse carries its attack family and charge,
+`ring`, `glow`, `hidden` or `slide`. A death wave is a cursor's pulse no weapon
+holds, `component.DeathWave`: fired on `EventDeathWaveRequest` from the cursor's
+cell, it grows from nearly nothing (`PulseSpec.Start`) to the map's far corner and
+strikes every tick under the `death_wave` family, whose rows take every hit point
+of a drain, a swarm, an eye and a snake, and so of a data species on the swarm row. A mount's pulse carries its attack family and charge,
 but the cursors it strikes take only its `CursorDamage` until cursors take a
 family's effects (todo: PvP).
 
@@ -192,7 +196,9 @@ family lands alike from every attacker, which a data species' row takes as given
 so the strike and hold are families of their own, and a prototype's `attacks` can
 take a body out of every other family's reach and leave it to the strike. The
 square's defense rewards that cursor's boost, and the shield's push and drain are
-the cursor's own.
+the cursor's own; with the shield down the square lands each body on its blocks
+itself, once a touch (`SquareSystem.breach`): the body's contact through
+`strikeCursor`, which is heat, and the shield family's knockback.
 
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields
@@ -226,7 +232,8 @@ is positive or negative by the cursor's energy, or hostile for a mount; a tracer
 keeps the palette it was fired with and draws as a background-only trail that
 contracts as it drains. A pulse draws from its component in its `PulseStyle`: a
 ring of ripples over what it strikes, a glow under the species that carries it,
-whose hostile color is the storm's green, or nothing when hidden. Rays are drawn straight
+whose hostile color is the storm's green, nothing when hidden, or a slide, which
+the `slide` renderer draws over every map layer. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
 a mount's warning as its core line alone. Missiles and bullets draw hostile colors
 from their `Hostile` flag; lightning uses its color table. A bolt's ends name

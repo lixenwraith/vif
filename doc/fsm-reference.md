@@ -559,6 +559,13 @@ A captured entity names the first cursor on every instance, so to set each
 participant's own heat, energy and ember emit `EventCursorArmRequest { heat, energy,
 ember }`, which acts on the cursor this instance drives, as `wad/scenario/base/recall` does.
 
+Heat past the meter fills overheat, and filling that bursts: `EventHeatBurst`, a
+`[local]` event, with the ember lit. A scenario that answers the burst its own way
+puts the ember out with `EventHeatEmberRequest { entity, lit = false }`, heat as it
+stands, and raises what it wants: `EventDeathWaveRequest { entity }` runs a death
+wave out from that cursor ([Gameplay §7](gameplay.md#7-weapons-and-attacks)), as
+`wad/scenario/base/magic` wires it.
+
 ---
 
 ## Player Metrics
@@ -796,13 +803,17 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 
 A magic square takes the presses of the keys a state captures for it: a digit
 selects the block it names for the pressing slot, h and l or a and f turn that
-block's row a place, and j and k or d and s its column. `EventSquareSpawnRequest {
-x, y, layout, groups, block_width, block_height }` lays it centered on the cell,
+block's row a place, and j and k or d and s its column; a press on a block is its
+digit's, and a drag of it the turn keys'. `EventSquareSpawnRequest { x, y, layout,
+groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
 attack, hold and defense; one square stands at a time, and it fights through the
-cursor standing on it, whose shield it sizes to cover it. `EventSquareAligned {
-kind, line }` says a line, rows 0 to 2 then columns 3 to 5, fired its kind (0
-attack, 1 hold, 2 defense), once a cooldown while it holds.
+cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
+steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
+`EventSquareAligned { kind, line }` says a line, rows 0 to 2 then columns 3 to 5,
+fired its kind (0 attack, 1 hold, 2 defense), once a cooldown while it holds, and
+`EventSquareHit { entity }` that a body struck the blocks with that cursor's shield
+down.
 
 A gateway stands on an anchor, as a pylon's header; `EventPylonSpawnRequest {
 inert = true }` stands a pylon no weapon aims at or wears. A second
@@ -811,8 +822,16 @@ pace it names, a data species by its program's name, keeping what it had
 accumulated. `EventGatewaySendRequest { anchor_entity, species }` has it send one of
 a species at once, and `EventGatewayHoldRequest { duration_ms, anchor_entity }`
 holds its spawns, every gateway's when it names none. A gateway's swarm or data
-species keeps it, which is how a line finds the bodies it faces.
-`wad/scenario/base/magic` is the worked example.
+species keeps it, which is how a line finds the bodies it faces. A request with
+`wave = true` marks the data species the gateway sends from then on, and once a
+request without it has re-armed the gateway and the last marked body is dead,
+`EventGatewayWaveDefeated { anchor_entity, x, y }` names the gateway's anchor and
+cell. `wad/scenario/base/magic` is the worked example.
+
+`EventWindStart { force, direction, duration }` starts the map's wind
+([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)); with `radial =
+true` it blows out from `x`, `y` whatever its direction, and with a `reach` fades to
+nothing that many columns out.
 
 ### Splash text and glyph lines
 

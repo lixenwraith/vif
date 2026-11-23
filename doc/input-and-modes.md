@@ -53,7 +53,9 @@ the keyboard's repeat delay flips again at its rate.
 A captured key is the scenario's one input hook, whatever produces it:
 
 - **Sources.** A typed key, a press of the left or right button, a finger or a
-  wheel notch on the button of that key (§7), and a bot or script naming the
+  wheel notch on the button of that key (§7), a press on a magic square's block,
+  which is its digit's, with the turn keys a drag of that block along its row or
+  column presses (`Router.dragBlock`), and a bot or script naming the
   `press` action with the key as its `char` all reach the router, which crosses
   `EventInputPressed { slot, key, source, tick }` so the shared FSM sees it on every
   instance: `slot` is the presser's roster slot, `source` 0 a key, 1 the left
