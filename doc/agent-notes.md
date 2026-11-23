@@ -1068,6 +1068,24 @@ Docs · Libraries · Branches.
   while away. `page.goBack({ waitUntil: 'commit' })` is the Back button, landing
   on the entries the page pushes in a gesture, which a key `press` in the game is.
 
+- A private sound server for a test: `pipewire`, `wireplumber` and
+  `pipewire-pulse` under `dbus-run-session` with `XDG_RUNTIME_DIR`, `HOME` and
+  `PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native` in a scratch directory;
+  wireplumber gives it a null sink, `auto_null`, and `pw-top -b` reads the
+  quantum. The runtime directory's path must leave room for `pipewire-0-manager`
+  inside a socket address's 107 bytes. On Ubuntu 24.04 `pipewire-pulse`
+  conflicts with the `pulseaudio` daemon and installing it removes the other:
+  unpack the daemon's package (`dpkg-deb -x`) and run it as `pulseaudio -n -F
+  <file> -p <its modules>` with its two library directories on
+  `LD_LIBRARY_PATH`; as root it only warns. Its idle null sink renders 2 s
+  blocks and takes over a second to start a stream: keep a silent `pacat
+  --latency-msec=50 /dev/zero` on it.
+- The window's keys under Xvfb with no window manager: `xdotool search --name
+  '^vif$'`, `windowfocus`, then `key`.
+- A build inside an unpacked Steam runtime runs under `chroot <root>` with the
+  sound server outside: hard-link the server's socket file under the root, the
+  root's own path being too long to bind a socket in.
+
 ## Measuring
 
 - `Bitmap.recycle` shows in `dumpsys meminfo`'s native heap, not in its Graphics,
@@ -1390,6 +1408,28 @@ Docs · Libraries · Branches.
   -F '#{client_discarded}'`; a rising count means the client is repainted every
   100 ms. To count what a client saw, replay its byte stream through `pyte`,
   sampling 60 times a second, and count the samples where a pane changed.
+
+- A recorder on a sink's monitor must not set the graph's pace: on PipeWire
+  `stdbuf -o0 pw-record --target <sink> -P stream.capture.sink=true --latency 2s
+  ... -` (a `parec --latency-msec` there asks a quantum of its own, and
+  pw-record's stdout is otherwise buffered by 4096 bytes); on PulseAudio `parec
+  --process-time-msec=5`. Stamp each read and anchor the sample clock on the
+  least (arrival - frames/rate). PulseAudio's rewinds rewrite frames the monitor
+  already gave, so time a sound there by the read that brought it.
+- A pipe player's queue is the pipe's unread bytes: `FIONREAD` on the write end
+  reads it. It only grows, to the pipe's 64 KiB (371 ms of 44.1 kHz stereo s16),
+  which is latency no stat line shows.
+- A goroutine waiting more than a few milliseconds inside a purego (or cgo) call
+  costs the runtime's sysmon some 58 wakeups a call:
+  `/proc/<pid>/task/*/schedstat` by thread shows one thread switching a thousand
+  times a second. A write that blocks every period cost 0.9 to 2 % of a core
+  that way.
+- On a machine other jobs share, read `/proc/stat` over each run and keep the
+  share of all cores busy with the reading: a batch splits into quiet runs and
+  the rest afterwards, where a repeat may not find the machine quiet either.
+- A variant of one file for a measurement is `go build -overlay <json>` from a
+  copy outside the tree (`{"Replace":{"<the file>":"<the copy>"}}`), as `go test
+  -overlay` is for a mutation: the worktree never holds the variant.
 
 ## Settings files
 

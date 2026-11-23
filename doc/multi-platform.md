@@ -25,7 +25,7 @@ host the game.
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time | Included; its own stream on PulseAudio or PipeWire where one answers | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Steam depot | `make steam-linux` | The desktop window, by default | Included | Yes | Included | The `vif_gui` build for linux/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §8](packaging.md#8-steam)) |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
@@ -104,16 +104,17 @@ gameplay code by platform.
 
 ## 3. Reference artifact measurements
 
-Measured with Go 1.27.2 and the release workflow's flags: `CGO_ENABLED=0`,
+Measured with Go 1.27.4 and the release workflow's flags: `CGO_ENABLED=0`,
 `-trimpath`, `-ldflags='-s -w'`, `linux/amd64` for the native profiles. They are
 not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native | 17,219,847 | 16.42 | baseline for native profiles |
-| `vif_noaudio` native | 16,810,247 | 16.03 | 2.38% smaller than full |
-| `vif_headless` native | 15,704,224 | 14.98 | 8.80% smaller than full |
-| Browser (`js/wasm`) | 29,683,569 | 28.31 | — |
+| Full native, and `vif_gui` | 23,978,247 | 22.87 | baseline for native profiles |
+| `vif_nogui` native | 23,658,656 | 22.56 | 1.33% smaller than full |
+| `vif_noaudio` native | 23,372,039 | 22.29 | 2.53% smaller than full |
+| `vif_headless` native | 21,749,920 | 20.74 | 9.29% smaller than full |
+| Browser (`js/wasm`) | 40,816,175 | 38.93 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that this command prints no renderer or audio-engine package:
@@ -530,6 +531,44 @@ through XWayland. purego's `fakecgo` links the binary to the system libc, so a
 Linux client binary needs glibc and runs neither on musl nor under Termux;
 `vif_nogui` and `vif_headless` binaries stay static.
 
+The window's speakers are its own (`cmd/vif/pulse.go`, in every window build
+that has audio). As a run starts in the window with no `-ab`, `speakers` opens a
+playback stream through `libpulse-simple.so.0`, loaded with purego as the
+window's libraries are, and the engine plays through it as `Host.Audio`:
+PulseAudio answers it, and PipeWire through its pulse server. Where the library
+or one of its four symbols is missing, or no server takes the stream, it is nil
+and a backend is found by name as on a terminal; on FreeBSD `/dev/dsp` keeps OSS
+first. So the window sounds on a machine holding none of the engine's players,
+Steam's runtime among them, whose one player is a `pw-cat` the engine's
+arguments do not start. The stream asks of the device what the engine's `pacat`
+line asks, 12.5 ms, and holds 112.5 ms itself (`tlength` 125 ms, `minreq` 50 ms,
+`prebuf` 25 ms): a period's write returns at once on a quiet stream and waits
+once a stall has filled it, so what a stalled server, a waking device or a slow
+device clock queues stops there, where a pipe to `pacat` keeps up to 371 ms more
+until the run ends. Measured against `pacat` on its pipe, the engine alone at a
+50 ms period on a null sink (PipeWire 1.0.5, PulseAudio 16.1), a busy machine's
+starts set aside:
+
+```
+                                          pacat on its pipe   the window's speakers
+trigger to the server playing it, ms
+  PipeWire, median / worst                51.1 / 78.6         45.6 / 77.5
+  PulseAudio, median / worst              26.4 / 51.1         26.1 / 51.4
+game and player, % of a core
+  PipeWire / PulseAudio                   4.21 / 4.38         4.21 / 3.93
+queued by a 200 ms stall of the server    +196 to +232 ms     +60 to +80 ms
+queued by 5 min of a clock 2000 ppm slow  +286 ms             +43 ms
+ten minutes on a loaded machine
+  PipeWire: gaps, queue at the end        11, 307 ms          6, 90 ms
+  PulseAudio: gaps                        9                   12
+```
+
+Latency and CPU are the pipe's; the bound is what the window gains. A server
+that goes mid-run leaves the run silent
+([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
+and every figure is a null sink's
+([todo](todo.md#hear-the-windows-speakers-on-real-devices)).
+
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
 its Worker, hands the page one frame at a time, the cells changed since the one it
@@ -726,8 +765,10 @@ included, as [its design](https://github.com/lixenwraith/stapes/blob/main/doc/st
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
 dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
 dedicated profiles, the `android` module and the window's
-(`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check in
-addition to the normal test and vet gates. A release should also run:
+(`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check,
+with two of its kind: `vif_nogui` links neither purego nor the window, and the
+window's speakers build into the Linux window builds alone. That is in addition
+to the normal test and vet gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest

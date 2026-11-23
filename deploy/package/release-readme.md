@@ -68,6 +68,11 @@ puts its font back.
 menu, and `:q` quits.
 
 <!-- end -->
+<!-- if steamlinux -->
+Sound goes to PulseAudio, or to PipeWire through its pulse server, whichever the
+system runs; `-ab <name>` in Launch Options names a player instead.
+
+<!-- end -->
 <!-- if client -->
 ```sh
 tar -xzf vif-@LABEL@-@TARGET@.tar.gz

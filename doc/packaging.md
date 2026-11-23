@@ -256,8 +256,12 @@ alone: no `pacat`, `aplay`, `play` or `ffplay`. It holds no `libGLESv2.so.2`,
 which a launch has only where the host does, so the window draws through the
 runtime's `libOpenGL.so.0` where GLES 2 does not load. Both checks passed there
 on a machine with no GPU (Xvfb, Mesa's llvmpipe), and in the runtime's tree
-alone, with no library of a host's, the window opened through `libOpenGL.so.0`;
-a Steam Deck and the Steam client's overlay are checked by hand.
+alone, with no library of a host's, the window opened through `libOpenGL.so.0`
+and the window's speakers played to a sound server outside it through the
+runtime's own `libpulse-simple.so.0`. Without those speakers a run there is
+silent: its `pw-cat` (1.4.2) takes raw PCM only with `--raw`, which the engine's
+line does not pass. A Steam Deck and the Steam client's overlay are checked by
+hand.
 
 ### Upload
 

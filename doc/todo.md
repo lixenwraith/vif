@@ -2707,6 +2707,37 @@ own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
 linked from it.
 
+### Hear the window's speakers on real devices
+
+- Priority: P1
+- Affected files: `cmd/vif/pulse.go`, `doc/multi-platform.md`
+
+The window's speakers were measured on null sinks in a container. Owed, each
+beside `-ab pacat`: an hour of play on an ALSA device under PipeWire and under
+PulseAudio with the stream's latency read every minute (`pactl list
+sink-inputs`), which shows a device clock's drift (a pipe should creep toward
+its 371 ms on a slow one, the window stop at 112 ms); a Bluetooth sink; the
+first seconds after the device was suspended; ten minutes with nothing else
+running, counting dropouts; the game's CPU on a GPU; the game started by Steam,
+on a PulseAudio host, a PipeWire host and a Steam Deck (the runtime was checked
+in a chroot); FreeBSD without `/dev/dsp`.
+
+### Bring the window's speakers back when their server returns
+
+- Priority: P2
+- Affected files: `cmd/vif/pulse.go`
+- Guide: [platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
+
+A sound server that goes mid-run (a session manager restarting it, a user
+stopping `pipewire-pulse`) fails the stream's write, and a host sink is the
+engine's only candidate: the run is silent until it ends. Smallest: in
+`pulseSpeaker.Write`, free a stream whose write failed and report the buffer
+written, then at most once a second try `pa_simple_new` again before dropping
+the next; the status bar needs a word of its own for it, since the engine no
+longer hears of the loss. With it, give `Close` a drain that gives up: a server
+that stops answering in the tenth of a second before a quit, after the mixer's
+last write returned, holds the exit in `pa_simple_drain`.
+
 ### Bring stapes to Android (stapes mobile)
 
 - Priority: P1

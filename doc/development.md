@@ -30,10 +30,11 @@ The modules it requires:
   account sign-in: the credential a player derives, the exchange both ends run. Its
   JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)).
 - `golang.org/x/sys`: `pkg/network`'s Windows error codes.
-- Indirect: `github.com/ebitengine/purego`, through which the window loads Xlib,
-  EGL and GLES 2 or desktop OpenGL at run time with cgo off; `x/term`, which the
-  terminal module uses; and `x/crypto` and `golang-jwt/jwt/v5`, Argon2 and the
-  JWT half `auth` carries.
+- `github.com/ebitengine/purego`: the desktop window's speakers load the sound
+  server's client library through it with cgo off (`cmd/vif/pulse.go`), as the
+  window (`terminal/window`) loads Xlib, EGL and GLES 2 or desktop OpenGL.
+- Indirect: `x/term`, which the terminal module uses; and `x/crypto` and
+  `golang-jwt/jwt/v5`, Argon2 and the JWT half `auth` carries.
 
 Audio sends PCM to optional host commands; see the audio library's
 [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover) for runtime

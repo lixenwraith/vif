@@ -81,7 +81,12 @@ What vif sets of the engine:
 - **Speakers.** A host that has its own hands them over as `app.Host.Audio`
   beside the run's `Config`, the engine's `Sink`, which a scenario change plays on
   through: Android's is its `AudioTrack`; the browser's posts each buffer that
-  sounds to the page, which plays it through an AudioWorklet.
+  sounds to the page, which plays it through an AudioWorklet; the desktop
+  window's is a stream on PulseAudio or on PipeWire's pulse server, opened where
+  one answers and `-ab` names no backend ([platforms
+  §8](multi-platform.md#8-adding-another-renderer-or-android-host)). A sink
+  stands in for detection, so one that fails mid-run leaves the run silent
+  ([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)).
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {
