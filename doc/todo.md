@@ -224,7 +224,7 @@ Magic holds a magic square under its cursor's shield against eight gateways
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
 built to be play tested; its numbers and rules are what the play test settles.
 
-### Tune magic after its third play test
+### Tune magic after its fourth play test
 
 - Priority: P1
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
@@ -233,10 +233,10 @@ built to be play tested; its numbers and rules are what the play test settles.
 To settle: the shield's start, step and cap and what a touch costs it and the
 blocks, what a defeated wave pays, each kind's duration and cooldown, the gust's
 force and reach, the boost a kill gives and the bank's cap, the paces, how a rank
-and a round quicken them and how long a wave stays, the carrier's weapons, the
-magic state's dust and its wait, and whether one turn may align all three kinds at
-once. Played headless at 80 by 40, a player turned to each wave 5 s after it moved
-lost the square at 235 s.
+and a round quicken them and how long a wave stays, the carrier's weapons, what
+charges the magic meter and what its dust's blast does, and whether one turn may
+align all three kinds at once. Played headless at 80 by 40, a player turned to
+each wave 5 s after it moved lost the square at 208 s.
 
 ### Give magic's late game an end
 
@@ -254,19 +254,9 @@ gateway, closes it.
 - Affected files: `internal/mode/router.go` (`ProcessInputTick`),
   `internal/system/particle.go` (`detonateDust`)
 
-Under auto-fire `on`, the default, special fire detonates the dust a magic state
+Under auto-fire `on`, the default, special fire detonates the dust a defense
 sheds as it is shed, so only a player on `:auto main` times the blast. A scenario's
 say over auto-fire's special, or dust the automatic special passes over, closes it.
-
-### Lay magic out again on a resize
-
-- Priority: P3
-- Affected files: `internal/system/square.go`, `internal/system/pylon.go`,
-  `wad/scenario/base/magic/scenario.toml`
-
-Magic's map holds its size for the game, so a grown screen shows it in the middle
-of a void until the next game. An event a scenario hears as its screen resizes, and
-requests that move a pylon and a square, neither of which exists, close it.
 
 ## Devourer
 
