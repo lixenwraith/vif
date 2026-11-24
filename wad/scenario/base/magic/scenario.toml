@@ -40,10 +40,12 @@ background = true
 # A body homes on the cursor at the square's middle and nothing else: no lock, no
 # charge, no teleport. Its mass has it flock and scatter with its kind. Every weapon
 # of the cursor's wears it, a pulse without its stun, which would hold a crowd for
-# good; a strike's, a bolt's or a death wave's kill flashes, any other scatters it.
+# good; a strike ends it unless its rank says what one takes, and a strike's, a
+# bolt's or a death wave's kill flashes, any other scatters it.
 [macros.Body]
-doc = "A body of the gateways: it homes on the square under a look, with the hit points, mass, touch and flight of its rank."
-params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", physics = "table" }
+doc = "A body of the gateways: it homes on the square under a look, with the hit points, mass, touch and flight of its rank, and what a strike does to it."
+params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", physics = "table", strike = "table" }
+defaults = { strike = { death = "flash" } }
 
 [macros.Body.body]
 initial = "Seek"
@@ -52,7 +54,7 @@ states = { Seek = { on_update = [{ action = "Home" }] } }
 [macros.Body.body.prototype]
 combat = "swarm"
 death = "scatter"
-attacks = { pulse = { stun = false }, strike = { death = "flash" }, lightning = { death = "flash" }, death_wave = { death = "flash" } }
+attacks = { pulse = { stun = false }, strike = "${strike}", lightning = { death = "flash" }, death_wave = { death = "flash" } }
 width = "${width}"
 height = "${height}"
 header = "${header}"
@@ -68,7 +70,8 @@ bg256 = 0
 
 # Eight ranks, a stray and a wave's body to each. A rank up flies faster and holds
 # more hit points, so the weapons take longer over it, and from the fifth on they
-# cannot stop it alone; the masses stand close, so a wind carries every rank about
+# cannot stop it alone and a strike takes 8 hit points a cell of it struck rather
+# than all it holds. The masses stand close, so a wind carries every rank about
 # alike. A touch costs the same at every rank, 1 energy off the shield or 10 heat
 # off the blocks, so the shield's energy counts the touches left, 200 a color.
 [macros.Touch]
@@ -80,6 +83,11 @@ doc = "A body of a rank: its hit points, mass and speed."
 base = "Body"
 params = { hp = "int", mass = "float", speed = "float" }
 with = { hp = "${hp}", mass = "${mass}", contact = { macro = "Touch" }, physics = { speed = "${speed}", accel = 9.0, drag = 1.6, restitution = 0.0 } }
+
+[macros.Elite]
+doc = "A body of an upper rank, which a strike wounds."
+base = "Rank"
+with = { strike = { damage = 8, death = "flash" } }
 
 [macros.Rank1]
 doc = "A first-rank body: light and slow."
@@ -103,23 +111,23 @@ with = { hp = 30, mass = 2.4, speed = 3.0 }
 
 [macros.Rank5]
 doc = "A fifth-rank body: quick, and past a full loadout now and then."
-base = "Rank"
-with = { hp = 45, mass = 2.0, speed = 3.4 }
+base = "Elite"
+with = { hp = 80, mass = 2.0, speed = 3.4 }
 
 [macros.Rank6]
 doc = "A sixth-rank body."
-base = "Rank"
-with = { hp = 70, mass = 2.2, speed = 3.8 }
+base = "Elite"
+with = { hp = 160, mass = 2.2, speed = 3.8 }
 
 [macros.Rank7]
 doc = "A seventh-rank body."
-base = "Rank"
-with = { hp = 110, mass = 2.4, speed = 4.2 }
+base = "Elite"
+with = { hp = 320, mass = 2.4, speed = 4.2 }
 
 [macros.Rank8]
 doc = "An eighth-rank body: the quickest and the hardest to wear."
-base = "Rank"
-with = { hp = 170, mass = 2.6, speed = 4.6 }
+base = "Elite"
+with = { hp = 640, mass = 2.6, speed = 4.6 }
 
 # The strays, a hue to a rank: green motes, violet wisps, orange imps, bone golems,
 # then azure fiends, rose ogres, lime drakes and pale gold colossi
@@ -386,12 +394,13 @@ on_enter = [
 ]
 transitions = [{ trigger = "Tick", target = "Gate1" }]
 
-# The corners, clockwise from the top left
+# The corners, clockwise from the top left, each pylon flush in its corner so
+# that no body is held behind it
 [states]
-Gate1 = { macro = "Gate", n = 1, at = "top_left", x = 4, y = 1, next = "Gate2" }
-Gate2 = { macro = "Gate", n = 2, at = "top_right", x = -4, y = 1, next = "Gate3" }
-Gate3 = { macro = "Gate", n = 3, at = "bottom_right", x = -4, y = -1, next = "Gate4" }
-Gate4 = { macro = "Gate", n = 4, at = "bottom_left", x = 4, y = -1, next = "Play" }
+Gate1 = { macro = "Gate", n = 1, at = "top_left", x = 2, y = 1, next = "Gate2" }
+Gate2 = { macro = "Gate", n = 2, at = "top_right", x = -2, y = 1, next = "Gate3" }
+Gate3 = { macro = "Gate", n = 3, at = "bottom_right", x = -2, y = -1, next = "Gate4" }
+Gate4 = { macro = "Gate", n = 4, at = "bottom_left", x = 2, y = -1, next = "Play" }
 
 # Keys are the square's while it stands, Enter with them for the burst. The keys are
 # told a while in, so what ended the last game reads first, then what the shield's
@@ -515,14 +524,15 @@ transitions = [
 
 # Within a round each rank comes quicker and asks more kills: the trickle a fifth
 # quicker down to a stray a gateway every 2 s, a wave two fifths quicker down to
-# a body every 200 ms, the level's kills half as many again
+# a body every 600 ms, as fast as the largest leave a gateway without a jam, the
+# level's kills half as many again
 [states.RankUp]
 parent = "Root"
 on_enter = [
     { action = "MultiplyVar", payload = { name = "trickle_ms", delta = 4 } },
     { action = "DivideVar", payload = { name = "trickle_ms", delta = 5, min = 2000 } },
     { action = "MultiplyVar", payload = { name = "flood_ms", delta = 3 } },
-    { action = "DivideVar", payload = { name = "flood_ms", delta = 5, min = 200 } },
+    { action = "DivideVar", payload = { name = "flood_ms", delta = 5, min = 600 } },
     { action = "MultiplyVar", payload = { name = "need", delta = 3 } },
     { action = "DivideVar", payload = { name = "need", delta = 2 } },
 ]
@@ -537,7 +547,7 @@ on_enter = [
     { action = "MultiplyVar", payload = { name = "trickle_base", delta = 4 } },
     { action = "DivideVar", payload = { name = "trickle_base", delta = 5, min = 2000 } },
     { action = "MultiplyVar", payload = { name = "flood_base", delta = 3 } },
-    { action = "DivideVar", payload = { name = "flood_base", delta = 5, min = 200 } },
+    { action = "DivideVar", payload = { name = "flood_base", delta = 5, min = 600 } },
     { action = "MultiplyVar", payload = { name = "need_base", delta = 3 } },
     { action = "DivideVar", payload = { name = "need_base", delta = 2 } },
     { action = "CopyVar", payload = { name = "trickle_ms", source_var = "trickle_base" } },
