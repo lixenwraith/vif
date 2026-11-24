@@ -732,6 +732,10 @@ Docs · Libraries · Branches.
   whole calls it; the fuzz test's invariant fails one that does not.
 - `BeginBatch` returns the store's one batch, begun again: commit it before the
   next begins, and hold none across a call that may begin one.
+- A cell holds 31 and keeps whichever came first, so a world rebuilt by insertion
+  seats a full cell's first rows instead: what must hold cells alike carries the
+  placements held out (`WorldOrder.Unindexed`). `magic` fills one at a gateway
+  some 1,000 s in.
 - `PositionBatch.Commit` refuses a cell any entity holds, a Player one included,
   as `GlyphSystem.occupied` does for a line drifting in: an entity put on the
   index or taken off it, an effect's too, moves where glyph lines and nuggets
@@ -814,7 +818,11 @@ Docs · Libraries · Branches.
   its previous body, kept in a scratch test, on random inputs by
   `math.Float64bits`, negative zeros among them, before the headless digests are
   read: `v -= v*0` turns a negative zero positive, so a branch that skips a
-  subtraction is not one that subtracts nothing.
+  subtraction is not one that subtracts nothing. A system's pass is held the same
+  way: `git show HEAD:<file>` under a scratch tag with its types renamed, both
+  stepped over twin random worlds, every velocity compared by its bits. A pass
+  that visits pairs in another order keeps them only if each target still takes
+  its pushes and sums its sources in the old order (soft collision's scatter).
 - A term hoisted out of a float sum keeps the sum's bits only in the sum's own
   order, `(a+b)+c`: the Devourer's rebuild was rewritten against main's, tick by
   tick, on that rule; a table or an angle identity in its place moves cells.
@@ -836,11 +844,16 @@ Docs · Libraries · Branches.
   kind dropped from `cursorDefenders` takes no damage but still draws every aimed
   shot. A body nothing may hit is a container, as the Devourer's is and an `inert`
   pylon: a loadout shot `magic`'s gateway pylons down, which ended its spawns.
-- A cursor's pulse, ray and blast land on every member they cover, so they kill a
-  crowd as fast as it grows, and each kill boosts the shield half a second: a horde
-  those weapons can kill keeps its shield boosted for good. A row that takes a body
-  out of their reach reads to a player as weapons doing nothing, which `magic`'s
-  wave bodies did: cap the boost, or what pays it, instead.
+- A cursor's pulse, ray and blast land on every member they cover, so what they
+  take off a body does not fall as a crowd grows: the emitter alone at three
+  charges ends ten 30-point bodies a second. What presses a full loadout is a
+  body's hit points and speed against its walk, never its numbers, and a strike
+  that ends whatever it faces every 2 s outruns any rank: `magic`'s upper four
+  ranks hold 80 to 640 points and take a strike as a wound for that.
+- Each kill boosts a plain shield half a second, and a boosted shield takes no
+  touch, so a horde the weapons can kill never costs it: under a stepped shield
+  (`ShieldComponent.Step`) a kill earns none, which is what lets `magic` count
+  touches at all.
 - `TestSystemDomainProfiles` reads a system's file, not its guards: a shared
   system that touches `Boost`, `Energy` or another D-13 store fails it even behind
   `ResolveOwnedCursor`. What it wants of one it leaves where the store's owner
@@ -862,22 +875,29 @@ Docs · Libraries · Branches.
   second in two of a uniform radial wind at force 16 held `magic`'s lightest body
   six columns out, where it had touched every 4.5 s. The square's gust is short
   and fades with distance for that; measure a wind by a body's distance a tick.
-- A wind turned round a cell holds off as one blown out of it does: without pause
-  at force 120 it kept `magic`'s two lightest bodies circling for good, and half
-  the time at 90 a square whose three kinds aligned and never turned stood 20
-  minutes on three seeds of four, where 60 fell by 341 s. Read a whirl by the
-  degrees a body is carried before its first touch, and by when fixed lines fall:
-  a scratch test writes `SquareComponent.Lines` each tick, which only a turn
-  recomputes, and a dispatch tap on `EventGameResetRequest` marks the fall.
+- A wind turned round a cell holds off as one blown out of it does: at force 500
+  for 0.7 s of each 2 s, fading over 30 columns, 7 in 100 of `magic`'s lightest
+  bodies reached the shield. Read a whirl by the degrees a body is carried from
+  its gateway to the shield, the share carried 45 to 135, the share that arrives
+  and when fixed lines fall: a scratch test writes `SquareComponent.Lines` each
+  tick, which only a turn recomputes, and `App.Position().Run` moving marks the
+  fall. A wind's pull is its force over a body's mass, so ranks carried alike need
+  masses that stand close (`magic`'s run 1.6 to 2.6).
 - A gust's throw does not scale with its force: drag above the cruise speed eats
   the rest, so ten times the force threw `magic`'s bodies three to four times as
   far, and a body thrown onto the map's edge bounces back in at speed unless its
   prototype's `restitution` is 0. A gust that throws well needs a cooldown near
   the time its lightest body takes to walk back, or it is a wall.
 - Species nothing kills gather without bound: with no weapon wearing them,
-  `magic`'s wave bodies passed 700 in nine minutes and the tick grew with their
-  square. A cap is
-  the scenario's, a `StatusIntCompare` on `behavior.count` that holds the gateways.
+  `magic`'s wave bodies passed 700 in nine minutes. A cap is the scenario's, a
+  `StatusIntCompare` on `behavior.count` that holds the gateways, and bodies
+  that stand without dying spend it: 291 held in one corner stopped every
+  gateway, and the game with them.
+- Bodies sent faster than they leave jam at their gateway: a soft collision opens
+  a kinetic-immunity window in which a body does not steer, so a pile kicks itself
+  along the map's edge at 40 cells a second and walks nowhere. `magic`'s largest
+  leave a gateway cleanly one each 600 ms and jam at 200. A pylon stood off its
+  corner holds bodies in the pocket behind it: stand it flush.
 - What special fire spends comes off the overheat first, so a scenario that keeps
   a full overheat for a key must give the spend back, or one dust blast leaves
   it a point short of full.
@@ -974,8 +994,8 @@ Docs · Libraries · Branches.
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
 - A game left running in tmux plays on between captures: `magic` unattended falls
-  in half a minute and starts over, so a clock near zero after a change is that,
-  not the change. `:emit DeathWaveRequest {entity = 2}` runs its death wave, its
+  in two and a half minutes and starts over, so a clock near zero after a change
+  is that, not the change. `:emit DeathWaveRequest {entity = 2}` runs its death wave, its
   cursor being entity 2.
 - `tmux kill-server` returns before the server is gone: a `new-session` sent at
   once can land on the dying one and take the next command down with "server
@@ -1010,7 +1030,16 @@ Docs · Libraries · Branches.
   policy that reads `Resources.Scenario.Var` and the stores in `RunSafe` and presses
   keys through `a.inputMachine.Process`. Auto-fire is the router's, so the probe
   injects `input.IntentFireMain` every five ticks, and a gateway sends one body a
-  tick at most.
+  tick at most. Read a policy that sets its lines once and leaves, and one that
+  plays: `magic`'s turns the attack to the side holding the most bodies by a
+  breadth-first search over the turns, a few moves deep. Read them on the smallest
+  map and a large one, since a body's walk is the weapons' time over it, and
+  where the bodies stand (a count by block of 8 by 4 cells) before believing a
+  game that never ends.
+- The 3 by 3 square's row and column turns reach the even permutations of its
+  places alone, 181,440 states: from 2 7 6 over 9 5 1 over 4 3 8 neither 1 2 3
+  over 4 5 6 over 7 8 9 nor its reverse can be reached, and from the mirror image
+  both are four turns off. A layout a scenario must reach is checked by that search.
 - An effect a second long is caught in a terminal by capturing the pane on a loop
   (`tmux capture-pane -p -e` every 100 ms to numbered files) and rendering the
   frames that show it. A flat tint is one SGR run a row, so its frames are found
@@ -1695,6 +1724,9 @@ Docs · Libraries · Branches.
 
 ## Branches
 
+- `git checkout <file>` to take back one line takes the file's whole uncommitted
+  work with it: undo a line with an edit, and commit a checkpoint before a long
+  tuning run.
 - A session pushes only its own branch. A rebase its owner asked for goes up with
   `git push --force-with-lease=<branch>:<the head its PR shows>`, which is taken;
   a force push with no lease was refused, so a branch whose PR merged starts again

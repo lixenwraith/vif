@@ -288,6 +288,46 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 }
 
+// TestAnOrderSeatsAFullCellAsItsWorldDid: a full cell holds whichever came first, so
+// a world written in store order holds others than the world its rows were read
+// from; that world's order, installed, leaves the cell its occupants in its order.
+func TestAnOrderSeatsAFullCellAsItsWorldDid(t *testing.T) {
+	run, twin := NewWorld(), NewWorld()
+	NewGameContextWithClock(run, 40, 24, NewManualClock())
+	NewGameContextWithClock(twin, 40, 24, NewManualClock())
+	cell, aside := component.PositionComponent{X: 3, Y: 4}, component.PositionComponent{X: 9, Y: 4}
+	const late = 6
+	for i := range parameter.MaxEntitiesPerCell + late {
+		e := run.CreateEntity(core.DomainShared)
+		if twin.CreateEntity(core.DomainShared) != e {
+			t.Fatal("two new worlds number their entities apart")
+		}
+		at := cell
+		if i < late { // the store's first rows reach the cell once it is full
+			at = aside
+		}
+		run.Positions.SetPosition(e, at)
+	}
+	for _, e := range run.Positions.entities[:late] {
+		run.Positions.Move(e, cell)
+	}
+	for _, e := range run.Positions.entities {
+		twin.Positions.SetPosition(e, cell)
+	}
+	held := func(w *World) []core.Entity {
+		return slices.Clone(w.Positions.Index.EntitiesAt(position.Point{X: cell.X, Y: cell.Y}, position.ScopeAll))
+	}
+	if slices.Equal(held(run), held(twin)) {
+		t.Fatal("a world written in store order holds a full cell as the one that filled it did")
+	}
+	if err := twin.InstallOrder(run.CaptureOrder()); err != nil {
+		t.Fatalf("the order of a world holding a full cell: %v", err)
+	}
+	if got, want := held(twin), held(run); !slices.Equal(got, want) {
+		t.Fatalf("the cell holds %v under its world's order, want %v", got, want)
+	}
+}
+
 // TestABatchPlacesAllOrNone: a batch places every addition or none of them: a cell
 // its scope finds held refuses it, as do two additions on one cell, on the map or
 // off it; a shared commit passes over a private occupant, and a forced one over any.

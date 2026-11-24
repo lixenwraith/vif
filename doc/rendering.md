@@ -415,7 +415,8 @@ for 450.
 The square renderer draws all a magic square shows, over the shield and every
 field so no blend reaches its blocks: a boost's glow on the rim, a turning wind's
 streaks on the outer orbit, a strike's flash over the part it landed in and its
-orb, then the blocks, the selection and the legend.
+orb, then the blocks, lit near white as their edge fires, the selection and the
+legend.
 
 The tracer renderer is intentionally background-only: every sampled trail
 cell writes no rune/foreground, so typeable text remains readable as a tracer

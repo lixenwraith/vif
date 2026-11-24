@@ -233,9 +233,9 @@ func (s *EnergySystem) Update() {
 
 		// Evaluate shield activation state for this cursor alone
 		if shieldComp, ok := s.world.Components.Shield.GetPtr(e); ok {
-			if energy != 0 && !shieldComp.Active {
+			if up := energy != 0 || shieldComp.Raised; up && !shieldComp.Active {
 				s.world.PushLocal(event.EventShieldActivate, &event.ShieldActivatePayload{Entity: e})
-			} else if energy == 0 && shieldComp.Active {
+			} else if !up && shieldComp.Active {
 				s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: e})
 			}
 		}
@@ -277,11 +277,11 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	var crossedZero bool
 	switch deltaType {
 	case component.EnergyDeltaReward:
-		s.statRewardCount.Add(1)
-		// A stepped shield holds its steps of energy and no more
+		// A stepped shield's energy only runs down
 		if shield, ok := s.world.Components.Shield.GetComponent(cursor); ok && shield.Step > 0 {
-			absDelta = min(absDelta, max(shield.Step*parameter.ShieldSteps-absI64(currentEnergy), 0))
+			return
 		}
+		s.statRewardCount.Add(1)
 		// Absolute value increase, can't cross zero
 		if currentEnergy < 0 {
 			newEnergy = currentEnergy - absDelta
@@ -292,6 +292,11 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	case component.EnergyDeltaPenalty:
 		// Boost protects from penalties
 		if boostComp, ok := s.world.Components.Boost.GetPtr(cursor); ok && boostComp.Active {
+			s.statPenaltyRejects.Add(1)
+			return
+		}
+		// A shield raised over no energy has none to lose, and falls no second time
+		if shield, ok := s.world.Components.Shield.GetComponent(cursor); ok && shield.Raised && currentEnergy == 0 {
 			s.statPenaltyRejects.Add(1)
 			return
 		}

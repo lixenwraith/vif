@@ -27,12 +27,12 @@ const (
 
 	// SquareWhirlForce is the wind a whirl turns round the square for
 	// SquareWhirlDuration of each SquareWhirlCooldown, fading to nothing
-	// SquareWhirlReach columns past the shield: it carries a body round the shield
-	// as it walks in, a light one further than a heavy one
-	SquareWhirlForce    = 120.0
-	SquareWhirlReach    = 60.0
-	SquareWhirlDuration = 1500 * time.Millisecond
-	SquareWhirlCooldown = 3 * time.Second
+	// SquareWhirlReach columns past the shield: a burst that carries a body walking
+	// in about a quarter round the shield, to where the next gateway's come in
+	SquareWhirlForce    = 300.0
+	SquareWhirlReach    = 40.0
+	SquareWhirlDuration = 500 * time.Millisecond
+	SquareWhirlCooldown = 2 * time.Second
 
 	// A square's magic meter charges a second a second, and SquareMagicKill for each
 	// kill its cursor makes, up to SquareMagicFull, which a magic state, every row
@@ -41,10 +41,6 @@ const (
 	SquareMagicFull = 40 * time.Second
 	SquareMagicKill = time.Second
 	SquareMagicDust = 36
-
-	// SquareBoostCap is the most boost the shield over a square banks: a strike's
-	// cooldown, so a strike that kills many covers the wait for the next and no more
-	SquareBoostCap = SquareStrikeCooldown
 
 	// SquareShieldMargin is the columns the shield over the square reaches past its
 	// corners, which keeps its cursor's orbs clear of the legend, and SquareOrbGap

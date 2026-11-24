@@ -650,6 +650,8 @@ const (
 	EventSquareAligned
 	// EventSquareHit (SquareHitPayload) [bus] carries a body striking a square's blocks under no shield, from the owner of the cursor it cost
 	EventSquareHit
+	// EventSquareShieldFell (SquareHitPayload) [bus] carries the shield over a square falling with its cursor's energy, from that cursor's owner
+	EventSquareShieldFell
 
 	// --- Genetic ---
 

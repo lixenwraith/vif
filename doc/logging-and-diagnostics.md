@@ -934,7 +934,8 @@ tracking, timed effects, the player domain's streams, the cells its input has in
 flight, each system's own state (`engine.LocalStateSaver`), the corpus position,
 the event tallies, every status cell but this instance's own, and the order the run holds both domains'
 entities in by store and by cell (`engine.WorldOrder`), which systems visit them
-in and a re-insertion would not keep. The opening writes it over a muted
+in and a re-insertion would not keep, with the placements a full cell held out,
+which a re-insertion would seat in place of that cell's first comers. The opening writes it over a muted
 headless twin of the boot as a replay does, and the run adopts the twin's result,
 itself, before the journal attaches; only the transport, audio and music keep
 their own state. A start is refused while a new game is starting, between a

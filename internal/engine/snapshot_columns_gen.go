@@ -1310,9 +1310,6 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 		dst = appendInt(dst, rows[i].Value.DrainElapsed)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.BoostCap)
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Step)
 	}
 	for i := range rows {
@@ -1336,6 +1333,9 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Stemless)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Raised)
+	}
 	return dst
 }
 
@@ -1348,9 +1348,6 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	readEntityColumn(rows, r)
 	for i := range rows {
 		readInt(&rows[i].Value.DrainElapsed, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.BoostCap, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Step, r)
@@ -1375,6 +1372,9 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Stemless, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Raised, r)
 	}
 	return rows
 }

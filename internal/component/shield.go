@@ -24,12 +24,9 @@ type ShieldComponent struct {
 	// DrainElapsed is how long a player's shield has been up since it rose or last drained
 	DrainElapsed time.Duration
 
-	// BoostCap is the most boost the shield's cursor banks, zero for no cap
-	BoostCap time.Duration
-
 	// Step is the energy a step of visual.ShieldRamp spans: a shield with one is
-	// colored by what it holds, keeps it with no passive drain, and holds no more
-	// than parameter.ShieldSteps of them; zero is main's
+	// colored by what it holds, which only runs down, by no passive drain and
+	// with no reward, and its cursor's kills earn no boost; zero is main's
 	Step int64
 
 	Radius float64
@@ -40,4 +37,8 @@ type ShieldComponent struct {
 
 	// Stemless draws its cursor's rays from their orbs out, clear of what it covers
 	Stemless bool
+
+	// Raised stands the shield with no energy to hold it, as a magic square's
+	// boosting kind does while its boost holds
+	Raised bool
 }
