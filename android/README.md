@@ -31,11 +31,15 @@ make android-install     # adb install -r the APK of the device's ABI, adb from 
 ```
 
 `make android` reports the JDK and SDK pieces it lacks and installs none of them.
-`make android-toolchain` offers the system's Go and JDK packages and installs each
-on a yes; into the SDK it unpacks Google's command-line tools when it has no
-`sdkmanager` (the build `toolchain.sh` pins, checked against its published
-SHA-256), then has `sdkmanager` install the platform, NDK and `platform-tools`,
-asking to accept their license; it records `sdk.dir` when nothing named the SDK.
+`make android-toolchain` offers Go as every target that compiles does, and the
+system's JDK package, installing it on a yes; then the Android CLI, run with
+`--no-metrics`, installs the platform, NDK and `platform-tools` into the SDK
+(`android sdk install`) and records their license, under the terms it shows on its
+first run. With no `android` on `PATH`, in `~/.local/bin` or in the SDK's
+command-line tools (22.0 and newer ship it), it first installs the CLI's launcher
+into `~/.local/bin`, as Google's installer does; the launcher keeps the CLI in
+`~/.android`, and `android update` updates it. It records `sdk.dir` when nothing
+named the SDK.
 Google ships the SDK's tools for Linux, macOS and Windows only; on FreeBSD, build
 the APK on one of those.
 

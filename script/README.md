@@ -55,3 +55,11 @@ Policy, the share link is the site's, and solo play asks nothing of a network. I
 needs `playwright` (1.63.0 is the version it is held to) and that version's
 Chromium (`npx playwright install --no-shell chromium`), and reaches no network:
 the browser's one proxy is the script's own, which refuses everything.
+
+## Go
+
+`toolchain.sh GO DIST` is what `make`'s `check-go` runs when the Go command `GO`
+names is missing: it shows Go's install by hand and offers the system's package or
+Go's latest release from go.dev, checked against the SHA-256 go.dev lists and
+unpacked as `DIST` (`GO_DIST`, `.go/` unless set), which `make` puts last on its
+`PATH`, so an installed Go takes over. A stdin that answers nothing stops it.
