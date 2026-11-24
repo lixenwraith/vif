@@ -377,15 +377,13 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 
 // PlayerWorldState is this instance's player domain, by store, beside its placements
 // and allocator counters: what a journal's opening carries so its replay plays on as
-// the run's own participant. Unindexed names the placements a full cell held out,
-// which a re-insertion would otherwise take in.
+// the run's own participant.
 type PlayerWorldState struct {
 	NextEntity uint64 `json:"next_entity"`
 	Created    int64  `json:"created"`
 	Destroyed  int64  `json:"destroyed"`
 
 	Positions   []StoreEntry[component.PositionComponent]    `json:"positions,omitempty"`
-	Unindexed   []core.Entity                                `json:"unindexed,omitempty"`
 	Glyph       []StoreEntry[component.GlyphComponent]       `json:"glyph,omitempty"`
 	Sigil       []StoreEntry[component.SigilComponent]       `json:"sigil,omitempty"`
 	Nugget      []StoreEntry[component.NuggetComponent]      `json:"nugget,omitempty"`
@@ -423,7 +421,7 @@ func (w *World) CapturePlayerWorld() PlayerWorldState {
 		Created:    w.createdCount[core.DomainPlayer].Load(),
 		Destroyed:  w.destroyedCount[core.DomainPlayer].Load(),
 	}
-	s.Positions, s.Unindexed = w.Positions.capturePlayer()
+	s.Positions = captureRows(w.Positions.dense, w.Positions.entities, core.DomainPlayer)
 	s.Glyph = captureRows(w.Components.Glyph.dense, w.Components.Glyph.entities, core.DomainPlayer)
 	s.Sigil = captureRows(w.Components.Sigil.dense, w.Components.Sigil.entities, core.DomainPlayer)
 	s.Nugget = captureRows(w.Components.Nugget.dense, w.Components.Nugget.entities, core.DomainPlayer)
@@ -460,7 +458,7 @@ func (w *World) CapturePlayerWorld() PlayerWorldState {
 // Caller MUST hold updateMutex.
 func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 	w.DestroyDomainEntities(core.DomainPlayer)
-	w.Positions.installPlayer(s.Positions, s.Unindexed)
+	w.Positions.installPlayer(s.Positions)
 	installPlayerRows(w.Components.Glyph, s.Glyph)
 	installPlayerRows(w.Components.Sigil, s.Sigil)
 	installPlayerRows(w.Components.Nugget, s.Nugget)
@@ -494,12 +492,13 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 }
 
 // WorldOrder is the order a world holds its entities in, by store and by cell, where
-// two or more give it one. Systems visit them in it, and a world rebuilt by insertion
-// holds another, so a journal's opening carries it: the run it opens on, and every
-// replay of it, then play on in the run's own order.
+// two or more give it one, and the placements no cell holds. Systems visit them in
+// it, and a world rebuilt by insertion holds another, so a journal's opening carries
+// it: the run it opens on, and every replay of it, then play on in the run's own.
 type WorldOrder struct {
 	Positions    []core.Entity                     `json:"positions,omitempty"`
 	Cells        []position.CellOrder[core.Entity] `json:"cells,omitempty"`
+	Unindexed    []core.Entity                     `json:"unindexed,omitempty"`
 	Glyph        []core.Entity                     `json:"glyph,omitempty"`
 	Sigil        []core.Entity                     `json:"sigil,omitempty"`
 	Nugget       []core.Entity                     `json:"nugget,omitempty"`
@@ -565,7 +564,7 @@ type WorldOrder struct {
 //
 // Caller MUST hold updateMutex.
 func (w *World) CaptureOrder() WorldOrder {
-	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.cellOrder()}
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.cellOrder(), Unindexed: w.Positions.unindexed()}
 	o.Glyph = orderOf(w.Components.Glyph.entities)
 	o.Sigil = orderOf(w.Components.Sigil.entities)
 	o.Nugget = orderOf(w.Components.Nugget.entities)
@@ -634,7 +633,7 @@ func (w *World) CaptureOrder() WorldOrder {
 //
 // Caller MUST hold updateMutex.
 func (w *World) InstallOrder(o WorldOrder) error {
-	if err := w.Positions.reorder(o.Positions, o.Cells); err != nil {
+	if err := w.Positions.reorder(o.Positions, o.Cells, o.Unindexed); err != nil {
 		return fmt.Errorf("positions: %w", err)
 	}
 	if err := reorderStore(w.Components.Glyph, o.Glyph); err != nil {
