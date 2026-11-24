@@ -35,7 +35,7 @@ type SquareWind struct {
 }
 
 // SquareKindSpec is what a line of one kind fires as its cursor's each time its
-// cooldown runs out: a family on what stands in the third of the map the line faces,
+// cooldown runs out: a family on what stands in the part of the map the line faces,
 // a boost of the shield, a wind about the square, the square's magic shed as dust
 type SquareKindSpec struct {
 	Name     string
@@ -175,15 +175,25 @@ func (s *SquareComponent) Orbs(l int, aspect vmath.Aspect) (cells [2]vmath.Point
 	}
 }
 
-// Faces reports whether a cell lies in line l's third of the map, cut by the edges
-// of the square's middle block run on across it: the right column faces every cell
-// right of the middle column, the middle row every cell level with it
-func (s *SquareComponent) Faces(l, x, y int) bool {
+// Faces is the test of whether a cell lies in line l's part of the map: for a side
+// line its third, past the edge of the middle block run on across the map, and for
+// the middle row or column the ribbon of rows or columns its shield draws across
+func (s *SquareComponent) Faces(l int, aspect vmath.Aspect) func(x, y int) bool {
 	mx, my := s.Place(SquareBlocks / 2)
-	if l < SquareSide {
-		return third(y, my, s.Height) == l
+	cx, cy := s.Center()
+	reach := s.ShieldRadius(aspect) * parameter.ShieldFeatherEndRatio
+	switch i, column := l%SquareSide, l >= SquareSide; {
+	case i == 1 && column:
+		half := int(reach)
+		return func(x, _ int) bool { return x >= cx-half && x <= cx+half }
+	case i == 1:
+		half := int(aspect.FromCircular(reach))
+		return func(_, y int) bool { return y >= cy-half && y <= cy+half }
+	case column:
+		return func(x, _ int) bool { return third(x, mx, s.Width) == i }
+	default:
+		return func(_, y int) bool { return third(y, my, s.Height) == i }
 	}
-	return third(x, mx, s.Width) == l-SquareSide
 }
 
 // third is 0 for v before [start, start+size), 1 inside it and 2 past it

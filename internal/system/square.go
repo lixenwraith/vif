@@ -346,7 +346,7 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 }
 
 // fire runs each part of a kind's effect as its cursor's: its family on what stands
-// in the third line faces, as many boost rewards as its hold is of a kill's, its
+// in the part line faces, as many boost rewards as its hold is of a kill's, its
 // wind about the square, and the square's magic shed as dust
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
@@ -370,13 +370,13 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }
 
-// strike lands a family as cursor's on every body with a member in the third of the
+// strike lands a family as cursor's on every body with a member in the part of the
 // map line faces, and reports whether any stood there
 func (s *SquareSystem) strike(sq *component.SquareComponent, cursor core.Entity, attack component.CombatAttackType, line int) bool {
 	if cursor == 0 {
 		return false
 	}
-	bodies := FindTargetsIn(s.world, func(x, y int) bool { return sq.Faces(line, x, y) }, position.ScopeShared, cursor)
+	bodies := FindTargetsIn(s.world, sq.Faces(line, s.world.Resources.Config.CellAspect), position.ScopeShared, cursor)
 	for _, g := range bodies {
 		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,
