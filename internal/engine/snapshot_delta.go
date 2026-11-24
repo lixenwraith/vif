@@ -326,35 +326,12 @@ func installPlayerRows[T any](s *Store[T], entries []StoreEntry[T]) {
 	}
 }
 
-// capturePlayer reads the player placements in dense order, and the ones the
-// spatial index holds out of their cell.
-func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], []core.Entity) {
-	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
-	var out []core.Entity
+// installPlayer places captured player entities in capture order.
+func (p *Position) installPlayer(placed []StoreEntry[component.PositionComponent]) {
 	for _, en := range placed {
-		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value) {
-			out = append(out, en.Entity)
+		if en.Entity.Domain() == core.DomainPlayer {
+			p.SetPosition(en.Entity, en.Value)
 		}
-	}
-	return placed, out
-}
-
-// installPlayer places captured player entities in capture order, holding out of
-// the spatial index the ones out names, as the capture's cells did.
-func (p *Position) installPlayer(placed []StoreEntry[component.PositionComponent], out []core.Entity) {
-	held := make(map[core.Entity]struct{}, len(out))
-	for _, e := range out {
-		held[e] = struct{}{}
-	}
-	for _, en := range placed {
-		if en.Entity.Domain() != core.DomainPlayer {
-			continue
-		}
-		if _, ok := held[en.Entity]; ok && !p.HasPosition(en.Entity) {
-			p.insert(en.Entity, en.Value)
-			continue
-		}
-		p.SetPosition(en.Entity, en.Value)
 	}
 }
 
@@ -410,17 +387,46 @@ func reorderRows[T any](index *sparseIndex, dense []T, entities, order []core.En
 	return nil
 }
 
-// reorder puts the placements in order and each cell's occupants in its own.
-func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.Entity]) error {
+// reorder puts the placements in order, seats in each cell the ones the order's
+// world held there, a full cell holding whichever came first and out naming the
+// rest, and puts each cell's occupants in their own order.
+func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.Entity], out []core.Entity) error {
 	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
 	p.readWalls()
+	held := make(map[core.Entity]struct{}, len(out))
+	for _, e := range out {
+		i, ok := p.slots.get(e)
+		if !ok {
+			return errOrderMismatch
+		}
+		held[e] = struct{}{}
+		p.Index.RemoveEntityAt(e, p.dense[i])
+		p.wallMoved(i, p.dense[i])
+	}
+	for i, e := range p.entities {
+		if _, ok := held[e]; !ok && !p.Index.Holds(e, EntityClass(e), p.dense[i]) {
+			p.Index.Set(e, EntityClass(e), p.dense[i])
+			p.wallMoved(int32(i), p.dense[i])
+		}
+	}
 	return p.Index.Reorder(cells, EntityClass)
 }
 
 // cellOrder reads the occupants of every cell holding two or more.
 func (p *Position) cellOrder() []position.CellOrder[core.Entity] { return p.Index.Order() }
+
+// unindexed reads the placements no cell holds: off the map, or held out of a full
+// cell.
+func (p *Position) unindexed() (out []core.Entity) {
+	for i, e := range p.entities {
+		if !p.Index.Holds(e, EntityClass(e), p.dense[i]) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
 
 // WorldReconcile is one world brought to another's shared half in place, store by
 // store, with no capture of either: the comparison first, reading both and writing

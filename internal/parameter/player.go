@@ -28,8 +28,7 @@ const (
 	// ShieldPassiveDrainInterval is the interval for passive shield drain
 	ShieldPassiveDrainInterval = 1 * time.Second
 
-	// ShieldSteps is how many steps of energy a stepped shield shows and holds: a
-	// color to each, and no reward past the last
+	// ShieldSteps is how many steps of energy a stepped shield shows, a color to each
 	ShieldSteps = 7
 
 	// ShieldBoostRotationDuration is the animation speed at which the boost indicator rotates once around the shield

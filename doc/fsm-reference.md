@@ -812,10 +812,11 @@ groups, block_width, block_height, shield_step }` lays it centered on the cell,
 attack, whirl and defense; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
-`EventSquareAligned { kind, line }` says a line, rows 0 to 2 then columns 3 to 5,
-fired its kind (0 attack, 1 whirl, 2 defense), once a cooldown while it holds, and
-`EventSquareHit { entity }` that a body struck the blocks with that cursor's shield
-down.
+`EventSquareAligned { kind, line }` says an edge, 0 the top row, 1 the bottom, 2
+the left column and 3 the right, fired its kind (0 attack, 1 whirl, 2 defense),
+once a cooldown while it holds, `EventSquareShieldFell { entity }` that the
+cursor's shield fell with its energy, and `EventSquareHit { entity }` that a body
+struck the blocks with that shield down.
 
 A gateway stands on an anchor, as a pylon's header; `EventPylonSpawnRequest {
 inert = true }` stands a pylon no weapon aims at or wears. A second

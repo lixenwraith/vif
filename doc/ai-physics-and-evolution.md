@@ -237,11 +237,15 @@ never reads drain positions. A data species with mass takes the swarm's and
 quasar's part in both, across an ellipse half its footprint; one without takes
 neither. A shared target's impulse draws from a stream
 reseeded from the tick and the pair (D-8); a player-domain target's from this
-instance's player stream. A pair is tested for overlap on the tick's cached cells
-before any store is read, since a crowd's pairs number its square: in `magic` at
-160 by 50 with nothing killing a wave's bodies, a tick over
-705 bodies took 8.5 ms before that and 3.1 ms after, the bodies' course the same.
-`magic` also holds its gateways at 300 bodies, where a tick takes 1 ms.
+instance's player stream. Both passes read the tick's cached cells and no store,
+filed by map block, 4 cells by 2, once 16 bodies stand (`indexCaches`): a source,
+in species and cache order, meets only the bodies in the blocks its reach crosses,
+so a crowd costs its neighborhoods rather than its square, and each target still
+takes its pushes and sums its flock in the order a whole scan gave them, bit for
+bit. In `magic` at 140 by 50 with 300 bodies standing unkilled, the profiler's
+`sys soft_collision` read 453 µs a tick before and 111 after, the tick 956 and
+593; what is left is a wave's pile at its gateway, 67 bodies in one block. An
+index a species, read once for each source and target species, read 396.
 
 ## 6. Numeric model and determinism
 

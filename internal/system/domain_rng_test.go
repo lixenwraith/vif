@@ -113,10 +113,17 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	player := knockTarget(w, core.DomainPlayer, 10, 10)
 	shared := knockTarget(w, core.DomainShared, 14, 10)
 
+	// push lands source's collision, from a cell, on target as the system's pass does
+	push := func(s *SoftCollisionSystem, w *engine.World, source core.Entity, x, y int, target core.Entity) {
+		at, _ := w.Positions.GetPosition(target)
+		tgt := collisionEntry{entity: target, x: at.X, y: at.Y}
+		tgt.kinetic, _ = w.Components.Kinetic.GetPtr(target)
+		tgt.combat, _ = w.Components.Combat.GetPtr(target)
+		s.tryApplyCollision(&collisionEntry{entity: source, x: x, y: y}, &tgt, rule)
+	}
 	beforePlayer := s.rngPlayer.State()
-	hits := s.statCollisions.Load()
-	s.tryApplyCollision(source, 11, 10, player, rule)
-	if s.statCollisions.Load() == hits {
+	push(s, w, source, 11, 10, player)
+	if s.collisions == 0 {
 		t.Fatal("player impulse did not land; the source is outside the collision ellipse")
 	}
 	if s.rngPlayer.State() == beforePlayer {
@@ -124,7 +131,7 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	}
 
 	beforePlayer = s.rngPlayer.State()
-	s.tryApplyCollision(source, 15, 10, shared, rule)
+	push(s, w, source, 15, 10, shared)
 	first, _ := w.Components.Kinetic.GetComponent(shared)
 	if s.rngPlayer.State() != beforePlayer {
 		t.Fatal("shared impulse advanced the player stream")
@@ -144,8 +151,8 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	if source2 != source || shared2 != shared {
 		t.Fatalf("shared identity differs between instances: %d/%d", source2, shared2)
 	}
-	s2.tryApplyCollision(source2, 15, 10, doomed, rule)
-	s2.tryApplyCollision(source2, 15, 10, shared2, rule)
+	push(s2, w2, source2, 15, 10, doomed)
+	push(s2, w2, source2, 15, 10, shared2)
 	if got, _ := w2.Components.Kinetic.GetComponent(shared2); got != first {
 		t.Fatalf("one extra collision moved the pair's impulse: %v here, %v there",
 			first.Kinetic, got.Kinetic)

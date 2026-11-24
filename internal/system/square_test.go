@@ -15,15 +15,15 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// newSquare lays the Lo Shu square in the middle of an 80 by 40 world, a cursor
-// standing on its middle cell
+// newSquare lays the Lo Shu square, 6 7 2 over 1 5 9 over 8 3 4, in the middle of an
+// 80 by 40 world, a cursor standing on its middle cell
 func newSquare(t *testing.T) (*engine.World, *SquareSystem, *component.SquareComponent) {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
 	s := ready(NewSquareSystem(w)).(*SquareSystem)
 	s.HandleEvent(event.GameEvent{Type: event.EventSquareSpawnRequest, Payload: &event.SquareSpawnRequestPayload{
-		X: 40, Y: 18, Layout: "276951438", Groups: []string{"213", "654", "879"},
+		X: 40, Y: 18, Layout: "672159834", Groups: []string{"213", "654", "879"}, ShieldStep: 200,
 	}})
 	ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{X: 40, Y: 18, Control: uint8(component.ControlLocal)}})
@@ -82,23 +82,23 @@ func standSwarm(w *engine.World, x, y int) core.Entity {
 	return header
 }
 
-// TestATurnTurnsTheSelectedBlocksLineAPlace: 951 turned right is 195, the selection
+// TestATurnTurnsTheSelectedBlocksLineAPlace: 159 turned right is 915, the selection
 // follows its block into the column it turns next, and a d s f turn as h j k l do
 func TestATurnTurnsTheSelectedBlocksLineAPlace(t *testing.T) {
 	for _, keys := range [2][4]string{{"h", "j", "k", "l"}, {"a", "d", "s", "f"}} {
 		left, down, up, right := keys[0], keys[1], keys[2], keys[3]
 		_, s, sq := newSquare(t)
 		pressSquare(s, "5", right)
-		if got := squareDigits(sq); got != "276195438" {
-			t.Fatalf("5 turned right by %s: %s, want 276195438", right, got)
+		if got := squareDigits(sq); got != "672915834" {
+			t.Fatalf("5 turned right by %s: %s, want 672915834", right, got)
 		}
 		pressSquare(s, down)
-		if got := squareDigits(sq); got != "278196435" {
-			t.Fatalf("then turned down by %s: %s, want 278196435", down, got)
+		if got := squareDigits(sq); got != "674912835" {
+			t.Fatalf("then turned down by %s: %s, want 674912835", down, got)
 		}
 		pressSquare(s, up, left)
-		if got := squareDigits(sq); got != "276951438" {
-			t.Fatalf("then back up by %s and left by %s: %s, want 276951438", up, left, got)
+		if got := squareDigits(sq); got != "672159834" {
+			t.Fatalf("then back up by %s and left by %s: %s, want 672159834", up, left, got)
 		}
 	}
 }
@@ -113,128 +113,141 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 	return kinds
 }
 
-// TestALineFiresItsKindAgainEachCooldownWhileItHolds: 1 turned right and 3 left
-// stand the kinds down the columns, each firing at once and again as its cooldown
-// runs out, a turn away and back inside it firing nothing. Each fire of the defense
-// rewards its cursor's boost as many times as its hold is of a kill's and blows one
-// gust out from the square's middle, and each of the whirl turns one wind round it.
-func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
-	w, s, sq := newSquare(t)
-	cursor := w.Resources.Player.Slot(0)
-	pressSquare(s, "1", "l", "3", "h")
-	down := []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareWhirl}
-	events := slices.Clone(w.Resources.Event.Queue.Consume())
-	if got := squareFired(events); !slices.Equal(got, down) {
-		t.Fatalf("fired %v, want %v down the columns", got, down)
-	}
-	rewards, gusts, whirls := 0, 0, 0
-	cx, cy := sq.Center()
-	for _, ev := range events {
-		if p, ok := ev.Payload.(*event.BoostRewardPayload); ok && p.Entity == cursor {
-			rewards++
+// TestAnEdgeFiresItsKindAgainEachCooldownWhileItHolds: with the kinds down the
+// columns the two on the edges fire at once and again as each cooldown runs out, a
+// turn away and back inside it firing nothing, and the middle column's never. A
+// defense's fire boosts its cursor for its hold and blows one gust out from the
+// middle; a whirl's turns one wind round it.
+func TestAnEdgeFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
+	for _, c := range []struct {
+		keys  []string
+		edges []component.SquareKind // the left column's, then the right's
+	}{
+		{[]string{"5", "h", "3", "l"}, []component.SquareKind{component.SquareWhirl, component.SquareAttack}},
+		{[]string{"7", "l", "3", "h"}, []component.SquareKind{component.SquareAttack, component.SquareDefense}},
+	} {
+		w, s, sq := newSquare(t)
+		cursor := w.Resources.Player.Slot(0)
+		pressSquare(s, c.keys...)
+		events := slices.Clone(w.Resources.Event.Queue.Consume())
+		if got := squareFired(events); !slices.Equal(got, c.edges) {
+			t.Fatalf("%v fired %v, want the edges' %v", c.keys, got, c.edges)
 		}
-		if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy {
-			switch {
-			case p.Force == parameter.SquareWindForce && p.Direction == 0:
-				gusts++
-			case p.Force == parameter.SquareWhirlForce && p.Direction == math.Pi/2 && p.Duration == parameter.SquareWhirlDuration:
-				whirls++
+		boosts, gusts, whirls := 0, 0, 0
+		cx, cy := sq.Center()
+		for _, ev := range events {
+			if p, ok := ev.Payload.(*event.BoostActivatePayload); ok && p.Entity == cursor && p.Duration == parameter.SquareBoostDuration {
+				boosts++
+			}
+			if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy {
+				switch {
+				case p.Force == parameter.SquareWindForce && p.Direction == 0:
+					gusts++
+				case p.Force == parameter.SquareWhirlForce && p.Direction == math.Pi/2 && p.Duration == parameter.SquareWhirlDuration:
+					whirls++
+				}
 			}
 		}
-	}
-	if gusts != 1 || whirls != 1 {
-		t.Fatalf("the defense blew %d gusts out from the square's middle and the whirl turned %d winds round it, want one each", gusts, whirls)
-	}
-	if want := int(parameter.SquareBoostDuration / parameter.BoostBaseDuration); rewards != want {
-		t.Fatalf("the defense rewarded its cursor's boost %d times, want %d", rewards, want)
-	}
-	pressSquare(s, "l", "h")
-	if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {
-		t.Fatalf("%v fired again inside the cooldown", got)
-	}
+		defends, turns := 0, 0
+		if slices.Contains(c.edges, component.SquareDefense) {
+			defends = 1
+		}
+		if slices.Contains(c.edges, component.SquareWhirl) {
+			turns = 1
+		}
+		if gusts != defends || whirls != turns || boosts != defends {
+			t.Fatalf("%v blew %d gusts, turned %d winds and boosted %d times, want %d, %d and a boost a gust",
+				c.keys, gusts, whirls, boosts, defends, turns)
+		}
+		pressSquare(s, "l", "h")
+		if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {
+			t.Fatalf("%v fired again inside the cooldown", got)
+		}
 
-	ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
-	var again [component.SquareKindCount]int
-	last := 0
-	for _, spec := range component.SquareKinds {
-		last = max(last, ticks(spec.Cooldown))
-	}
-	for tick := 1; tick <= last; tick++ {
-		for _, kind := range squareFired(stepSquare(w, s)) {
-			if again[kind] == 0 {
-				again[kind] = tick
+		ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
+		var again [component.SquareKindCount]int
+		last := 0
+		for _, spec := range component.SquareKinds {
+			last = max(last, ticks(spec.Cooldown))
+		}
+		for tick := 1; tick <= last; tick++ {
+			for _, kind := range squareFired(stepSquare(w, s)) {
+				if again[kind] == 0 {
+					again[kind] = tick
+				}
 			}
 		}
-	}
-	for kind, spec := range component.SquareKinds {
-		if again[kind] != ticks(spec.Cooldown) {
-			t.Errorf("%s fired again at tick %d, want %d", spec.Name, again[kind], ticks(spec.Cooldown))
+		for kind, spec := range component.SquareKinds {
+			want := 0
+			if slices.Contains(c.edges, component.SquareKind(kind)) {
+				want = ticks(spec.Cooldown)
+			}
+			if again[kind] != want {
+				t.Errorf("%v: %s fired again at tick %d, want %d", c.keys, spec.Name, again[kind], want)
+			}
 		}
 	}
 }
 
-// TestALineFacesTheGatewaysOnItsSide: a side's row or column faces the three
-// gateways along that side, past the middle block's edge, and the middle row and
-// column, whose ribbon is the shield's span, the two at its ends
+// TestALineFacesTheGatewaysOnItsSide: an edge faces the two corners of its side,
+// past the middle block's edge, and the cells between them, and no edge the
+// square's own rows and columns between two sides
 func TestALineFacesTheGatewaysOnItsSide(t *testing.T) {
 	w, _, sq := newSquare(t)
 	right, bottom := w.Resources.Config.MapWidth-1, w.Resources.Config.MapHeight-1
 	cx, cy := sq.Center()
-	aspect := w.Resources.Config.CellAspect
 	for _, c := range []struct {
 		name  string
 		x, y  int
 		lines []int
 	}{
-		{"top left", 0, 0, []int{0, 3}}, {"top", cx, 0, []int{0, 4}}, {"top right", right, 0, []int{0, 5}},
-		{"right", right, cy, []int{1, 5}}, {"bottom right", right, bottom, []int{2, 5}},
-		{"bottom", cx, bottom, []int{2, 4}}, {"bottom left", 0, bottom, []int{2, 3}}, {"left", 0, cy, []int{1, 3}},
+		{"top left", 0, 0, []int{0, 2}}, {"top", cx, 0, []int{0}}, {"top right", right, 0, []int{0, 3}},
+		{"right", right, cy, []int{3}}, {"bottom right", right, bottom, []int{1, 3}},
+		{"bottom", cx, bottom, []int{1}}, {"bottom left", 0, bottom, []int{1, 2}}, {"left", 0, cy, []int{2}},
+		{"middle", cx, cy, nil},
 	} {
 		var got []int
 		for l := range component.SquareLines {
-			if sq.Faces(l, aspect)(c.x, c.y) {
+			if sq.Faces(l)(c.x, c.y) {
 				got = append(got, l)
 			}
 		}
 		if !slices.Equal(got, c.lines) {
-			t.Errorf("the %s gateway is faced by lines %v, want %v", c.name, got, c.lines)
+			t.Errorf("the %s cell is faced by lines %v, want %v", c.name, got, c.lines)
 		}
 	}
 }
 
-// TestAnOrbStandsOnTheSideItsLineFaces: a side's row or column stands its orb at the
-// middle of that side of the outer orbit, the middle row and column one at each end
+// TestAnOrbStandsOnTheSideItsLineFaces: an edge stands its orb at the middle of its
+// side of the outer orbit
 func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 	w, _, sq := newSquare(t)
 	aspect := w.Resources.Config.CellAspect
 	cx, cy := sq.Center()
 	reach := sq.ShieldRadius(aspect) + parameter.SquareOrbGap
 	rx, ry := int(math.Round(reach)), int(math.Round(aspect.FromCircular(reach)))
-	top, bottom := vmath.Point{X: cx, Y: cy - ry}, vmath.Point{X: cx, Y: cy + ry}
-	left, right := vmath.Point{X: cx - rx, Y: cy}, vmath.Point{X: cx + rx, Y: cy}
-	for l, want := range [component.SquareLines][]vmath.Point{
-		{top}, {left, right}, {bottom}, {left}, {top, bottom}, {right},
+	for l, want := range [component.SquareLines]vmath.Point{
+		{X: cx, Y: cy - ry}, {X: cx, Y: cy + ry}, {X: cx - rx, Y: cy}, {X: cx + rx, Y: cy},
 	} {
-		cells, n := sq.Orbs(l, aspect)
-		if !slices.Equal(cells[:n], want) {
-			t.Errorf("line %d stands its orbs at %v, want %v", l, cells[:n], want)
+		if got := sq.Orb(l, aspect); got != want {
+			t.Errorf("line %d stands its orb at %v, want %v", l, got, want)
 		}
 	}
 }
 
 // TestASquareSizesItsCursorsShieldToCoverIt: the cursor standing on the square
 // takes a shield reaching past the square's corners, its orbs' orbit with it, and
-// banks no more boost than the square's cap however many kills reward it
+// under that stepped shield its kills earn it no boost
 func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	stepSquare(w, s)
 	boosts := ready(NewBoostSystem(w)).(*BoostSystem)
 	for range 10 {
-		boosts.HandleEvent(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: cursor}})
+		boosts.HandleEvent(event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: cursor}})
 	}
-	if boost, _ := w.Components.Boost.GetComponent(cursor); !boost.Active || boost.Remaining != parameter.SquareBoostCap {
-		t.Fatalf("ten rewards bank %v of boost under the square, want its cap of %v", boost.Remaining, parameter.SquareBoostCap)
+	if boost, _ := w.Components.Boost.GetComponent(cursor); boost.Active {
+		t.Fatalf("ten kills boost a square's cursor for %v, want none under its stepped shield", boost.Remaining)
 	}
 	shield, _ := w.Components.Shield.GetPtr(cursor)
 	aspect := w.Resources.Config.CellAspect
@@ -262,7 +275,7 @@ func TestAStrikeKillsWhatStandsInTheThirdItsLineFaces(t *testing.T) {
 		c, _ := w.Components.Combat.GetPtr(swarm)
 		c.HitPoints = hp
 	}
-	pressSquare(s, "1", "l", "3", "h")
+	pressSquare(s, "7", "l", "3", "h")
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && (p.OwnerEntity != cursor || p.OriginEntity != cursor) {
 			t.Fatalf("a %s lands as %d's from %d, want its cursor's", component.CombatAttackNames[p.AttackType], p.OwnerEntity, p.OriginEntity)
@@ -325,7 +338,9 @@ func TestABodyOnTheBlocksUnderNoShieldCostsHeatOnceATouch(t *testing.T) {
 
 // TestASquaresMagicChargesAndItsDefenseShedsIt: the meter charges with time and with
 // each kill its cursor makes, a turn into a magic state fills it at once, and a
-// defense's fire sheds the share of SquareMagicDust it holds as dust and empties it
+// defense's fire sheds the share of SquareMagicDust it holds as dust and empties
+// it. The digits turned into order, 1 to 9 or 9 to 1, fill it too, and the defense
+// along an edge of either sheds it whole.
 func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
@@ -340,10 +355,10 @@ func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 		t.Fatalf("a turn into a magic state (%t) left the meter at %v, want it full", sq.IsMagic(), sq.Magic)
 	}
 
-	// 1 turned right and 3 left stand the kinds down the columns, the defense firing
-	shed := func() (dust int) {
+	// The keys' turns line the defense up on an edge
+	shed := func(keys ...string) (dust int) {
 		w.Resources.Event.Queue.Consume()
-		pressSquare(s, "1", "l", "3", "h")
+		pressSquare(s, keys...)
 		for _, ev := range w.Resources.Event.Queue.Consume() {
 			if batch, ok := ev.Payload.(*event.BatchPayload[event.ParticleSpawnEntry]); ok {
 				dust += len(batch.Entries)
@@ -351,12 +366,105 @@ func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 		}
 		return dust
 	}
-	if dust := shed(); dust != parameter.SquareMagicDust || sq.Magic != 0 {
+	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareMagicDust || sq.Magic != 0 {
 		t.Fatalf("a defense on a full meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust)
 	}
 	w, s, sq = newSquare(t)
 	sq.Magic = parameter.SquareMagicFull / 4
-	if dust := shed(); dust != parameter.SquareMagicDust/4 || sq.Magic != 0 {
+	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareMagicDust/4 || sq.Magic != 0 {
 		t.Fatalf("a defense on a quarter meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust/4)
+	}
+	for _, c := range []struct {
+		digits [component.SquareBlocks]uint8
+		key    string
+	}{
+		{[component.SquareBlocks]uint8{3, 1, 2, 4, 5, 6, 7, 8, 9}, "3"},
+		{[component.SquareBlocks]uint8{7, 9, 8, 6, 5, 4, 3, 2, 1}, "7"},
+	} {
+		w, s, sq = newSquare(t)
+		sq.Digits = c.digits
+		if dust := shed(c.key, "h"); !sq.IsMagic() || dust != parameter.SquareMagicDust {
+			t.Fatalf("%s turned into order (magic %t) shed %d dust from an empty meter, want a full meter's %d",
+				squareDigits(sq), sq.IsMagic(), dust, parameter.SquareMagicDust)
+		}
+	}
+}
+
+// TestASquareShedsItsMagicAsItsShieldFalls: its cursor's energy crossing zero with
+// the shield down crosses the fall, which sheds the meter as dust on every
+// instance; a crossing of zero that leaves the shield standing crosses nothing,
+// nor does one of a cursor no square stands under
+func TestASquareShedsItsMagicAsItsShieldFalls(t *testing.T) {
+	w, s, sq := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
+	shield, _ := w.Components.Shield.GetPtr(cursor)
+	sq.Magic = parameter.SquareMagicFull
+	fall := func() (fell, dust int) {
+		w.Resources.Event.Queue.SetOwn(true)
+		s.HandleEvent(event.GameEvent{Type: event.EventEnergyCrossedZero, Payload: &event.EnergyCrossedZeroPayload{Entity: cursor}})
+		w.Resources.Event.Queue.SetOwn(false)
+		for _, ev := range slices.Clone(w.Resources.Event.Queue.Consume()) {
+			if ev.Type == event.EventSquareShieldFell {
+				fell++
+				s.HandleEvent(ev)
+			}
+		}
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if batch, ok := ev.Payload.(*event.BatchPayload[event.ParticleSpawnEntry]); ok {
+				dust += len(batch.Entries)
+			}
+		}
+		return fell, dust
+	}
+	shield.Active = true
+	if fell, dust := fall(); fell != 0 || dust != 0 || sq.Magic != parameter.SquareMagicFull {
+		t.Fatalf("under a standing shield a crossing of zero crossed %d falls and shed %d dust", fell, dust)
+	}
+	shield.Active = false
+	if fell, dust := fall(); fell != 1 || dust != parameter.SquareMagicDust || sq.Magic != 0 {
+		t.Fatalf("the shield falling crossed %d falls, shed %d dust and left %v, want one, %d and none", fell, dust, sq.Magic, parameter.SquareMagicDust)
+	}
+	w.Components.Square.RemoveEntity(w.Components.Square.Entities()[0])
+	if fell, _ := fall(); fell != 0 {
+		t.Fatalf("a shield falling over no square crossed %d falls", fell)
+	}
+}
+
+// TestADefenseStandsTheShieldItsCursorHasNoEnergyFor: while a defense's boost holds,
+// the square raises its cursor's shield, which the energy system then stands at no
+// energy and drops as the hold ends
+func TestADefenseStandsTheShieldItsCursorHasNoEnergyFor(t *testing.T) {
+	w, s, _ := newSquare(t)
+	cursor := w.Resources.Player.Slot(0)
+	energies := ready(NewEnergySystem(w)).(*EnergySystem)
+	shield, _ := w.Components.Shield.GetPtr(cursor)
+	energy, _ := w.Components.Energy.GetPtr(cursor)
+	energy.Current = 0
+	asked := func() (up, down int) {
+		stepSquare(w, s)
+		energies.Update()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch ev.Type {
+			case event.EventShieldActivate:
+				up++
+			case event.EventShieldDeactivate:
+				down++
+			}
+		}
+		return up, down
+	}
+	if up, down := asked(); shield.Raised || up != 0 || down != 0 {
+		t.Fatalf("with no defense firing the shield is raised %t, asked up %d times and down %d", shield.Raised, up, down)
+	}
+	pressSquare(s, "7", "l", "3", "h")
+	if up, _ := asked(); !shield.Raised || up != 1 {
+		t.Fatalf("a defense's fire raised the shield %t and asked it up %d times, want raised and once", shield.Raised, up)
+	}
+	shield.Active = true
+	for range int(parameter.SquareBoostDuration / parameter.GameUpdateInterval) {
+		stepSquare(w, s)
+	}
+	if _, down := asked(); shield.Raised || down != 1 {
+		t.Fatalf("past the defense's hold the shield is raised %t and asked down %d times, want lowered and once", shield.Raised, down)
 	}
 }

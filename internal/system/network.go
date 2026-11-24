@@ -3384,6 +3384,7 @@ var crossingRules = map[event.EventType]crossingRule{
 	event.EventCursorDefeatState:     {actor: actorEntity(func(p *event.CursorDefeatStatePayload) core.Entity { return p.Entity })},
 	event.EventEmberSpent:            {actor: actorEntity(func(p *event.HeatBurstPayload) core.Entity { return p.Entity })},
 	event.EventSquareHit:             {actor: actorEntity(func(p *event.SquareHitPayload) core.Entity { return p.Entity })},
+	event.EventSquareShieldFell:      {actor: actorEntity(func(p *event.SquareHitPayload) core.Entity { return p.Entity })},
 	event.EventExplosionRequest:      {actor: actorEntity(func(p *event.ExplosionRequestPayload) core.Entity { return p.Entity })},
 	event.EventExplosionBatchRequest: {actor: actorEntity(func(p *event.ExplosionBatchRequestPayload) core.Entity { return p.Entity })},
 	event.EventCombatAttackAreaCrossingRequest: {actor: actorAttacker(func(p *event.CombatAttackAreaRequestPayload) (owner, emitter core.Entity) {

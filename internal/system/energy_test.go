@@ -149,10 +149,10 @@ func TestARodDrawsItsBoltAsItFires(t *testing.T) {
 	}
 }
 
-// TestASteppedShieldShowsHoldsAndCapsItsEnergy: a shield with a step takes the color
-// of the steps of energy it holds, asks no passive drain where a plain one does, and
-// a reward fills it to parameter.ShieldSteps of them and no further
-func TestASteppedShieldShowsHoldsAndCapsItsEnergy(t *testing.T) {
+// TestASteppedShieldsEnergyOnlyRunsDown: a shield with a step takes the color of the
+// steps of energy it holds, asks no passive drain where a plain one does, and takes
+// no reward
+func TestASteppedShieldsEnergyOnlyRunsDown(t *testing.T) {
 	w, stepped, plain := testCursorWorld(t)
 	shields, energies := ready(NewShieldSystem(w)).(*ShieldSystem), ready(NewEnergySystem(w)).(*EnergySystem)
 	const step = 600
@@ -181,8 +181,8 @@ func TestASteppedShieldShowsHoldsAndCapsItsEnergy(t *testing.T) {
 	}
 
 	energies.addEnergy(stepped, 100*step, false, component.EnergyDeltaReward)
-	if energy, _ := w.Components.Energy.GetPtr(stepped); energy.Current != step*parameter.ShieldSteps {
-		t.Fatalf("a reward leaves a stepped shield %d, want its %d steps of %d", energy.Current, parameter.ShieldSteps, step)
+	if energy, _ := w.Components.Energy.GetPtr(stepped); energy.Current != 5*step+step/2 {
+		t.Fatalf("a reward leaves a stepped shield %d, want the %d it held", energy.Current, 5*step+step/2)
 	}
 }
 

@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -16,11 +17,29 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
-// collisionEntry holds cached entity data for soft collision processing
+// collisionEntry is one cached body: its entity, cell and species, and what a push
+// or a flock reads and writes of it, nil where it has none
 type collisionEntry struct {
-	entity core.Entity
-	x, y   int
+	entity  core.Entity
+	x, y    int
+	species component.SpeciesType
+	kinetic *component.KineticComponent
+	combat  *component.CombatComponent
 }
+
+// flockSum is what one flocking target takes from the sources round it
+type flockSum struct {
+	x, y float64
+	any  bool
+	open bool // it flocks this tick
+}
+
+// The map is read in blocks of 4 by 2 cells once softBlocksMin bodies stand on it;
+// fewer stand in one block, where every pair is read as it was
+const (
+	softBlockShiftX, softBlockShiftY = 2, 1
+	softBlocksMin                    = 16
+)
 
 // SoftCollisionRule defines a single soft collision interaction
 type SoftCollisionRule struct {
@@ -61,6 +80,16 @@ type SoftCollisionSystem struct {
 
 	caches [component.SpeciesMax][]collisionEntry
 
+	// Every cache's entries by map block, block b's being near[start[b]:start[b+1]]
+	// in cache order, the reach in cells of each species' pushes and flocking, and
+	// each near entry's flocking sum
+	near                  []collisionEntry
+	start                 []int32
+	blockCols, blockRows  int
+	pushReach, flockReach [component.SpeciesMax][2]int
+	sums                  []flockSum
+	collisions, rejects   int64 // this update's, told to the status once
+
 	// Collision and flocking matrices
 	matrix            SoftCollisionMatrix
 	flockMatrix       FlockingMatrix
@@ -80,7 +109,30 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 
 	s.initMatrix()
 	s.initFlockingMatrix()
+	for source := range s.matrix {
+		for target := range s.matrix[source] {
+			if rule := s.matrix[source][target]; rule != nil && !rule.MemberFootprint {
+				s.pushReach[source] = widerReach(s.pushReach[source], rule.SourceInvRx, rule.SourceInvRy)
+			}
+			if rule := s.flockMatrix[source][target]; rule != nil {
+				s.flockReach[source] = widerReach(s.flockReach[source], rule.InvRxSq, rule.InvRySq)
+			}
+		}
+	}
 	return s
+}
+
+// widerReach is reach grown to the cells an ellipse of the inverse squared radii
+// spans from its center along each axis; no radius spans any map
+func widerReach(reach [2]int, invRxSq, invRySq float64) [2]int {
+	for axis, invSq := range [2]float64{invRxSq, invRySq} {
+		cells := 1 << 20
+		if invSq > 0 {
+			cells = int(math.Sqrt(1/invSq) + 1e-9)
+		}
+		reach[axis] = max(reach[axis], cells)
+	}
+	return reach
 }
 
 // initMatrix populates the collision rule matrix
@@ -281,6 +333,9 @@ func (s *SoftCollisionSystem) Update() {
 	s.rebuildCaches()
 	s.processAllCollisions()
 	s.processAllFlocking(dtSec)
+	s.statCollisions.Add(s.collisions)
+	s.statImmuneRejects.Add(s.rejects)
+	s.collisions, s.rejects = 0, 0
 }
 
 // clearCaches resets all cache slices
@@ -345,6 +400,7 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 			s.caches[species] = append(s.caches[species], collisionEntry{entity: entity, x: pos.X, y: pos.Y})
 		}
 	}
+	s.indexCaches()
 	s.buffers.Observe(0, len(s.caches[component.SpeciesDrain]))
 	s.buffers.Observe(1, len(s.caches[component.SpeciesSwarm]))
 	s.buffers.Observe(2, len(s.caches[component.SpeciesQuasar]))
@@ -352,45 +408,100 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 	s.buffers.Observe(4, len(s.caches[component.SpeciesPylon]))
 }
 
-// processAllCollisions iterates the matrix and applies collisions
-func (s *SoftCollisionSystem) processAllCollisions() {
-	for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
-		for targetType := component.SpeciesType(1); targetType < component.SpeciesMax; targetType++ {
-			rule := s.matrix[sourceType][targetType]
-			if rule == nil {
-				continue
-			}
-			s.processCollisionPair(sourceType, targetType, rule)
+// indexCaches reads what a push or a flock touches of each cached body and files
+// the bodies by map block, in cache order
+func (s *SoftCollisionSystem) indexCaches() {
+	n := 0
+	for species := range s.caches {
+		entries := s.caches[species]
+		n += len(entries)
+		for i := range entries {
+			e := &entries[i]
+			e.species = component.SpeciesType(species)
+			e.kinetic, _ = s.world.Components.Kinetic.GetPtr(e.entity)
+			e.combat, _ = s.world.Components.Combat.GetPtr(e.entity)
 		}
 	}
+	s.blockCols, s.blockRows = 1, 1
+	if cfg := s.world.Resources.Config; n >= softBlocksMin {
+		s.blockCols, s.blockRows = cfg.MapWidth>>softBlockShiftX+1, cfg.MapHeight>>softBlockShiftY+1
+	}
+	blocks := s.blockCols * s.blockRows
+	s.start = append(s.start[:0], make([]int32, blocks+1)...)
+	s.near = append(s.near[:0], make([]collisionEntry, n)...)
+	for species := range s.caches {
+		for i := range s.caches[species] {
+			s.start[s.block(s.caches[species][i].x, s.caches[species][i].y)+1]++
+		}
+	}
+	for b := 1; b <= blocks; b++ {
+		s.start[b] += s.start[b-1]
+	}
+	// Each block fills from its start, which then stands at its end
+	for species := range s.caches {
+		for i := range s.caches[species] {
+			b := s.block(s.caches[species][i].x, s.caches[species][i].y)
+			s.near[s.start[b]] = s.caches[species][i]
+			s.start[b]++
+		}
+	}
+	copy(s.start[1:], s.start)
+	s.start[0] = 0
 }
 
-// processCollisionPair handles collisions between source and target species
-func (s *SoftCollisionSystem) processCollisionPair(
-	sourceType, targetType component.SpeciesType,
-	rule *SoftCollisionRule,
-) {
-	sources := s.caches[sourceType]
-	targets := s.caches[targetType]
+// block is the block of a cell, one off the map taking the nearest
+func (s *SoftCollisionSystem) block(x, y int) int {
+	return min(max(y>>softBlockShiftY, 0), s.blockRows-1)*s.blockCols + min(max(x>>softBlockShiftX, 0), s.blockCols-1)
+}
 
-	if len(sources) == 0 || len(targets) == 0 {
-		return
-	}
+// blocksNear is the blocks a reach about a cell crosses: the first, the first of
+// its last row, and how many more blocks each row runs
+func (s *SoftCollisionSystem) blocksNear(x, y int, reach [2]int) (first, last, more int) {
+	first, end := s.block(x-reach[0], y-reach[1]), s.block(x+reach[0], y+reach[1])
+	more = end%s.blockCols - first%s.blockCols
+	return first, end - more, more
+}
 
-	for i := range sources {
-		src := &sources[i]
-
-		for j := range targets {
-			tgt := &targets[j]
-
-			// Itself, or apart as most pairs are, which the cached cells say with no
-			// store read: a crowd's pairs number its square
-			if src.entity == tgt.entity || !rule.MemberFootprint &&
-				!vmath.EllipseContainsPoint(tgt.x, tgt.y, src.x, src.y, rule.SourceInvRx, rule.SourceInvRy) {
-				continue
+// processAllCollisions pushes every target each source overlaps, the sources in
+// species and cache order, so a target takes its pushes in the order they stand
+func (s *SoftCollisionSystem) processAllCollisions() {
+	for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
+		rules := &s.matrix[sourceType]
+		sources := s.caches[sourceType]
+		if len(sources) == 0 {
+			continue
+		}
+		footprint := false
+		for _, rule := range rules {
+			footprint = footprint || rule != nil && rule.MemberFootprint
+		}
+		for i := range sources {
+			src := &sources[i]
+			// A footprint is read cell by cell against every target of its rules
+			for targetType := component.SpeciesType(1); footprint && targetType < component.SpeciesMax; targetType++ {
+				if rule := rules[targetType]; rule != nil && rule.MemberFootprint {
+					targets := s.caches[targetType]
+					for j := range targets {
+						if src.entity != targets[j].entity {
+							s.tryApplyCollision(src, &targets[j], rule)
+						}
+					}
+				}
 			}
-
-			s.tryApplyCollision(src.entity, src.x, src.y, tgt.entity, rule)
+			// Apart as most pairs are, which the cached cells say with no store
+			// read: a crowd's pairs number its square
+			first, last, more := s.blocksNear(src.x, src.y, s.pushReach[sourceType])
+			for b := first; b <= last; b += s.blockCols {
+				for k := s.start[b]; k < s.start[b+more+1]; k++ {
+					tgt := &s.near[k]
+					rule := rules[tgt.species]
+					if rule == nil || rule.MemberFootprint || src.entity == tgt.entity ||
+						!vmath.EllipseContainsPoint(tgt.x, tgt.y, src.x, src.y, rule.SourceInvRx, rule.SourceInvRy) {
+						continue
+					}
+					s.tryApplyCollision(src, tgt, rule)
+				}
+			}
 		}
 	}
 }
@@ -406,50 +517,31 @@ func (s *SoftCollisionSystem) impulseStream(source, target core.Entity) *vmath.F
 	return &s.rngArtifact
 }
 
-// tryApplyCollision checks and applies collision from source position to target entity
-func (s *SoftCollisionSystem) tryApplyCollision(
-	sourceEntity core.Entity,
-	sourceX, sourceY int,
-	targetEntity core.Entity,
-	rule *SoftCollisionRule,
-) {
-	// Get target kinetic component
-	kineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity)
-	if !ok {
-		return
-	}
-
-	// Get target combat component for immunity/enrage check
-	combatComp, ok := s.world.Components.Combat.GetPtr(targetEntity)
-	if !ok {
+// tryApplyCollision checks and applies collision from a source to a target
+func (s *SoftCollisionSystem) tryApplyCollision(src, tgt *collisionEntry, rule *SoftCollisionRule) {
+	if tgt.kinetic == nil || tgt.combat == nil {
 		return
 	}
 
 	// Skip if immune or enraged
-	if combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged {
-		s.statImmuneRejects.Add(1)
-		return
-	}
-
-	// Get target position
-	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
-	if !ok {
+	if tgt.combat.RemainingKineticImmunity > 0 || tgt.combat.IsEnraged {
+		s.rejects++
 		return
 	}
 
 	var radialX, radialY float64
 	if rule.MemberFootprint {
-		if !s.footprintsOverlap(sourceEntity, targetEntity, targetPos) {
+		if !s.footprintsOverlap(src.entity, tgt.entity, component.PositionComponent{X: tgt.x, Y: tgt.y}) {
 			return
 		}
-		radialX, radialY = float64(targetPos.X-sourceX), float64(targetPos.Y-sourceY)
+		radialX, radialY = float64(tgt.x-src.x), float64(tgt.y-src.y)
 		if radialX == 0 && radialY == 0 {
 			radialX = 1
 		}
 	} else {
 		var hit bool
 		radialX, radialY, hit = physics.CheckSoftCollision(
-			targetPos.X, targetPos.Y, sourceX, sourceY, rule.SourceInvRx, rule.SourceInvRy,
+			tgt.x, tgt.y, src.x, src.y, rule.SourceInvRx, rule.SourceInvRy,
 		)
 		if !hit {
 			return
@@ -457,14 +549,13 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	}
 
 	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile,
-		s.impulseStream(sourceEntity, targetEntity))
+		s.impulseStream(src.entity, tgt.entity))
 
-	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
-	s.statCollisions.Add(1)
+	physics.ApplyImpulse(&tgt.kinetic.Kinetic, impulseX, impulseY)
+	s.collisions++
 
 	// Steering and flocking read this window as displacement
-	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-
+	tgt.combat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 }
 
 func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos component.PositionComponent) bool {
@@ -491,60 +582,49 @@ func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos 
 	return false
 }
 
-// processAllFlocking calculates and integrates continuous separation acceleration
+// processAllFlocking calculates and integrates continuous separation acceleration:
+// each source adds to the targets near it, the sources in species and cache order,
+// so a target sums its sources in the order they stand
 func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
-	// Loop over targets first to accumulate acceleration and minimize ECS writes
-	for targetType := component.SpeciesType(1); targetType < component.SpeciesMax; targetType++ {
-		targets := s.caches[targetType]
-		if len(targets) == 0 {
-			continue
-		}
+	s.sums = append(s.sums[:0], make([]flockSum, len(s.near))...)
+	for k := range s.near {
+		// Flocking does not apply if dead, immune to kinetic shifts (recently hit), enraged (attacking), or stunned
+		c := s.near[k].combat
+		s.sums[k].open = s.near[k].kinetic != nil && c != nil && c.HitPoints > 0 && c.RemainingKineticImmunity <= 0 &&
+			!c.IsEnraged && c.Status[component.StatusStun].Remaining <= 0
+	}
 
-		for i := range targets {
-			tgt := &targets[i]
-
-			combatComp, ok := s.world.Components.Combat.GetPtr(tgt.entity)
-			// Flocking does not apply if dead, immune to kinetic shifts (recently hit), enraged (attacking), or stunned
-			if !ok || combatComp.HitPoints <= 0 || combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged || combatComp.Status[component.StatusStun].Remaining > 0 {
-				continue
-			}
-
-			kineticComp, ok := s.world.Components.Kinetic.GetPtr(tgt.entity)
-			if !ok {
-				continue
-			}
-
-			var totalAccelX, totalAccelY float64
-			hasFlocking := false
-
-			// Accumulate repulsion from all active sources
-			for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
-				rule := s.flockMatrix[sourceType][targetType]
-				if rule == nil {
-					continue
-				}
-
-				sources := s.caches[sourceType]
-				for j := range sources {
-					src := &sources[j]
-					if src.entity == tgt.entity { // Prevent self-repulsion
+	// Accumulate repulsion from all active sources
+	for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
+		rules := &s.flockMatrix[sourceType]
+		sources := s.caches[sourceType]
+		for j := range sources {
+			src := &sources[j]
+			first, last, more := s.blocksNear(src.x, src.y, s.flockReach[sourceType])
+			for b := first; b <= last; b += s.blockCols {
+				for k := s.start[b]; k < s.start[b+more+1]; k++ {
+					tgt, sum := &s.near[k], &s.sums[k]
+					rule := rules[tgt.species]
+					if rule == nil || !sum.open || src.entity == tgt.entity { // Prevent self-repulsion
 						continue
 					}
 
 					accX, accY, applied := s.calculateFlockingAccel(src.x, src.y, tgt.x, tgt.y, rule)
 					if applied {
-						totalAccelX += accX
-						totalAccelY += accY
-						hasFlocking = true
+						sum.x += accX
+						sum.y += accY
+						sum.any = true
 					}
 				}
 			}
+		}
+	}
 
-			// Integrate and apply accumulated acceleration
-			if hasFlocking {
-				kineticComp.VelX += totalAccelX * dtSec
-				kineticComp.VelY += totalAccelY * dtSec
-			}
+	// Integrate and apply accumulated acceleration
+	for k := range s.sums {
+		if sum := &s.sums[k]; sum.any {
+			s.near[k].kinetic.VelX += sum.x * dtSec
+			s.near[k].kinetic.VelY += sum.y * dtSec
 		}
 	}
 }

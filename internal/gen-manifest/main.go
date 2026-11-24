@@ -1112,15 +1112,13 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 
 // PlayerWorldState is this instance's player domain, by store, beside its placements
 // and allocator counters: what a journal's opening carries so its replay plays on as
-// the run's own participant. Unindexed names the placements a full cell held out,
-// which a re-insertion would otherwise take in.
+// the run's own participant.
 type PlayerWorldState struct {
 	NextEntity uint64 ` + "`json:\"next_entity\"`" + `
 	Created    int64  ` + "`json:\"created\"`" + `
 	Destroyed  int64  ` + "`json:\"destroyed\"`" + `
 
 	Positions []StoreEntry[component.PositionComponent] ` + "`json:\"positions,omitempty\"`" + `
-	Unindexed []core.Entity                             ` + "`json:\"unindexed,omitempty\"`" + `
 {{- range .Components }}{{ if .HoldsPlayer }}
 	{{ .Field }} []StoreEntry[component.{{ .Type }}] ` + "`json:\"{{ .Field | lower }},omitempty\"`" + `
 {{- end }}{{ end }}
@@ -1135,7 +1133,7 @@ func (w *World) CapturePlayerWorld() PlayerWorldState {
 		Created:    w.createdCount[core.DomainPlayer].Load(),
 		Destroyed:  w.destroyedCount[core.DomainPlayer].Load(),
 	}
-	s.Positions, s.Unindexed = w.Positions.capturePlayer()
+	s.Positions = captureRows(w.Positions.dense, w.Positions.entities, core.DomainPlayer)
 {{- range .Components }}{{ if .HoldsPlayer }}
 	s.{{ .Field }} = captureRows(w.Components.{{ .Field }}.dense, w.Components.{{ .Field }}.entities, core.DomainPlayer)
 {{- end }}{{ end }}
@@ -1149,7 +1147,7 @@ func (w *World) CapturePlayerWorld() PlayerWorldState {
 // Caller MUST hold updateMutex.
 func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 	w.DestroyDomainEntities(core.DomainPlayer)
-	w.Positions.installPlayer(s.Positions, s.Unindexed)
+	w.Positions.installPlayer(s.Positions)
 {{- range .Components }}{{ if .HoldsPlayer }}
 	installPlayerRows(w.Components.{{ .Field }}, s.{{ .Field }})
 {{- end }}{{ end }}
@@ -1160,12 +1158,13 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 }
 
 // WorldOrder is the order a world holds its entities in, by store and by cell, where
-// two or more give it one. Systems visit them in it, and a world rebuilt by insertion
-// holds another, so a journal's opening carries it: the run it opens on, and every
-// replay of it, then play on in the run's own order.
+// two or more give it one, and the placements no cell holds. Systems visit them in
+// it, and a world rebuilt by insertion holds another, so a journal's opening carries
+// it: the run it opens on, and every replay of it, then play on in the run's own.
 type WorldOrder struct {
 	Positions []core.Entity ` + "`json:\"positions,omitempty\"`" + `
 	Cells     []position.CellOrder[core.Entity] ` + "`json:\"cells,omitempty\"`" + `
+	Unindexed []core.Entity ` + "`json:\"unindexed,omitempty\"`" + `
 {{- range .Components }}
 	{{ .Field }} []core.Entity ` + "`json:\"{{ .Field | lower }},omitempty\"`" + `
 {{- end }}
@@ -1175,7 +1174,7 @@ type WorldOrder struct {
 //
 // Caller MUST hold updateMutex.
 func (w *World) CaptureOrder() WorldOrder {
-	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.cellOrder()}
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.cellOrder(), Unindexed: w.Positions.unindexed()}
 {{- range .Components }}
 	o.{{ .Field }} = orderOf(w.Components.{{ .Field }}.entities)
 {{- end }}
@@ -1188,7 +1187,7 @@ func (w *World) CaptureOrder() WorldOrder {
 //
 // Caller MUST hold updateMutex.
 func (w *World) InstallOrder(o WorldOrder) error {
-	if err := w.Positions.reorder(o.Positions, o.Cells); err != nil {
+	if err := w.Positions.reorder(o.Positions, o.Cells, o.Unindexed); err != nil {
 		return fmt.Errorf("positions: %w", err)
 	}
 {{- range .Components }}

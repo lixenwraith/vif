@@ -18,8 +18,8 @@ import (
 )
 
 // SquareRenderer draws a magic square over its cursor's shield and every field:
-// what its kinds show round the shield, then each block in its kind's color, lit as
-// its line fires, the viewer's selection and the legend
+// what its kinds show round the shield, then each block in its kind's color, lit
+// near white as its line fires, the viewer's selection and the legend
 type SquareRenderer struct {
 	gameCtx *engine.GameContext
 	console *render.Console // nil draws true color
@@ -95,10 +95,7 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 		if effect.Cooldown > 0 && since < parameter.OrbFlashDuration {
 			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
 		}
-		cells, n := sq.Orbs(line, ctx.CellAspect)
-		for _, cell := range cells[:n] {
-			r.orb(ctx, buf, cell, look, spec.Name, 1, burst)
-		}
+		r.orb(ctx, buf, sq.Orb(line, ctx.CellAspect), look, spec.Name, 1, burst)
 	}
 }
 
@@ -108,7 +105,7 @@ func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffe
 	if r.console != nil {
 		return
 	}
-	faces := sq.Faces(line, ctx.CellAspect)
+	faces := sq.Faces(line)
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
@@ -222,7 +219,11 @@ func (r *SquareRenderer) block(ctx render.RenderContext, buf *render.RenderBuffe
 		return
 	}
 	colors := &visual.SquareKinds[kind]
-	bg := color.Lerp(colors.Block, colors.Glow, fired(sq, kind))
+	lit := fired(sq, kind)
+	bg, console := color.Lerp(colors.Block, visual.RgbSquareFire, visual.SquareFireLight*lit), colors.Console
+	if lit > 0.5 {
+		console = visual.ConBrightWhite
+	}
 	x, y := sq.Place(p)
 	for dy := range sq.Height {
 		for dx := range sq.Width {
@@ -231,7 +232,7 @@ func (r *SquareRenderer) block(ctx render.RenderContext, buf *render.RenderBuffe
 				continue
 			}
 			if r.console != nil {
-				r.cell256(buf, sx, sy, colors)
+				r.cell256(buf, sx, sy, console)
 			} else {
 				buf.SetWithBg(sx, sy, ' ', bg, bg)
 			}
@@ -242,8 +243,8 @@ func (r *SquareRenderer) block(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 }
 
-// fired is how far a kind's blocks glow toward its glow color: wholly as its line
-// fires, fading over visual.SquareFireFlash
+// fired is how far a kind's blocks are lit by its fire: wholly as its line fires,
+// fading over visual.SquareFireFlash
 func fired(sq *component.SquareComponent, kind component.SquareKind) float64 {
 	effect, spec := sq.Effects[kind], &component.SquareKinds[kind]
 	since := spec.Cooldown - effect.Cooldown
@@ -253,10 +254,10 @@ func fired(sq *component.SquareComponent, kind component.SquareKind) float64 {
 	return 1 - float64(since)/float64(visual.SquareFireFlash)
 }
 
-// cell256 fills a cell with a kind's console background
-func (r *SquareRenderer) cell256(buf *render.RenderBuffer, sx, sy int, colors *visual.SquareKindColors) {
+// cell256 fills a cell with a console background
+func (r *SquareRenderer) cell256(buf *render.RenderBuffer, sx, sy int, console uint8) {
 	buf.SetWithBg(sx, sy, ' ', visual.RgbBlack, visual.RgbBlack)
-	buf.SetBg256(sx, sy, r.console.Background(colors.Console))
+	buf.SetBg256(sx, sy, r.console.Background(console))
 }
 
 // mark writes a glyph over a cell's background, in tc or a console's entry
@@ -373,7 +374,7 @@ func (r *SquareRenderer) meter(ctx render.RenderContext, buf *render.RenderBuffe
 		case r.console != nil && n < 4:
 			r.mark(buf, sx, sy, visual.SquareMeterEmpty256, visual.RgbSquareIdle, visual.ConGray, terminal.AttrNone)
 		case r.console != nil:
-			r.cell256(buf, sx, sy, colors)
+			r.cell256(buf, sx, sy, colors.Console)
 		case n == 0:
 			buf.SetWithBg(sx, sy, ' ', track, track)
 		case n == 8:

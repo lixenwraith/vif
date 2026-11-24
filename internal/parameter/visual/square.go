@@ -8,7 +8,7 @@ import (
 )
 
 // SquareKindColors are what a magic square's blocks of one kind draw in: a block,
-// the glow its line fires and its effect holds in, the legend's empty meter, and a
+// the glow its effect holds in and a strike tints its part in, the legend's empty meter, and a
 // console's color
 type SquareKindColors struct {
 	Block, Glow, Track color.RGB
@@ -41,10 +41,11 @@ var SquareOrbs = [component.SquareKindCount]SquareOrb{
 	component.SquareAttack: {Core: color.White, Lobe: color.Red, Counter: color.RoyalBlue, Console: ConBrightRed},
 }
 
-// The square's marks: a block's digit, the frame round the viewer's selection, and
-// in the legend under it a kind no line holds
+// The square's marks: a block's digit, the light a firing line's blocks take, the
+// frame round the viewer's selection, and in the legend under it a kind no line holds
 var (
 	RgbSquareDigit = color.Black
+	RgbSquareFire  = color.White
 	RgbSquareFrame = color.White
 	RgbSquareIdle  = color.Gray
 )
@@ -53,9 +54,10 @@ const (
 	// SquareMeterEmpty256 is a console's empty meter cell
 	SquareMeterEmpty256 = '·'
 
-	// SquareFireFlash is how long a kind's blocks take to fade from its glow as its
-	// line fires
-	SquareFireFlash = 400 * time.Millisecond
+	// A firing line's blocks stand SquareFireLight of the way to RgbSquareFire, a
+	// console's in white, and fade back over SquareFireFlash
+	SquareFireLight = 0.85
+	SquareFireFlash = 500 * time.Millisecond
 
 	// SquareMeterTrack is how far a legend meter's empty cells stand from the
 	// background toward the kind's track color
