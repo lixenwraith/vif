@@ -78,7 +78,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 			w.Components.Gateway.Each(func(_ core.Entity, g *component.GatewayComponent) bool {
 				gate, _ := w.Positions.GetPosition(g.AnchorEntity)
 				for l := range faced {
-					if sq.Faces(l, gate.X, gate.Y) {
+					if sq.Faces(l, w.Resources.Config.CellAspect)(gate.X, gate.Y) {
 						faced[l]++
 					}
 				}

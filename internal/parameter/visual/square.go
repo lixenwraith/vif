@@ -71,7 +71,7 @@ const (
 	SquareSurgeAlpha = 0.95
 	SquareSurgeTurn  = 700 * time.Millisecond
 
-	// A strike that landed tints the third of the map its line faces in the kind's
+	// A strike that landed tints the part of the map its line faces in the kind's
 	// glow, at most SquareStrikeAlpha, fading over SquareStrikeFlash
 	SquareStrikeFlash = 250 * time.Millisecond
 	SquareStrikeAlpha = 0.15

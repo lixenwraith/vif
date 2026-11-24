@@ -173,13 +173,14 @@ func TestALineFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 	}
 }
 
-// TestALineFacesItsThirdOfTheMap: the edges of the middle block run on across the
-// map cut it in thirds, each line facing the gateways in its own: a side's row or
-// column the three along that side, the middle row and column the two at its ends
-func TestALineFacesItsThirdOfTheMap(t *testing.T) {
+// TestALineFacesTheGatewaysOnItsSide: a side's row or column faces the three
+// gateways along that side, past the middle block's edge, and the middle row and
+// column, whose ribbon is the shield's span, the two at its ends
+func TestALineFacesTheGatewaysOnItsSide(t *testing.T) {
 	w, _, sq := newSquare(t)
 	right, bottom := w.Resources.Config.MapWidth-1, w.Resources.Config.MapHeight-1
 	cx, cy := sq.Center()
+	aspect := w.Resources.Config.CellAspect
 	for _, c := range []struct {
 		name  string
 		x, y  int
@@ -191,7 +192,7 @@ func TestALineFacesItsThirdOfTheMap(t *testing.T) {
 	} {
 		var got []int
 		for l := range component.SquareLines {
-			if sq.Faces(l, c.x, c.y) {
+			if sq.Faces(l, aspect)(c.x, c.y) {
 				got = append(got, l)
 			}
 		}

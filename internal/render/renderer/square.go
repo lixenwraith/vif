@@ -62,7 +62,7 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 // fields draws what each kind shows round the shield, by what the kind fires: a
 // boost's glow on the rim and a turning wind's streaks while they hold, and for a
-// kind that strikes the flash of the third it landed in and its orb, at the middle
+// kind that strikes the flash of the part it landed in and its orb, at the middle
 // of the side its line faces, bursting as it fires, or dim and turning round the
 // outer orbit while no line holds the kind
 func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
@@ -102,16 +102,17 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
-// flash tints the third of the map a line faces in its kind's glow, a share of the
+// flash tints the part of the map a line faces in its kind's glow, a share of the
 // way from full to gone; a console draws none
 func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind, line int, left float64) {
 	if r.console != nil {
 		return
 	}
+	faces := sq.Faces(line, ctx.CellAspect)
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			if sx, sy, visible := ctx.MapToScreen(x, y); visible && sq.Faces(line, x, y) {
+			if sx, sy, visible := ctx.MapToScreen(x, y); visible && faces(x, y) {
 				buf.SetBgScreen(sx, sy, visual.SquareKinds[kind].Glow, visual.RgbBackground, visual.SquareStrikeAlpha*left)
 			}
 		}
