@@ -392,7 +392,8 @@ func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 
 // TestASquareShedsItsMagicAsItsShieldFalls: its cursor's energy crossing zero with
 // the shield down crosses the fall, which sheds the meter as dust on every
-// instance; a crossing of zero that leaves the shield standing crosses nothing
+// instance; a crossing of zero that leaves the shield standing crosses nothing,
+// nor does one of a cursor no square stands under
 func TestASquareShedsItsMagicAsItsShieldFalls(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
@@ -422,6 +423,10 @@ func TestASquareShedsItsMagicAsItsShieldFalls(t *testing.T) {
 	shield.Active = false
 	if fell, dust := fall(); fell != 1 || dust != parameter.SquareMagicDust || sq.Magic != 0 {
 		t.Fatalf("the shield falling crossed %d falls, shed %d dust and left %v, want one, %d and none", fell, dust, sq.Magic, parameter.SquareMagicDust)
+	}
+	w.Components.Square.RemoveEntity(w.Components.Square.Entities()[0])
+	if fell, _ := fall(); fell != 0 {
+		t.Fatalf("a shield falling over no square crossed %d falls", fell)
 	}
 }
 

@@ -94,9 +94,13 @@ func (s *SquareSystem) HandleEvent(ev event.GameEvent) {
 	case *event.EnergyCrossedZeroPayload:
 		// Its own cursor's shield falling with its energy is every instance's to hear
 		cursor := s.world.ResolveOwnedCursor(p.Entity)
-		if shield, ok := s.world.Components.Shield.GetPtr(cursor); ok && !shield.Active {
-			s.world.PushCrossing(event.EventSquareShieldFell, &event.SquareHitPayload{Entity: cursor})
-		}
+		shield, ok := s.world.Components.Shield.GetPtr(cursor)
+		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+			if ok && !shield.Active && s.owner(sq) == cursor {
+				s.world.PushCrossing(event.EventSquareShieldFell, &event.SquareHitPayload{Entity: cursor})
+			}
+			return true
+		})
 	case *event.SquareHitPayload:
 		// The shield over it fell: the square sheds its magic
 		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {

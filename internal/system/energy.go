@@ -295,6 +295,11 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 			s.statPenaltyRejects.Add(1)
 			return
 		}
+		// A shield raised over no energy has none to lose, and falls no second time
+		if shield, ok := s.world.Components.Shield.GetComponent(cursor); ok && shield.Raised && currentEnergy == 0 {
+			s.statPenaltyRejects.Add(1)
+			return
+		}
 		// Ember protects from penalties
 		if heatComp, ok := s.world.Components.Heat.GetPtr(cursor); ok && heatComp.EmberActive {
 			s.statPenaltyRejects.Add(1)
@@ -316,11 +321,6 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 		s.statSpendCount.Add(1)
 		// Convergent to zero, can cross zero
 		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, false)
-	}
-
-	// A raised shield's touch finds no energy to cost, and crosses nothing again
-	if newEnergy == 0 && currentEnergy == 0 {
-		return
 	}
 
 	energyComp.Current = newEnergy
