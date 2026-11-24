@@ -122,16 +122,16 @@ and the room the site has: `sessions_max`, the fleet's size, `doors` and
   "doors": 0,
   "doors_max": 16,
   "spectators_max": 256,
-  "scenarios": ["main", "blank", "recall", "td"],
+  "scenarios": ["fighter", "blank", "recall", "td"],
   "scenario_descriptions": {
-    "main": "Survive escalating storms, lure Krakens through mazes, cut the Devourer's guts, and defend the tower.",
+    "fighter": "Survive escalating storms, lure Krakens through mazes, cut the Devourer's guts, and defend the tower.",
     "blank": "An empty arena for experimenting with commands and building scenarios.",
     "recall": "Recall: repeat the sequence with keys 1-4 or by clicking the buttons; each level adds a step.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
   "scenario_fixed_maps": {"td": "500x250"},
-  "scenario_min_players": {"main": 1, "blank": 1, "recall": 1, "td": 1},
-  "scenario_max_players": {"main": 16, "blank": 16, "recall": 16, "td": 16}
+  "scenario_min_players": {"fighter": 1, "blank": 1, "recall": 1, "td": 1},
+  "scenario_max_players": {"fighter": 16, "blank": 16, "recall": 16, "td": 16}
 }
 ```
 
@@ -139,7 +139,7 @@ and the room the site has: `sessions_max`, the fleet's size, `doors` and
 `scenario_min_players` and `scenario_max_players` its `min_players` and
 `max_players`, and `scenario_fixed_maps` its `[map] fixed`, the size it says its map
 holds throughout, so the screen a request names does not size it. All are read from
-its `scenario.toml` on every request as the names are; `main` off the volume is the
+its `scenario.toml` on every request as the names are; `fighter` off the volume is the
 game's embedded fallback, described by that. A scenario that states one past the
 file's first 4 KiB, or a top-level one after any table, is absent from that object
 and still offered; with none at all the key is omitted. `players` must also fall in
@@ -313,7 +313,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-players`, `-players-max` | `4`, `-players` | the default guest ceiling and the highest a request may select (at most 16) |
 | `-bots-max` | `0` | the most bots a request may seat (at most 6) |
 | `-log-level`, `-log-level-min` | `info`, `debug` | the default session level and the most verbose a request may select |
-| `-scenario`, `-wad` | `main`, `/var/db/vif/wad` | the scenario a request runs when it names none, and the volume scanned for the others |
+| `-scenario`, `-wad` | `fighter`, `/var/db/vif/wad` | the scenario a request runs when it names none, and the volume scanned for the others |
 | `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first person's terminal, which a session seating bots plays at 120x40 instead; a scenario may or may not make it its map |
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |

@@ -7,11 +7,11 @@ Entry config search order:
 1. `-s <path-or-name>`, or `[paths] scenario` in `vif.toml` — file, directory
    containing `scenario.toml`, or a name, at any depth below `scenario/`, or a
    path below it, resolved under the configured roots;
-2. a scenario named `main` under `-config-dir <root>`;
+2. a scenario named `fighter` under `-config-dir <root>`;
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    `/usr/local/etc/vif` and `/etc/vif`;
-5. the embedded main scenario (`internal/asset/scenario/`; forced with `-d`).
+5. the embedded `fighter` scenario (`internal/asset/scenario/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
 embedded scenario and content corpus. For the runtime design behind this reference, see
@@ -20,8 +20,8 @@ cross-resource order is in [`doc/filesystem-layout.md`](filesystem-layout.md). A
 graph is written in this dialect with its own actions and guards
 ([Bots](bots.md#writing-a-graph)).
 
-The embedded main campaign is the only shipped source of `main`; `-s main`
-falls back to it. A scenario named `main` in a root is an optional user override.
+The embedded campaign is the only shipped source of `fighter`; `-s fighter` falls
+back to it. A scenario named `fighter` in a root is an optional user override.
 
 Region `file`, `macro_files`, behavior program and map `file` references resolve
 relative to the entry config's directory and cannot climb out of it. A region file
@@ -34,7 +34,7 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 ```text
 ~/.config/vif/
 ├── scenario/
-│   ├── main/                  # optional override: a copy of internal/asset/scenario/
+│   ├── fighter/               # optional override: a copy of internal/asset/scenario/
 │   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
 │   └── base/                  # the shipped scenarios
 │       ├── blank/scenario.toml

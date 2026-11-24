@@ -748,7 +748,7 @@ and cues a lesson cleared.
   `_partials/apps/publish.html`
 - Prerequisite: the decisions in the last paragraph
 
-The page plays the embedded `main` alone: a guest is served its coordinator's
+The page plays the embedded `fighter` alone: a guest is served its coordinator's
 scenario and a native player unpacks the wad, but nothing reaches a client with no
 config root and no peer, so `wad/scenario/` is out of the site's solo Play. The
 corpus needs no route, being player domain. A URL cannot carry one: the launcher
@@ -1526,9 +1526,9 @@ What the feature itself needs, best shaped by deploying it step by step:
 - A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
   `wss://` in a page, but the browser route wants a session id in its path before
   the first frame, so a publish needs a path of its own. A hosting page must be
-  exempt from `LEAVE_HIDDEN_MS`, holds only the embedded `main` until bundles are
+  exempt from `LEAVE_HIDDEN_MS`, holds only the embedded `fighter` until bundles are
   fetched over HTTP, and is never a successor door. Wasm runs host work about 3.9x
-  slower than a native core: `main` with eight participants takes under half the
+  slower than a native core: `fighter` with eight participants takes under half the
   page's thread and `td` does not fit, so the authority belongs in a Worker of its
   own.
 - `-doors-per-address` counted as the join budget counts an address. It counts the

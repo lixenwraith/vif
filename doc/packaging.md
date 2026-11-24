@@ -207,7 +207,7 @@ export XDG_CONFIG_HOME=/nonexistent VIF_SYSTEM_ROOTS=/tmp/stage/etc/vif
 ```
 
 The settings, keymap, content and installed bot-graph lines must name paths under
-the staged root, and so must the scenario line of the second check. The main
+the staged root, and so must the scenario line of the second check. The `fighter`
 scenario, the sound and music banks and the `embedded default` bot line are
 embedded by design. That is the packaging contract in two commands.
 

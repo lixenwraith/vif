@@ -187,7 +187,7 @@ func (f fakeHealth) probe(context.Context, string) (sessionHealth, error) {
 func testWad(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, name := range []string{"main", "td"} {
+	for _, name := range []string{"fighter", "td"} {
 		dir := filepath.Join(root, "scenario", name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -208,7 +208,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 			Players:   4,
 			Size:      sizeFirst,
 			LogLevel:  "info",
-			Scenario:  "main",
+			Scenario:  "fighter",
 			FirstJoin: "90s",
 			Empty:     "90s",
 			Drain:     "20s",
@@ -577,9 +577,9 @@ func TestABotRefusalNamesWhatLeavesNoSeat(t *testing.T) {
 	}
 }
 
-// TestScenarioDescriptionsComeFromTheirEntries reads each one from the file the
-// game reads, the embedded fallback standing in for a main the volume lacks. An
-// entry that states none, or whose preamble overruns the scan, is still offered.
+// TestWhatAScenarioStatesComesFromItsEntry reads each one from the file the game
+// reads, the embedded fallback standing in for fighter where the volume lacks it.
+// An entry that states none, or whose preamble overruns the scan, is still offered.
 func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 	cfg := testAllocatorConfig(t)
 	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
@@ -606,10 +606,10 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 		t.Fatalf("player ranges = %v..%v; want td's top-level min_players alone", limits.MinPlayers, limits.MaxPlayers)
 	}
 
-	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "main")); err != nil {
+	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "fighter")); err != nil {
 		t.Fatal(err)
 	}
-	embedded, err := fs.ReadFile(asset.MainScenario, asset.MainScenarioEntry)
+	embedded, err := fs.ReadFile(asset.FighterScenario, asset.FighterScenarioEntry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,8 +617,8 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 	if want == "" {
 		t.Fatal("the embedded scenario states no description")
 	}
-	if got := controller.limits().Descriptions["main"]; got != want {
-		t.Errorf("main off the volume is described as %q; want the embedded %q", got, want)
+	if got := controller.limits().Descriptions["fighter"]; got != want {
+		t.Errorf("fighter off the volume is described as %q; want the embedded %q", got, want)
 	}
 
 	write("td", "description = \"late\"\n"+strings.Repeat("# padding\n", describeScan/10+1))
@@ -644,7 +644,7 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 func TestScenariosFollowTheVolume(t *testing.T) {
 	cfg := testAllocatorConfig(t)
 	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
-	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"main", "td"}) {
+	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"fighter", "td"}) {
 		t.Fatalf("scenarios = %v; want the volume's two", got)
 	}
 
@@ -663,7 +663,7 @@ func TestScenariosFollowTheVolume(t *testing.T) {
 	}
 
 	controller.cfg.WadDir = filepath.Join(cfg.WadDir, "gone")
-	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"main"}) {
+	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"fighter"}) {
 		t.Errorf("an unreadable volume gave %v; want the default alone", got)
 	}
 }

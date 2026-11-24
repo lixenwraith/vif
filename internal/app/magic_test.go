@@ -133,9 +133,9 @@ func TestMagicsWeaponsWearEveryBody(t *testing.T) {
 }
 
 // TestMagicKeepsAHeatBurstForEnter: heat filling its overheat in the shipped magic
-// leaves the overheat full with the ember main lights put out, whole through what
-// special fire spends, and Enter then runs a death wave out from the cursor and
-// empties it
+// leaves the overheat full with the ember that fighter lights put out, whole through
+// what special fire spends, and Enter then runs a death wave out from the cursor
+// and empties it
 func TestMagicKeepsAHeatBurstForEnter(t *testing.T) {
 	t.Parallel()
 	a := newMagic(t)

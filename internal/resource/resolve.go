@@ -87,7 +87,7 @@ func newResolver(o Options) resolver {
 }
 
 // ScenarioPath returns the scenario entry path. An empty path selects the
-// embedded main scenario.
+// embedded fighter scenario.
 func ScenarioPath(o Options) (string, error) {
 	if o.Embedded {
 		return "", nil
@@ -105,10 +105,10 @@ func ScenarioPath(o Options) (string, error) {
 			return o.Scenario, nil // explicit file: entry filename override
 		}
 		if !paths.ExternalFiles() {
-			if o.Scenario == paths.MainScenarioName {
+			if o.Scenario == paths.FighterScenarioName {
 				return "", nil
 			}
-			return "", fmt.Errorf("scenario %q not found: a browser holds only the embedded %s", o.Scenario, paths.MainScenarioName)
+			return "", fmt.Errorf("scenario %q not found: a browser holds only the embedded %s", o.Scenario, paths.FighterScenarioName)
 		}
 		switch {
 		case !errors.Is(err, os.ErrNotExist):
@@ -119,23 +119,23 @@ func ScenarioPath(o Options) (string, error) {
 		if p := newResolver(o).scenario(o.Scenario); p != "" {
 			return p, nil
 		}
-		if o.Scenario == paths.MainScenarioName {
+		if o.Scenario == paths.FighterScenarioName {
 			return "", nil
 		}
 		return "", fmt.Errorf("scenario %q not found as a path or in any configuration root", o.Scenario)
 	}
 
 	r := newResolver(o)
-	return r.scenario(paths.MainScenarioName), nil
+	return r.scenario(paths.FighterScenarioName), nil
 }
 
-// Scenarios names every scenario a run with these options starts by name: the main
-// one, which the embedded copy answers for when no root holds it, then every one the
+// Scenarios names every scenario a run with these options starts by name: fighter,
+// which the embedded copy answers for when no root holds it, then every one the
 // roots' scenario/ trees hold, sorted. Each goes by its directory's name, or by its
 // path below scenario/ where that name reaches another first; one a higher root
 // holds at the same path is not named, since no name reaches it.
 func Scenarios(o Options) []string {
-	names := []string{paths.MainScenarioName}
+	names := []string{paths.FighterScenarioName}
 	if o.Embedded {
 		return names
 	}
@@ -143,7 +143,7 @@ func Scenarios(o Options) []string {
 	for _, root := range newResolver(o).roots {
 		paths.WalkScenarios(root, func(rel, _ string) bool {
 			switch name := path.Base(rel); {
-			case !seen[name] && name != paths.MainScenarioName:
+			case !seen[name] && name != paths.FighterScenarioName:
 				names = append(names, name)
 			case seen[name] && !seen[rel]:
 				names = append(names, rel)

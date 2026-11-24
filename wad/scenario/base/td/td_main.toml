@@ -119,7 +119,7 @@ transitions = [
     { trigger = "Tick", target = "TdQuasarFuse" },
 ]
 
-# The fused participant's drains hold, as main's do; the others' play on
+# The fused participant's drains hold, as fighter's do; the others' play on
 [states.TdQuasarPause]
 parent = "Root"
 on_enter = [
