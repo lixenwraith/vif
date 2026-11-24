@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math/rand/v2"
 	"reflect"
 	"testing"
 
@@ -114,5 +115,57 @@ func TestDrainFlockingObservesSharedSpeciesOneWay(t *testing.T) {
 				t.Fatalf("shared %s velocity = (%v, %v), want no drain influence", tc.name, sharedKinetic.VelX, sharedKinetic.VelY)
 			}
 		})
+	}
+}
+
+// TestSoftCollisionBlocksHoldEveryBodyInReach: the blocks a species' reach crosses
+// about a cell hold every body within it, on the map or off it, and the reach
+// spans every cell an ellipse of its rules holds
+func TestSoftCollisionBlocksHoldEveryBodyInReach(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	swarm := component.SpeciesSwarm
+	for range 40 {
+		w := engine.NewWorld()
+		mw, mh := 20+rng.IntN(120), 12+rng.IntN(40)
+		engine.NewGameContextWithClock(w, mw, mh, engine.NewManualClock())
+		for range softBlocksMin + rng.IntN(200) {
+			e := w.CreateEntity(core.DomainShared)
+			w.Components.Swarm.SetComponent(e, component.SwarmComponent{})
+			w.Positions.SetPosition(e, component.PositionComponent{X: rng.IntN(mw+16) - 8, Y: rng.IntN(mh+8) - 4})
+		}
+		s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
+		s.rebuildCaches()
+		bodies := s.caches[swarm]
+		for _, reach := range [][2]int{s.pushReach[swarm], s.flockReach[swarm]} {
+			for i := range bodies {
+				src, found := &bodies[i], map[core.Entity]bool{}
+				first, last, more := s.blocksNear(src.x, src.y, reach)
+				for b := first; b <= last; b += s.blockCols {
+					for _, e := range s.near[s.start[b]:s.start[b+more+1]] {
+						found[e.entity] = true
+					}
+				}
+				for _, tgt := range bodies {
+					dx, dy := tgt.x-src.x, tgt.y-src.y
+					if max(dx, -dx) <= reach[0] && max(dy, -dy) <= reach[1] && !found[tgt.entity] {
+						t.Fatalf("on a %dx%d map the blocks %v cells about (%d,%d) cross leave out the body at (%d,%d)",
+							mw, mh, reach, src.x, src.y, tgt.x, tgt.y)
+					}
+				}
+			}
+		}
+		push, flock := s.matrix[swarm][swarm], s.flockMatrix[swarm][swarm]
+		for dx := -20; dx <= 20; dx++ {
+			for dy := -20; dy <= 20; dy++ {
+				for _, c := range []struct {
+					reach        [2]int
+					invRx, invRy float64
+				}{{s.pushReach[swarm], push.SourceInvRx, push.SourceInvRy}, {s.flockReach[swarm], flock.InvRxSq, flock.InvRySq}} {
+					if vmath.EllipseContainsPoint(dx, dy, 0, 0, c.invRx, c.invRy) && (max(dx, -dx) > c.reach[0] || max(dy, -dy) > c.reach[1]) {
+						t.Fatalf("a reach of %v cells leaves out (%d,%d), which its ellipse holds", c.reach, dx, dy)
+					}
+				}
+			}
+		}
 	}
 }
