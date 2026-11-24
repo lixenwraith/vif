@@ -864,10 +864,11 @@ Docs · Libraries · Branches.
   and fades with distance for that; measure a wind by a body's distance a tick.
 - A wind turned round a cell holds off as one blown out of it does: without pause
   at force 120 it kept `magic`'s two lightest bodies circling for good, and half
-  the time at 100 it stood a square whose lines never turned past five minutes.
-  Read a whirl by the degrees a body is carried before its first touch, and by
-  when fixed lines fall: a scratch test writes `SquareComponent.Lines` each tick,
-  which only a turn recomputes.
+  the time at 90 a square whose three kinds aligned and never turned stood 20
+  minutes on three seeds of four, where 60 fell by 341 s. Read a whirl by the
+  degrees a body is carried before its first touch, and by when fixed lines fall:
+  a scratch test writes `SquareComponent.Lines` each tick, which only a turn
+  recomputes, and a dispatch tap on `EventGameResetRequest` marks the fall.
 - A gust's throw does not scale with its force: drag above the cruise speed eats
   the rest, so ten times the force threw `magic`'s bodies three to four times as
   far, and a body thrown onto the map's edge bounces back in at speed unless its

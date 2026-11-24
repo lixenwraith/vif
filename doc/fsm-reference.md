@@ -1111,7 +1111,7 @@ restitution = 0.5                   # Speed kept off a wall or the map's edge, 0
 [prototype.attacks]                 # Its own attack row: each family named replaces its combat row's keys (optional)
 pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and knockback (where the row takes it)
 missile = { damage = 9, death = "flash" }  # death: what a kill by the family leaves, in place of the prototype's own
-                                    # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, strike, hold, death_wave
+                                    # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, strike, death_wave
 
 [prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
 color = { r = 255, g = 120, b = 0 }  # The beams' color

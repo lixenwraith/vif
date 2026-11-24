@@ -805,7 +805,7 @@ size, and a resize stands the gateways, the square and the cursor on the new map
 as a new game would ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority));
 a smaller screen keeps the smallest map and looks at the square from its middle.
 The square stands there: the Lo Shu square, 2 7 6 over 9 5 1 over 4 3 8, its digits in
-three kinds, 2 1 3 attack, 6 5 4 hold and 8 7 9 defense, one of each along every
+three kinds, 2 1 3 attack, 6 5 4 whirl and 8 7 9 defense, one of each along every
 row and column. The scenario captures 1-9, h j k l, a s d f and Enter: a digit selects its
 block, h and l turn the block's row a place left and right, the last block round to
 the first (9 5 1 turned right is 1 9 5), and j and k its column down and up; a and
@@ -814,12 +814,12 @@ here), and the selection follows its block. A pointer or a finger does both: a
 press on a block selects it, and dragging it a block's width along its row, or its
 height along its column, turns that line a place, the first turn keeping the drag
 to that line. A line holding three of a kind fires the kind at once, and again each
-time its cooldown, 2 s from its last fire and 8 s for the defense, runs out while
-the line holds. Since a
-row turn keeps the row's kinds, and the square's rows are turns of one another,
-aligning one column by row turns aligns all three.
+time its cooldown, 2 s from its last fire, 3 s for the whirl and 8 s for the
+defense, runs out while the line holds. Since a row turn keeps the row's kinds, and
+the square's rows are turns of one another, aligning one column by row turns aligns
+all three.
 
-The square lies under the cursor's own shield, which the square sizes to reach two
+The square lies under the cursor's own shield, which the square sizes to reach four
 columns past its corners and steps ([Shield](#shield)): a touch costs it 2,500
 energy at every rank, it drains none on its own, its color counts the touches left
 25 to a step, red, yellow, green, blue, purple, pink, light gray, and it holds
@@ -830,22 +830,24 @@ the 100 the cursor starts with, and is thrown off as the shield threw it. The ga
 is lost to a touch on the blocks with neither energy nor heat left, under a red
 strobe as long as main's, and starts over on "The square has fallen".
 
-Attack and hold aim: each lands on the gateways its line faces and the bodies they
-sent, a body keeping its gateway. The edges of the middle block, run on across the
-map, cut it in thirds, and a line faces the gateways in its own, the right column
-the three on the right, the middle row those at the left and right. Each has an orb
-on an outer orbit, ten columns past the shield and clear of the cursor's own orbs,
-which circle the shield's edge: it stands at the middle of the side its line faces,
-one at each end for the middle row and column, and turns round the orbit, dim, while
-no line holds its kind. The attack's is a white core between a red and a blue lobe,
-the hold's a cyan core between a gold and a purple. Attack strikes those bodies
-dead whatever they hold, a red bolt flying to each from the orb; hold stuns them
-and holds those gateways' spawns for 1 s, its bolts gold and one to each gateway.
-Defense boosts the shield for 1 s, as two kills would, and blows a gust: a radial
-wind (§9) out from the square for 0.5 s that fades to nothing 30 columns past the
-shield and throws what stands by it back toward the map's edge, a mote 40 columns
-and a golem 27, with no knockback and no immunity; a body keeps no speed off the
-edge, and walks back in about as long as the defense's cooldown. While the boost
+A line faces a part of the map: a side's row or column the third past the edge of
+the middle block run on across the map, and the middle row or column, which faces
+both sides, the ribbon of rows or columns the shield spans, edge to edge. Attack
+strikes every body with a member in its part dead whatever it holds, and tints the
+part red as it lands. Its orb, a white core between a red and a blue lobe, stands
+on an outer orbit ten columns past the shield and clear of the cursor's own orbs,
+which circle the shield's edge: at the middle of the side its line faces, one at
+each end for the middle row and column, and dim, turning round the orbit, while no
+line holds the attack. The whirl, from whichever line holds it, turns a radial wind
+(§9) a quarter round the square for 1.5 s of each 3 s, fading to nothing 60 columns
+past the shield: it carries a body clockwise round the shield as it walks in, a
+light one further than a heavy one, and so into the part an attack faces, while
+streaks turn on the outer orbit. Defense boosts the shield for 1 s, as two kills
+would, and blows a gust: a radial wind (§9) out from the square for 0.5 s that fades
+to nothing 30 columns past the shield and throws what stands by it back toward the
+map's edge, a mote 40 columns and a golem 27, with no knockback and no immunity; a
+body keeps no speed off the edge, and walks back in about as long as the defense's
+cooldown. While the boost
 holds, the shield's rim carries a band in the defense's glow, two lobes turning
 round it. A firing line's blocks flash in the kind's glow, and under the square
 each kind's name, lit while a line holds it, stands over a meter that fills as
@@ -857,24 +859,25 @@ and every one holds while 300 bodies stand on the map. All
 trickle strays, bodies that home on the cursor and nothing else, and one sends a
 wave, a body every 3.2 s at first, which moves one to seven gateways on round the
 edge after 12 s, 9 s at the third rank and 6 s at the fourth. Bodies come in four
-ranks, a rank up heavier and a little faster (2.4 to 3 cells a second). A stray
-(mote, wisp, imp, golem; 6 to 30 hit points) is worn down by the cursor's weapons,
-a pulse without its stun. A wave's body (spark, shade, hex, titan, marked in the
-attack's red) takes nothing from them, so only a strike ends it. A strike's kill
-flashes its body where it stood and any other scatters it. Players' kills
+ranks, a rank up heavier and a little faster (2.4 to 3 cells a second). Every
+body, a stray (mote, wisp, imp, golem; 6 to 30 hit points) or a wave's (spark,
+shade, hex, titan, marked in the attack's red), is worn down by the cursor's
+weapons, a pulse without its stun. A kill by a strike, the rod or the death wave
+flashes the body where it stood, and any other scatters it. Players' kills
 raise the level, 30 for the first, or 90 s do, and each level is a rank on, small
 to big and round again: within a round the trickle runs a fifth quicker down to
 4 s a gateway, the wave two fifths quicker down to a body every 80 ms, and a level
 asks half as many kills again; the first rank of the next round eases back to where
 the last round's second ran. A level also sends a carrier, a heavy stray in gold,
 out of the gateway opposite the wave, and where a player's kill ends it the next
-weapon of the round launcher, turret, emitter, disruptor drops; the cursor's own
+weapon of the round launcher, turret, emitter, disruptor, rod drops; the cursor's own
 gun is taken as the game starts, so its weapons are those drops, fired as in every
 scenario by main fire or auto-fire, and lost as in main when the shield falls.
 
 A wave is defeated once its gateway sends strays again and the last of its bodies
 is dead, and it pays from that gateway: a heat drop, 10, and an energy drop,
-10,000, four touches, which is all the shield earns. Heat past the meter's 100
+10,000, four touches, which with the rod's 100 a hit is all the shield earns.
+Heat past the meter's 100
 fills overheat (§5), and here a full one is kept: the ember is put out and the
 overheat stands full, whole against what special fire spends, until Enter, or a
 press on the burst meter, spends it on a death wave (§7) out from the square
