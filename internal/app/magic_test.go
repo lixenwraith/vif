@@ -53,8 +53,8 @@ func newMagicOn(t *testing.T, width, height int) *App {
 
 // TestMagicFightsThroughACursorFixedOnItsSquare plays the shipped magic on its
 // smallest map: the cursor stands on the square's middle under a shield that covers
-// the square, each side line faces three gateways and each middle one two, and
-// neither a motion nor a pointer press moves the cursor.
+// the square, each edge faces the two gateways on its side's corners, and neither a
+// motion nor a pointer press moves the cursor.
 func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 	t.Parallel()
 	a := newMagic(t)
@@ -78,7 +78,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 			w.Components.Gateway.Each(func(_ core.Entity, g *component.GatewayComponent) bool {
 				gate, _ := w.Positions.GetPosition(g.AnchorEntity)
 				for l := range faced {
-					if sq.Faces(l, w.Resources.Config.CellAspect)(gate.X, gate.Y) {
+					if sq.Faces(l)(gate.X, gate.Y) {
 						faced[l]++
 					}
 				}
@@ -86,7 +86,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 			})
 		})
 	}
-	want := [component.SquareLines]int{3, 2, 3, 3, 2, 3}
+	want := [component.SquareLines]int{2, 2, 2, 2}
 	for range 100 {
 		if read(); faced == want {
 			break
@@ -94,7 +94,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 		a.Tick(1)
 	}
 	if faced != want {
-		t.Fatalf("the lines face %v gateways, want three a side line and two a middle one", faced)
+		t.Fatalf("the lines face %v gateways, want two an edge", faced)
 	}
 	cx, cy := sq.Center()
 	if at.X != cx || at.Y != cy {
@@ -203,10 +203,10 @@ type magicLayout struct {
 	mapW, mapH int
 	square     vmath.Point
 	cursor     vmath.Point
-	gates      [8]vmath.Point
+	gates      [4]vmath.Point
 }
 
-// layMagic plays a magic until its eight gateways stand and reads its layout
+// layMagic plays a magic until its four gateways stand and reads its layout
 func layMagic(t *testing.T, a *App) (lay magicLayout) {
 	t.Helper()
 	w := a.World()
@@ -232,7 +232,7 @@ func layMagic(t *testing.T, a *App) (lay magicLayout) {
 		}
 		a.Tick(1)
 	}
-	t.Fatal("magic never stood its eight gateways")
+	t.Fatal("magic never stood its four gateways")
 	return lay
 }
 
@@ -301,7 +301,7 @@ func TestMagicHoldsItsGatewaysOnceACrowdStands(t *testing.T) {
 	}
 	a.Settle()
 	a.Tick(2)
-	if n := held(); n != 8 {
-		t.Fatalf("%d gateways hold with 300 bodies on the map, want all eight", n)
+	if n := held(); n != 4 {
+		t.Fatalf("%d gateways hold with 300 bodies on the map, want all four", n)
 	}
 }

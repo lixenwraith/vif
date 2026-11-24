@@ -16,7 +16,7 @@ import (
 
 // SquareSystem keeps a magic square: nine blocks a player selects by digit and turns
 // a row or column at a time (squareTurns), under the shield of the cursor standing
-// on it, which it sizes to cover them. A line holding three blocks of a
+// on it, which it sizes to cover them. An edge holding three blocks of a
 // kind fires the kind's effect (component.SquareKinds) as that cursor's each time
 // its cooldown runs out.
 type SquareSystem struct {
@@ -58,6 +58,8 @@ func (s *SquareSystem) EventTypes() []event.EventType {
 		event.EventSquareSpawnRequest,
 		event.EventInputPressed,
 		event.EventSpeciesKilled,
+		event.EventEnergyCrossedZero,
+		event.EventSquareShieldFell,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -86,6 +88,20 @@ func (s *SquareSystem) HandleEvent(ev event.GameEvent) {
 		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
 			if p.KillerEntity != 0 && p.KillerEntity == s.owner(sq) {
 				sq.Magic = min(sq.Magic+parameter.SquareMagicKill, parameter.SquareMagicFull)
+			}
+			return true
+		})
+	case *event.EnergyCrossedZeroPayload:
+		// Its own cursor's shield falling with its energy is every instance's to hear
+		cursor := s.world.ResolveOwnedCursor(p.Entity)
+		if shield, ok := s.world.Components.Shield.GetPtr(cursor); ok && !shield.Active {
+			s.world.PushCrossing(event.EventSquareShieldFell, &event.SquareHitPayload{Entity: cursor})
+		}
+	case *event.SquareHitPayload:
+		// The shield over it fell: the square sheds its magic
+		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
+			if p.Entity != 0 && p.Entity == s.owner(sq) {
+				s.shed(sq)
 			}
 			return true
 		})
@@ -195,9 +211,9 @@ func (s *SquareSystem) owner(sq *component.SquareComponent) core.Entity {
 	return 0
 }
 
-// cover has its cursor's shield reach past the square's corners, hold its boost to
-// parameter.SquareBoostCap, step by the square's energy and leave its rays' stems
-// off the blocks, on the instance that simulates the cursor (D-13). With that shield
+// cover has its cursor's shield reach past the square's corners, step by the
+// square's energy, stand while a boosting kind holds and leave its rays' stems off
+// the blocks, on the instance that simulates the cursor (D-13). With that shield
 // down the blocks take the touches.
 func (s *SquareSystem) cover(sq *component.SquareComponent) {
 	cursor := s.world.ResolveOwnedCursor(s.owner(sq))
@@ -205,7 +221,10 @@ func (s *SquareSystem) cover(sq *component.SquareComponent) {
 	if !ok {
 		return
 	}
-	shield.BoostCap, shield.Step, shield.Stemless = parameter.SquareBoostCap, sq.ShieldStep, true
+	shield.Step, shield.Stemless, shield.Raised = sq.ShieldStep, true, false
+	for kind, spec := range component.SquareKinds {
+		shield.Raised = shield.Raised || spec.Boost && sq.Effects[kind].Active > 0
+	}
 	if want := sq.ShieldRadius(s.world.Resources.Config.CellAspect); shield.Radius != want {
 		shield.Radius = want
 		s.world.UpdateBoundsRadius()
@@ -276,17 +295,17 @@ func (s *SquareSystem) press(e core.Entity, sq *component.SquareComponent, slot 
 }
 
 // turn moves every block of a digit's row or column step places along it, the last
-// round to the first, and fires each ready kind a line now holds three of
+// round to the first, fills the meter of a magic state and fires each ready kind
+// a line now holds three of
 func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit uint8, column bool, step int) {
 	place := slices.Index(sq.Digits[:], digit)
 	if digit == 0 || place < 0 {
 		return
 	}
-	line := place / component.SquareSide
+	places := component.LinePlaces(false, place/component.SquareSide)
 	if column {
-		line = component.SquareSide + place%component.SquareSide
+		places = component.LinePlaces(true, place%component.SquareSide)
 	}
-	places := component.LinePlaces(line)
 	var was [component.SquareSide]uint8
 	for i, p := range places {
 		was[i] = sq.Digits[p]
@@ -295,15 +314,16 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 		sq.Digits[places[(i+step+component.SquareSide)%component.SquareSide]] = d
 	}
 	sq.Lines = squareLines(sq)
-	s.trigger(e, sq)
 	if sq.IsMagic() {
 		sq.Magic = parameter.SquareMagicFull
 	}
+	s.trigger(e, sq)
 }
 
 // shed empties the square's magic meter into dust, the share of SquareMagicDust it
 // held, in the blocks' digits evenly round the shield's rim, on this instance for
 // its own player: what special fire then detonates. A meter short of one keeps it.
+// A boosting kind's fire sheds it, and its cursor's shield falling.
 func (s *SquareSystem) shed(sq *component.SquareComponent) {
 	n := int(sq.Magic * parameter.SquareMagicDust / parameter.SquareMagicFull)
 	if n == 0 {
@@ -327,7 +347,7 @@ func (s *SquareSystem) shed(sq *component.SquareComponent) {
 // squareLines reads the kind each line holds three of
 func squareLines(sq *component.SquareComponent) (lines [component.SquareLines]uint8) {
 	for l := range lines {
-		places := component.LinePlaces(l)
+		places := component.EdgePlaces(l)
 		kind := sq.KindAt(places[0])
 		if kind < component.SquareKindCount && sq.KindAt(places[1]) == kind && sq.KindAt(places[2]) == kind {
 			lines[l] = uint8(kind) + 1
@@ -346,17 +366,15 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 }
 
 // fire runs each part of a kind's effect as its cursor's: its family on what stands
-// in the part line faces, as many boost rewards as its hold is of a kill's, its
-// wind about the square, and the square's magic shed as dust
+// in the part line faces, a boost for as long as it holds, its wind about the
+// square, and the square's magic shed as dust
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
 	cursor := s.owner(sq)
 	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown,
 		Struck: spec.Attack != component.CombatAttackNone && s.strike(sq, cursor, spec.Attack, line)}
 	if spec.Boost && cursor != 0 {
-		for range int(spec.Duration / parameter.BoostBaseDuration) {
-			s.world.PushLocal(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
-		}
+		s.world.PushLocal(event.EventBoostActivate, &event.BoostActivatePayload{Entity: cursor, Duration: spec.Duration})
 	}
 	if cx, cy := sq.Center(); spec.Wind.Force > 0 {
 		s.world.PushEvent(event.EventWindStart, &event.WindStartPayload{
@@ -376,7 +394,7 @@ func (s *SquareSystem) strike(sq *component.SquareComponent, cursor core.Entity,
 	if cursor == 0 {
 		return false
 	}
-	bodies := FindTargetsIn(s.world, sq.Faces(line, s.world.Resources.Config.CellAspect), position.ScopeShared, cursor)
+	bodies := FindTargetsIn(s.world, sq.Faces(line), position.ScopeShared, cursor)
 	for _, g := range bodies {
 		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,

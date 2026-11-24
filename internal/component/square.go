@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SquareKind is what a block of a magic square is; three of one kind along a row
-// or a column fire the kind's effect
+// SquareKind is what a block of a magic square is; three of one kind along an edge
+// fire the kind's effect
 type SquareKind uint8
 
 const (
@@ -22,7 +22,7 @@ const (
 const (
 	SquareSide   = 3
 	SquareBlocks = SquareSide * SquareSide
-	SquareLines  = 2 * SquareSide // the rows top down, then the columns left to right
+	SquareLines  = 4 // its edges: the top row, the bottom row, the left column, the right
 )
 
 // SquareWind is the wind a kind blows about the square as it fires: its force, the
@@ -117,14 +117,19 @@ func (s *SquareComponent) KindAt(p int) SquareKind {
 }
 
 // IsMagic reports a magic state: every row and column of digits summing alike, as
-// the Lo Shu square's do and the turns that shift it whole, which line up no kind
+// the Lo Shu square's do and the turns that shift it whole, which line up no kind,
+// or the digits standing in order row by row, 1 to 9 or 9 to 1
 func (s *SquareComponent) IsMagic() bool {
-	var sums [SquareLines]int
+	up, down := true, true
+	for p, d := range s.Digits {
+		up, down = up && int(d) == p+1, down && int(d) == SquareBlocks-p
+	}
+	var sums [2 * SquareSide]int
 	for l := range sums {
-		for _, p := range LinePlaces(l) {
+		for _, p := range LinePlaces(l >= SquareSide, l%SquareSide) {
 			sums[l] += int(s.Digits[p])
 		}
-		if sums[l] != sums[0] {
+		if sums[l] != sums[0] && !up && !down {
 			return false
 		}
 	}
@@ -157,43 +162,22 @@ func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect) vmath.Point 
 	return vmath.Point{X: x, Y: y}
 }
 
-// Orbs are the cells a line's orb stands at on the outer orbit, the middle of the
-// side the line faces: one for a side's row or column, one at each end for the
-// middle row and column, which face both
-func (s *SquareComponent) Orbs(l int, aspect vmath.Aspect) (cells [2]vmath.Point, n int) {
-	at := func(quarter int) vmath.Point { return s.OrbAt(float64(quarter)*math.Pi/2, aspect) }
+// Orb is the cell a line's orb stands at on the outer orbit, the middle of the side
+// the line faces
+func (s *SquareComponent) Orb(l int, aspect vmath.Aspect) vmath.Point {
 	// Quarter turns from the right: right, bottom, left, top
-	switch i, column := l%SquareSide, l >= SquareSide; {
-	case i == 1 && column:
-		return [2]vmath.Point{at(3), at(1)}, 2
-	case i == 1:
-		return [2]vmath.Point{at(2), at(0)}, 2
-	case column:
-		return [2]vmath.Point{at(2 - i)}, 1
-	default:
-		return [2]vmath.Point{at(3 - i)}, 1
-	}
+	return s.OrbAt(float64([SquareLines]int{3, 1, 2, 0}[l])*math.Pi/2, aspect)
 }
 
-// Faces is the test of whether a cell lies in line l's part of the map: for a side
-// line its third, past the edge of the middle block run on across the map, and for
-// the middle row or column the ribbon of rows or columns its shield draws across
-func (s *SquareComponent) Faces(l int, aspect vmath.Aspect) func(x, y int) bool {
+// Faces is the test of whether a cell lies in line l's part of the map: the third
+// on its side, past the edge of the middle block run on across the map
+func (s *SquareComponent) Faces(l int) func(x, y int) bool {
 	mx, my := s.Place(SquareBlocks / 2)
-	cx, cy := s.Center()
-	reach := s.ShieldRadius(aspect) * parameter.ShieldFeatherEndRatio
-	switch i, column := l%SquareSide, l >= SquareSide; {
-	case i == 1 && column:
-		half := int(reach)
-		return func(x, _ int) bool { return x >= cx-half && x <= cx+half }
-	case i == 1:
-		half := int(aspect.FromCircular(reach))
-		return func(_, y int) bool { return y >= cy-half && y <= cy+half }
-	case column:
-		return func(x, _ int) bool { return third(x, mx, s.Width) == i }
-	default:
-		return func(_, y int) bool { return third(y, my, s.Height) == i }
+	side := l % 2 * 2
+	if l >= 2 {
+		return func(x, _ int) bool { return third(x, mx, s.Width) == side }
 	}
+	return func(_, y int) bool { return third(y, my, s.Height) == side }
 }
 
 // third is 0 for v before [start, start+size), 1 inside it and 2 past it
@@ -207,14 +191,19 @@ func third(v, start, size int) int {
 	return 1
 }
 
-// LinePlaces names the places along line l
-func LinePlaces(l int) (places [SquareSide]int) {
-	for i := range places {
-		if l < SquareSide {
-			places[i] = l*SquareSide + i
+// LinePlaces names the places along row i, or along column i
+func LinePlaces(column bool, i int) (places [SquareSide]int) {
+	for n := range places {
+		if column {
+			places[n] = n*SquareSide + i
 		} else {
-			places[i] = i*SquareSide + l - SquareSide
+			places[n] = i*SquareSide + n
 		}
 	}
 	return places
+}
+
+// EdgePlaces names the places along line l
+func EdgePlaces(l int) [SquareSide]int {
+	return LinePlaces(l >= 2, l%2*(SquareSide-1))
 }

@@ -1607,7 +1607,7 @@ func equalHeat(a, b *component.HeatComponent) bool {
 }
 
 func equalShield(a, b *component.ShieldComponent) bool {
-	return a.DrainElapsed == b.DrainElapsed && a.BoostCap == b.BoostCap && a.Step == b.Step && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active && a.Stemless == b.Stemless
+	return a.DrainElapsed == b.DrainElapsed && a.Step == b.Step && math.Float64bits(float64(a.Radius)) == math.Float64bits(float64(b.Radius)) && a.Color == b.Color && a.Type == b.Type && a.Active == b.Active && a.Stemless == b.Stemless && a.Raised == b.Raised
 }
 
 func equalBoost(a, b *component.BoostComponent) bool {

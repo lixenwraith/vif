@@ -1874,8 +1874,8 @@ type SquareSpawnRequestPayload struct {
 	ShieldStep  int64    `toml:"shield_step"`
 }
 
-// SquareAlignedPayload names the kind that fired and its line: 0 to 2 the rows top
-// down, 3 to 5 the columns left to right
+// SquareAlignedPayload names the kind that fired and its line: the top row, the
+// bottom row, the left column, the right
 type SquareAlignedPayload struct {
 	Kind component.SquareKind `toml:"kind"`
 	Line int                  `toml:"line"`
@@ -1893,7 +1893,8 @@ type DeathWaveRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// SquareHitPayload names the cursor a touch on its square's blocks cost
+// SquareHitPayload names a square's cursor: the one a touch on its blocks cost, or
+// whose shield fell
 type SquareHitPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
