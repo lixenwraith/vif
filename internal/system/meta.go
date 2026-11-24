@@ -734,7 +734,7 @@ func (s *MetaSystem) handleAboutRequest() {
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "ViF",
 		Entries: []core.CardEntry{
-			{Key: "desc", Value: "A real-time roguelike typing shooter, solo or multiplayer, on an HFSM-driven ECS engine of its own, played with vi-style motions on a keyboard, a mouse or a phone's touchscreen."},
+			{Key: "desc", Value: "A real-time roguelike typing shooter, solo or multiplayer, on an HFSM-driven ECS engine of its own, played with vi-style motions on a keyboard, a mouse or a phone's touchscreen. Made with love for Go, terminal, and games."},
 			{Key: "version", Value: asset.Build()},
 			{Key: "go", Value: strings.TrimPrefix(runtime.Version(), "go")},
 			{Key: "plays on", Value: "a terminal, a desktop window, Android, a browser"},

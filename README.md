@@ -11,11 +11,11 @@
 
 # vif
 
-vif is a real-time roguelike typing shooter played with vi-style motions, solo or
-with others over the network: in a terminal, a desktop window, on Android or in
-the browser.
+vif is a real-time roguelike typing shooter played with vi-style motions, 
+offline solo or online multi-player: in a terminal, a desktop window,
+on Android or in the browser.
 
-It is pure Go with cgo off and few dependencies. The terminal, TOML, color and
+It is pure Go with few dependencies. The terminal, TOML, color and
 logging primitives are modules of their own
 ([terminal](https://github.com/lixenwraith/terminal),
 [toml](https://github.com/lixenwraith/toml),
