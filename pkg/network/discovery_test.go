@@ -12,7 +12,7 @@ import (
 )
 
 var testBeacon = Beacon{
-	Nonce: "00112233aabbccdd", Name: "friday", Scenario: "main", Players: 2, Ceiling: 8,
+	Nonce: "00112233aabbccdd", Name: "friday", Scenario: "fighter", Players: 2, Ceiling: 8,
 	Waiting: true, Protocol: 34, Build: "v1.2.3 (0a1b2c3d)",
 	Doors: []BeaconDoor{{Scheme: "ws", Port: 7778}, {Scheme: "tcp", Port: 7777}},
 }
@@ -58,7 +58,7 @@ func FuzzDiscoveryDatagram(f *testing.F) {
 	f.Add(append(bytes.Clone(valid), ' '))
 	f.Add(bytes.Replace(valid, []byte(`"nonce"`), []byte(`"Nonce"`), 1))
 	f.Add(bytes.Replace(valid, []byte(`"players":2`), []byte(`"players":2,"players":3`), 1))
-	f.Add(bytes.Replace(valid, []byte(`main`), []byte(`main`), 1))
+	f.Add(bytes.Replace(valid, []byte(`fighter`), []byte(`fighter`), 1))
 	f.Add(append(datagramHeader(datagramBeacon), `{"doors":null}`...))
 	f.Fuzz(func(t *testing.T, p []byte) {
 		b, err := DecodeBeacon(p)

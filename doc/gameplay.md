@@ -23,7 +23,7 @@ combat entity. Movement is discrete on the character grid. Hostile species,
 projectiles, and effects may keep higher-precision `float64` kinetic state but
 are projected back into the same grid for collision and rendering.
 
-The main campaign is endless rather than a fixed sequence of
+The embedded campaign, `fighter`, is endless rather than a fixed sequence of
 levels. Typing drives the resource economy, drains supply the first hostile
 pressure, and kill counters let the FSM introduce composite encounters. The
 author may replace that progression entirely with external TOML configuration.
@@ -425,7 +425,7 @@ a blocked tracer drains to its stop point.
 | Actor | Role |
 |---|---|
 | Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases its own cursor, drains its shield energy, removes its heat on unshielded contact, meets no other player's cursor, turns the player glyphs it crosses into dust (§4) and breaks the gold sequence it crosses; one that crosses a swarm or quasar is absorbed into it, healing it. |
-| Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the main campaign. |
+| Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the `fighter` campaign. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. A blinking cell marks where a charge or teleport lands, from the lock until it does. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area that swells over its first half second, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |
 | Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. One spawned `inert` is a post no weapon aims at or wears, as a gateway's in `magic`. |
@@ -600,10 +600,10 @@ drift, or under a drift without `scenery`, is typeable as before.
 ## 10. Embedded campaign progression
 
 The campaign has one source, `internal/asset/scenario/`, compiled into native,
-headless, and browser builds. `-s main` uses it unless a configuration root supplies
-an explicit `scenario/main` override. Only the background monitor starts at boot;
-it spawns and arms the cursor there and opens `main` at the first tick, the game's
-start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
+headless, and browser builds. `-s fighter` uses it unless a configuration root supplies
+an explicit `scenario/fighter` override. Only the background monitor starts at boot;
+it spawns and arms the cursor there and opens its `main` region at the first tick, the
+game's start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 
 1. `main` cycles gold sequences and decay waves. Ten drain kills elect the causal
    cursor, pause `main`, and begin a quasar encounter.
@@ -733,9 +733,9 @@ map in under six seconds; then the scroll and the drift ease to rest over a seco
 and the Kraken rises at the right edge (the `boss` region), with 120 hit points in
 the first cave, thirty seconds of the gun on it (a hit's immunity window lets one
 tracer of a volley land, four a second whatever the lanes), and twice the last
-Kraken's in each cave after. Its touch is main's, so a ship that stays in its reach
+Kraken's in each cave after. Its touch is `fighter`'s, so a ship that stays in its reach
 is lost within seconds. A player's kill of it drops a missile charge, heat and two
-energy for every player, doubles species damage as a storm kill does in main, every
+energy for every player, doubles species damage as a storm kill does in `fighter`, every
 energy penalty with it ("Species Damage Up"), and lays the next cave behind its open
 mouth, of a stone art drawn from the three it is not, scrolling a fifth faster in
 whole columns a second (20, 24, 29, 35, and on to the soft cap of 200), its drift
@@ -792,7 +792,7 @@ the bottom, the rest climb out where they came in (`Leave`). The flagship circle
 station over the top's middle, its emitter laying a ray at the nearest cursor that
 fires after a warning, and launches wasps from its bay; shot down, it drops every
 player a `U`, a heat and two energy. A formation shot down doubles species damage as
-a storm kill does in main ("Species Damage Up"), and a squadron wave none of whose
+a storm kill does in `fighter` ("Species Damage Up"), and a squadron wave none of whose
 ships got away drops every player a heat. A kill rolls the armada drop table for
 every player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is as in `cave`:
 heat and energy both run out, the stars stop under a red strobe, and the game starts
@@ -825,10 +825,10 @@ columns past its corners and steps ([Shield](#shield)): it starts with 1,400
 energy, a touch costs it 1 at every rank and nothing gives any back, so its energy
 counts the touches left and its color 200 to a step, red, yellow, green, blue,
 purple, pink, light gray. With no energy the shield is down for good, the weapons
-fall as in main and the square sheds its magic, and the blocks take the touches: a
+fall as in `fighter` and the square sheds its magic, and the blocks take the touches: a
 body on them costs 10 heat, of the 100 the cursor starts with, and is thrown off
 as the shield threw it. The game is lost to a touch on the blocks with neither
-energy nor heat left, under a red strobe as long as main's, and starts over on
+energy nor heat left, under a red strobe as long as `fighter`'s, and starts over on
 "The square has fallen".
 
 An edge faces its side of the map, past the edge of the middle block run on across
@@ -958,7 +958,7 @@ Each entry declares a domain profile and its dependencies in
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
-| Main campaign | `internal/asset/scenario/*.toml` |
+| Fighter campaign | `internal/asset/scenario/*.toml` |
 | External scenarios | `wad/scenario/base/*` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in

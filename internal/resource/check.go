@@ -148,7 +148,7 @@ func checkScenario(o Options, w io.Writer) (Scenario, error) {
 		return Scenario{}, err
 	}
 	if source == "" {
-		source = "embedded main"
+		source = "embedded fighter"
 	}
 	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s, players %d..%d)\n",
 		source, sc.Name, sc.Files(), sc.Short(), sc.MinPlayers, sc.MaxPlayers)

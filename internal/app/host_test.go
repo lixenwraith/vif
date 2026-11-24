@@ -2143,7 +2143,7 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 }
 
 // TestTdFusesTheCausalParticipantsDrains: td's quasar phase opens on the drain defeat
-// that crosses its threshold and fuses that participant's drains, as main's does: the
+// that crosses its threshold and fuses that participant's drains, as fighter's does: the
 // guest whose defeat it was lands the quasar, the host takes it from the guest, and
 // only the guest's drains hold while the phase runs
 func TestTdFusesTheCausalParticipantsDrains(t *testing.T) {
@@ -3281,7 +3281,7 @@ func arrival(t *testing.T, host, guest *App) (link.PeerID, uint8) {
 // TestAHostAnnouncesTheSessionItsDoorOpens: a run announces nothing to the local
 // network while it plays alone, and once it hosts at a door others reach, its
 // session: that door, its scenario by the name a player reads, the built-in one
-// as main, the host as its one player, the places it holds and the protocol.
+// as fighter, the host as its one player, the places it holds and the protocol.
 func TestAHostAnnouncesTheSessionItsDoorOpens(t *testing.T) {
 	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}})
 	if err != nil {
@@ -3301,8 +3301,8 @@ func TestAHostAnnouncesTheSessionItsDoorOpens(t *testing.T) {
 	}
 	door := link.BeaconDoor{Scheme: "tcp", Port: uint16(portOf(t, a).Addr().(*net.TCPAddr).Port)}
 	if !slices.Equal(b.Doors, []link.BeaconDoor{door}) || b.Players != 1 || int(b.Ceiling) != a.membership.SessionCapacity()+1 ||
-		b.Scenario != "main" || b.Protocol != network.ProtocolVersion {
-		t.Fatalf("the host announces %+v, want its door %+v, one player of %d, scenario main and protocol %d",
+		b.Scenario != "fighter" || b.Protocol != network.ProtocolVersion {
+		t.Fatalf("the host announces %+v, want its door %+v, one player of %d, scenario fighter and protocol %d",
 			*b, door, a.membership.SessionCapacity()+1, network.ProtocolVersion)
 	}
 }

@@ -1863,7 +1863,7 @@ type GatewayDespawnedPayload struct {
 // SquareSpawnRequestPayload lays a magic square centered on a cell: Layout names the
 // digit of each place row by row, Groups the digits of each kind in SquareKind
 // order. A zero block size takes the default. ShieldStep is the energy a step of
-// its cursor's shield's color spans, zero leaving that shield main's.
+// its cursor's shield's color spans, zero leaving that shield fighter's.
 type SquareSpawnRequestPayload struct {
 	X           int      `toml:"x"`
 	Y           int      `toml:"y"`

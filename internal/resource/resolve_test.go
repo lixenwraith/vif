@@ -29,16 +29,16 @@ func TestResolutionPrecedence(t *testing.T) {
 	base := t.TempDir()
 	user, system := filepath.Join(base, "user"), filepath.Join(base, "system")
 
-	systemScenario := filepath.Join(system, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
+	systemScenario := filepath.Join(system, paths.ScenarioDirName, paths.FighterScenarioName, paths.ScenarioFile)
 	writeFixture(t, systemScenario)
 	r := resolver{roots: []string{user, system}}
-	if got := r.scenario(paths.MainScenarioName); got != systemScenario {
+	if got := r.scenario(paths.FighterScenarioName); got != systemScenario {
 		t.Fatalf("scenario path = %q, want the system root's file %q", got, systemScenario)
 	}
 
-	userScenario := filepath.Join(user, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
+	userScenario := filepath.Join(user, paths.ScenarioDirName, paths.FighterScenarioName, paths.ScenarioFile)
 	writeFixture(t, userScenario)
-	if got := r.scenario(paths.MainScenarioName); got != userScenario {
+	if got := r.scenario(paths.FighterScenarioName); got != userScenario {
 		t.Fatalf("scenario path = %q, want the user root's file %q", got, userScenario)
 	}
 
@@ -240,7 +240,7 @@ func writeKeymap(t *testing.T, path, doc string) {
 // end, and the strictness the explicit overrides apply.
 func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	root := t.TempDir()
-	scenario := filepath.Join(root, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
+	scenario := filepath.Join(root, paths.ScenarioDirName, paths.FighterScenarioName, paths.ScenarioFile)
 	keymap := filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile)
 	music := filepath.Join(root, paths.AudioDirName, paths.MusicConfigFile)
 	sounds := filepath.Join(root, paths.AudioDirName, paths.SoundConfigFile)
@@ -359,16 +359,16 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	}
 }
 
-// TestScenariosListsMainThenEveryRootsScenario: main leads whether or not a root
-// holds it, then every scenario of every group, sorted, each by the name -s reaches
-// it by: its own, or its path where that name reaches another. A directory without
-// an entry file, one a higher root holds at the same path, or -d lists nothing.
-func TestScenariosListsMainThenEveryRootsScenario(t *testing.T) {
+// TestScenariosListsFighterThenEveryRootsScenario: fighter leads whether or not a
+// root holds it, then every scenario of every group, sorted, each by the name -s
+// reaches it by: its own, or its path where that name reaches another. A directory
+// without an entry file, one a higher root holds at the same path, or -d lists nothing.
+func TestScenariosListsFighterThenEveryRootsScenario(t *testing.T) {
 	user := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", user)
 	t.Setenv(paths.SystemRootsEnv, "")
 	dir := t.TempDir()
-	for _, rel := range []string{"base/td", "base/blank", paths.MainScenarioName, "test/td"} {
+	for _, rel := range []string{"base/td", "base/blank", paths.FighterScenarioName, "test/td"} {
 		writeFixture(t, filepath.Join(dir, paths.ScenarioDirName, filepath.FromSlash(rel), paths.ScenarioFile))
 	}
 	writeFixture(t, filepath.Join(user, paths.AppDirName, paths.ScenarioDirName, "base", "td", paths.ScenarioFile))
@@ -376,10 +376,10 @@ func TestScenariosListsMainThenEveryRootsScenario(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := Scenarios(Options{Dir: dir})
-	if want := []string{paths.MainScenarioName, "blank", "td", "test/td"}; strings.Join(got, " ") != strings.Join(want, " ") {
+	if want := []string{paths.FighterScenarioName, "blank", "td", "test/td"}; strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("scenarios = %v, want %v", got, want)
 	}
-	if got := Scenarios(Options{Dir: dir, Embedded: true}); len(got) != 1 || got[0] != paths.MainScenarioName {
-		t.Fatalf("-d lists %v, want main alone", got)
+	if got := Scenarios(Options{Dir: dir, Embedded: true}); len(got) != 1 || got[0] != paths.FighterScenarioName {
+		t.Fatalf("-d lists %v, want fighter alone", got)
 	}
 }

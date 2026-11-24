@@ -217,10 +217,10 @@ func (a *allocator) scenarios() ([]string, map[string]string) {
 const describeScan = 4 << 10
 
 // describe fills each of limits' scenarios' description, player range and [map]
-// fixed from its entry file in dirs, per request for the reason the names are. A
-// main the volume does not hold is the game's embedded fallback, so it is described
-// by that one. An unreadable or malformed entry is left undescribed: describing is
-// not this service's check to fail.
+// fixed from its entry file in dirs, per request for the reason the names are.
+// Fighter, where the volume does not hold it, is the game's embedded fallback, so it
+// is described by that one. An unreadable or malformed entry is left undescribed:
+// describing is not this service's check to fail.
 func (a *allocator) describe(limits *fleetLimits, dirs map[string]string) {
 	limits.Descriptions, limits.FixedMaps = map[string]string{}, map[string]string{}
 	limits.MinPlayers, limits.MaxPlayers = map[string]int{}, map[string]int{}
@@ -230,8 +230,8 @@ func (a *allocator) describe(limits *fleetLimits, dirs map[string]string) {
 		if dir, ok := dirs[name]; ok {
 			head, err = readHead(filepath.Join(dir, paths.ScenarioFile), describeScan)
 		}
-		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
-			head, err = fs.ReadFile(asset.MainScenario, asset.MainScenarioEntry)
+		if errors.Is(err, fs.ErrNotExist) && name == paths.FighterScenarioName {
+			head, err = fs.ReadFile(asset.FighterScenario, asset.FighterScenarioEntry)
 		}
 		if err != nil {
 			continue

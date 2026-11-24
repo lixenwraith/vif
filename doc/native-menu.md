@@ -56,7 +56,7 @@ node's id. The terminal and the desktop window keep the `tui` menu.
   `configForms`) or `info`. `TestEveryNodeHasTheKindItsFieldsServeAndAnIdOfItsOwn`
   holds each kind to its fields.
 - A node's id is its keys from the root joined by `/`: `settings/#Sound/sfx`,
-  `scenarios/#Installed/pick/main`, `multiplayer/#Bots/drop/10`. Run-time keys hold
+  `scenarios/#Installed/pick/fighter`, `multiplayer/#Bots/drop/10`. Run-time keys hold
   `/` themselves, which `configNodeFor`'s walk down the groups on the id's path
   allows; the same test holds the tree to unique ids. The `tui` menu keys its rows,
   a search's included, by the same id, so `changeConfigMenu` is the selection lookup
@@ -89,8 +89,8 @@ own, nil otherwise; the app pushes it when its bytes differ from the last pushed
       {"id": "game/speed", "kind": "step", "label": "Game speed", "value": "1x"}]},
     {"id": "scenarios", "kind": "group", "label": "Scenarios", "nodes": [
       {"id": "scenarios/#Installed", "kind": "group", "label": "Installed", "nodes": [
-        {"id": "scenarios/#Installed/pick/main", "kind": "pick", "label": "main", "value": "current", "marked": true}]},
-      {"id": "scenarios/start", "kind": "action", "label": "Start main", "confirm": true},
+        {"id": "scenarios/#Installed/pick/fighter", "kind": "pick", "label": "fighter", "value": "current", "marked": true}]},
+      {"id": "scenarios/start", "kind": "action", "label": "Start fighter", "confirm": true},
       {"id": "scenarios/#Other", "kind": "group", "label": "Other", "nodes": [
         {"id": "scenarios/#Other/scenario", "kind": "form", "label": "Other scenario",
          "fields": [{"label": "Scenario", "value": "", "input": "text"}]}]}]},

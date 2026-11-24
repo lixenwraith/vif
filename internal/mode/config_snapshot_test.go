@@ -297,7 +297,7 @@ func TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds(t *testing.T) {
 		{"settings/#Controls/auto", menuNode{Kind: "choice", Label: "Auto-fire", Value: "on", Choices: []string{"off", "main", "on"}}},
 		{"game/speed", menuNode{Kind: "step", Label: "Game speed", Value: "1x"}},
 		{"game/restart", menuNode{Kind: "action", Label: "Restart game", Confirm: true}},
-		{"scenarios/#Installed/pick/main", menuNode{Kind: "pick", Label: "main", Value: "current", Marked: true}},
+		{"scenarios/#Installed/pick/fighter", menuNode{Kind: "pick", Label: "fighter", Value: "current", Marked: true}},
 		{"multiplayer/#Bots/drop/10", menuNode{Kind: "action", Label: "Remove 2: default", Confirm: true}},
 		{"multiplayer/#Bots/drop/12", menuNode{Kind: "action", Label: "Remove 5: default", Confirm: true, Disabled: "This bot is leaving"}},
 		{"multiplayer/#Players/player/9", menuNode{Kind: "action", Label: "Drop 6: player, away", Confirm: true, Disabled: "Only the host can remove other participants"}},

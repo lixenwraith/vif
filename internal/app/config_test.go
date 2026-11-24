@@ -197,7 +197,7 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 // a door reopens under its session's policy, and a size fitted is kept as named.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
-	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
+	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "fighter", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
 			Participants: 4, Migrate: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
 	dialed := &membership.JoinDial{}

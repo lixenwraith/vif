@@ -187,16 +187,16 @@ Nightly builds of this binary are also the container image
 <!-- end -->
 <!-- if steam -->
 `wad/` holds the `td`, `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and
-`tutorial` scenarios beside the main one, the full typing corpus, wall images and
-copies of the keymaps, bot graphs and `vif.toml` to read. Steam replaces it at
-every update and the game never writes there, so what is yours lives elsewhere.
+`tutorial` scenarios beside the embedded `fighter`, the full typing corpus, wall
+images and copies of the keymaps, bot graphs and `vif.toml` to read. Steam replaces
+it at every update and the game never writes there, so what is yours lives elsewhere.
 
 <!-- end -->
 <!-- if zip -->
 `wad\` holds the `td`, `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and
-`tutorial` scenarios beside the main one, the full typing corpus, wall images and
-copies of the keymaps, bot graphs and `vif.toml` to read. A later release brings
-its own and the game never writes there, so what is yours lives elsewhere.
+`tutorial` scenarios beside the embedded `fighter`, the full typing corpus, wall
+images and copies of the keymaps, bot graphs and `vif.toml` to read. A later release
+brings its own and the game never writes there, so what is yours lives elsewhere.
 
 <!-- end -->
 <!-- if winfolder -->
@@ -216,7 +216,7 @@ music (`-mw`) go under `~/.local/state/vif/`.
 
 <!-- end -->
 <!-- if client -->
-The binary carries the main scenario and a tutorial typing corpus. The `td`,
+The binary carries the `fighter` scenario and a tutorial typing corpus. The `td`,
 `recall`, `blank`, `cave`, `armada`, `magic`, `dummy` and `tutorial` scenarios,
 the full corpus, wall images and editable copies of the keymaps, bot graphs and
 `vif.toml` are the wad, `vif-@LABEL@-wad.tar.gz` in the same release. It unpacks
@@ -224,7 +224,7 @@ as the `vif/` configuration directory:
 
 <!-- end -->
 <!-- if headless -->
-The binary carries the main scenario. The `td`, `recall`, `blank`, `cave`,
+The binary carries the `fighter` scenario. The `td`, `recall`, `blank`, `cave`,
 `armada`, `magic`, `dummy` and `tutorial` scenarios and their wall images are in
 the wad, `vif-@LABEL@-wad.tar.gz` in the same release, which unpacks as the
 `vif/` configuration directory:
