@@ -190,8 +190,9 @@ hits. The digest names every slot field, so a status is compared state.
 A magic square's attack is that of the cursor standing on it, which owns and
 originates it, so a kill is that cursor's: `strike` takes whatever hit points a
 body on the swarm row holds (`CombatDamageSquareStrike`), on every target with a
-member in the third of the map the firing line faces (`SquareSystem.strike`, the
-weapons' own `FindTargetsIn`). A family lands alike from every attacker, which a
+member in the part of the map the firing line faces (`SquareComponent.Faces`), a
+side line's third or a middle line's ribbon (`SquareSystem.strike`, the weapons'
+own `FindTargetsIn`). A family lands alike from every attacker, which a
 data species' row takes as given, so the strike is a family of its own. A hit
 that takes hit points records its family (`CombatComponent.LastAttack`), and a data
 species killed dies by that row's `death`, its prototype's unless the row names

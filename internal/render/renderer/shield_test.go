@@ -212,3 +212,40 @@ func TestShieldGeometryFollowsEveryRadiusAndMap(t *testing.T) {
 		}
 	}
 }
+
+// TestAMiddleLinesRibbonIsItsShieldsSpan: the part of the map a magic square's
+// middle row faces is the rows its shield draws, and its middle column's the
+// columns, so the strike's flash meets the shield's edge with none over or under
+func TestAMiddleLinesRibbonIsItsShieldsSpan(t *testing.T) {
+	t.Parallel()
+	const w, h = 120, 80
+	rc := render.RenderContext{ViewportWidth: w, ViewportHeight: h, MapWidth: w, MapHeight: h}
+	look := &visual.ShieldLooks[component.ShieldTypePlayer]
+	style := ShieldStyle{Look: look, BlendScale: 1, Color: look.Color, Palette256: look.Palette256, Local: true}
+	for _, aspect := range []vmath.Aspect{vmath.RefAspect, 0.45, 1} {
+		sq := component.SquareComponent{X: 40, Y: 30, Width: parameter.SquareBlockWidth, Height: aspect.YInt(parameter.SquareBlockHeight)}
+		cx, cy := sq.Center()
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, w, h)
+		NewShieldPainter(terminal.ColorModeTrueColor, aspect).Paint(buf, rc, cx, cy, sq.ShieldRadius(aspect), style)
+		var rows [h]bool
+		var columns [w]bool
+		for y := range h {
+			for x := range w {
+				if buf.BackgroundAt(x, y, untouchedBg) != untouchedBg {
+					rows[y], columns[x] = true, true
+				}
+			}
+		}
+		row, column := sq.Faces(1, aspect), sq.Faces(component.SquareSide+1, aspect)
+		for y, drawn := range rows {
+			if row(cx, y) != drawn {
+				t.Errorf("aspect %v: row %d faced %t, drawn by the shield %t", aspect, y, !drawn, drawn)
+			}
+		}
+		for x, drawn := range columns {
+			if column(x, cy) != drawn {
+				t.Errorf("aspect %v: column %d faced %t, drawn by the shield %t", aspect, x, !drawn, drawn)
+			}
+		}
+	}
+}

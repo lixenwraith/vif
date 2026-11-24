@@ -236,9 +236,8 @@ and the whirl's force and reach, the boost a kill gives, a weapon's kill of a
 wave's body among them, and the bank's cap, the paces, how a rank and a round
 quicken them and how long a wave stays, the carrier's weapons, what charges the
 magic meter and what its dust's blast does, and whether one turn may align all
-three kinds at once. Played headless at 130 by 44 with no turn, attack and whirl
-held on two rows lost the square at 163 to 216 s, attack and defense at 143 to
-152 s.
+three kinds at once. Played headless at 130 by 44 with no turn once all three
+kinds align, the square stood 1,200 s on each of four seeds.
 
 ### Give magic's late game an end
 
