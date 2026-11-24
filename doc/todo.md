@@ -220,34 +220,30 @@ follow the terrain.
 
 ## Magic
 
-Magic holds a magic square under its cursor's shield against eight gateways
-([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). It is a first cut
-built to be play tested; its numbers and rules are what the play test settles.
+Magic holds a magic square under its cursor's shield against the gateways on its
+map's corners ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). Its
+numbers are what a play test settles.
 
-### Tune magic after its fifth play test
+### Tune magic after its sixth play test
 
 - Priority: P1
 - Affected files: `wad/scenario/base/magic/scenario.toml`,
   `internal/parameter/square.go`, `internal/component/square.go` (`SquareKinds`)
 
-To settle: the shield's start, step and cap and what a touch costs it and the
-blocks, what a defeated wave pays, each kind's duration and cooldown, the gust's
-and the whirl's force and reach, the boost a kill gives, a weapon's kill of a
-wave's body among them, and the bank's cap, the paces, how a rank and a round
-quicken them and how long a wave stays, the carrier's weapons, what charges the
-magic meter and what its dust's blast does, and whether one turn may align all
-three kinds at once. Played headless at 130 by 44 with no turn once all three
-kinds align, the square stood 1,200 s on each of four seeds.
+To settle: the shield's count and what a touch costs the blocks, the eight ranks'
+hit points and speeds and what a strike takes off the upper four, the paces, how a
+rank and a round quicken them and the waves a round adds, each kind's duration and
+cooldown, the whirl's carry and the gust's throw, the carrier's weapons, and what
+charges the magic meter and what its dust's blast does.
 
-### Give magic's late game an end
+### Hold magic's length whatever the map's size
 
 - Priority: P2
-- Affected files: `wad/scenario/base/magic/scenario.toml` (`FloodRun`, the ramp)
+- Affected files: `wad/scenario/base/magic/scenario.toml` (`Gate`, the ranks)
 
-A strike ends all that stands in its third whatever its count, so past the paces'
-floors only the time a wave stays tests a player: one turned to each wave 3 s
-after it moved still stood at 900 s. A stay that shortens each round, or a second wave from the opposite
-gateway, closes it.
+A body's walk from a corner grows with the map, and the weapons have that much
+longer over it: one policy stood 620 s at 80 by 40 and 1,913 s at 200 by 60.
+Gateways a fixed walk from the square, or a pace by the map's size, closes it.
 
 ### Leave magic's dust to the player's key
 
