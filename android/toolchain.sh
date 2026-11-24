@@ -2,14 +2,10 @@
 # What make android needs: Go, a JDK, and an Android SDK holding the platform and
 # NDK app/build.gradle.kts names. "gradlew ARGS" names every missing piece and
 # every module go.mod lists below its build, else runs the wrapper; "adb ARGS"
-# runs adb from PATH or the SDK; "install" sets the missing pieces up: the only
-# command here that downloads (README.md).
+# runs adb from PATH or the SDK; "install" sets the missing pieces up with the
+# Android CLI: the only command here that downloads (README.md).
 set -eu
 cd "$(dirname "$0")"
-
-# The command-line tools an SDK is bootstrapped from, as published with their
-# SHA-256 at https://developer.android.com/studio#command-tools
-tools_build=15859902
 
 die() {
 	printf '%s\n' "$*" >&2
@@ -33,23 +29,21 @@ if [ -z "$sdk" ]; then
 	esac
 fi
 
-sdkmanager=
-for d in "$sdk/cmdline-tools/latest" "$sdk"/cmdline-tools/*; do
-	if [ -x "$d/bin/sdkmanager" ]; then
-		sdkmanager=$d/bin/sdkmanager
+# The Android CLI: PATH's, else where Google's installer and bootstrap put it, else
+# the launcher the command-line tools ship from 22.0. An SDK's tools/android is the
+# retired SDK Tools' manager, not the CLI.
+android=
+for a in "$(command -v android || :)" "$HOME/.local/bin/android" "$sdk"/cmdline-tools/*/bin/android; do
+	case $a in '' | */tools/android) continue ;; esac
+	if [ -x "$a" ]; then
+		android=$a
 		break
 	fi
 done
 
-# gradlew and sdkmanager start the java JAVA_HOME names, else PATH's; gomobile
-# runs javac from PATH.
+# gradlew starts the java JAVA_HOME names, else PATH's; gomobile runs javac from PATH.
 java=java
 [ -z "${JAVA_HOME:-}" ] || java=$JAVA_HOME/bin/java
-
-java_major() {
-	command -v "$java" >/dev/null 2>&1 || return 0
-	"$java" -version 2>&1 | sed -n 's/.* version "1\.\([0-9]*\).*/\1/p; s/.* version "\([0-9]*\).*/\1/p' | head -n 1
-}
 
 have_jdk() {
 	command -v "$java" >/dev/null 2>&1 && command -v javac >/dev/null 2>&1
@@ -100,11 +94,11 @@ preflight() {
 		return 1
 	fi
 	pkgs=
-	[ -f "$sdk/platforms/$platform/android.jar" ] || pkgs="$pkgs \"platforms;$platform\""
-	[ -f "$sdk/ndk/$ndk/source.properties" ] || pkgs="$pkgs \"ndk;$ndk\""
-	[ -z "$pkgs" ] || gap "SDK packages$pkgs in $sdk" "${sdkmanager:+$sdkmanager$pkgs}"
+	[ -f "$sdk/platforms/$platform/android.jar" ] || pkgs="$pkgs platforms/$platform"
+	[ -f "$sdk/ndk/$ndk/source.properties" ] || pkgs="$pkgs ndk/$ndk"
+	[ -z "$pkgs" ] || gap "SDK packages$pkgs in $sdk" "${android:+$android --sdk=$sdk sdk install$pkgs}"
 	# The build fetches the build tools its plugin wants under this license.
-	[ -f "$sdk/licenses/android-sdk-license" ] || gap "the SDK license, accepted in $sdk" "${sdkmanager:+$sdkmanager --licenses}"
+	[ -f "$sdk/licenses/android-sdk-license" ] || gap "the SDK license in $sdk, which the Android CLI records with each package it installs"
 	[ -z "$gaps" ]
 }
 
@@ -166,75 +160,53 @@ fetch() {
 	fi
 }
 
-sha256() {
-	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum "$1"
-	else
-		shasum -a 256 "$1"
-	fi | cut -d ' ' -f 1
-}
-
-# bootstrap unpacks the command-line tools as cmdline-tools/latest, the layout
-# sdkmanager expects to find its SDK from.
+# bootstrap installs the Android CLI's launcher where Google's installer does, which
+# fetches the CLI itself on its first run. Google publishes no checksum for either.
 bootstrap() {
 	case $(uname -s)/$(uname -m) in
-	Linux/*) host=linux sum=4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583 ;;
-	Darwin/arm64) host=mac_arm64 sum=835b62a26162b229b441d1f6d4680383815a270809eb33522c0d480fa5002c4e ;;
-	Darwin/x86_64) host=mac_x86_64 sum=c5a6378ab5cf7e0d5701921405115befff13e9ff7417fb588389338f8bd050f3 ;;
-	*) die "Unpack the command-line tools from https://developer.android.com/studio#command-tools as $sdk/cmdline-tools/latest, then run make android-toolchain again." ;;
+	Linux/x86_64) host=linux_x86_64 ;;
+	Linux/aarch64) host=linux_arm64 ;;
+	Darwin/arm64) host=darwin_arm64 ;;
+	Darwin/x86_64) host=darwin_x86_64 ;;
+	*) die "Install the Android CLI from https://developer.android.com/tools/agents/android-cli/download, then run make android-toolchain again." ;;
 	esac
-	[ ! -e "$sdk/cmdline-tools/latest" ] || die "$sdk/cmdline-tools/latest holds no bin/sdkmanager: remove it and run make android-toolchain again."
-	command -v unzip >/dev/null 2>&1 || die "unzip is needed to unpack the command-line tools."
-	url=https://dl.google.com/android/repository/commandlinetools-$host-${tools_build}_latest.zip
-	mkdir -p "$sdk/cmdline-tools"
-	tmp=$(mktemp -d "$sdk/cmdline-tools/.download.XXXXXX")
-	trap 'rm -rf "$tmp"' EXIT
+	url=https://dl.google.com/android/cli/latest/$host/android
+	android=$HOME/.local/bin/android
+	mkdir -p "${android%/*}"
+	tmp=$(mktemp "$android.XXXXXX")
+	trap 'rm -f "$tmp"' EXIT
 	echo "Downloading $url"
-	fetch "$url" "$tmp/tools.zip"
-	[ "$(sha256 "$tmp/tools.zip")" = "$sum" ] || die "$url does not match its published SHA-256 $sum."
-	unzip -q "$tmp/tools.zip" -d "$tmp"
-	mv "$tmp/cmdline-tools" "$sdk/cmdline-tools/latest"
-	sdkmanager=$sdk/cmdline-tools/latest/bin/sdkmanager
+	fetch "$url" "$tmp"
+	chmod 0755 "$tmp"
+	mv "$tmp" "$android"
+	echo "Installed the Android CLI as $android."
 }
 
 setup() {
 	sdk_host
 	set --
 	[ -x "$sdk/platform-tools/adb" ] || set -- "$@" platform-tools
-	[ -f "$sdk/platforms/$platform/android.jar" ] || set -- "$@" "platforms;$platform"
-	[ -f "$sdk/ndk/$ndk/source.properties" ] || set -- "$@" "ndk;$ndk"
-	license=
-	[ -f "$sdk/licenses/android-sdk-license" ] || license=1
-	# sdkmanager runs on Java 17 or newer; the build starts on any JDK.
-	need=0
-	if [ $# -gt 0 ] || [ -n "$license" ]; then need=17; fi
-	major=$(java_major)
-	if ! have_jdk && [ "${major:-0}" -ge "$need" ] && [ -x "${JAVA_HOME:-/nonexistent}/bin/javac" ]; then
-		die "javac is not on PATH, where gomobile runs it from: export PATH=\"\$JAVA_HOME/bin:\$PATH\""
-	fi
-	if ! have_jdk || [ "${major:-0}" -lt "$need" ]; then
+	[ -f "$sdk/platforms/$platform/android.jar" ] || set -- "$@" "platforms/$platform"
+	[ -f "$sdk/ndk/$ndk/source.properties" ] || set -- "$@" "ndk/$ndk"
+	# The CLI has no license command: an install records the license of what it installs.
+	[ $# -gt 0 ] || [ -f "$sdk/licenses/android-sdk-license" ] || set -- platform-tools
+	if ! have_jdk; then
+		[ ! -x "${JAVA_HOME:-/nonexistent}/bin/javac" ] || die "javac is not on PATH, where gomobile runs it from: export PATH=\"\$JAVA_HOME/bin:\$PATH\""
 		pkg=$(jdk_package)
-		[ -n "$pkg" ] || die "Install a JDK, 17 or newer, then run make android-toolchain again."
-		echo "Gradle and gomobile need a JDK, and sdkmanager Java 17 or newer${major:+; java here is $major}."
+		[ -n "$pkg" ] || die "Install a JDK, then run make android-toolchain again."
+		echo "Gradle and gomobile need a JDK."
 		printf 'Proposed installation: %s\nInstall now? [y/N] ' "$pkg"
 		read -r yn || yn=
 		case $yn in
 		[Yy]*) $pkg ;;
 		*) die "Aborted. Install a JDK to continue." ;;
 		esac
-		major=$(java_major)
-		if ! have_jdk || [ "${major:-0}" -lt "$need" ]; then
-			die "java is ${major:-missing} or javac is not on PATH: point JAVA_HOME and PATH at the JDK just installed."
-		fi
+		have_jdk || die "java or javac is not on PATH: point JAVA_HOME and PATH at the JDK just installed."
 	fi
-	if [ $# -gt 0 ] || [ -n "$license" ]; then
-		if [ -z "$sdkmanager" ]; then bootstrap; fi
-		if [ $# -gt 0 ]; then
-			echo "Installing into $sdk: $*"
-			"$sdkmanager" --sdk_root="$sdk" --install "$@"
-		else
-			"$sdkmanager" --sdk_root="$sdk" --licenses
-		fi
+	if [ $# -gt 0 ]; then
+		[ -n "$android" ] || bootstrap
+		echo "Installing into $sdk: $*"
+		"$android" --no-metrics --sdk="$sdk" sdk install "$@"
 	fi
 	if [ -z "$sdk_dir" ] && [ -z "${ANDROID_HOME:-}" ]; then
 		printf 'sdk.dir=%s\n' "$sdk" >>local.properties

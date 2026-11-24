@@ -40,8 +40,10 @@ Audio sends PCM to optional host commands; see the audio library's
 [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
 to build the normal binary. When the `GO` command is missing, a target that
-compiles proposes the Arch, Debian (snap) or FreeBSD package install and runs it
-only on a yes. Beyond Go, `make android` names each JDK or Android SDK piece it
+compiles shows Go's install by hand and offers the system's package (Arch,
+Debian's snap, FreeBSD, Homebrew) or Go's latest release, checked against the
+SHA-256 go.dev lists and unpacked as `.go/` (`GO_DIST`), last on `make`'s `PATH`
+for this checkout alone (`script/toolchain.sh`). Beyond Go, `make android` names each JDK or Android SDK piece it
 lacks, which `make android-toolchain` installs ([android/README.md](../android/README.md#build)).
 
 ## 2. Common build workflow

@@ -26,11 +26,9 @@ Docs · Libraries · Branches.
   for concepts (`door_test.go`), and a write to a path that exists replaces it.
 - `android/` is its own module: a dependency bump in the root `go.mod` also needs
   `go -C android mod tidy`, which `android/toolchain.sh` checks before Gradle. A
-  container without egress to `dl.google.com` cannot build the APK; with it, the
-  steps of `android/toolchain.sh install` by hand (the command-line tools zip it
-  pins, then `sdkmanager --licenses` and the platform, NDK, build-tools and
-  platform-tools) set the SDK up under `~/Android/Sdk` in minutes, and
-  `sdk.dir=` in `android/local.properties` names it. Gradle then stops on Maven
+  container without egress to `dl.google.com` cannot build the APK; with it and a
+  JDK, `android/toolchain.sh install` asks nothing and sets the SDK up in
+  minutes, under a scratch `ANDROID_HOME` if one is set. Gradle then stops on Maven
   Central's 429 to the shared egress even for an artifact another repository holds:
   an init script hooking `beforeSettings` and re-pointing every `mavenCentral()` at
   Google's mirror (`maven-central.storage-download.googleapis.com/maven2/`), passed
@@ -43,6 +41,11 @@ Docs · Libraries · Branches.
   github.com/lixenwraith/vif/android/game` writes without an SDK; `androidTest`
   adds `junit:junit:4.13.2` and a stub of `AndroidJUnit4`. The jar's
   `UnsupportedAppUsage` warnings are noise.
+- The Android CLI reads without being run: its launcher fetches
+  `https://dl.google.com/android/cli/<version>/<host>/android-cli` (`latest` for
+  the version), a native stub followed by a zip of a JRE and `main.jar`; Python's
+  `zipfile` opens that zip from its first `PK\x03\x04`, and `javap -c -constants`
+  reads `com.android.cli.ui.commands.Sdk` and `com.android.cli.sdk.SdkManager`.
 - Go on Android reads local time as UTC whatever the device's zone (`time` sets
   `Local` to UTC there), so a wall-clock time the player reads, as the console's
   stamps, takes the zone the app names (`game.Zone`), which the first `game.Start`

@@ -179,18 +179,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      # The runner's SDK has a sdkmanager and its licenses accepted; the platform
-      # and NDK the build names are installed as make android-toolchain installs them.
+      # The platform and NDK the build names, into the runner's SDK, as make
+      # android-toolchain installs them: with the Android CLI, asking nothing.
       - name: Install the SDK platform and NDK
         shell: bash
-        run: |
-          set -euo pipefail
-          platform=$(sed -n 's/^ *compileSdkVersion("\(.*\)")$/\1/p' android/app/build.gradle.kts)
-          ndk=$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
-          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          # yes dies of SIGPIPE once sdkmanager stops reading, which pipefail would count
-          { yes || true; } | "$sdkmanager" --licenses >/dev/null
-          "$sdkmanager" "platforms;$platform" "ndk;$ndk"
+        run: android/toolchain.sh install
 
       # The keystore secrets sign a release; without them the repository's debug key
       # does, which a local make android shares, so either installs over the other.
