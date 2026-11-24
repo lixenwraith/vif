@@ -26,3 +26,4 @@ journal/**/*.jsonl
 tool/vif-router/vif-router
 *.exe
 __pycache__/
+/.go/

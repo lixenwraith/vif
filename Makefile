@@ -80,15 +80,21 @@ SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
 GO ?= $(GO_DEFAULT)
+# The Go check-go unpacks on request, for this checkout alone: last on PATH, so an
+# installed Go wins, and a dot directory, which ./... skips.
+GO_DIST ?= $(CURDIR)/.go
+export PATH := $(PATH):$(GO_DIST)/bin
 # SIMD builds the presentation with GOEXPERIMENT=simd, under which
 # lixenwraith/terminal's cell diff runs on AVX2, NEON or wasm SIMD128: auto where
 # the toolchain takes the experiment, 1 to insist on it, 0 to leave it out.
 SIMD ?= auto
-SIMD_TAKEN != GOEXPERIMENT=simd $(GO) env GOEXPERIMENT >/dev/null 2>&1 && echo yes || echo no
+# Asked where used, so a Go check-go has just installed answers; PATH passed by
+# hand, as make before 4.4 exports none to $(shell).
+SIMD_TAKEN = $(shell PATH='$(PATH)' GOEXPERIMENT=simd $(GO) env GOEXPERIMENT >/dev/null 2>&1 && echo yes || echo no)
 comma := ,
 GOEXP = $(if $(or $(filter 1,$(SIMD)),$(and $(filter auto,$(SIMD)),$(filter yes,$(SIMD_TAKEN)))),GOEXPERIMENT=$(if $(GOEXPERIMENT),$(GOEXPERIMENT)$(comma))simd)
 # purego's FreeBSD port builds its fakecgo as std to link without cgo
-GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true
+GUI_GCFLAGS = $(shell [ "$$(PATH='$(PATH)' $(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true)
 # purego, which the desktop window links, builds with cgo off on fewer platforms
 # than the terminal does (not under Termux), so a client build tries it first and
 # names the terminal-only builds rather than leaving purego's errors to explain it.
@@ -165,38 +171,7 @@ $(WEB_DIR):
 	mkdir -p $(WEB_DIR)
 
 check-go:
-	@if ! command -v $(GO) >/dev/null 2>&1; then \
-		echo "Go compiler ($(GO)) not found."; \
-		if [ -n "$${SUDO_USER:-}" ]; then \
-			echo "sudo may reset PATH: make release as $$SUDO_USER, then sudo make install"; exit 1; \
-		fi; \
-		CMD=""; \
-		if [ -f /etc/arch-release ]; then \
-			CMD="sudo pacman -S go"; \
-		elif [ -f /etc/debian_version ]; then \
-			if command -v snap >/dev/null 2>&1; then \
-				CMD="sudo snap install go --classic"; \
-			fi; \
-		elif [ "$$(uname)" = "FreeBSD" ]; then \
-			CMD="sudo pkg install $$(sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go)"; \
-		fi; \
-		if [ -n "$$CMD" ]; then \
-			echo "Proposed installation: $$CMD"; \
-			printf "Install now? [y/N] "; \
-			read yn; \
-			case "$$yn" in \
-				[Yy]*) $$CMD ;; \
-				*) echo "Aborted. Install Go manually to continue."; exit 1 ;; \
-			esac; \
-		else \
-			echo "Automatic installation unavailable (or apt packages outdated)."; \
-			echo "Install Go $$(sed -n 's/^go //p' go.mod)+ manually:"; \
-			echo "  1. Download: https://go.dev/dl/"; \
-			echo "  2. Extract to /usr/local"; \
-			echo "  3. Add /usr/local/go/bin to PATH"; \
-			exit 1; \
-		fi; \
-	fi
+	@command -v $(GO) >/dev/null 2>&1 || script/toolchain.sh '$(GO)' '$(GO_DIST)'
 
 generate: check-go
 	$(GO) generate ./internal/manifest/...
