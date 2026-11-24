@@ -29,7 +29,7 @@ const (
 	// SquareWhirlDuration of each SquareWhirlCooldown, fading to nothing
 	// SquareWhirlReach columns past the shield: it carries a body round the shield
 	// as it walks in, a light one further than a heavy one
-	SquareWhirlForce    = 60.0
+	SquareWhirlForce    = 120.0
 	SquareWhirlReach    = 60.0
 	SquareWhirlDuration = 1500 * time.Millisecond
 	SquareWhirlCooldown = 3 * time.Second
