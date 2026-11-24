@@ -31,10 +31,10 @@ wad/                            internal/asset/
                                  └── splash_font.go
 ```
 
-The main campaign lives only in `internal/asset/scenario/`. Native, headless,
-and browser builds embed that same tree; `-s main` falls back to it when no
+The `fighter` campaign lives only in `internal/asset/scenario/`. Native, headless,
+and browser builds embed that same tree; `-s fighter` falls back to it when no
 external override exists. To author a variant, copy that directory into a
-configuration root's `scenario/` under a name of its own. A scenario named `main`
+configuration root's `scenario/` under a name of its own. A scenario named `fighter`
 in any root takes precedence.
 
 ## 2. Installed configuration tree
@@ -53,7 +53,7 @@ vif/
 ├── scenario/    scenarios, each rooted at scenario.toml, in groups
 │   ├── base/    the shipped ones; cave/behavior/ holds its programs, cave/bot/ its bots
 │   ├── downloads/  what sessions' hosts sent, when the player saves it
-│   ├── main/    optional default override
+│   ├── fighter/ optional default override
 │   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
 ├── input/       keymap.toml, and keymaps -k names: vim.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
@@ -72,7 +72,7 @@ directory is a group of scenarios and groups, to any depth, so a player can file
 their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed
 over, and a link counts as a scenario but is not read as a group. A scenario is
 selected by name (`-s td`), by its path below `scenario/` or by an explicit path
-(§3); an optional one named `main` is the automatically discovered scenario.
+(§3); an optional one named `fighter` is the automatically discovered scenario.
 
 `downloads/` (`[paths] downloads`) holds a scenario a session's host sent when
 `[session] save_downloads` asks for it, named for it and its digest
@@ -115,7 +115,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
-| Scenario | `scenario/**/main/scenario.toml`, as `-s main` finds it | embedded scenario |
+| Scenario | `scenario/**/fighter/scenario.toml`, as `-s fighter` finds it | embedded scenario |
 | Keymap | `input/keymap.toml`, or `input/<name>.toml` for a name `-k` gives | the built-in keymap alone, or the embedded keymap of that name over it |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
@@ -132,7 +132,7 @@ image, the event's path is a logical name below each root's `image/` directory,
 opened only as a regular file there; it may include nested directories but not
 `..`, and a host path, absolute or relative, is never opened, since the scenario
 naming it may have come from a peer. Missing explicit paths or names other than
-the built-in `main` are errors; absent discovered overrides are normal.
+the built-in `fighter` are errors; absent discovered overrides are normal.
 
 `-d` bypasses scenario and content discovery only, and refuses `-s` and `-f`.
 Keymap, audio and bot-graph overrides remain local participant preferences and

@@ -300,7 +300,7 @@ transitions = [
 # It rises with kraken_hp hit points, 120 in the first cave and twice the last
 # Kraken's in each after: 120 are thirty seconds of the gun on it, one tracer
 # landing a volley, four a second, whatever the lanes, as a hit's immunity window
-# holds the rest. Its touch is the code's, as in main.
+# holds the rest. Its touch is the code's, as in fighter.
 [states.BossSpawn]
 parent = "Root"
 on_enter = [
@@ -414,7 +414,7 @@ transitions = [
     { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# A lost game freezes the rock and the drift under a red strobe as long as main's,
+# A lost game freezes the rock and the drift under a red strobe as long as fighter's,
 # then starts over; the reset clears the status bar, so the new game opens with
 # what ended the last
 [states.PlayerDown]

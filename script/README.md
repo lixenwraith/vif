@@ -19,7 +19,7 @@ Overrides: `BIN` (default `./bin/vif`), `HOST` (`127.0.0.1`), `PORT` (`7777`),
 | Check | Asserts |
 |---|---|
 | `bundle` | the release wad archive extracts to a config root that resolves and carries a corpus |
-| `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
+| `scenario` | `:n td` then `:n fighter` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
 | `tree` | a relay, a relay behind it and a player with a bot behind that lose their host: the first relay goes on with all of them, each back in its own place through the door it joined at. Three terminals and a pty, like `follow` |
 | `fleet` | the hand-rendered session template and the router's own render carry the same arguments, mounts and claims |

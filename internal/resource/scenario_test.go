@@ -48,16 +48,16 @@ const scenarioRegion = "[states.MainStart]\nparent = \"Root\"\n"
 // and one changed byte is a different one. It is what a join is refused on.
 func TestDigestFollowsContentNotLocation(t *testing.T) {
 	base := t.TempDir()
-	here := writeScenario(t, filepath.Join(base, "one", "scenario", "main"), scenarioRegion)
+	here := writeScenario(t, filepath.Join(base, "one", "scenario", "fighter"), scenarioRegion)
 	there := writeScenario(t, filepath.Join(base, "two", "scenario", "renamed"), scenarioRegion)
-	edited := writeScenario(t, filepath.Join(base, "three", "scenario", "main"),
+	edited := writeScenario(t, filepath.Join(base, "three", "scenario", "fighter"),
 		scenarioRegion+"\n[states.MainOther]\nparent = \"Root\"\n")
 
 	a, b, c := read(t, here), read(t, there), read(t, edited)
 	if a.Digest() != b.Digest() {
 		t.Errorf("same bytes under different names digest differently:\n  %s\n  %s", a.Digest(), b.Digest())
 	}
-	if a.Name != "main" || b.Name != "renamed" {
+	if a.Name != "fighter" || b.Name != "renamed" {
 		t.Errorf("names = %q and %q; want the containing directory", a.Name, b.Name)
 	}
 	if a.Digest() == c.Digest() {
@@ -308,7 +308,7 @@ func TestNoNameAHostSendsLeavesTheDownloads(t *testing.T) {
 	for name, want := range map[string]string{
 		"../../escape": "escape", "/etc/vif": "etc_vif", ".hidden": "hidden", "-s": "s",
 		"日本語": "scenario", strings.Repeat("x", 300): strings.Repeat("x", 48),
-		EmbeddedLabel: "main", "td-" + sc.Short(): "td",
+		EmbeddedLabel: "fighter", "td-" + sc.Short(): "td",
 	} {
 		sc.Name = name
 		at, err := SaveDownload(dir, sc)
@@ -337,7 +337,7 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 	adversarial := scenarioRegion +
 		"\n# VIFSCEN\x00\x00\x01 unbalanced \" and a lone ' in a comment\n" +
 		"[states.MainOther]\nparent = \"Root\"\n"
-	src := read(t, writeScenario(t, filepath.Join(t.TempDir(), "scenario", "main"), scenarioRegion))
+	src := read(t, writeScenario(t, filepath.Join(t.TempDir(), "scenario", "fighter"), scenarioRegion))
 	// TOML refuses a NUL, so it cannot load from disk; a peer's body can still carry one.
 	src.files[slices.IndexFunc(src.files, func(f scenarioFile) bool { return f.name == "main.toml" })].data = []byte(adversarial)
 	src.digest = digestOf(src.Marshal())

@@ -104,7 +104,7 @@ speed** runs from 1/8x through 8x, in a session the host's.
 
 ### Scenarios
 
-One row per scenario `:n <name>` would start: `main` and every scenario the
+One row per scenario `:n <name>` would start: `fighter` and every scenario the
 configuration roots' `scenario/` trees hold, the saved downloads among them, each
 by its name, or by its path below `scenario/` where its name reaches another
 first, the running one marked `current`. Enter or a press marks one `(*)`; **Start &lt;name&gt;** below

@@ -77,14 +77,14 @@ func towerScenario(t *testing.T, seed uint64) Config {
 		t.Skipf("external scenario %s not present", soakScenarioDir)
 	}
 	cfg := Config{Mode: ModeHeadless, Seed: seed, Width: 160, Height: 50,
-		Resources: resource.Options{Dir: soakRoot, Scenario: paths.MainScenarioName}}
+		Resources: resource.Options{Dir: soakRoot, Scenario: paths.FighterScenarioName}}
 	if _, err := os.Stat(soakContentDir); err == nil {
 		cfg.Resources.Content = soakContentDir
 	}
 	return cfg
 }
 
-func TestMainOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.T) {
+func TestFighterOpensTheKrakenTheDevourerAndTheTowerEveryThirdStormKill(t *testing.T) {
 	a, err := NewHeadless(towerScenario(t, fixtureSeed))
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 func forEachShippedScenario(t *testing.T, test func(t *testing.T, a *App)) {
 	t.Helper()
 	event.EnsureRegistry()
-	for _, name := range []string{"main", "blank", "td", "recall", "cave", "armada", "dummy", ""} {
+	for _, name := range []string{"fighter", "blank", "td", "recall", "cave", "armada", "dummy", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
@@ -642,7 +642,7 @@ func TestShippedConfigsSpawnTowersThatOwnThemselves(t *testing.T) {
 		spawn bool
 	}{
 		{"td", "../../wad/scenario/base/td", false},
-		{"main", soakScenarioDir, true},
+		{"fighter", soakScenarioDir, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

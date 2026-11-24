@@ -605,7 +605,7 @@ transitions = [
 
 # A wave down: a green strobe, the pace a step faster and the stars rushing past as
 # the armada regroups ahead. The ranks' fall doubles species damage, and every energy
-# penalty with it, as a storm kill doubles it in main.
+# penalty with it, as a storm kill doubles it in fighter.
 [states.Cleared]
 parent = "Root"
 on_enter = [
@@ -746,7 +746,7 @@ transitions = [
     { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# A lost game stops the stars under a red strobe as long as main's, then starts over;
+# A lost game stops the stars under a red strobe as long as fighter's, then starts over;
 # the reset clears the status bar, so the new game opens with what ended the last
 [states.PlayerDied]
 parent = "Root"

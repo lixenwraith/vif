@@ -84,7 +84,7 @@ func TestBrowserKeepsWhatABotLearnedAsThePagesDocuments(t *testing.T) {
 	})
 	defer post.Release()
 	js.Global().Set("terminalPage", map[string]any{"post": post,
-		"kept": map[string]any{docBots: "default.main.walk\nmine.cave.raid", docBot + "default.main.walk": "walked", docBot + "mine.cave.raid": "raided"}})
+		"kept": map[string]any{docBots: "default.fighter.walk\nmine.cave.raid", docBot + "default.fighter.walk": "walked", docBot + "mine.cave.raid": "raided"}})
 	defer js.Global().Delete("terminalPage")
 	p := &keptPopulations{kept: map[string][]byte{}}
 	read := func(name string) string {
@@ -94,7 +94,7 @@ func TestBrowserKeepsWhatABotLearnedAsThePagesDocuments(t *testing.T) {
 		}
 		return string(doc)
 	}
-	if got := p.Names(); !slices.Equal(got, []string{"default.main.walk", "mine.cave.raid"}) || read("mine.cave.raid") != "raided" {
+	if got := p.Names(); !slices.Equal(got, []string{"default.fighter.walk", "mine.cave.raid"}) || read("mine.cave.raid") != "raided" {
 		t.Fatalf("the page's populations read as %v, one %q", got, read("mine.cave.raid"))
 	}
 	if err := p.Open("mine.cave.kraken").Store([]byte("fought")); err != nil {
@@ -103,7 +103,7 @@ func TestBrowserKeepsWhatABotLearnedAsThePagesDocuments(t *testing.T) {
 	if err := p.Remove("mine.cave.raid"); err != nil {
 		t.Fatal(err)
 	}
-	if got := p.Names(); !slices.Equal(got, []string{"default.main.walk", "mine.cave.kraken"}) || read("mine.cave.kraken") != "fought" || read("mine.cave.raid") != "" {
+	if got := p.Names(); !slices.Equal(got, []string{"default.fighter.walk", "mine.cave.kraken"}) || read("mine.cave.kraken") != "fought" || read("mine.cave.raid") != "" {
 		t.Fatalf("after a store and a remove the run reads %v, %q and %q", got, read("mine.cave.kraken"), read("mine.cave.raid"))
 	}
 	if text, told := posted[docBot+"mine.cave.raid"]; posted[docBot+"mine.cave.kraken"] != "fought" || !told || text != "" {

@@ -26,7 +26,7 @@ type ShieldComponent struct {
 
 	// Step is the energy a step of visual.ShieldRamp spans: a shield with one is
 	// colored by what it holds, which only runs down, by no passive drain and
-	// with no reward, and its cursor's kills earn no boost; zero is main's
+	// with no reward, and its cursor's kills earn no boost; zero is fighter's
 	Step int64
 
 	Radius float64

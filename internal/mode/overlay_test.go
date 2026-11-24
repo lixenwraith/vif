@@ -68,11 +68,11 @@ func (s *menuSession) BotError() error                           { return s.botE
 func (s *menuSession) SessionSummary() string                    { return "Test session" }
 func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
 func (s *menuSession) Participants() []engine.SessionParticipant { return nil }
-func (s *menuSession) Scenarios() ([]string, string)             { return []string{"main", "tower"}, "main" }
+func (s *menuSession) Scenarios() ([]string, string)             { return []string{"fighter", "tower"}, "fighter" }
 func (s *menuSession) Journaling() bool                          { return false }
 func (s *menuSession) JournalError() error                       { return nil }
 func (s *menuSession) ChangeScenario(name string) (bool, error) {
-	if !slices.Contains([]string{"main", "tower"}, name) {
+	if !slices.Contains([]string{"fighter", "tower"}, name) {
 		return false, fmt.Errorf("scenario %q not found", name)
 	}
 	s.calls = append(s.calls, "scenario "+name)
@@ -596,7 +596,7 @@ func TestANearbyGameIsJoinedFromItsRow(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
 	session := &menuSession{near: []engine.NearbySession{
-		{ID: "aa/10.0.0.5", Scenario: "main", Address: "10.0.0.5:7777", Target: "vif://10.0.0.5:7777", Players: 2, Ceiling: 8, Waiting: true},
+		{ID: "aa/10.0.0.5", Scenario: "fighter", Address: "10.0.0.5:7777", Target: "vif://10.0.0.5:7777", Players: 2, Ceiling: 8, Waiting: true},
 		{ID: "bb/10.0.0.6", Name: "friday", Scenario: "td", Address: "10.0.0.6:7777", Target: "vif://10.0.0.6:7777/friday", Players: 1, Ceiling: 4,
 			Refusal: "Another build, vif 9 there and vif 1 here"},
 	}}
@@ -605,7 +605,7 @@ func TestANearbyGameIsJoinedFromItsRow(t *testing.T) {
 	r.handleConfigMenu()
 	showConfigMenu(ctx, "multiplayer")
 	const open, other = "multiplayer/#Nearby games/near/aa/10.0.0.5", "multiplayer/#Nearby games/near/bb/10.0.0.6"
-	if row := menuRow(ctx, open); row.Label != "Join 10.0.0.5:7777 (main, 2/8)" || row.Disabled != "" {
+	if row := menuRow(ctx, open); row.Label != "Join 10.0.0.5:7777 (fighter, 2/8)" || row.Disabled != "" {
 		t.Fatalf("a game found reads %q, disabled %q", row.Label, row.Disabled)
 	}
 	if row := menuRow(ctx, other); row.Label != "Join friday (td, 1/4)" || row.Disabled != session.near[1].Refusal {

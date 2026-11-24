@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 )
 
 var (
@@ -127,7 +128,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"most verbose session log level a request may select")
 	set.StringVar(&cfg.Allocator.Workload.Size, "size", sizeFirst,
 		"default session screen WxH, the host's -size, or first: the first person's terminal")
-	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", "main", "scenario a request runs when it names none")
+	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", paths.FighterScenarioName, "scenario a request runs when it names none")
 	set.StringVar(&cfg.Allocator.WadDir, "wad", defaultWadDir,
 		"node resource volume, scanned for the scenarios a request may select")
 	set.StringVar(&firstJoin, "first-join", "90s", "first guest deadline")

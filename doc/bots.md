@@ -803,7 +803,7 @@ before it plays: it was asked for the model.
   - A run of `default` alone learns `walk`, in a population for each scenario.
     What that population fields is what `default` plays in that scenario from
     then on, as a seat too. In the embedded scenario, which carries no bot, it
-    is `default.main.walk.json`.
+    is `default.fighter.walk.json`.
   - It sends sixteen actions a second, twelve for the keys and four for the
     special attack. The region `special` updates after `play`, so a key goes
     out ahead of a special attack asked for in the same step: the other way

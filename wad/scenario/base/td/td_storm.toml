@@ -32,7 +32,7 @@ transitions = [
     { trigger = "Tick", target = "StSpawn" },
 ]
 
-# Same shape as main's StormSetup: a refused spawn asks again rather than falling
+# Same shape as fighter's StormSetup: a refused spawn asks again rather than falling
 # through StLive's defensive timeout, which would clear a storm never fought.
 [states.StSpawn]
 parent = "Root"

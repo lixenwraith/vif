@@ -16,9 +16,9 @@ import (
 var assetFS embed.FS
 
 var (
-	// MainScenario is the main campaign, the scenario a run falls back to;
-	// MainScenarioEntry is its entry.
-	MainScenario fs.FS
+	// FighterScenario is the fighter campaign, the scenario a run falls back to;
+	// FighterScenarioEntry is its entry.
+	FighterScenario fs.FS
 	// DefaultContent is the fallback typing corpus.
 	DefaultContent fs.FS
 	// DefaultBots holds the shipped bot graphs, one <name>.toml each.
@@ -28,7 +28,7 @@ var (
 	Keymaps fs.FS
 )
 
-const MainScenarioEntry = "scenario.toml"
+const FighterScenarioEntry = "scenario.toml"
 
 // DefaultKeymap is the keymap TOML the binary falls back to.
 var DefaultKeymap []byte
@@ -38,7 +38,7 @@ var DefaultSettings []byte
 
 // A missing group is a broken build artifact, not a recoverable user error.
 func init() {
-	MainScenario = sub("scenario")
+	FighterScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultBots = sub("bot")
 	Keymaps = sub("input")

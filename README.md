@@ -85,7 +85,7 @@ Linux and FreeBSD; where the window cannot build (Termux) it says so and names
 | Logs, journals, music (`-l`, `-j`, `-mw`) | `~/.local/state/vif/` | `~/.local/state/vif/` | `~/.local/state/vif/` |
 
 The wad is the scenarios, typing corpus, wall images, bot graphs, keymap and
-`vif.toml` the binary does not need to play its embedded main scenario. A file in
+`vif.toml` the binary does not need to play its embedded `fighter` scenario. A file in
 `~/.config/vif` overrides the system copy of it. `make uninstall` keeps the wad,
 and `make install-config` installs only the wad, into `~/.config/vif`.
 Uninstalled, `./bin/vif` plays the checkout's `wad/`. The

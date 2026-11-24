@@ -814,7 +814,7 @@ indices now, and a page whose cells and bytes held keeps its hash unhashed.
 ### 3.8 The feed
 
 `TestAFeedOverAFightReadsItsCost` (`VIF_FEED=1`, `VIF_FEED_PLAYERS`,
-`VIF_FEED_TICKS`) on 2026-11-14: the embedded `main` scenario at 120x40 over
+`VIF_FEED_TICKS`) on 2026-11-14: the embedded `fighter` scenario at 120x40 over
 loopback sockets, protocol 38, the players under `:god`, each moving one tick in
 three and firing one in six as §3.5's do, 2,400 ticks stepped with one viewer in
 step. The feed's bytes are counted once, however many viewers are sent them,
