@@ -16,9 +16,9 @@ import (
 
 // SquareSystem keeps a magic square: nine blocks a player selects by digit and turns
 // a row or column at a time (squareTurns), under the shield of the cursor standing
-// on it, which it sizes to cover them. An edge holding three blocks of a
-// kind fires the kind's effect (component.SquareKinds) as that cursor's each time
-// its cooldown runs out.
+// on it, which it sizes to cover them. An edge holding three blocks of a kind fires
+// the kind's effect (component.SquareKinds) as that cursor's each time its cooldown
+// runs out, the attack only on a turn that leaves it there.
 type SquareSystem struct {
 	world *engine.World
 	on    []core.Entity // a body's members on the blocks, reused
@@ -124,7 +124,7 @@ func (s *SquareSystem) Update() {
 			effect := &sq.Effects[kind]
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
 		}
-		s.trigger(e, sq)
+		s.trigger(e, sq, false)
 		return true
 	})
 }
@@ -321,7 +321,7 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 	if sq.IsMagic() {
 		sq.Magic = parameter.SquareMagicFull
 	}
-	s.trigger(e, sq)
+	s.trigger(e, sq, true)
 }
 
 // shed empties the square's magic meter into dust, the share of SquareMagicDust it
@@ -360,10 +360,11 @@ func squareLines(sq *component.SquareComponent) (lines [component.SquareLines]ui
 	return lines
 }
 
-// trigger fires each kind a line holds three of whose cooldown has run out
-func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
+// trigger fires each kind a line holds three of whose cooldown has run out, one
+// that fires on a turn only when turned
+func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent, turned bool) {
 	for l, kind := range sq.Lines {
-		if kind != 0 && sq.Effects[kind-1].Ready() {
+		if kind != 0 && sq.Effects[kind-1].Ready() && (turned || !component.SquareKinds[kind-1].Turned) {
 			s.fire(e, sq, component.SquareKind(kind-1), l)
 		}
 	}

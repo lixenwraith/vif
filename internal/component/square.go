@@ -35,8 +35,9 @@ type SquareWind struct {
 }
 
 // SquareKindSpec is what a line of one kind fires as its cursor's each time its
-// cooldown runs out: a family on what stands in the part of the map the line faces,
-// a boost of the shield, a wind about the square, the square's magic shed as dust
+// cooldown runs out, or with Turned only on a turn that leaves a line holding it: a
+// family on what stands in the part of the map the line faces, a boost of the
+// shield, a wind about the square, the square's magic shed as dust
 type SquareKindSpec struct {
 	Name     string
 	Attack   CombatAttackType // CombatAttackNone lands nothing
@@ -44,12 +45,13 @@ type SquareKindSpec struct {
 	Cooldown time.Duration    // from a fire until the line fires again
 	Boost    bool             // the shield takes no damage while it holds
 	Shed     bool
+	Turned   bool
 	Wind     SquareWind // a zero force blows none
 }
 
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
-	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown},
+	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Turned: true},
 	SquareWhirl: {Name: "whirl", Attack: CombatAttackNone, Duration: parameter.SquareWhirlDuration, Cooldown: parameter.SquareWhirlCooldown,
 		Wind: SquareWind{Force: parameter.SquareWhirlForce, Turn: math.Pi / 2, Duration: parameter.SquareWhirlDuration, Reach: parameter.SquareWhirlReach}},
 	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown,

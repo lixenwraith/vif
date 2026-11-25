@@ -15,6 +15,7 @@ type HeatSystem struct {
 
 	statCurrent  *status.PlayerInt
 	statOverheat *status.PlayerInt
+	statBurst    *status.PlayerInt
 	statAtMax    *status.PlayerBool
 	statEmber    *status.PlayerBool
 	rejects      rejectionTelemetry
@@ -28,6 +29,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 	reg := world.Resources.Status
 	s.statCurrent = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.current", "heat.current")
 	s.statOverheat = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.overheat", "heat.overheat")
+	s.statBurst = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.burst", "heat.burst")
 	s.statAtMax = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.at_max", "heat.at_max")
 	s.statEmber = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.ember", "heat.ember")
 	s.rejects = newRejectionTelemetry(reg, "heat")
@@ -39,6 +41,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 func (s *HeatSystem) Init() {
 	s.statCurrent.Reset()
 	s.statOverheat.Reset()
+	s.statBurst.Reset()
 	s.statAtMax.Reset()
 	s.statEmber.Reset()
 	s.rejects.Reset()
@@ -104,6 +107,8 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 		event.EventHeatSetRequest,
 		event.EventHeatSpendRequest,
 		event.EventHeatEmberRequest,
+		event.EventBurstSpendRequest,
+		event.EventShieldDrainRequest,
 		event.EventCursorArmRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -176,6 +181,24 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 				s.publish(cursor, heat)
 			}
 		}
+	case event.EventBurstSpendRequest:
+		if p, ok := ev.Payload.(*event.BurstSpendRequestPayload); ok {
+			cursor := s.world.ResolveOwnedCursor(p.Entity)
+			if cursor == 0 {
+				s.rejects.cursor.Add(1)
+				return
+			}
+			if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok {
+				heat.Burst = 0
+				s.publish(cursor, heat)
+			}
+		}
+	case event.EventShieldDrainRequest:
+		if p, ok := ev.Payload.(*event.ShieldDrainRequestPayload); ok {
+			if cursor := s.world.ResolveOwnedCursor(p.Entity); cursor != 0 {
+				s.chargeBurst(cursor, parameter.BurstPerShieldHit)
+			}
+		}
 	case event.EventCursorArmRequest:
 		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {
 			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
@@ -197,10 +220,12 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	}
 	wasDefeated := cursorDefeated(s.world, cursor)
 
-	// Reset overheat if heat penalty
+	// A penalty resets overheat; a gain fills the burst meter
 	if delta < 0 {
 		heatComp.Overheat = 0
 		s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.MetalHit})
+	} else {
+		heatComp.Burst = min(heatComp.Burst+delta*parameter.BurstPerHeat, parameter.BurstFull)
 	}
 
 	// Update heat, clamp to bounds, accumulate overheat
@@ -224,6 +249,14 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 
 	s.publish(cursor, heatComp)
 	s.pushDefeatTransition(cursor, wasDefeated)
+}
+
+// chargeBurst fills one cursor's burst meter by n, up to full
+func (s *HeatSystem) chargeBurst(cursor core.Entity, n int) {
+	if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok && heat.Burst < parameter.BurstFull {
+		heat.Burst = min(heat.Burst+n, parameter.BurstFull)
+		s.publish(cursor, heat)
+	}
 }
 
 // setHeat writes an absolute value to one cursor, what passes the meter spilling
@@ -251,6 +284,7 @@ func (s *HeatSystem) publish(cursor core.Entity, heatComp *component.HeatCompone
 	}
 	s.statCurrent.Store(slot, int64(heatComp.Current))
 	s.statOverheat.Store(slot, int64(heatComp.Overheat))
+	s.statBurst.Store(slot, int64(heatComp.Burst))
 	s.statAtMax.Store(slot, heatComp.Current >= parameter.HeatMax)
 	s.statEmber.Store(slot, heatComp.EmberActive)
 }
@@ -272,6 +306,7 @@ func (s *HeatSystem) publishSlots() {
 func (s *HeatSystem) clearSlot(slot uint8) {
 	s.statCurrent.Store(slot, 0)
 	s.statOverheat.Store(slot, 0)
+	s.statBurst.Store(slot, 0)
 	s.statAtMax.Store(slot, false)
 	s.statEmber.Store(slot, false)
 }

@@ -248,6 +248,8 @@ const (
 	EventHeatBurst
 	// EventHeatEmberRequest (HeatEmberRequestPayload) [local] lights a cursor's ember or puts it out, its heat as it stands
 	EventHeatEmberRequest
+	// EventBurstSpendRequest (BurstSpendRequestPayload) [local] empties a cursor's burst meter
+	EventBurstSpendRequest
 	// EventEmberSpent (HeatBurstPayload) [bus] carries an owner's ember burning its heat out
 	EventEmberSpent
 
@@ -646,7 +648,7 @@ const (
 
 	// EventSquareSpawnRequest (SquareSpawnRequestPayload) [shared] lays a magic square of blocks centered on a cell
 	EventSquareSpawnRequest
-	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds
+	// EventSquareAligned (SquareAlignedPayload) [shared] announces a line of one kind firing its effect, once a cooldown while it holds, the attack on a turn
 	EventSquareAligned
 	// EventSquareHit (SquareHitPayload) [bus] carries a body striking a square's blocks under no shield, from the owner of the cursor it cost
 	EventSquareHit
