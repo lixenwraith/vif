@@ -22,10 +22,10 @@ var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
-// SquareMagic and SquareBurst are the legend entries over the square, its magic
+// SquareDust and SquareBurst are the legend entries over the square, its dust
 // meter and its cursor's overheat, each drawn as a kind's
 var (
-	SquareMagic = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
+	SquareDust  = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
 	SquareBurst = SquareKindColors{Block: color.ElectricViolet, Glow: color.PaleLavender, Track: color.DarkViolet, Console: ConBrightMagenta}
 )
 

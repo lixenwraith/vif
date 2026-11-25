@@ -84,10 +84,10 @@ func (s *SquareSystem) HandleEvent(ev event.GameEvent) {
 			return true
 		})
 	case *event.SpeciesKilledPayload:
-		// A kill its cursor made charges the square's magic
+		// A kill its cursor made charges the square's dust
 		s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
 			if p.KillerEntity != 0 && p.KillerEntity == s.owner(sq) {
-				sq.Magic = min(sq.Magic+parameter.SquareMagicKill, parameter.SquareMagicFull)
+				sq.Dust = min(sq.Dust+parameter.SquareDustKill, parameter.SquareDustFull)
 			}
 			return true
 		})
@@ -119,7 +119,7 @@ func (s *SquareSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	s.world.Components.Square.Each(func(e core.Entity, sq *component.SquareComponent) bool {
 		s.cover(sq)
-		sq.Magic = min(sq.Magic+dt, parameter.SquareMagicFull)
+		sq.Dust = min(sq.Dust+dt, parameter.SquareDustFull)
 		for kind := range sq.Effects {
 			effect := &sq.Effects[kind]
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
@@ -324,21 +324,21 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 	}
 	sq.Lines = squareLines(sq)
 	if sq.IsMagic() {
-		sq.Magic = parameter.SquareMagicFull
+		sq.Dust = parameter.SquareDustFull
 	}
 	s.trigger(e, sq, true)
 }
 
-// shed empties the square's magic meter into dust, the share of SquareMagicDust it
+// shed empties the square's dust meter into dust, the share of SquareDustShed it
 // held, in the blocks' digits evenly round the shield's rim, on this instance for
 // its own player: what special fire then detonates. A meter short of one keeps it.
 // A boosting kind's fire sheds it, and its cursor's shield falling.
 func (s *SquareSystem) shed(sq *component.SquareComponent) {
-	n := int(sq.Magic * parameter.SquareMagicDust / parameter.SquareMagicFull)
+	n := int(sq.Dust * parameter.SquareDustShed / parameter.SquareDustFull)
 	if n == 0 {
 		return
 	}
-	sq.Magic = 0
+	sq.Dust = 0
 	aspect := s.world.Resources.Config.CellAspect
 	cx, cy := sq.Center()
 	rim := sq.ShieldRadius(aspect) + 1
@@ -377,7 +377,7 @@ func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent, tur
 
 // fire runs each part of a kind's effect as its cursor's: its family on what stands
 // in the part line faces, a boost for as long as it holds, its wind about the
-// square, and the square's magic shed as dust
+// square, and the square's dust shed
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
 	cursor := s.owner(sq)

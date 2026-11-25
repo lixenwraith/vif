@@ -37,7 +37,7 @@ type SquareWind struct {
 // SquareKindSpec is what a line of one kind fires as its cursor's each time its
 // cooldown runs out, or with Turned only on a turn that leaves a line holding it: a
 // family on what stands in the part of the map the line faces, a boost of the
-// shield, a wind about the square, the square's magic shed as dust
+// shield, a wind about the square, the square's dust shed
 type SquareKindSpec struct {
 	Name     string
 	Attack   CombatAttackType // CombatAttackNone lands nothing
@@ -78,7 +78,7 @@ type SquareComponent struct {
 	Selected [parameter.MaxPlayers]uint8
 	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of, 0 for none
 	Effects  [SquareKindCount]SquareEffect
-	Magic    time.Duration // its magic meter's charge, full at parameter.SquareMagicFull
+	Dust     time.Duration // its dust meter's charge, full at parameter.SquareDustFull
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells

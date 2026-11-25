@@ -343,23 +343,23 @@ func TestABodyOnTheBlocksUnderNoShieldCostsHeatOnceATouch(t *testing.T) {
 	}
 }
 
-// TestASquaresMagicChargesAndItsDefenseShedsIt: the meter charges with time and with
+// TestASquaresDustChargesAndItsDefenseShedsIt: the meter charges with time and with
 // each kill its cursor makes, a turn into a magic state fills it at once, and a
-// defense's fire sheds the share of SquareMagicDust it holds as dust and empties
+// defense's fire sheds the share of SquareDustShed it holds as dust and empties
 // it. The digits turned into order, 1 to 9 or 9 to 1, fill it too, and the defense
 // along an edge of either sheds it whole.
-func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
+func TestASquaresDustChargesAndItsDefenseShedsIt(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	stepSquare(w, s)
 	for _, killer := range []core.Entity{cursor, cursor + 99} {
 		s.HandleEvent(event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{KillerEntity: killer}})
 	}
-	if want := parameter.GameUpdateInterval + parameter.SquareMagicKill; sq.Magic != want {
-		t.Fatalf("a tick and a kill of its cursor's charged %v, want %v", sq.Magic, want)
+	if want := parameter.GameUpdateInterval + parameter.SquareDustKill; sq.Dust != want {
+		t.Fatalf("a tick and a kill of its cursor's charged %v, want %v", sq.Dust, want)
 	}
-	if pressSquare(s, "5", "l", "h"); !sq.IsMagic() || sq.Magic != parameter.SquareMagicFull {
-		t.Fatalf("a turn into a magic state (%t) left the meter at %v, want it full", sq.IsMagic(), sq.Magic)
+	if pressSquare(s, "5", "l", "h"); !sq.IsMagic() || sq.Dust != parameter.SquareDustFull {
+		t.Fatalf("a turn into a magic state (%t) left the meter at %v, want it full", sq.IsMagic(), sq.Dust)
 	}
 
 	// The keys' turns line the defense up on an edge
@@ -373,13 +373,13 @@ func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 		}
 		return dust
 	}
-	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareMagicDust || sq.Magic != 0 {
-		t.Fatalf("a defense on a full meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust)
+	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareDustShed || sq.Dust != 0 {
+		t.Fatalf("a defense on a full meter shed %d dust and left %v, want %d and none", dust, sq.Dust, parameter.SquareDustShed)
 	}
 	w, s, sq = newSquare(t)
-	sq.Magic = parameter.SquareMagicFull / 4
-	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareMagicDust/4 || sq.Magic != 0 {
-		t.Fatalf("a defense on a quarter meter shed %d dust and left %v, want %d and none", dust, sq.Magic, parameter.SquareMagicDust/4)
+	sq.Dust = parameter.SquareDustFull / 4
+	if dust := shed("7", "l", "3", "h"); dust != parameter.SquareDustShed/4 || sq.Dust != 0 {
+		t.Fatalf("a defense on a quarter meter shed %d dust and left %v, want %d and none", dust, sq.Dust, parameter.SquareDustShed/4)
 	}
 	for _, c := range []struct {
 		digits [component.SquareBlocks]uint8
@@ -390,22 +390,22 @@ func TestASquaresMagicChargesAndItsDefenseShedsIt(t *testing.T) {
 	} {
 		w, s, sq = newSquare(t)
 		sq.Digits = c.digits
-		if dust := shed(c.key, "h"); !sq.IsMagic() || dust != parameter.SquareMagicDust {
+		if dust := shed(c.key, "h"); !sq.IsMagic() || dust != parameter.SquareDustShed {
 			t.Fatalf("%s turned into order (magic %t) shed %d dust from an empty meter, want a full meter's %d",
-				squareDigits(sq), sq.IsMagic(), dust, parameter.SquareMagicDust)
+				squareDigits(sq), sq.IsMagic(), dust, parameter.SquareDustShed)
 		}
 	}
 }
 
-// TestASquareShedsItsMagicAsItsShieldFalls: its cursor's energy crossing zero with
+// TestASquareShedsItsDustAsItsShieldFalls: its cursor's energy crossing zero with
 // the shield down crosses the fall, which sheds the meter as dust on every
 // instance; a crossing of zero that leaves the shield standing crosses nothing,
 // nor does one of a cursor no square stands under
-func TestASquareShedsItsMagicAsItsShieldFalls(t *testing.T) {
+func TestASquareShedsItsDustAsItsShieldFalls(t *testing.T) {
 	w, s, sq := newSquare(t)
 	cursor := w.Resources.Player.Slot(0)
 	shield, _ := w.Components.Shield.GetPtr(cursor)
-	sq.Magic = parameter.SquareMagicFull
+	sq.Dust = parameter.SquareDustFull
 	fall := func() (fell, dust int) {
 		w.Resources.Event.Queue.SetOwn(true)
 		s.HandleEvent(event.GameEvent{Type: event.EventEnergyCrossedZero, Payload: &event.EnergyCrossedZeroPayload{Entity: cursor}})
@@ -424,12 +424,12 @@ func TestASquareShedsItsMagicAsItsShieldFalls(t *testing.T) {
 		return fell, dust
 	}
 	shield.Active = true
-	if fell, dust := fall(); fell != 0 || dust != 0 || sq.Magic != parameter.SquareMagicFull {
+	if fell, dust := fall(); fell != 0 || dust != 0 || sq.Dust != parameter.SquareDustFull {
 		t.Fatalf("under a standing shield a crossing of zero crossed %d falls and shed %d dust", fell, dust)
 	}
 	shield.Active = false
-	if fell, dust := fall(); fell != 1 || dust != parameter.SquareMagicDust || sq.Magic != 0 {
-		t.Fatalf("the shield falling crossed %d falls, shed %d dust and left %v, want one, %d and none", fell, dust, sq.Magic, parameter.SquareMagicDust)
+	if fell, dust := fall(); fell != 1 || dust != parameter.SquareDustShed || sq.Dust != 0 {
+		t.Fatalf("the shield falling crossed %d falls, shed %d dust and left %v, want one, %d and none", fell, dust, sq.Dust, parameter.SquareDustShed)
 	}
 	w.Components.Square.RemoveEntity(w.Components.Square.Entities()[0])
 	if fell, _ := fall(); fell != 0 {

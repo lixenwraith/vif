@@ -400,7 +400,7 @@ Gate4 = { macro = "Gate", n = 4, at = "bottom_left", x = 2, y = -1, next = "Play
 
 # Keys are the square's while it stands, Enter with them for the burst. The keys are
 # told a while in, so what ended the last game reads first, then what the shield's
-# energy is spent and earned by, what a line does, what the weapons do, what magic
+# energy is spent and earned by, what a line does, what the weapons do, what dust
 # is and what fills the burst.
 [states.Play]
 parent = "Root"
@@ -410,7 +410,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A touch costs the shield 1 of its 1,400, which nothing gives back; a wave you end pays 10 heat" }, delay_ms = 12000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A turn leaving an attack along an edge strikes the side it faces; a whirl carries bodies a gateway round" }, delay_ms = 22000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Weapons wear every body down and fall with the shield; a defense stands it a moment" }, delay_ms = 32000 },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Magic fills with time and kills, a magic square at once: a defense sheds it as dust, or the shield's fall" }, delay_ms = 42000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Dust fills with time and kills, a magic square at once: a defense sheds it, as the shield's fall does" }, delay_ms = 42000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Each touch on the shield and each heat gained fill the burst a hundredth" }, delay_ms = 52000 },
     { action = "SpawnRegion", region = "flood", initial_state = "FloodPick" },
     { action = "SpawnRegion", region = "ramp", initial_state = "Level" },

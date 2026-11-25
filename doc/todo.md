@@ -233,7 +233,7 @@ numbers are what a play test settles.
 To settle: the shield's count and what a touch costs the blocks, the eight ranks'
 hit points and speeds, the paces, how a rank and a round quicken them and the waves
 a round adds, each kind's duration and cooldown, the whirl's carry and the gust's
-throw, the carrier's weapons, what charges the magic meter and the burst meter, and
+throw, the carrier's weapons, what charges the dust meter and the burst meter, and
 what the dust's blast does.
 
 The options Lixen did not take (2026-11-25), each with what would reopen it:
