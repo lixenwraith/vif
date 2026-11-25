@@ -103,6 +103,9 @@ spec:
             # must not elect a private continuation that looks like the old session.
             - "-authority"
             - "host"
+            # A public match: no player sets their own energy, heat or weapons,
+            # and every guest's menu reads God and Demon unavailable.
+            - "-no-cheats"
             # The local PVC is backed by the node's capped tmpfs. The session ID
             # selects this process's filename and tags every application record.
             - "-l=/var/log/vif-fleet"

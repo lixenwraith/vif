@@ -1381,6 +1381,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		Door:           m.doorVerifierLocked(),
 		FixedAuthority: m.fixedAuthority(),
 		Players:        m.playersSet(),
+		NoCheats:       m.cfg.NoCheats || m.wiring.SessionNoCheats,
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
 		// what it offered — a reset between the two cannot turn a valid join into a

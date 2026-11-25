@@ -660,6 +660,13 @@ a successor keeps offering it, a scenario change reopens the door under it
 session: an orchestrator replacing a pod at the same address is the reconnect its
 guests want, and a guest's own port would be for nothing.
 
+A host started with `-no-cheats` refuses the grants (`:god`, `:demon`, `:energy`,
+`:heat`, `:boost`, `:w`) to the whole session the same way: every offer carries it
+(`SessionOffer.NoCheats`), a successor keeps it and a scenario change reopens under
+it (`RestartAsk.NoCheats`), and each participant refuses them itself, since what
+they set reaches the others through its owner's sync, which no host bounds. A run
+that leaves the session takes them back, unless its own `-no-cheats` refuses them.
+
 ### 5.1 Succession
 
 If the authority disappears, the survivors walk the **succession list**: the

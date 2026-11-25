@@ -51,6 +51,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"bot"}, arg: "[N[:graph]|graph|verb ...]", hint: "Add bots alongside you: one where no count is given, the scenario's own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares"},
+			{names: []string{"no-cheats"}, hint: "Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts, a successor's included; the menu's God and Demon read unavailable"},
 			{names: []string{"slow-window"}, arg: "<dur>",
 				hint: fmt.Sprintf("Window a participant's lateness is judged over; host only, 0 never evicts (default %s)", parameter.NetworkSlowWindow)},
 			{names: []string{"slow-late"}, arg: "<n>",

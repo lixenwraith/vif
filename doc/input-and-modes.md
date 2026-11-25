@@ -542,7 +542,11 @@ crosses so everyone changes rate; a guest's is refused. Help, telemetry
 and about overlays stay local and do not pause, logging and view controls are local
 inspection, and resizes retain D-14's locked map bounds. Player grants and effect
 commands remain available because they author the invoking cursor or use the
-ordinary player-to-shared crossing path. The host's reset crosses at an agreed tick,
+ordinary player-to-shared crossing path, unless the host started with `-no-cheats`:
+then every participant refuses the grants, `:god`, `:demon`, `:energy`, `:heat`,
+`:boost` and `:w`, with "Cheats unavailable in this session", as a run started so
+refuses them "in this run", and the menu's God and Demon rows read the same
+([Configuration menu](config-menu.md#game)). The host's reset crosses at an agreed tick,
 so every participant resets; a guest reset is refused. `:host`, `:leave` and `:bot`
 are outside the guard: `:host` creates the session the guard protects, or opens a
 door on one a successor took over, and refuses a run already in any other; `:leave`

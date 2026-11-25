@@ -254,7 +254,7 @@ var topics = []topicDef{
 			{Keys: ":energy N", Desc: "Set player energy; negative values are valid"},
 			{Keys: ":heat N", Desc: "Set player heat, 0 to 200: past 100 the excess is overheat"},
 			{Keys: ":boost", Desc: "Max heat and activate boost"},
-			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon"},
+			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon; these and :energy, :heat, :boost and :w are refused in a run started with -no-cheats and in a session whose host was"},
 			{Keys: ":w <weapon> <n>  :weapon", Desc: "Set one weapon's charges, named by it or its attack: past its maximum it maxes out, 0 takes it, the gun included, and a negative n first flips the energy's sign, which drops every other weapon but the gun"},
 			{Keys: ":blossom  :decay", Desc: "Trigger a blossom or decay wave"},
 			{Keys: ":dust", Desc: "Transform every glyph to dust"},

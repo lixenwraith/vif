@@ -101,7 +101,8 @@ the reason. **Restart game** starts the game over from its scenario's first tick
 `:console` do ([Input §9](input-and-modes.md#9-command-mode)): on a touch screen,
 whose keyboard shows no backtick on its first page, it is the way there. **Game
 speed** runs from 1/8x through 8x, in a session the host's. **God** and **Demon**
-act as `:god` and `:demon` do and close the menu.
+act as `:god` and `:demon` do and close the menu; a run started with `-no-cheats`,
+or a session whose host was, reads them unavailable, as the commands refuse.
 
 ### Scenarios
 
