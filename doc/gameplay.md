@@ -39,7 +39,8 @@ shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an
 off-map cursor that only holds its player's slot. Under `cursors = "fixed"` a
 cursor is equipped whole but stands where it spawned: no key, pointer or touch
-moves it, and neither it nor its crosshair is drawn. Each cursor owns an independent
+moves it, and neither it nor its crosshair is drawn. Under `[map] step` it walks
+that map's blocks alone, a block a press of a motion key. Each cursor owns an independent
 copy of that state. A roster slot records whether this instance or a remote peer
 drives the cursor and, for a bot, which participant holds it. One selected local
 slot receives this instance's input and anchors the camera/UI.

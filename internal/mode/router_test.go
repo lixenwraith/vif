@@ -830,3 +830,115 @@ func TestTheRouterEntersThePlayModeAScenarioAskedFor(t *testing.T) {
 		t.Fatalf("an ask before the next key left %v, want Visual", ctx.GetMode())
 	}
 }
+
+// stepWorld is a map that walks in blocks of 5 by 3, its cursor in the middle of
+// block (1, 1) at (7, 4) and a wall filling block (3, 1). keys types play keys and
+// mouse presses, tick moves game time on and runs an input tick; each lands what
+// the router asked, the cells the cursor went to and the sounds it asked for.
+func stepWorld(t *testing.T) (keys func(evs ...terminal.Event), tick func(d time.Duration), landed func() (cells [][2]int, sounds int)) {
+	t.Helper()
+	w := engine.NewWorld()
+	clock := engine.NewManualClock()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, clock)
+	ctx.AutoFire.Store(engine.AutoFireOff)
+	w.Resources.Config.CursorStepX, w.Resources.Config.CursorStepY = 5, 3
+	for y := 3; y < 6; y++ {
+		for x := 15; x < 20; x++ {
+			e := w.CreateEntity(core.DomainShared)
+			w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockAll})
+		}
+	}
+	w.Resources.Player.Entity = w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(w.Resources.Player.Entity, component.PositionComponent{X: 7, Y: 4})
+	machine := input.NewMachine()
+	machine.SetKeyTable(input.MergeKeyTable(input.DefaultKeyTable(), vimKeys(t)))
+	r := NewRouter(ctx, machine)
+	var cells [][2]int
+	sounds := 0
+	apply := func() {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.CursorMoveRequestPayload:
+				w.Positions.SetPosition(p.Entity, component.PositionComponent{X: p.X, Y: p.Y})
+				cells = append(cells, [2]int{p.X, p.Y})
+			case *event.SoundRequestPayload:
+				sounds++
+			}
+		}
+	}
+	keys = func(evs ...terminal.Event) {
+		for _, ev := range evs {
+			for intent := machine.Process(ev); intent != nil; intent = machine.Next() {
+				r.Handle(intent)
+				apply()
+			}
+		}
+	}
+	tick = func(d time.Duration) {
+		clock.Step(d)
+		r.ProcessInputTick()
+		apply()
+	}
+	landed = func() ([][2]int, int) {
+		got, n := cells, sounds
+		cells, sounds = nil, 0
+		return got, n
+	}
+	return keys, tick, landed
+}
+
+func runeKey(ch rune) terminal.Event {
+	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ch}
+}
+
+// TestAStepWalksItsBlockACellAtATime: a press walks the cursor one block, its first
+// cell at once and the rest a block's beat apart, a count walks that many blocks,
+// and a block a wall fills is a bump that moves nothing.
+func TestAStepWalksItsBlockACellAtATime(t *testing.T) {
+	keys, tick, landed := stepWorld(t)
+	keys(runeKey('l'))
+	for range 6 {
+		tick(parameter.StepWalkDuration / 5)
+	}
+	if cells, _ := landed(); !slices.Equal(cells, [][2]int{{8, 4}, {9, 4}, {10, 4}, {11, 4}, {12, 4}}) {
+		t.Fatalf("l walked %v, want the five cells to (12, 4) one at a time", cells)
+	}
+	keys(runeKey('l'))
+	tick(parameter.StepWalkDuration)
+	if cells, sounds := landed(); len(cells) != 0 || sounds != 1 {
+		t.Fatalf("l into the wall walked %v and sounded %d, want no cell and one bump", cells, sounds)
+	}
+	keys(runeKey('2'), runeKey('j'))
+	for range 8 {
+		tick(parameter.StepWalkDuration / 3)
+	}
+	if cells, _ := landed(); len(cells) != 6 || cells[5] != [2]int{12, 10} {
+		t.Fatalf("2j walked %v, want six cells to (12, 10)", cells)
+	}
+}
+
+// TestOnlyTheWalkMovesASteppedCursor: on a stepped map no other motion, no jump to
+// a mark and no press, drag or wheel of the pointer places the cursor.
+func TestOnlyTheWalkMovesASteppedCursor(t *testing.T) {
+	keys, tick, landed := stepWorld(t)
+	mouse := func(btn terminal.MouseButton, action terminal.MouseAction, x, y int) terminal.Event {
+		return terminal.Event{Type: terminal.EventMouse, MouseBtn: btn, MouseAction: action, MouseX: x, MouseY: y}
+	}
+	keys(runeKey('m'), runeKey('a'), runeKey('l'))
+	for range 6 {
+		tick(parameter.StepWalkDuration / 5)
+	}
+	if cells, _ := landed(); len(cells) != 5 {
+		t.Fatalf("l walked %v, want a block", cells)
+	}
+	keys(runeKey('`'), runeKey('a'), runeKey('w'), runeKey('G'), runeKey('$'), runeKey('0'),
+		mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, 20, 10),
+		mouse(terminal.MouseBtnLeft, terminal.MouseActionDrag, 22, 12),
+		mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, 22, 12),
+		mouse(terminal.MouseBtnWheelDown, terminal.MouseActionPress, 5, 5))
+	tick(parameter.StepWalkDuration)
+	if cells, _ := landed(); len(cells) != 0 {
+		t.Fatalf("a stepped cursor was placed at %v by what is not its walk", cells)
+	}
+}

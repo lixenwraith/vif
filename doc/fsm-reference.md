@@ -85,6 +85,7 @@ min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
 cursors = false                     # Players hold slots, no cursor on the map; "fixed" stands each where it spawned (optional)
+step = "5x3"                        # A cursor walks blocks this size, a press a block, nothing else moving it (optional)
 
 [navigation]
 field_refresh_ticks = 4             # Out of sight, read the field every 4 ticks (optional; 1)
@@ -542,7 +543,9 @@ Its player plays through the keys the scenario captures and their buttons, each
 press from that slot, and counts in `player.count`. With `cursors = "fixed"` the
 spawn equips a whole cursor that stands where it landed: its player's keys, pointer
 and touch move it nowhere, and it and its crosshair are not drawn, while its
-shield, weapons and loot are a free cursor's.
+shield, weapons and loot are a free cursor's. With `step = "5x3"` a cursor walks a
+block of that size a press of `h`, `j`, `k`, `l` or an arrow, a cell at a time, and
+nothing else places it, so a scenario spawns it in a block's middle.
 
 Capture the entity to address that cursor in later actions:
 
