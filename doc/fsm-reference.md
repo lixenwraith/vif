@@ -564,10 +564,12 @@ participant's own heat, energy and ember emit `EventCursorArmRequest { heat, ene
 ember }`, which acts on the cursor this instance drives, as `wad/scenario/base/recall` does.
 
 Heat past the meter fills overheat, and filling that bursts: `EventHeatBurst`, a
-`[local]` event, with the ember lit. A scenario that answers the burst its own way
-puts the ember out with `EventHeatEmberRequest { entity, lit = false }`, heat as it
-stands, and raises what it wants: `EventDeathWaveRequest { entity }` runs a death
-wave out from that cursor ([Gameplay §7](gameplay.md#7-weapons-and-attacks)), as
+`[local]` event, with the ember lit. A scenario that wants no ember puts it out with
+`EventHeatEmberRequest { entity, lit = false }`, heat as it stands. A cursor's burst
+meter, which heat gained and shield hits fill, is the scenario's to spend: guarded
+on `player.<n>.heat.burst`, `EventDeathWaveRequest { entity }` runs a death wave out
+from that cursor ([Gameplay §7](gameplay.md#7-weapons-and-attacks)) and
+`EventBurstSpendRequest { entity }` empties the meter, as
 `wad/scenario/base/magic` wires it.
 
 ---
@@ -586,6 +588,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | `player.<n>.energy.current`      | Energy                     |
 | `player.<n>.heat.current`        | Heat                       |
 | `player.<n>.heat.overheat`       | Overheat accumulator       |
+| `player.<n>.heat.burst`          | Burst meter, full at 100   |
 | `player.<n>.heat.at_max`         | Heat at cap                |
 | `player.<n>.heat.ember`          | Ember decay active         |
 | `player.<n>.shield.active`       | Shield up                  |
@@ -606,13 +609,13 @@ guards. Reports carry their production tick; a reset rejects reports from the
 previous attempt. A transition on the defeat's own event runs before the keys
 move: guard it with `PayloadCursorDecides`.
 
-The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
-`heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
-`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.emitter`, `weapon.gun`,
-`weapon.orbs`, `typing.max_streak`, `player.x`, `player.y` mirror **the slot this
-instance drives**. That is what "the player" means on a status bar or in an operator
-command. The mirror follows the roster rather than slot 0 because slot 0 is the
-coordinator's cursor, which no guest authors.
+The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.burst`,
+`heat.at_max`, `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`,
+`weapon.rod`, `weapon.launcher`, `weapon.disruptor`, `weapon.turret`,
+`weapon.emitter`, `weapon.gun`, `weapon.orbs`, `typing.max_streak`, `player.x`,
+`player.y` mirror **the slot this instance drives**. That is what "the player" means
+on a status bar or in an operator command. The mirror follows the roster rather than
+slot 0 because slot 0 is the coordinator's cursor, which no guest authors.
 
 They are therefore **instance-local by construction and must not be a guard key
 in a shared region** — a shared region has to take the same transition on every
@@ -809,18 +812,18 @@ A magic square takes the presses of the keys a state captures for it: a digit
 selects the block it names for the pressing slot, h and l or a and f turn that
 block's row a place, and j and k or d and s its column; a press on a block is its
 digit's, a drag of it the turn keys', and a press on the burst meter over the
-square Enter's, which a scenario captures as `\r` to spend its cursor's overheat
-as it likes. `EventSquareSpawnRequest { x, y, layout,
+square Enter's, which a scenario captures as `\r` to spend its cursor's burst
+meter as it likes. `EventSquareSpawnRequest { x, y, layout,
 groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
 attack, whirl and defense; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
-`EventSquareAligned { kind, line }` says an edge, 0 the top row, 1 the bottom, 2
-the left column and 3 the right, fired its kind (0 attack, 1 whirl, 2 defense),
-once a cooldown while it holds, `EventSquareShieldFell { entity }` that the
-cursor's shield fell with its energy, and `EventSquareHit { entity }` that a body
-struck the blocks with that shield down.
+`EventSquareAligned { kind, line }` says an edge, 0 the top row, 1 the bottom, 2 the
+left column and 3 the right, fired its kind (0 attack, 1 whirl, 2 defense), once a
+cooldown while it holds (the attack only on a turn that leaves it there),
+`EventSquareShieldFell { entity }` that the cursor's shield fell with its energy,
+and `EventSquareHit { entity }` that a body struck the blocks with that shield down.
 
 A gateway stands on an anchor, as a pylon's header; `EventPylonSpawnRequest {
 inert = true }` stands a pylon no weapon aims at or wears. A second

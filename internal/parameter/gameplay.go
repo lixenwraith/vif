@@ -20,6 +20,12 @@ const (
 
 	EmberDecayInterval = 250 * time.Millisecond
 	EmberDecayAmount   = 1
+
+	// A cursor's burst meter fills to BurstFull by BurstPerHeat for each heat it
+	// gains and BurstPerShieldHit for each hit its shield takes
+	BurstFull         = 100
+	BurstPerHeat      = 1
+	BurstPerShieldHit = 1
 )
 
 // Energy System

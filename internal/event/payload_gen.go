@@ -86,6 +86,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventHeatSpendRequest:                func() any { return new(HeatSpendRequestPayload) },
 	EventHeatBurst:                       func() any { return new(HeatBurstPayload) },
 	EventHeatEmberRequest:                func() any { return new(HeatEmberRequestPayload) },
+	EventBurstSpendRequest:               func() any { return new(BurstSpendRequestPayload) },
 	EventEmberSpent:                      func() any { return new(HeatBurstPayload) },
 	EventBoostActivate:                   func() any { return new(BoostActivatePayload) },
 	EventBoostDeactivate:                 func() any { return new(BoostDeactivatePayload) },
@@ -278,6 +279,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventHeatSpendRequest:                &codecHeatSpendRequestPayload,
 	EventHeatBurst:                       &codecHeatBurstPayload,
 	EventHeatEmberRequest:                &codecHeatEmberRequestPayload,
+	EventBurstSpendRequest:               &codecBurstSpendRequestPayload,
 	EventEmberSpent:                      &codecHeatBurstPayload,
 	EventBoostActivate:                   &codecBoostActivatePayload,
 	EventBoostDeactivate:                 &codecBoostDeactivatePayload,
@@ -611,6 +613,7 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Overheat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Burst), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadius), kind: kindFloat},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BoostRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BoostTotal), kind: kindInt, size: unsafe.Sizeof(int64(0))},
@@ -1098,6 +1101,14 @@ func (p *HeatEmberRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecHeatEmberRequestPayload = structCodec{size: unsafe.Sizeof(HeatEmberRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(HeatEmberRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(HeatEmberRequestPayload{}.Lit), kind: kindBool},
+}}
+
+func (p *BurstSpendRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBurstSpendRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBurstSpendRequestPayload = structCodec{size: unsafe.Sizeof(BurstSpendRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BurstSpendRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 func (p *BoostActivatePayload) codec() (*structCodec, unsafe.Pointer) {

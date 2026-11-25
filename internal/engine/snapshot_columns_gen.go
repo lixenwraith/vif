@@ -1292,6 +1292,9 @@ func encodeColumnsHeat(dst []byte, rows []StoreEntry[component.HeatComponent]) [
 		dst = appendInt(dst, rows[i].Value.Overheat)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Burst)
+	}
+	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.EmberActive)
 	}
 	for i := range rows {
@@ -1312,6 +1315,9 @@ func decodeColumnsHeat(r *columnReader) []StoreEntry[component.HeatComponent] {
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Overheat, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Burst, r)
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.EmberActive, r)

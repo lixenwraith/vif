@@ -861,8 +861,8 @@ Docs · Libraries · Branches.
   take off a body does not fall as a crowd grows: the emitter alone at three
   charges ends ten 30-point bodies a second. What presses a full loadout is a
   body's hit points and speed against its walk, never its numbers, and a strike
-  that ends whatever it faces every 2 s outruns any rank: `magic`'s upper four
-  ranks hold 80 to 640 points and take a strike as a wound for that.
+  that ends whatever it faces every 2 s outruns any rank: `magic`'s strike ends
+  every rank and fires only on a turn for that (`SquareKindSpec.Turned`).
 - Each kill boosts a plain shield half a second, and a boosted shield takes no
   touch, so a horde the weapons can kill never costs it: under a stepped shield
   (`ShieldComponent.Step`) a kill earns none, which is what lets `magic` count
@@ -911,9 +911,9 @@ Docs · Libraries · Branches.
   along the map's edge at 40 cells a second and walks nowhere. `magic`'s largest
   leave a gateway cleanly one each 600 ms and jam at 200. A pylon stood off its
   corner holds bodies in the pocket behind it: stand it flush.
-- What special fire spends comes off the overheat first, so a scenario that keeps
-  a full overheat for a key must give the spend back, or one dust blast leaves
-  it a point short of full.
+- A cursor's burst meter counts every heat gain, so a scenario that gives back
+  what special fire spends, an `EventHeatAddRequest` of it, fills the meter by as
+  much.
 
 ## Glyphs and widgets
 
@@ -1049,12 +1049,14 @@ Docs · Libraries · Branches.
   policy that reads `Resources.Scenario.Var` and the stores in `RunSafe` and presses
   keys through `a.inputMachine.Process`. Auto-fire is the router's, so the probe
   injects `input.IntentFireMain` every five ticks, and a gateway sends one body a
-  tick at most. Read a policy that sets its lines once and leaves, and one that
-  plays: `magic`'s turns the attack to the side holding the most bodies by a
-  breadth-first search over the turns, a few moves deep. Read them on the smallest
-  map and a large one, since a body's walk is the weapons' time over it, and
-  where the bodies stand (a count by block of 8 by 4 cells) before believing a
-  game that never ends.
+  tick at most. Read a policy that presses nothing and one that plays: `magic`'s
+  turns the attack to the side holding the most bodies by a breadth-first search
+  over the turns, a few moves deep, and strikes by a turn along its edge, at a
+  turn a second and at four. Read them on the smallest map and a large one, since
+  a body's walk is the weapons' time over it, and where the bodies stand (a count
+  by block of 8 by 4 cells) before believing a game that never ends. A reset
+  stands a new cursor: read `Player.Slot(0)` each tick, and take the scenario's
+  `level` falling as the game lost, or the old cursor's empty stores read as play.
 - The 3 by 3 square's row and column turns reach the even permutations of its
   places alone, 181,440 states: from 2 7 6 over 9 5 1 over 4 3 8 neither 1 2 3
   over 4 5 6 over 7 8 9 nor its reverse can be reached, and from the mirror image

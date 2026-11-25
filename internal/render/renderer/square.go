@@ -51,11 +51,11 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if int(slot) < len(sq.Selected) {
 			r.frame(ctx, buf, sq, sq.Selected[slot])
 		}
-		overheat := 0
+		burst := 0
 		if heat, ok := world.Components.Heat.GetPtr(world.Resources.Player.Slot(slot)); ok {
-			overheat = heat.Overheat
+			burst = heat.Burst
 		}
-		r.legend(ctx, buf, sq, overheat)
+		r.legend(ctx, buf, sq, burst)
 		return true
 	})
 }
@@ -305,8 +305,8 @@ func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffe
 
 // legend stands each kind under a column of the square, in kind order, lit while a
 // line holds three of the kind, and over its outer columns its magic meter and its
-// viewer's overheat, the burst a scenario spends, each lit when full
-func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, overheat int) {
+// viewer's burst meter, each lit when full
+func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, burst int) {
 	_, h := sq.Size()
 	var aligned [component.SquareKindCount]bool
 	for _, kind := range sq.Lines {
@@ -322,15 +322,15 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 	r.entry(ctx, buf, x, y, sq.Width, &squareMagic, component.SquareEffect{Cooldown: parameter.SquareMagicFull - sq.Magic},
 		&visual.SquareMagic, sq.Magic >= parameter.SquareMagicFull)
 	x, y = sq.Legend(component.SquareSide - 1)
-	r.entry(ctx, buf, x, y, sq.Width, &squareBurst, component.SquareEffect{Cooldown: time.Duration(parameter.HeatMaxOverheat - overheat)},
-		&visual.SquareBurst, overheat >= parameter.HeatMaxOverheat)
+	r.entry(ctx, buf, x, y, sq.Width, &squareBurst, component.SquareEffect{Cooldown: time.Duration(parameter.BurstFull - burst)},
+		&visual.SquareBurst, burst >= parameter.BurstFull)
 }
 
 // squareMagic and squareBurst are the legend's entries over the square: a name, and
 // in the place of a cooldown what its meter is full at
 var (
 	squareMagic = component.SquareKindSpec{Name: "magic", Cooldown: parameter.SquareMagicFull}
-	squareBurst = component.SquareKindSpec{Name: "burst", Cooldown: parameter.HeatMaxOverheat}
+	squareBurst = component.SquareKindSpec{Name: "burst", Cooldown: parameter.BurstFull}
 )
 
 // entry draws one legend entry at a column: its name, in its color when lit,

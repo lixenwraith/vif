@@ -926,6 +926,7 @@ type CursorStatePayload struct {
 	Energy   int64 `toml:"energy,omitempty"`
 	Heat     int   `toml:"heat,omitempty"`
 	Overheat int   `toml:"overheat,omitempty"`
+	Burst    int   `toml:"burst,omitempty"`
 
 	ShieldRadius float64 `toml:"shield_radius,omitempty"`
 
@@ -1914,6 +1915,11 @@ type SquareAlignedPayload struct {
 type HeatEmberRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 	Lit    bool        `toml:"lit"`
+}
+
+// BurstSpendRequestPayload names the cursor whose burst meter empties
+type BurstSpendRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // DeathWaveRequestPayload names the cursor a death wave runs out from

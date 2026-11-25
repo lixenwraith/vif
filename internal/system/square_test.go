@@ -113,12 +113,12 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 	return kinds
 }
 
-// TestAnEdgeFiresItsKindAgainEachCooldownWhileItHolds: with the kinds down the
-// columns the two on the edges fire at once and again as each cooldown runs out, a
-// turn away and back inside it firing nothing, and the middle column's never. A
-// defense's fire boosts its cursor for its hold and blows one gust out from the
-// middle; a whirl's turns one wind round it.
-func TestAnEdgeFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
+// TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn: with the kinds down the columns
+// the two on the edges fire at once, a turn away and back inside the cooldown firing
+// nothing and the middle column's never; then a whirl or a defense fires again as its
+// cooldown runs out, and the attack only on a turn that leaves it there. A defense's
+// fire boosts its cursor and blows a gust out from the middle; a whirl turns a wind.
+func TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn(t *testing.T) {
 	for _, c := range []struct {
 		keys  []string
 		edges []component.SquareKind // the left column's, then the right's
@@ -179,12 +179,18 @@ func TestAnEdgeFiresItsKindAgainEachCooldownWhileItHolds(t *testing.T) {
 		}
 		for kind, spec := range component.SquareKinds {
 			want := 0
-			if slices.Contains(c.edges, component.SquareKind(kind)) {
+			if slices.Contains(c.edges, component.SquareKind(kind)) && !spec.Turned {
 				want = ticks(spec.Cooldown)
 			}
 			if again[kind] != want {
 				t.Errorf("%v: %s fired again at tick %d, want %d", c.keys, spec.Name, again[kind], want)
 			}
+		}
+		l := sq.Line(component.SquareAttack)
+		along := map[bool]string{false: "h", true: "k"}[l >= 2]
+		pressSquare(s, string(rune('0'+sq.Digits[component.EdgePlaces(l)[0]])), along)
+		if got := squareFired(w.Resources.Event.Queue.Consume()); !slices.Equal(got, []component.SquareKind{component.SquareAttack}) {
+			t.Fatalf("%v then a turn along the attack's edge fired %v, want the attack", c.keys, got)
 		}
 	}
 }
