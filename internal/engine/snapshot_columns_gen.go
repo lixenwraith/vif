@@ -3792,6 +3792,9 @@ func encodeColumnsSquare(dst []byte, rows []StoreEntry[component.SquareComponent
 		dst = appendInt(dst, rows[i].Value.Height)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.MaxHeight)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.ShieldStep)
 	}
 	return dst
@@ -3853,6 +3856,9 @@ func decodeColumnsSquare(r *columnReader) []StoreEntry[component.SquareComponent
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Height, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.MaxHeight, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.ShieldStep, r)

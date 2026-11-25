@@ -827,11 +827,15 @@ heat and energy both run out, the stars stop under a red strobe, and the game st
 over on "You Died!". Drains, nuggets, gold, the fuse and particles are off: special
 fire would blast the stars among the ranks, and they would fall with nobody aiming.
 
-`magic` is for one player, on a map of at least 80 by 40, whose cursor is fixed at
-the middle (`[map] cursors = "fixed"`). The map follows the screen down to that
-size, and a resize stands the gateways, the square and the cursor on the new map
-as a new game would ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority));
-a smaller screen keeps the smallest map and looks at the square from its middle.
+`magic` is for one player, whose cursor is fixed at the middle (`[map] cursors =
+"fixed"`), on a map of at least 41 by 19, a 42 by 23 terminal's: the least that
+holds the square on blocks a row tall with its cursor's orbs circling on it, and a
+gateway's pylon in each corner a cell clear of their orbit. The map follows the
+screen down to that size, and a resize stands the gateways, the square and the
+cursor on the new map as a new game would ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)):
+the blocks are as tall as the map leaves the cursor's orbs room to circle, three rows
+down to one (`SquareComponent.Fit`), and the outer orbit flattens to the map. A
+smaller screen keeps the smallest map and looks at the square from its middle.
 The square stands there: the Lo Shu square, 6 7 2 over 1 5 9 over 8 3 4, its digits in
 three kinds, 2 1 3 attack, 6 5 4 whirl and 8 7 9 defense, one of each along every
 row and column. The scenario captures 1-9, h j k l, a s d f and Enter: a digit selects its

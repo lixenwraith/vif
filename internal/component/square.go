@@ -82,6 +82,7 @@ type SquareComponent struct {
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells
+	MaxHeight     int // the block's rows asked, of which Fit keeps what the map has room for
 
 	ShieldStep int64 // the ShieldComponent.Step it gives its cursor's shield
 }
@@ -155,20 +156,35 @@ func (s *SquareComponent) Line(kind SquareKind) int {
 	return -1
 }
 
+// Fit sets the block's height to the most, down to one row, under which its
+// cursor's orbs circle on a map of mapW by mapH about a middle at (cx, cy)
+func (s *SquareComponent) Fit(cx, cy, mapW, mapH int, aspect vmath.Aspect) {
+	for s.Height = max(s.MaxHeight, 1); s.Height > 1; s.Height-- {
+		orbit := s.ShieldRadius(aspect) + parameter.OrbOrbitRadiusX - parameter.PlayerShieldRadius
+		if orbit < room(cx, mapW)+vmath.CellCenter && aspect.FromCircular(orbit) < room(cy, mapH)+vmath.CellCenter {
+			return
+		}
+	}
+}
+
+// room is the radius about cell c that stays on an axis of size cells
+func room(c, size int) float64 { return float64(min(c, size-1-c)) }
+
 // OrbAt is the cell on the square's outer orbit at an angle, 0 the right and a
-// quarter turn the bottom
-func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect) vmath.Point {
+// quarter turn the bottom; a map of mapW by mapH too small for the orbit flattens it
+func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect, mapW, mapH int) vmath.Point {
 	cx, cy := s.Center()
 	rx := s.ShieldRadius(aspect) + parameter.SquareOrbGap
-	x, y := vmath.AngleToGridPos(angle, cx, cy, rx, aspect.FromCircular(rx))
+	ry := min(aspect.FromCircular(rx), room(cy, mapH))
+	x, y := vmath.AngleToGridPos(angle, cx, cy, min(rx, room(cx, mapW)), ry)
 	return vmath.Point{X: x, Y: y}
 }
 
 // Orb is the cell a line's orb stands at on the outer orbit, the middle of the side
 // the line faces
-func (s *SquareComponent) Orb(l int, aspect vmath.Aspect) vmath.Point {
+func (s *SquareComponent) Orb(l int, aspect vmath.Aspect, mapW, mapH int) vmath.Point {
 	// Quarter turns from the right: right, bottom, left, top
-	return s.OrbAt(float64([SquareLines]int{3, 1, 2, 0}[l])*math.Pi/2, aspect)
+	return s.OrbAt(float64([SquareLines]int{3, 1, 2, 0}[l])*math.Pi/2, aspect, mapW, mapH)
 }
 
 // Faces is the test of whether a cell lies in line l's part of the map: the third

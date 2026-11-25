@@ -129,19 +129,23 @@ func (s *SquareSystem) Update() {
 	})
 }
 
-// Reflow keeps a square by the edge or the middle it stood by as the map resizes
+// Reflow keeps a square's middle by the edge or the middle it stood by as the map
+// resizes, its blocks as tall as the new map has room for
 func (s *SquareSystem) Reflow(stand func(x, y int) (int, int)) {
+	cfg := s.world.Resources.Config
 	s.world.Components.Square.Each(func(_ core.Entity, sq *component.SquareComponent) bool {
-		cx, cy := sq.Center()
-		x, y := stand(cx, cy)
-		sq.X, sq.Y = sq.X+x-cx, sq.Y+y-cy
+		x, y := stand(sq.Center())
+		sq.Fit(x, y, cfg.MapWidth, cfg.MapHeight, cfg.CellAspect)
+		w, h := sq.Size()
+		sq.X, sq.Y = x-w/2, y-h/2
 		return true
 	})
 }
 
 // spawn lays the square whole on the map, centered as near the asked cell as that
-// allows; a second square, a map too small for it, or a layout and groups that do
-// not each name the nine digits once, is refused
+// allows, its blocks as tall as the map has room for; a second square, a map too
+// small for it, or a layout and groups that do not each name the nine digits once,
+// is refused
 func (s *SquareSystem) spawn(p *event.SquareSpawnRequestPayload) {
 	if s.world.Components.Square.CountEntities() > 0 {
 		return
@@ -151,13 +155,14 @@ func (s *SquareSystem) spawn(p *event.SquareSpawnRequestPayload) {
 		return
 	}
 	cfg := s.world.Resources.Config
-	sq := component.SquareComponent{Width: p.BlockWidth, Height: p.BlockHeight, Kinds: kinds, ShieldStep: p.ShieldStep}
+	sq := component.SquareComponent{Width: p.BlockWidth, MaxHeight: p.BlockHeight, Kinds: kinds, ShieldStep: p.ShieldStep}
 	if sq.Width <= 0 {
 		sq.Width = parameter.SquareBlockWidth
 	}
-	if sq.Height <= 0 {
-		sq.Height = max(1, cfg.CellAspect.YInt(parameter.SquareBlockHeight))
+	if sq.MaxHeight <= 0 {
+		sq.MaxHeight = max(1, cfg.CellAspect.YInt(parameter.SquareBlockHeight))
 	}
+	sq.Fit(p.X, p.Y, cfg.MapWidth, cfg.MapHeight, cfg.CellAspect)
 	w, h := sq.Size()
 	if w > cfg.MapWidth || h > cfg.MapHeight {
 		return

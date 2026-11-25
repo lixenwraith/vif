@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,7 +23,8 @@ func newMagic(t *testing.T) *App {
 	return newMagicOn(t, 0, 0)
 }
 
-// newMagicOn is newMagic on a screen of width by height, the smallest map's when zero
+// newMagicOn is newMagic on a screen of width by height, the one showing the
+// smallest map whole when zero
 func newMagicOn(t *testing.T, width, height int) *App {
 	t.Helper()
 	opts := resource.Options{Dir: soakRoot, Scenario: "magic"}
@@ -34,7 +36,7 @@ func newMagicOn(t *testing.T, width, height int) *App {
 		t.Fatalf("scenario: %v", err)
 	}
 	if width == 0 {
-		width, height = sc.MapMinWidth, sc.MapMinHeight
+		width, height = sc.MapMinWidth+parameter.LeftMargin, sc.MapMinHeight+parameter.TopMargin+parameter.BottomMargin
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: width, Height: height, Resources: opts})
 	if err != nil {
@@ -204,10 +206,12 @@ func TestMagicsTurnsDriveItsMusic(t *testing.T) {
 }
 
 // magicLayout is where the shipped magic stands its things: the map, the square's
-// corner, the cursor and the gateways' pylons in the order they were stood
+// corner and its blocks' rows, the cursor and the gateways' pylons in the order
+// they were stood
 type magicLayout struct {
 	mapW, mapH int
 	square     vmath.Point
+	rows       int
 	cursor     vmath.Point
 	gates      [4]vmath.Point
 }
@@ -222,7 +226,7 @@ func layMagic(t *testing.T, a *App) (lay magicLayout) {
 			lay.mapW, lay.mapH = w.Resources.Config.MapWidth, w.Resources.Config.MapHeight
 			for _, e := range w.Components.Square.Entities() {
 				sq, _ := w.Components.Square.GetComponent(e)
-				lay.square = vmath.Point{X: sq.X, Y: sq.Y}
+				lay.square, lay.rows = vmath.Point{X: sq.X, Y: sq.Y}, sq.Height
 			}
 			at, _ := w.Positions.GetPosition(w.Resources.Player.Slot(0))
 			lay.cursor = vmath.Point{X: at.X, Y: at.Y}
@@ -251,7 +255,7 @@ func TestMagicKeepsItsLayoutThroughAResize(t *testing.T) {
 	a := newMagic(t)
 	w := a.World()
 	layMagic(t, a)
-	for _, screen := range [][2]int{{140, 60}, {100, 46}, {180, 48}} {
+	for _, screen := range [][2]int{{140, 60}, {130, 30}, {80, 24}, {100, 46}, {180, 26}} {
 		a.Resize(screen[0], screen[1])
 		a.Tick(2)
 		got, want := layMagic(t, a), layMagic(t, newMagicOn(t, screen[0], screen[1]))
@@ -259,12 +263,12 @@ func TestMagicKeepsItsLayoutThroughAResize(t *testing.T) {
 			t.Fatalf("resized to %dx%d magic stands %+v, want a new game's %+v", screen[0], screen[1], got, want)
 		}
 	}
-	if tick := w.Resources.Game.State.GetGameTicks(); tick < 6 {
-		t.Fatalf("the game stands at tick %d after three resizes, want it running on", tick)
+	if tick := w.Resources.Game.State.GetGameTicks(); tick < 10 {
+		t.Fatalf("the game stands at tick %d after five resizes, want it running on", tick)
 	}
 
 	small := layMagic(t, newMagic(t))
-	a.Resize(60, 30)
+	a.Resize(40, 20)
 	a.Tick(2)
 	var seen, view vmath.Point
 	w.RunSafe(func() {
@@ -278,6 +282,121 @@ func TestMagicKeepsItsLayoutThroughAResize(t *testing.T) {
 	if dx, dy := seen.X-(view.X-1)/2, seen.Y-(view.Y-1)/2; dx < -1 || dx > 1 || dy < -1 || dy > 1 {
 		t.Fatalf("the square's middle shows at (%d,%d) of a %dx%d view, want its middle", seen.X, seen.Y, view.X, view.Y)
 	}
+}
+
+// TestMagicShowsItsWholeLayoutOnEveryScreenDownToItsFloor: on every screen down to
+// the one its smallest map fills, tall or wide, the shipped magic shows that layout
+// whole (magicOnScreen), and on a map a column or a row under its floor it cannot
+func TestMagicShowsItsWholeLayoutOnEveryScreenDownToItsFloor(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
+	w := a.World()
+	floor := layMagic(t, a)
+	// The sweep plays minutes on: a shield that never falls keeps one game standing
+	w.RunSafe(func() {
+		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Slot(0), Value: parameter.GodEnergyAmount})
+	})
+	least := func(mapW, mapH int) (int, int) {
+		return mapW + parameter.LeftMargin, mapH + parameter.TopMargin + parameter.BottomMargin
+	}
+	minW, minH := least(floor.mapW, floor.mapH)
+	widths := []int{129, 130, 131, 200, 320}
+	for width := minW; width <= 100; width++ {
+		widths = append(widths, width)
+	}
+	for height := minH; height <= 64; height++ {
+		for _, width := range widths {
+			a.Resize(width, height)
+			a.Tick(2)
+			w.RunSafe(func() {
+				if err := magicOnScreen(w); err != "" {
+					t.Errorf("on a %dx%d screen %s", width, height, err)
+				}
+			})
+		}
+	}
+	w.RunSafe(func() { w.Resources.Config.MapMinWidth, w.Resources.Config.MapMinHeight = 1, 1 })
+	for _, under := range [][2]int{{floor.mapW - 1, floor.mapH}, {floor.mapW, floor.mapH - 1}} {
+		a.Resize(least(under[0], under[1]))
+		a.Tick(2)
+		w.RunSafe(func() {
+			if magicOnScreen(w) == "" {
+				t.Errorf("a %dx%d map holds the whole layout, under the %dx%d floor", under[0], under[1], floor.mapW, floor.mapH)
+			}
+		})
+	}
+}
+
+// magicOnScreen says what of the magic's layout the screen does not show whole,
+// empty when the map is its game area, the cursor's orbs and the outer orbit circle
+// on it, the blocks as tall as that leaves room for, and a pylon stands in each
+// corner a cell clear of the orbs' orbit and off the outer one
+func magicOnScreen(w *engine.World) string {
+	cfg := w.Resources.Config
+	if cfg.MapWidth != cfg.ViewportWidth || cfg.MapHeight != cfg.ViewportHeight {
+		return fmt.Sprintf("the map is %dx%d in a %dx%d view", cfg.MapWidth, cfg.MapHeight, cfg.ViewportWidth, cfg.ViewportHeight)
+	}
+	shield, _ := w.Components.Shield.GetPtr(w.Resources.Player.Slot(0))
+	squares := w.Components.Square.Entities()
+	if len(squares) != 1 || shield == nil {
+		return "no square stands under a shield"
+	}
+	sq, _ := w.Components.Square.GetPtr(squares[0])
+	cx, cy := sq.Center()
+	ox, oy := float64(cx)+vmath.CellCenter, float64(cy)+vmath.CellCenter
+	// The orbs' orbit about a shield of radius: whether it stays on the map, and
+	// whether a cell's middle lies within it
+	orbit := func(radius float64) (on bool, within func(x, y int) bool) {
+		rx := parameter.OrbOrbitRadiusX + radius - parameter.PlayerShieldRadius
+		ry := cfg.CellAspect.FromCircular(rx)
+		on = ox-rx >= 0 && oy-ry >= 0 && ox+rx < float64(cfg.MapWidth) && oy+ry < float64(cfg.MapHeight)
+		return on, func(x, y int) bool {
+			dx, dy := (float64(x)+vmath.CellCenter-ox)/rx, (float64(y)+vmath.CellCenter-oy)/ry
+			return dx*dx+dy*dy <= 1
+		}
+	}
+	on, within := orbit(shield.Radius)
+	if !on {
+		return fmt.Sprintf("the cursor's orbs circle off it, %d-row blocks under a %.2f-column shield", sq.Height, shield.Radius)
+	}
+	taller := *sq
+	if taller.Height++; sq.Height < sq.MaxHeight {
+		if on, _ := orbit(taller.ShieldRadius(cfg.CellAspect)); on {
+			return fmt.Sprintf("the blocks stand %d rows where %d leave the orbs room", sq.Height, taller.Height)
+		}
+	}
+	var path []vmath.Point
+	for i := range 360 {
+		at := sq.OrbAt(float64(i)*vmath.TwoPi/360, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+		if at.X < 0 || at.Y < 0 || at.X >= cfg.MapWidth || at.Y >= cfg.MapHeight {
+			return fmt.Sprintf("the outer orbit leaves it at %v", at)
+		}
+		path = append(path, at)
+	}
+	corners := map[vmath.Point]bool{}
+	for _, e := range w.Components.Pylon.Entities() {
+		at, _ := w.Positions.GetPosition(e)
+		if at.X < 2 || at.Y < 1 || at.X+2 >= cfg.MapWidth || at.Y+1 >= cfg.MapHeight {
+			return fmt.Sprintf("the pylon at %v is cut off", at)
+		}
+		for y := at.Y - 2; y <= at.Y+2; y++ {
+			for x := at.X - 3; x <= at.X+3; x++ {
+				if within(x, y) {
+					return fmt.Sprintf("the pylon at %v stands within a cell of the orbs' orbit", at)
+				}
+			}
+		}
+		for _, p := range path {
+			if p.X >= at.X-2 && p.X <= at.X+2 && p.Y >= at.Y-1 && p.Y <= at.Y+1 {
+				return fmt.Sprintf("the outer orbit crosses the pylon at %v", at)
+			}
+		}
+		corners[vmath.Point{X: min(at.X, cfg.MapWidth-1-at.X), Y: min(at.Y, cfg.MapHeight-1-at.Y)}] = true
+	}
+	if len(w.Components.Pylon.Entities()) != 4 || len(corners) != 1 || !corners[vmath.Point{X: 2, Y: 1}] {
+		return fmt.Sprintf("the pylons stand %v from the corners, want one in each", corners)
+	}
+	return ""
 }
 
 // TestMagicHoldsItsGatewaysOnceACrowdStands: with as many bodies on the map as the
@@ -303,7 +422,7 @@ func TestMagicHoldsItsGatewaysOnceACrowdStands(t *testing.T) {
 	}
 	for i := range 300 {
 		a.Context().PushEventOrigin(event.EventBehaviorSpawnRequest,
-			&event.BehaviorSpawnRequestPayload{Program: "spark", X: 2 + i%70, Y: 2 + i%30}, event.OriginDebug)
+			&event.BehaviorSpawnRequestPayload{Program: "spark", X: 2 + i%37, Y: 2 + i%15}, event.OriginDebug)
 	}
 	a.Settle()
 	a.Tick(2)

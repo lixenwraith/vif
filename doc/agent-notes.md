@@ -1730,6 +1730,10 @@ Docs · Libraries · Branches.
 - The shipped `[play] auto_fire = "on"` repeats special fire every cooldown, so a
   transition on `EventFireSpecialRequest` meaning a press guards
   `PayloadBoolEquals { field = "repeat", value = false }`, as `shadows` does.
+- `magic`'s `[map]` floor is the least map its layout holds, which
+  `TestMagicShowsItsWholeLayoutOnEveryScreenDownToItsFloor` proves both ways: a
+  change to the square's blocks, its shield's margin, the orbs' orbit or the
+  gateways' pylons moves it, and the test's failures name the size to take.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
   `wad/scenario/` for its name (`tutorial` lists its systems one by one). A list
