@@ -12,7 +12,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		Image:     "docker.io/library/vif:revision",
 		Players:   4,
 		Size:      "120x40",
-		Scenario:  "main",
+		Scenario:  "fighter",
 		FirstJoin: "90s",
 		Empty:     "90s",
 		Drain:     "20s",
@@ -32,8 +32,8 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`{"mountPath":"/var/log/vif-fleet","name":"fleet-logs"}`,
 		`{"mountPath":"/wad/scenario","name":"fleet-wad","readOnly":true,"subPath":"scenario"}`,
 		`{"name":"fleet-wad","persistentVolumeClaim":{"claimName":"vif-fleet-wad","readOnly":true}}`,
-		`"-config-dir","/wad","-s","main"`,
-		`"args":["-check","-config-dir","/wad","-s","main"]`,
+		`"-config-dir","/wad","-s","fighter"`,
+		`"args":["-check","-config-dir","/wad","-s","fighter"]`,
 		`"envFrom":[{"configMapRef":{"name":"vif-session-env","optional":true}}]`,
 		`"automountServiceAccountToken":false`,
 		`"readOnlyRootFilesystem":true`,
@@ -44,7 +44,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"-empty","90s"`,
 		`"-drain","20s"`,
 		`"-size","120x40"`,
-		`"annotations":{"vif.lixenwraith.dev/scenario":"main","vif.lixenwraith.dev/size":"120x40"}`,
+		`"annotations":{"vif.lixenwraith.dev/scenario":"fighter","vif.lixenwraith.dev/size":"120x40"}`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Job JSON does not contain %s", want)

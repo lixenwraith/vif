@@ -264,7 +264,7 @@ sudo kubectl get pv vif-fleet-logs vif-fleet-wad    # values: ["<node>"], Availa
 
 `WaitForFirstConsumer` leaves both claims `Pending` until something mounts them.
 Bind them with the checked-in probe, which loads a scenario through the wad claim
-(`td`: `main` is the image's own and would prove nothing) and writes a record
+(`td`: `fighter` is the image's own and would prove nothing) and writes a record
 through the log claim:
 
 ```sh

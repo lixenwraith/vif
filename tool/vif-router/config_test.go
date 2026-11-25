@@ -135,7 +135,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
-		if cfg.Allocator.WadDir != defaultWadDir || cfg.Allocator.Workload.Scenario != "main" ||
+		if cfg.Allocator.WadDir != defaultWadDir || cfg.Allocator.Workload.Scenario != "fighter" ||
 			cfg.Listen != ":9080" || cfg.Allocator.RoutePort != 7777 || cfg.Allocator.RouteMax != 8 ||
 			cfg.Allocator.PlayersMax != cfg.Allocator.Workload.Players {
 			t.Errorf("%v: an empty variable overrode a default: %+v", args, cfg.Allocator)

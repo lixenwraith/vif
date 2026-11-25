@@ -34,7 +34,7 @@ func BenchmarkHeadlessTicks(b *testing.B) {
 		cursor bool
 		cfg    Config
 	}{
-		{"main-160x50", true, Config{Seed: 42, Width: 160, Height: 50, Resources: resource.Options{Embedded: true}}},
+		{"fighter-160x50", true, Config{Seed: 42, Width: 160, Height: 50, Resources: resource.Options{Embedded: true}}},
 		{"td-200x60", false, Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: "../../wad", Scenario: "td"}}},
 		{"cave-200x60", false, Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: "../../wad", Scenario: "cave"}}},
 	}

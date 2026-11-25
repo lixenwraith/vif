@@ -320,7 +320,7 @@ bundle)
 	make wad-archive WAD_ARCHIVE="$ARCHIVE" >/dev/null || fail "make wad-archive"
 	tar -C "$DEST" -xzf "$ARCHIVE" || fail "the archive did not extract"
 	[ "$(ls -A "$DEST")" = vif ] || fail "the archive unpacked beside vif/: $(ls -A "$DEST")"
-	for tree in "-s main" "-s td" ""; do
+	for tree in "-s fighter" "-s td" ""; do
 		# shellcheck disable=SC2086
 		"$BIN" -check -config-dir "$ROOT" $tree >/dev/null \
 			|| fail "the extracted root did not resolve: $tree"
@@ -338,12 +338,12 @@ scenario)
 	[ -d wad/scenario/base/td ] || fail "wad/scenario/base/td is not in this checkout"
 	pty_ok || { echo "SKIP scenario: no usable script(1) for a pty" >&2; exit 0; }
 	LOG=$(mktemp -d)
-	KEYS=$(keyfile "sleep 1" "printf ':n td\\r'" "sleep 3" "printf ':n main\\r'" "sleep 3" "printf ':q\\r'" "sleep 1")
+	KEYS=$(keyfile "sleep 1" "printf ':n td\\r'" "sleep 3" "printf ':n fighter\\r'" "sleep 3" "printf ':q\\r'" "sleep 1")
 	pty_bg "$KEYS" "$BIN -config-dir wad -l=$LOG -lv info -ls app"
 	wait "$PTY_PID" 2>/dev/null || true
 	got=$(grep -ho '"digest":"[0-9a-f]*"' "$LOG"/*.jsonl 2>/dev/null | sed 's/.*:"//;s/"//' | uniq)
 	count=$(printf '%s\n' "$got" | grep -c .)
-	[ "$count" -ge 3 ] || fail "expected main, td and main again; the log named $count scenario(s): $(printf '%s ' $got)"
+	[ "$count" -ge 3 ] || fail "expected fighter, td and fighter again; the log named $count scenario(s): $(printf '%s ' $got)"
 	first=$(printf '%s\n' "$got" | head -1)
 	[ "$(printf '%s\n' "$got" | sed -n 3p)" = "$first" ] || fail "the run did not come back to the scenario it started on"
 	rm -rf "$LOG" "$KEYS"
@@ -361,7 +361,7 @@ follow)
 	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
 	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
 	GK=$(keyfile "sleep 24" "printf ':q\\r'" "sleep 2")
-	pty_bg "$HK" "$BIN -nw -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
+	pty_bg "$HK" "$BIN -nw -host $HOST:$PORT -config-dir wad -s fighter -l=$HL -lv info -ls app+session"
 	HOST_PTY=$PTY_PID
 	sleep 2
 	pty_bg "$GK" "$BIN -nw -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
@@ -498,7 +498,7 @@ deploy)
 
 	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
 	# resolves from exactly that and names itself in the log the commissioning
-	# check reads. main is the embedded campaign, on no volume, so td stands in.
+	# check reads. fighter is the embedded campaign, on no volume, so td stands in.
 	mount=$(mktemp -d)/wad
 	mkdir -p "$mount"
 	cp -a wad/scenario wad/image "$mount/"

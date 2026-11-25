@@ -78,11 +78,11 @@ type scenarioFile struct {
 	data []byte
 }
 
-// Shown is the name a player reads for the scenario: the built-in one is main,
+// Shown is the name a player reads for the scenario: the built-in one is fighter,
 // whatever label its record carries.
 func (s Scenario) Shown() string {
 	if s.Name == EmbeddedLabel {
-		return paths.MainScenarioName
+		return paths.FighterScenarioName
 	}
 	return s.Name
 }
@@ -97,7 +97,7 @@ func LoadScenario(o Options) (Scenario, error) {
 		return Scenario{}, err
 	}
 	if entry == "" {
-		return ReadScenario(EmbeddedLabel, asset.MainScenario, asset.MainScenarioEntry)
+		return ReadScenario(EmbeddedLabel, asset.FighterScenario, asset.FighterScenarioEntry)
 	}
 	dir := filepath.Dir(entry)
 	return ReadScenario(filepath.Base(dir), os.DirFS(dir), filepath.Base(entry))

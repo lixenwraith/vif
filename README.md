@@ -11,11 +11,11 @@
 
 # vif
 
-vif is a real-time roguelike typing shooter played with vi-style motions, solo or
-with others over the network: in a terminal, a desktop window, on Android or in
-the browser.
+vif is a real-time roguelike typing shooter played with vi-style motions, 
+offline solo or online multi-player: in a terminal, a desktop window,
+on Android or in the browser.
 
-It is pure Go with cgo off and few dependencies. The terminal, TOML, color and
+It is pure Go with few dependencies. The terminal, TOML, color and
 logging primitives are modules of their own
 ([terminal](https://github.com/lixenwraith/terminal),
 [toml](https://github.com/lixenwraith/toml),
@@ -85,7 +85,7 @@ Linux and FreeBSD; where the window cannot build (Termux) it says so and names
 | Logs, journals, music (`-l`, `-j`, `-mw`) | `~/.local/state/vif/` | `~/.local/state/vif/` | `~/.local/state/vif/` |
 
 The wad is the scenarios, typing corpus, wall images, bot graphs, keymap and
-`vif.toml` the binary does not need to play its embedded main scenario. A file in
+`vif.toml` the binary does not need to play its embedded `fighter` scenario. A file in
 `~/.config/vif` overrides the system copy of it. `make uninstall` keeps the wad,
 and `make install-config` installs only the wad, into `~/.config/vif`.
 Uninstalled, `./bin/vif` plays the checkout's `wad/`. The

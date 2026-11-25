@@ -618,7 +618,7 @@ transitions = [
 ]
 
 # The game is lost to a touch on the blocks with no energy and no heat left. It
-# flashes red as long as main's, then starts over; the reset clears the status bar,
+# flashes red as long as fighter's, then starts over; the reset clears the status bar,
 # so the new game opens with what ended the last
 [states.Fallen]
 parent = "Root"

@@ -121,11 +121,11 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 
 	testServer(&fakeSessionAllocator{
 		bounds: fleetLimits{PlayersMax: 4, PlayersDefault: 4, LogLevels: []string{"info"},
-			LogLevelDefault: "info", SizeDefault: sizeFirst, Scenarios: []string{"main"}},
+			LogLevelDefault: "info", SizeDefault: sizeFirst, Scenarios: []string{"fighter"}},
 	}).ServeHTTP(response, request)
 
 	want := `{"sessions":[],"limits":{"players_max":4,"players_default":4,"bots_max":0,` +
-		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["main"],` +
+		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["fighter"],` +
 		`"sessions_max":0,"doors":0,"doors_max":0,"spectators_max":0}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
@@ -140,10 +140,10 @@ func TestGetSessionsNamesScenarioDescriptionsBesideTheList(t *testing.T) {
 
 	testServer(&fakeSessionAllocator{
 		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"},
-			Scenarios: []string{"main", "td"}, Descriptions: map[string]string{"td": "Hold the line."}},
+			Scenarios: []string{"fighter", "td"}, Descriptions: map[string]string{"td": "Hold the line."}},
 	}).ServeHTTP(response, request)
 
-	want := `"scenarios":["main","td"],"scenario_descriptions":{"td":"Hold the line."},"sessions_max":0`
+	want := `"scenarios":["fighter","td"],"scenario_descriptions":{"td":"Hold the line."},"sessions_max":0`
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -175,11 +175,11 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://site.example:7777/abc"}}
 	site := httptest.NewServer(testServer(backend))
 	defer site.Close()
-	got, _, err := network.RequestSession(site.URL, 2, 1, "main", "")
+	got, _, err := network.RequestSession(site.URL, 2, 1, "fighter", "")
 	if err != nil || got != backend.created.JoinTarget {
 		t.Fatalf("RequestSession = %q, %v; want %q", got, err, backend.created.JoinTarget)
 	}
-	if backend.requested != (sessionRequest{Players: 2, Bots: 1, Scenario: "main"}) {
+	if backend.requested != (sessionRequest{Players: 2, Bots: 1, Scenario: "fighter"}) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 	backend.createErr = errFleetFull

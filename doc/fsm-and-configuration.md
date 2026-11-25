@@ -42,15 +42,15 @@ The scenario entry is resolved in this order:
    path is an entry file or a directory holding `scenario.toml`, and a name, at
    any depth below `scenario/`, or a path below it resolves in the configured
    roots ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy));
-2. a scenario named `main` under a root passed with `-config-dir` (or
+2. a scenario named `fighter` under a root passed with `-config-dir` (or
    `[paths] root`);
 3. the same under the user config root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    each system root, `/usr/local/etc/vif` and `/etc/vif`;
-5. the embedded main campaign in `internal/asset/scenario/`.
+5. the embedded `fighter` campaign in `internal/asset/scenario/`.
 
-`-s main` also falls back to that campaign when no root holds an override; there
-is no duplicate main scenario under `wad/`.
+`-s fighter` also falls back to that campaign when no root holds an override; there
+is no duplicate `fighter` scenario under `wad/`.
 
 All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and

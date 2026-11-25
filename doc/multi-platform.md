@@ -164,7 +164,7 @@ shows ([todo](todo.md#tell-a-neovim-player-their-keys-tap)). And it passes on th
 pointer moving with no button down only under Neovim's `mousemoveevent`, so the
 cursor follows the pointer only then. The picture keeps the terminal's rate: of
 the 60 frames a second the game draws at 120x40, the 20.5 that change all reach
-the screen in Neovim 0.11.7 and 0.12.6 as in Alacritty alone, on `main` and on
+the screen in Neovim 0.11.7 and 0.12.6 as in Alacritty alone, on `fighter` and on
 `td`.
 
 The About overlay's `notices` row names `NOTICES`, which travels with every
@@ -246,7 +246,7 @@ at once rather than lingering for a burst, because a browser timer is clamped to
 4 ms or coarser. Measured against a local host on 2026-09-29, round trip as the
 host reads it:
 
-| Guest | `main` at 120x40 | `td` at 500x250 |
+| Guest | `fighter` at 120x40 | `td` at 500x250 |
 |---|---|---|
 | native terminal | 5 ms | 5 ms |
 | browser, headless Chromium, 1080p | 3–4 ms | 80–500 ms, the Worker at 100% of a core |

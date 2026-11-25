@@ -159,7 +159,7 @@ refuses a lobby that would wait for a guest forever.
   Visual; vim's block insert has no counterpart, since Insert lays no text, so
   `I` and `A` leave Visual for Insert as elsewhere.
 - The practice text is the scenario's own corpus, not the run's, and block
-  placement is the tutorial's choice: the main scenario and `td` spread lines as
+  placement is the tutorial's choice: `fighter` and `td` spread lines as
   before.
 - The tutorial's cursor has no shield outside the Visual lesson, so Visual there
   moves and edits as Normal does.

@@ -863,10 +863,10 @@ Docs · Libraries · Branches.
   reads it, as the square's boost cap and energy step ride `ShieldComponent`. The
   same test narrows a dual system by what its file creates: `PulseSystem` creating
   a cursor's pulse reads as player alone, so `WeaponSystem` fires the death wave.
-- Main's swarm is no body for a scenario with a small shield: it charges at its
+- Fighter's swarm is no body for a scenario with a small shield: it charges at its
   target enraged, which refuses the shield's knockback, and costs 1,000 energy a
-  tick inside it (`profile.Contact`, main's scale). `magic`'s carrier is a declared
-  species for that, its touch the scenario's.
+  tick inside it (`profile.Contact`, fighter's scale). `magic`'s carrier is a
+  declared species for that, its touch the scenario's.
 - `EventCursorArmRequest` sets energy with heat and ember, so a payload that names
   no energy zeroes the shield; `EventHeatEmberRequest` moves the ember alone.
 - A `[bus]` event needs its row in `crossingRules` (`internal/system/network.go`)

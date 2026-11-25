@@ -19,7 +19,7 @@ in [`script/`](../script/README.md).
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
 | Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
-| Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `main` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
+| Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `fighter` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
 | Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Admitted by the router's ticket (§4). |
 | Reached by | Its name, through the router alone, on two routes (§9): `vif://<site>:7777/<session>` at the front door, `vifs://` where the edge ends TLS for it, and `wss://<site>/vif/ws/<session>` through the site's edge; both reach the pod from the node, the only source its game port admits. |
@@ -209,7 +209,7 @@ What the manifest asks for:
 
 | Resource | Value | Rationale |
 |---|---:|---|
-| memory request / limit | 96 / 480 MiB | td's 500×250 map peaks at about 200–215 MiB with one guest (`vif -serve`, measured locally), plus headroom for a staging world after an authority change; `main` at 120×40 holds about 33 MiB. |
+| memory request / limit | 96 / 480 MiB | td's 500×250 map peaks at about 200–215 MiB with one guest (`vif -serve`, measured locally), plus headroom for a staging world after an authority change; `fighter` at 120×40 holds about 33 MiB. |
 | `GOMEMLIMIT` | 448 MiB | 32 MiB under the limit, an earlier collection target, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
 | per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request and limit | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 672 MiB, under its one core. A seat is a world of its own, so a request for bots is refused on a map past that screen's 4,800 cells, a scenario's fixed one or the screen asked for (`botMapCells`). |
