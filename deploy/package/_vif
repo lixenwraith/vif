@@ -41,7 +41,7 @@ _arguments \
   '-fullscreen[Open the desktop window full screen; vif.toml'\''s \[presentation\] fullscreen is the default, and a terminal run ignores it]' \
   '-scale[Draw the desktop window'\''s font n times its pixels, for a HiDPI screen; with -g (default 1). Ctrl with = or -, or with the wheel, zooms the window from there, as a terminal'\''s own keys zoom a terminal, and Ctrl-0 puts its font back]:n: ' \
   '-mute[Start muted, or with sound as -mute=false; unset, vif.toml'\''s \[play\] channels stand, sound on by default]' \
-  '(-ab -audio-backend)'{-ab,-audio-backend}'[Force an audio backend instead of detecting one]:name: ' \
+  '(-ab -audio-backend)'{-ab,-audio-backend}'[Play through one output alone: pulse, alsa or wasapi, a player such as pw-cat, null, or wav:path]:name: ' \
   '(-nw -no-wait)'{-nw,-no-wait}'[Start each new game and seat each join at once, or at a key, click or tap as -nw=false; unset, vif.toml'\''s \[play\] wait stands, waiting by default]' \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \
   '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing]:rate: ' \

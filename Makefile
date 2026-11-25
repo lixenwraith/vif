@@ -332,13 +332,13 @@ verify: generate test
 	@if GOOS=linux GOARCH=amd64 $(GO) list -deps $(SRC) | grep -q 'golang.org/x/sys/windows$$'; then \
 		echo "FAIL: a Linux build links Windows' system calls"; exit 1; \
 	fi
-	@for sink in linux:pulse.go windows:wasapi.go; do for tags in '' vif_nogui vif_noaudio vif_headless; do \
-		files=$$(GOOS=$${sink%:*} GOARCH=amd64 $(GO) list -f '{{.GoFiles}}' -tags "$$tags" $(SRC)) || exit 1; \
-		case "$$tags:$$files" in \
-		:*$${sink#*:}*) ;; \
-		:*) echo "FAIL: the $${sink%:*} window build lacks its speakers"; exit 1 ;; \
-		*$${sink#*:}*) echo "FAIL: $${sink%:*} with $$tags builds the desktop window's speakers"; exit 1 ;; \
-		esac; \
+	@for sink in linux:pulse.go windows:wasapi.go linux:alsa.go:vif_nogui; do \
+		os=$${sink%%:*}; file=$${sink#*:}; also=$${file#*:}; file=$${file%%:*}; [ "$$also" = "$$file" ] && also=; \
+		for tags in '' vif_nogui vif_noaudio vif_headless; do \
+		files=$$(GOOS=$$os GOARCH=amd64 $(GO) list -f '{{.GoFiles}}' -tags "$$tags" $(SRC)) || exit 1; \
+		case ":$$tags:" in "::"|":$$also:") wrong=lacks ;; *) wrong=builds ;; esac; \
+		case "$$files" in *$$file*) has=builds ;; *) has=lacks ;; esac; \
+		[ $$wrong != $$has ] || { echo "FAIL: $$os with tags '$$tags' $$has the speakers' $$file"; exit 1; }; \
 	done; done
 	$(GO) vet ./...
 	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui github.com/lixenwraith/terminal/window $(SRC)

@@ -338,8 +338,9 @@ four-slot sequencer and the shipped banks. It has no gameplay or APM concept.
 and arrangement intensity; `AudioSystem` translates effect and mute/pause
 events.
 
-Audio output is zero-CGO but not device-native on most platforms: the engine
-streams 44.1 kHz, 16-bit stereo PCM to an installed process such as `pacat`,
+Audio output is zero-CGO: the engine streams 44.1 kHz, 16-bit stereo PCM to the
+build's own speakers, a stream on the sound server, the Linux sound card through
+the kernel or Windows' WASAPI, and else to an installed process such as `pacat`,
 `pw-cat`, `aplay`, SoX `play`, or `ffplay`, or to FreeBSD OSS. Explicit `null`
 and `wav:path` sinks support automation and offline capture. Missing backends
 degrade to silence rather than aborting gameplay.
@@ -419,10 +420,9 @@ These boundaries belong to separately maintained modules:
   passphrase door and an account sign-in prove with.
 - `github.com/lixenwraith/ascimage`: the dual-mode cell images a wall pattern
   loads (`.aimg`) and the quadrant fit the logo draws with.
-- `github.com/ebitengine/purego`: loading libraries at run time with cgo off, for
-  the desktop window: the sound server's client library for its speakers
-  (`cmd/vif/pulse.go`) and, in `terminal/window`, Xlib, EGL and GLES 2 or desktop
-  OpenGL.
+- `github.com/ebitengine/purego`: loading libraries at run time with cgo off: the
+  sound server's client library for the build's own stream (`cmd/vif/pulse.go`)
+  and, in `terminal/window`, Xlib, EGL and GLES 2 or desktop OpenGL.
 
 `golang.org/x/sys` serves `pkg/network`'s Windows error codes; `golang.org/x/term`,
 `golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through

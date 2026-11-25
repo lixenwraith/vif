@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/audio/bank"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 type AudioService struct {
@@ -93,11 +94,12 @@ func (s *AudioService) Start() error {
 		return nil // Sfx stays SoundNone: every Play is a no-op
 	}
 
-	// No backend is a degradation, not a failure. The engine has already
-	// latched silent mode, Play is a no-op, and the AudioResource bound in
-	// Contribute stays valid. Only a broken subsystem (built-in sound
-	// registry) aborts startup.
-	if err := s.audioEngine.Start(); err != nil && !errors.Is(err, audio.ErrNoAudioBackend) {
+	// No backend is a degradation, not a failure: the engine has latched silent
+	// mode, Play is a no-op, and the AudioResource bound in Contribute stays
+	// valid. Only a broken subsystem (built-in sound registry) aborts startup.
+	if err := s.audioEngine.Start(); errors.Is(err, audio.ErrNoAudioBackend) {
+		vlog.Warn("app", "msg", "audio silent", "error", err.Error())
+	} else if err != nil {
 		return err
 	}
 

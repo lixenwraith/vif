@@ -18,7 +18,14 @@ import (
 
 // The window plays through the system's own mixer, shared with every other
 // program: Windows ships none of the players the engine finds by name
-func init() { speakers = wasapiSpeakers }
+func init() {
+	speakerOpens["wasapi"] = func(bool) (io.WriteCloser, error) {
+		if s := wasapiSpeakers(); s != nil {
+			return s, nil
+		}
+		return nil, errors.New("no output device answered")
+	}
+}
 
 // wasapiStall is how long a device may take nothing before its stream is taken
 // for lost, and a render thread not answer before a write or Close gives it up.

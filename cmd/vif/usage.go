@@ -92,7 +92,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"fullscreen"}, arg: "[=false]", hint: "Open the desktop window full screen; vif.toml's [presentation] fullscreen is the default, and a terminal run ignores it"},
 			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; with -g (default 1). Ctrl with = or -, or with the wheel, zooms the window from there, as a terminal's own keys zoom a terminal, and Ctrl-0 puts its font back"},
 			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, sound on by default"},
-			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Force an audio backend instead of detecting one"},
+			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Play through one output alone: pulse, alsa or wasapi, a player such as pw-cat, null, or wav:path"},
 		},
 	}, {
 		title: "Run",

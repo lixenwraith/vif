@@ -232,8 +232,12 @@ func (s *AudioSystem) Update() {
 	for i := range r {
 		s.statReject[i].Store(int64(counterDelta(r[i], s.baseReject[i])))
 	}
+	silent := s.player.IsSilent()
+	if silent && !s.statSilent.Load() {
+		s.world.Log().Warn("app", "msg", "audio silent: its backend ended and no other played", "backend", s.statBackend.Load())
+	}
 	s.statBackend.Store(s.player.BackendName())
-	s.statSilent.Store(s.player.IsSilent())
+	s.statSilent.Store(silent)
 }
 
 // counterDelta reports a session delta and tolerates a backend counter reset.
