@@ -1533,11 +1533,18 @@ Docs · Libraries · Branches.
   1,000-2,000 Hz a cloud container kept a quarter of the samples or fewer.
   `nav.recomputes` is a gauge, not a count.
 - tmux can throw frames away while vif sees nothing: it reads a pane at once, so
-  writes return and held frames stay near zero. Attach a client (Alacritty under
-  Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
-  -F '#{client_discarded}'`; a rising count means the client is repainted every
-  100 ms. To count what a client saw, replay its byte stream through `pyte`,
-  sampling 60 times a second, and count the samples where a pane changed.
+  writes return and held frames stay near zero. Attach a client (Alacritty, or a
+  Python pty reader sized with `TIOCSWINSZ`) and poll `#{client_discarded}` and
+  `#{client_written}` through one control client (`tmux -C attach -f
+  no-output,ignore-size`, a `display -p -c <client>` a sample), not a fork a
+  sample: a rising discard is the client frozen some 200 ms and repainted whole.
+  `client_written` against vif's `wchar` (`/proc/<pid>/io`) is tmux's
+  amplification, and the `\e[?2026h` a pty reader counts are the whole frames it
+  got. A pty takes some 12 KB a write and tmux tests its limit after one, so a
+  frame past eight bytes a cell is discarded however fast the client reads. The
+  Devourer shows it on tmux 3.8 ([Rendering §1](rendering.md#1-frame-pipeline));
+  tmux's master, built beside it, runs under a `-L` server of its own. Keys sent
+  start from Normal, where Escape opens the menu and pauses the run.
 
 - A recorder on a sink's monitor must not set the graph's pace: on PipeWire
   `stdbuf -o0 pw-record --target <sink> -P stream.capture.sink=true --latency 2s
