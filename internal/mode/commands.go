@@ -191,6 +191,16 @@ func inspects(cmd string) bool {
 	return false
 }
 
+// cheats names the commands that set this run's player's own state, which a run or
+// a session started with -no-cheats refuses
+func cheats(cmd string) bool {
+	switch cmd {
+	case "god", "demon", "energy", "heat", "boost", "w", "weapon":
+		return true
+	}
+	return false
+}
+
 // The menu and command line share the same session and replay policy.
 func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	if cmd == "replay" && ctx.ReplaySeek == nil {
@@ -220,6 +230,15 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 			"host", "join", "spectate", "leave", "lan", "relay", "takeover", "register", "login", "logout":
 		default:
 			return "Unavailable while a bot plays"
+		}
+	}
+
+	if cheats(cmd) {
+		switch {
+		case ctx.NoCheats.Load():
+			return "Cheats unavailable in this run"
+		case ctx.SessionNoCheats.Load():
+			return "Cheats unavailable in this session"
 		}
 	}
 

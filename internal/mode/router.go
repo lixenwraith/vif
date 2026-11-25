@@ -301,6 +301,9 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentConsole:
 		return r.handleConsole()
 	case input.IntentPause:
+		// As :pause typed, whose line ends this run's own pause first: a step's gives
+		// way to the hold, so the resume leaves the game running
+		r.ctx.SetPaused(false)
 		r.ctx.WithOrigin(event.OriginCommand, func() { handlePauseCommand(r.ctx, nil) })
 		return true
 

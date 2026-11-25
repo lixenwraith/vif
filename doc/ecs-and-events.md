@@ -124,9 +124,9 @@ cell out of it, and a scan passes empty cells a word at a time.
 `position.Clamp` is the single gate in front of that allocation, bounding a map by
 `MaxWidth`, `MaxHeight` and `MaxCells` (2 MB of cells per world at the ceiling),
 which `parameter` names as the game reads them. It clamps rather than rejects
-because a `LevelSetup` payload is replicated: every participant applies the same
+because an `EventMapSetup` payload is replicated: every participant applies the same
 one, so a clamp reaches the same bounds everywhere where a payload dropped on one
-instance and applied on another is a divergence. `World.SetupLevel` and the resize
+instance and applied on another is a divergence. `World.SetupMap` and the resize
 and reset paths write the map size through `ConfigResource.FloorMapSize`, which
 raises it to the scenario's `[map]` floor and then clamps, and `Grid.Resize`
 clamps again before it allocates. Config and the grid therefore describe one map,
@@ -614,7 +614,7 @@ The catalog covers these domains:
 
 | Domain | Representative responsibilities |
 |---|---|
-| Session and level | map setup, terminal resize, reset, pause, time scale and stepping |
+| Session and map | map setup, terminal resize, reset, pause, time scale and stepping |
 | Audio and music | sound requests, mute state, music start/stop, beat and melody patterns, tempo, intensity, seed and swing |
 | FSM and meta | region control, system commands, cycle damage multiplier, overlays, status messages, debug views |
 | Player and input | cursor lifecycle/placement, character input, deletion, key capture and captured-input presses, mode, per-cursor energy, heat, boost, shield and weapons, nugget and gold jumps |

@@ -274,6 +274,10 @@ type GameContext struct {
 	// command line is open, as [play] pause_menu and pause_command set them
 	PauseMenu, PauseCommand atomic.Bool
 
+	// NoCheats refuses the commands that set this run's player's own state, by its
+	// own -no-cheats, and SessionNoCheats by its session host's; the membership keeps both
+	NoCheats, SessionNoCheats atomic.Bool
+
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
 	modeAsk    atomic.Int32     // A play mode the scenario asked for, plus one, till the router takes it
 
@@ -413,7 +417,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	ctx.TimeCtl = NewTimeControl(clock, reg)
 
 	// 4. Config Resource
-	// Initial: Map = Viewport, CropOnResize on until a level setup says otherwise
+	// Initial: Map = Viewport, CropOnResize on until a map setup says otherwise
 	world.Resources.Config = &ConfigResource{
 		MapWidth:       viewportWidth,
 		MapHeight:      viewportHeight,

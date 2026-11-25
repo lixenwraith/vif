@@ -326,7 +326,7 @@ func TestReproducingJoinAdmissionAndRefusals(t *testing.T) {
 
 	host := mustHeadless(t, seed, 120, 40)
 	defer host.Close()
-	host.SetupLevel(100, 30, true, false)
+	host.SetupMap(100, 30, true, false)
 
 	an := host.JoinAnchor()
 	if an.Anchor.MapWidth != 100 || an.Anchor.MapHeight != 30 || an.Anchor.CropOnResize {

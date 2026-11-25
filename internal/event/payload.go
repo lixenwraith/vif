@@ -15,15 +15,15 @@ import (
 
 // --- Engine ---
 
-// --- Level ---
+// --- Map ---
 
-// LevelSetupPayload configures map dimensions and entity lifecycle
-type LevelSetupPayload struct {
+// MapSetupPayload configures map dimensions and entity lifecycle
+type MapSetupPayload struct {
 	Width         int  `toml:"width"`          // New map width in grid cells
 	Height        int  `toml:"height"`         // New map height in grid cells
 	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
 	PreserveLoot  bool `toml:"preserve_loot"`  // Encounter transitions keep uncollected rewards
-	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
+	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = the map apart from the viewport)
 }
 
 // ScreenResizePayload carries new terminal dimensions. Terminal cells, not viewport

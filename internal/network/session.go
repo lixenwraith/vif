@@ -70,6 +70,10 @@ type SessionOffer struct {
 	// more than it would have.
 	Players int `json:"players,omitempty"`
 
+	// NoCheats says the session refuses :god, :demon, :energy, :heat, :boost and :w
+	// to every participant, as its host's -no-cheats asked; a successor keeps it.
+	NoCheats bool `json:"no_cheats,omitempty"`
+
 	// TermKeys is the authority key of every term since the first, the session's
 	// identity across its successors, which a pass is verified against (TermKey);
 	// KeepOut the keys and accounts the authority dropped, refused at every door.

@@ -17,7 +17,7 @@ import (
 
 func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	w.SetupLevel(80, 40, false, false, false)
+	w.SetupMap(80, 40, false, false, false)
 	w.Positions.SetPosition(first, component.PositionComponent{X: 10, Y: 10})
 	w.Positions.SetPosition(second, component.PositionComponent{X: 70, Y: 10})
 	for y := range 30 {

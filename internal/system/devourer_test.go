@@ -16,7 +16,7 @@ import (
 func devourerFixture(t *testing.T) (*engine.World, *DevourerSystem, core.Entity) {
 	t.Helper()
 	w, first, second := testCursorWorld(t)
-	w.SetupLevel(120, 40, false, false, false)
+	w.SetupMap(120, 40, false, false, false)
 	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
 	for _, cursor := range []core.Entity{first, second} {
 		w.Positions.SetPosition(cursor, component.PositionComponent{X: 60, Y: 20})

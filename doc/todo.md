@@ -520,7 +520,7 @@ A scenario carries maps: `[maps]` in its entry, each inline or a file of its own
 read, bounded, digested and sent as a program is and compiled once a run; `rows`
 of one width over a `legend`; and `EventMapLayRequest { map, x, y }`, which a
 request naming no map of the scenario fails the load on. A legend lays a
-program's spawn and nothing else, so a formation is drawn and a level is not. A
+program's spawn and nothing else, so a formation is drawn and terrain is not. A
 wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg`
 from the `image/` category, which the digest leaves out and a joiner is not sent.
 What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
@@ -531,7 +531,7 @@ What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
   loose walls, a batch a block mask and box style. A 500 by 250 map is 125 KB of
   rows, half a file's bound.
 - **Its own size.** A map is as large as its rows, and the scenario holds the map
-  to it (`[map] fixed`, its level setup). A layout that stretches with the
+  to it (`[map] fixed`, its map setup). A layout that stretches with the
   terminal is not this item's.
 - **A loot, and a named cell** a payload takes, the marker the editor drags, each
   a kind of legend entry its own system lays.
@@ -2490,7 +2490,7 @@ A cursor then takes what an attack family does rather than a fixed `CursorDamage
 - Priority: P3
 - Affected files: `internal/system/mount.go`, `internal/event/payload.go`
 
-`EventMountRequest` naming a cell and no host places a bare Shared anchor carrying the mount, so a scenario can lay a sustained, hidden pulse over part of the map, such as one that pushes cursors back once they take pushes; a level clear and a request remove it.
+`EventMountRequest` naming a cell and no host places a bare Shared anchor carrying the mount, so a scenario can lay a sustained, hidden pulse over part of the map, such as one that pushes cursors back once they take pushes; a map setup's clear and a request remove it.
 
 ### Let a scenario shape the cursor's pulse
 
@@ -2611,6 +2611,10 @@ The console landed ([Input §9](input-and-modes.md#9-command-mode)). Open:
   drag over its rows would suit a phone better.
 - Help and telemetry still center on the whole screen under a touch keyboard, whose
   covered rows only the console keeps above (`ComputeConsoleGeometry`).
+- With Wait to start off, `:n` typed on the console's line plays the new game behind
+  the console: the reset's unpause (`Scheduler.executeReset`) ends the pause the
+  console asked again. Closes with the reset asking it once more after its entry
+  actions settle, while an overlay or the command line that pauses stands open.
 
 The options Lixen did not take (2026-11-14), each with what would reopen it:
 
@@ -2957,7 +2961,7 @@ it and write the WAV.
 - Priority: P3
 - Affected files: `internal/system/music.go`
 
-The conductor plays tiers, not bars. A level that wants a fixed piece would play
+The conductor plays tiers, not bars. A scenario that wants a fixed piece would play
 a `SongDef` through the sequencer as stapes conducts one, each bar's patterns
 scheduled while the bar before plays.
 

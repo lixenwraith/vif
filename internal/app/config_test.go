@@ -80,7 +80,7 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 // TestASoloPauseStandsUntilTheNextPause: the Game page's Pause row holds a solo run
 // at once and closes the menu, and a tick asked of it takes none. Closing the menu or
 // the command line ends only the pause each made; p runs the game on, and so does a
-// step after :pause.
+// step after :pause, and p's pause takes a step's place, so its resume runs the game.
 func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
@@ -130,6 +130,11 @@ func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	command("step")
 	if ctx.TimeCtl.Held() {
 		t.Fatal("a step left the hold standing")
+	}
+	key(terminal.KeyRune, 'p')
+	key(terminal.KeyRune, 'p')
+	if ctx.TimeCtl.IsPaused() {
+		t.Fatalf("p's pause and resume after a step left held %v, own pause %v", ctx.TimeCtl.Held(), ctx.TimeCtl.OwnPause())
 	}
 }
 

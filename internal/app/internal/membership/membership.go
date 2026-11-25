@@ -228,11 +228,12 @@ type RestartAsk struct {
 	// Host is the address to open hosting on once the next run's clock is running.
 	// A coordinator changing scenario does not go back into a startup lobby: its
 	// guests are already redialing, and the mid-run gate is the door they arrive
-	// at. Migrate is the policy the session held and Door the verifier its doors
-	// took, which the door reopens under.
-	Host    string
-	Migrate bool
-	Door    *network.DoorVerifier
+	// at. Migrate is the policy the session held, NoCheats its refusal of cheats
+	// and Door the verifier its doors took, which the door reopens under.
+	Host     string
+	Migrate  bool
+	NoCheats bool
+	Door     *network.DoorVerifier
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial now that succession moved the door. Join alone is a :join target
@@ -286,7 +287,9 @@ type Wiring struct {
 
 	// SessionPlayers is the -players of the session this run joined, which it holds
 	// to should it take that session over; Participants is a host's own.
-	SessionPlayers int
+	// SessionNoCheats is that session's NoCheats, held the same way.
+	SessionPlayers  int
+	SessionNoCheats bool
 
 	// BotsCarried says the run's bots are seats the run it replaces held: one whose
 	// graph this run's scenario does not carry plays the scenario's own, where a
@@ -377,8 +380,13 @@ func (m *Membership) Open(run Run, cfg *config.Membership, wire *Wiring, scenari
 	m.openNearby()
 }
 
-// Bind wires the run's world and its game context once both exist.
-func (m *Membership) Bind(w *engine.World, ctx *engine.GameContext) { m.world, m.ctx = w, ctx }
+// Bind wires the run's world and its game context once both exist, which shows the
+// commands what refuses cheats
+func (m *Membership) Bind(w *engine.World, ctx *engine.GameContext) {
+	m.world, m.ctx = w, ctx
+	ctx.NoCheats.Store(m.cfg.NoCheats)
+	ctx.SessionNoCheats.Store(m.wiring.SessionNoCheats)
+}
 
 // SetConverge wires the protocol's three halves, which the run builds over its world.
 func (m *Membership) SetConverge(corrections *converge.Corrections, authority *converge.Authority, reach *converge.Reach) {

@@ -1,10 +1,10 @@
-# Setup chain: level → maze → T1/T2 → Q1..Q4 quadrant towers → P1 x4 (+gateways → quadrant groups)
+# Setup chain: map → maze → T1/T2 → Q1..Q4 quadrant towers → P1 x4 (+gateways → quadrant groups)
 # → ST pylon pair (+snake gateways) → arm. Then quasar pressure loop with grayout.
 
 # --- Setup ---
 
 # Boot: settled before the clock starts, drawn behind the start prompt; the game
-# begins at the first Tick, after the press. The level and its maze stand before
+# begins at the first Tick, after the press. The map and its maze stand before
 # it; the towers come after
 [states.TdSetup]
 parent = "Root"
@@ -22,7 +22,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventWallDespawnAll" },
 
     # Fixed map
-    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 500, height = 250, clear_entities = true, crop_on_resize = false } },
+    { action = "EmitEvent", event = "EventMapSetup", payload = { width = 500, height = 250, clear_entities = true, crop_on_resize = false } },
 
     # Maze with 13 pre-carved rooms:
     # ST center, T1/T2, 4x quadrant towers, 4x P1 corners, 2x P2 mid-side (vertical twin stack)

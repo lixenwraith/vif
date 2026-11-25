@@ -9,15 +9,15 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// TestSetupLevelRecordsOnlyBoundsTheGridHolds pins that Config and the grid
+// TestSetupMapRecordsOnlyBoundsTheGridHolds pins that Config and the grid
 // describe one map. Clamping only inside the grid would leave map logic reading
 // bounds no cell exists for.
-func TestSetupLevelRecordsOnlyBoundsTheGridHolds(t *testing.T) {
+func TestSetupMapRecordsOnlyBoundsTheGridHolds(t *testing.T) {
 	t.Parallel()
 	w := NewWorld()
 	NewGameContextWithClock(w, 80, 24, NewManualClock())
 
-	w.SetupLevel(math.MaxInt32, math.MaxInt32, false, false, false)
+	w.SetupMap(math.MaxInt32, math.MaxInt32, false, false, false)
 
 	cfg := w.Resources.Config
 	if cfg.MapWidth > parameter.MaxMapWidth || cfg.MapHeight > parameter.MaxMapHeight ||
@@ -30,10 +30,10 @@ func TestSetupLevelRecordsOnlyBoundsTheGridHolds(t *testing.T) {
 	}
 }
 
-// TestSetupLevelDropsWhatAShrinkLeavesOffTheMap: a level setup that keeps its
+// TestSetupMapDropsWhatAShrinkLeavesOffTheMap: a map setup that keeps its
 // entities still ends the ones past the new bounds, as a crop does, and spares
 // one protected from death.
-func TestSetupLevelDropsWhatAShrinkLeavesOffTheMap(t *testing.T) {
+func TestSetupMapDropsWhatAShrinkLeavesOffTheMap(t *testing.T) {
 	t.Parallel()
 	w := NewWorld()
 	NewGameContextWithClock(w, 80, 24, NewManualClock())
@@ -45,7 +45,7 @@ func TestSetupLevelDropsWhatAShrinkLeavesOffTheMap(t *testing.T) {
 	inside, outside, protected := place(10, 5), place(70, 20), place(75, 22)
 	w.Components.Protection.SetComponent(protected, component.ProtectionComponent{Mask: component.ProtectFromDeath})
 
-	w.SetupLevel(40, 12, false, false, false)
+	w.SetupMap(40, 12, false, false, false)
 
 	dying := func(e core.Entity) bool { return w.Components.Death.HasEntity(e) }
 	if dying(inside) || !dying(outside) || dying(protected) {

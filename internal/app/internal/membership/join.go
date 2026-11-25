@@ -298,13 +298,13 @@ func (m *Membership) localParticipant() uint32 {
 	return id
 }
 
-// adoptMapLatch applies the host's bounds through the D-14 authority — the level
+// adoptMapLatch applies the host's bounds through the D-14 authority — the map
 // setup path — rather than by writing Config, so grid, camera and cursors reflow as
 // they would for a map script and entities are kept. Config.MapWidth has already
 // installed the latch, so this is the confirmation; it runs unconditionally because
 // the event is part of the session's record stream a replay has to see.
 func (m *Membership) adoptMapLatch(an event.JournalAnchor) {
-	m.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
+	m.ctx.PushEventOrigin(event.EventMapSetup, &event.MapSetupPayload{
 		Width: an.MapWidth, Height: an.MapHeight, CropOnResize: an.CropOnResize,
 	}, event.OriginDebug)
 	m.scheduler.Settle()

@@ -134,7 +134,7 @@ correction repairs a difference.
 destroy shared identity; the swarm, quasar and behavior spawn requests and the
 species land request, which allocate it; and a drain's defeat and a cursor's
 defeat state, which advance the progression a region gates its spawns on or
-rebuild the level.
+rebuild the map.
 
 ### D-4 — Wire payloads name Shared entities only
 
@@ -157,7 +157,7 @@ per-target combat requests derived from that geometry do not.
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, a Kraken's
 burn, a Devourer's recede, a maze's fade-in, a cursor's pulses, particles (dust, decay and blossom),
 orbs, bullets, missiles, and loot are Player-domain; a materialize takes its
-requester's domain (§3). Encounter level clears explicitly preserve loot; run resets clear it. Shared
+requester's domain (§3). Encounter map setups that clear explicitly preserve loot; run resets clear it. Shared
 corrections retain each receiver's drops and ownership, and loot revalidates its
 bounds and walls after an install. Collected weapon charges travel through the
 existing owner-state sync (D-13). These effects may depend on local view state and
@@ -341,7 +341,7 @@ correction wrote.
 
 `MapWidth` and `MapHeight` are Shared simulation state, carried in every capture
 header. `CropOnResize` is not in the capture: it rides the join anchor with the
-bounds, and only `EventLevelSetup` and a reset write it, each applied alike on
+bounds, and only `EventMapSetup` and a reset write it, each applied alike on
 every instance, so scripts may read it as agreed. The cell aspect rides the anchor
 the same way, and a guest plays at the host's. Session admission installs all
 four before the FSM boots. While `World.SessionShared()` is true, a terminal
@@ -361,7 +361,7 @@ and `color_mode` have no shared counterpart and a script reading one is warned,
 because it can choose a different FSM branch on different terminals.
 
 A person's run that fixes its map with `-size` closes the same paths, the crop, the
-reset and the level setup to the viewport, through a latch of its own
+reset and the map setup to the viewport, through a latch of its own
 (`World.FixMap`), since the session's also engages the barrier:
 `World.MapSizeLocal` answers for both ([Runtime §1](runtime.md#1-process-modes)).
 
@@ -750,7 +750,7 @@ instance-local operator actions and are refused while peers are live; so is an o
 pause, unless every linked participant is a bot seat this instance holds
 (`SeatsOnly`). Only the coordinator may hold or reset a live session, and both
 cross: a hold stops every participant after the same tick. The programmatic surface
-takes the same rule through one guard: `App.SetupLevel`, `App.Region` and
+takes the same rule through one guard: `App.SetupMap`, `App.Region` and
 `App.Reset` read the event's declared class, so the coordinator crosses a `Bus`
 request, a guest's is refused, and any other class is refused outright. Inspection
 modes and the telemetry save remain available without stopping simulation.

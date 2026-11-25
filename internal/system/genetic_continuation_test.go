@@ -107,8 +107,8 @@ func TestAGuestBehindTheAuthorityRegistersFromTheCapture(t *testing.T) {
 // TestACaptureWithNoDeclarationIsRefusedBeforeAnythingIsWritten is the atomic half.
 // A record this instance cannot install has to say so while it is still a
 // question — the live install writes the component stores before it reaches a
-// carrier, and a staging world has never entered a level region, so it accepts
-// exactly what the live world would refuse.
+// carrier, and a staging world has never entered a region declaring species, so it
+// accepts exactly what the live world would refuse.
 func TestACaptureWithNoDeclarationIsRefusedBeforeAnythingIsWritten(t *testing.T) {
 	authority := newGeneticFixture(t)
 	registerSpecies(authority, 7)

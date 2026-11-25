@@ -480,7 +480,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. `:step` ends a solo hold, `:new` any. |
+| `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. A hold takes the place of a step's pause; `:step` ends a solo hold, `:new` any. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
 | `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values; a live session keeps its host's speed. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
@@ -542,7 +542,11 @@ crosses so everyone changes rate; a guest's is refused. Help, telemetry
 and about overlays stay local and do not pause, logging and view controls are local
 inspection, and resizes retain D-14's locked map bounds. Player grants and effect
 commands remain available because they author the invoking cursor or use the
-ordinary player-to-shared crossing path. The host's reset crosses at an agreed tick,
+ordinary player-to-shared crossing path, unless the host started with `-no-cheats`:
+then every participant refuses the grants, `:god`, `:demon`, `:energy`, `:heat`,
+`:boost` and `:w`, with "Cheats unavailable in this session", as a run started so
+refuses them "in this run", and the menu's God and Demon rows read the same
+([Configuration menu](config-menu.md#game)). The host's reset crosses at an agreed tick,
 so every participant resets; a guest reset is refused. `:host`, `:leave` and `:bot`
 are outside the guard: `:host` creates the session the guard protects, or opens a
 door on one a successor took over, and refuses a run already in any other; `:leave`

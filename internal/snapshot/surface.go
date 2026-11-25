@@ -63,7 +63,7 @@ var deniedSharedKey = map[string]bool{
 	// shared half.
 	"nav.entities": true,
 	// How this instance answers its own resize, from a CropOnResize the capture
-	// leaves local: a joiner after a level setup holds a different one.
+	// leaves local: a joiner after a map setup holds a different one.
 	"context.map_locked": true,
 }
 
