@@ -1397,6 +1397,12 @@ Docs · Libraries · Branches.
 - A steer is timed in the game, not in a loop: a field read of an entity after
   its scan runs cold there. Two binaries timed side by side differ by 30 ns a
   steer from run to run, so each plays alone, in turn, three rounds or more.
+- A status counter a scratch probe adds is registered in its system's
+  constructor: the registry freezes once the world is built, and a later
+  `Ints.Get` hands back a detached cell that reads zero.
+- A headless bot run is not repeatable from its seed: one binary and seed played
+  5 cave games averaging 34,000 ticks, then 14 averaging 16,000. A change to
+  physics is read over several `-field` runs a build, by their game lengths.
 - Games that learn together are read by ticks a second, and only against a run
   whose rounds are alike: a tick costs by where its game stands. A build or a
   probe beside a timed run takes a tenth off its rate.

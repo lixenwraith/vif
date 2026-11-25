@@ -399,6 +399,42 @@ func magicOnScreen(w *engine.World) string {
 	return ""
 }
 
+// TestMagicsBodiesLeaveThePocketsBehindItsGateways: through two minutes of bodies
+// no weapon wears, on the smallest map, none stands five seconds inside a pylon's
+// push on its corner's side of it
+func TestMagicsBodiesLeaveThePocketsBehindItsGateways(t *testing.T) {
+	t.Parallel()
+	a := newMagic(t)
+	w := a.World()
+	layMagic(t, a)
+	w.RunSafe(func() {
+		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Slot(0), Value: parameter.GodEnergyAmount})
+	})
+	held := map[core.Entity]int{}
+	cornerward := func(v, c, size int) bool { return v != c && (c < size/2) == (v < c) }
+	for range 2400 {
+		a.Tick(1)
+		w.RunSafe(func() {
+			cfg := w.Resources.Config
+			invRx, invRy := vmath.EllipseInvRadiiSq(parameter.PylonCollisionRadiusX, cfg.CellAspect.Y(parameter.PylonCollisionRadiusY))
+			for _, e := range w.Components.Behavior.Entities() {
+				at, _ := w.Positions.GetPosition(e)
+				in := false
+				w.Components.Pylon.Each(func(_ core.Entity, p *component.PylonComponent) bool {
+					in = vmath.EllipseContainsPoint(at.X, at.Y, p.SpawnX, p.SpawnY, invRx, invRy) &&
+						(cornerward(at.X, p.SpawnX, cfg.MapWidth) || cornerward(at.Y, p.SpawnY, cfg.MapHeight))
+					return !in
+				})
+				if !in {
+					delete(held, e)
+				} else if held[e]++; held[e] == int(5*time.Second/parameter.GameUpdateInterval) {
+					t.Errorf("a body has stood five seconds at (%d,%d), behind a gateway's pylon", at.X, at.Y)
+				}
+			}
+		})
+	}
+}
+
 // TestMagicHoldsItsGatewaysOnceACrowdStands: with as many bodies on the map as the
 // shipped magic lets gather, every gateway holds its spawns
 func TestMagicHoldsItsGatewaysOnceACrowdStands(t *testing.T) {

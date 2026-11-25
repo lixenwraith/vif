@@ -90,6 +90,10 @@ type SoftCollisionSystem struct {
 	sums                  []flockSum
 	collisions, rejects   int64 // this update's, told to the status once
 
+	// feet is the footprint each species bounces off walls and the map's edge by,
+	// none for one that moves otherwise
+	feet [component.SpeciesMax]vmath.Footprint
+
 	// Collision and flocking matrices
 	matrix            SoftCollisionMatrix
 	flockMatrix       FlockingMatrix
@@ -138,6 +142,9 @@ func widerReach(reach [2]int, invRxSq, invRySq float64) [2]int {
 // initMatrix populates the collision rule matrix
 func (s *SoftCollisionSystem) initMatrix() {
 	aspect := s.world.Resources.Config.CellAspect
+	for _, species := range []component.SpeciesType{component.SpeciesSwarm, component.SpeciesQuasar, component.SpeciesEye, component.SpeciesSnake} {
+		s.feet[species] = component.Footprints[species]
+	}
 	stormInvRx, stormInvRy := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, aspect.Y(parameter.StormCircleRadiusY))
 	pylonInvRx, pylonInvRy := vmath.EllipseInvRadiiSq(parameter.PylonCollisionRadiusX, aspect.Y(parameter.PylonCollisionRadiusY))
 
@@ -217,6 +224,7 @@ func (s *SoftCollisionSystem) initMatrix() {
 		if p.Mass > 0 {
 			invRx, invRy := vmath.EllipseInvRadiiSq(float64(p.Footprint.Width)/2, float64(p.Footprint.Height)/2)
 			data = append(data, body{p.Species, p.Mass, invRx, invRy})
+			s.feet[p.Species] = p.Footprint
 		}
 	}
 	bodies := append([]body{
@@ -535,9 +543,6 @@ func (s *SoftCollisionSystem) tryApplyCollision(src, tgt *collisionEntry, rule *
 			return
 		}
 		radialX, radialY = float64(tgt.x-src.x), float64(tgt.y-src.y)
-		if radialX == 0 && radialY == 0 {
-			radialX = 1
-		}
 	} else {
 		var hit bool
 		radialX, radialY, hit = physics.CheckSoftCollision(
@@ -546,6 +551,13 @@ func (s *SoftCollisionSystem) tryApplyCollision(src, tgt *collisionEntry, rule *
 		if !hit {
 			return
 		}
+	}
+	if tgt.x == src.x && tgt.y == src.y {
+		radialX, radialY = s.apart(src.entity, tgt.entity)
+	}
+	// A push the walls take whole is none, and leaves the target free to steer
+	if radialX, radialY = s.open(tgt, radialX, radialY); radialX == 0 && radialY == 0 {
+		return
 	}
 
 	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile,
@@ -556,6 +568,37 @@ func (s *SoftCollisionSystem) tryApplyCollision(src, tgt *collisionEntry, rule *
 
 	// Steering and flocking read this window as displacement
 	tgt.combat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+}
+
+// apart is the way a body standing on its source's cell parts from it: one the
+// pair draws anew each tick, so a pile scatters every way and no side of the map
+// draws it, nor a wall at its back sends it there again
+func (s *SoftCollisionSystem) apart(source, target core.Entity) (float64, float64) {
+	tick := s.world.Resources.Game.State.GetGameTicks()
+	angle := float64(vmath.MixChain(tick, uint64(source), uint64(target), s.sharedRoot)>>11) / (1 << 53) * vmath.TwoPi
+	return vmath.Cos(angle), vmath.Sin(angle)
+}
+
+// open drops each part of a push that runs into a side its target stands against,
+// the map's edge or a wall it bounces off by its footprint, as the bounce would
+func (s *SoftCollisionSystem) open(tgt *collisionEntry, dirX, dirY float64) (float64, float64) {
+	foot, cfg := s.feet[tgt.species], s.world.Resources.Config
+	if foot.Width == 0 {
+		return dirX, dirY
+	}
+	closed := func(x, y int) bool {
+		return x < foot.HeaderX || y < foot.HeaderY ||
+			x > cfg.MapWidth-foot.Width+foot.HeaderX || y > cfg.MapHeight-foot.Height+foot.HeaderY ||
+			s.world.Positions.BlocksArea(vmath.Area{X: x - foot.HeaderX, Y: y - foot.HeaderY,
+				Width: foot.Width, Height: foot.Height}, component.WallBlockKinetic)
+	}
+	if dirX != 0 && closed(tgt.x+int(math.Copysign(1, dirX)), tgt.y) {
+		dirX = 0
+	}
+	if dirY != 0 && closed(tgt.x, tgt.y+int(math.Copysign(1, dirY))) {
+		dirY = 0
+	}
+	return dirX, dirY
 }
 
 func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos component.PositionComponent) bool {
@@ -609,7 +652,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 						continue
 					}
 
-					accX, accY, applied := s.calculateFlockingAccel(src.x, src.y, tgt.x, tgt.y, rule)
+					accX, accY, applied := s.calculateFlockingAccel(src, tgt, rule)
 					if applied {
 						sum.x += accX
 						sum.y += accY
@@ -630,22 +673,18 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 }
 
 // calculateFlockingAccel computes the separation vector pushed onto the target by the source
-func (s *SoftCollisionSystem) calculateFlockingAccel(
-	sourceX, sourceY int,
-	targetX, targetY int,
-	rule *FlockingRule,
-) (accelX, accelY float64, applied bool) {
+func (s *SoftCollisionSystem) calculateFlockingAccel(src, tgt *collisionEntry, rule *FlockingRule) (accelX, accelY float64, applied bool) {
 	// Source is the center. Does its ellipse overlap the target?
-	if !vmath.EllipseContainsPoint(targetX, targetY, sourceX, sourceY, rule.InvRxSq, rule.InvRySq) {
+	if !vmath.EllipseContainsPoint(tgt.x, tgt.y, src.x, src.y, rule.InvRxSq, rule.InvRySq) {
 		return 0, 0, false
 	}
 
 	// Vector points from Source to Target (pushing Target away)
-	dx := float64(targetX - sourceX)
-	dy := float64(targetY - sourceY)
+	dx := float64(tgt.x - src.x)
+	dy := float64(tgt.y - src.y)
 
 	if dx == 0 && dy == 0 {
-		dx = 1.0 // Fallback rightwards to prevent stacking lock
+		dx, dy = s.apart(src.entity, tgt.entity)
 	}
 
 	dist := vmath.Magnitude(dx, dy)
