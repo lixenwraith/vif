@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/ebitengine/purego v0.11.3
 	github.com/lixenwraith/ascimage v0.1.4
-	github.com/lixenwraith/audio v0.46.2
+	github.com/lixenwraith/audio v0.47.1
 	github.com/lixenwraith/auth v0.5.3
 	github.com/lixenwraith/color v0.1.7
 	github.com/lixenwraith/genetic v0.4.0
