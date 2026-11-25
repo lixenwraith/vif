@@ -1200,6 +1200,21 @@ Docs · Libraries · Branches.
 - A build inside an unpacked Steam runtime runs under `chroot <root>` with the
   sound server outside: hard-link the server's socket file under the root, the
   root's own path being too long to bind a socket in.
+- The latest distribution's sound stack runs in a chroot of Arch's bootstrap image,
+  its pacman trusting the proxy's CA, with a null sink made by `pw-cli create-node
+  adapter` (`object.linger=true`) and `pw-record --target <sink> -P
+  stream.capture.sink=true` on it. A run sounds only once a key starts the game:
+  recorded with no input, every build reads as silence.
+- The kernel's PCM is tested with no sound card in QEMU, TCG being enough: Arch's
+  `linux` package's `vmlinuz`, an initramfs of a static busybox, the `.ko.zst`
+  modules decompressed (`soundcore`, `snd`, `snd-timer`, `snd-pcm`, `snd-aloop`,
+  `snd-dummy`) and a static `vif_nogui` test binary that `-overlay` adds a scratch
+  test to boots and runs in 15 s. `snd-aloop pcm_substreams=1` makes a held device
+  busy and captures on device 1, bit for bit, what device 0 plays, at the rate and
+  width the side opened first set: its capture opened at 48 kHz or in 32 bits
+  makes a card that takes no other. `snd-dummy model=ac97` is a 48 kHz-only card.
+  A test paced by `time.Sleep` falls behind the device and underruns; pace it by a
+  ticker, as the mixer is.
 
 ## Measuring
 

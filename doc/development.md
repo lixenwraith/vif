@@ -30,9 +30,9 @@ The modules it requires:
   account sign-in: the credential a player derives, the exchange both ends run. Its
   JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)).
 - `golang.org/x/sys`: `pkg/network`'s Windows error codes.
-- `github.com/ebitengine/purego`: the desktop window's speakers load the sound
-  server's client library through it with cgo off (`cmd/vif/pulse.go`), as the
-  window (`terminal/window`) loads Xlib, EGL and GLES 2 or desktop OpenGL.
+- `github.com/ebitengine/purego`: the build's own stream loads the sound server's
+  client library through it with cgo off (`cmd/vif/pulse.go`), as the window
+  (`terminal/window`) loads Xlib, EGL and GLES 2 or desktop OpenGL.
 - Indirect: `x/term`, which the terminal module uses; and `x/crypto` and
   `golang-jwt/jwt/v5`, Argon2 and the JWT half `auth` carries.
 
@@ -260,7 +260,7 @@ and the audio buffer; a flag on the command line wins
 | `-maximized[=false]`, `-fullscreen[=false]` | The state the desktop window opens in, asked of the window manager (`_NET_WM_STATE`); `vif.toml`'s `[presentation] maximized` and `fullscreen` set the default, and a terminal run ignores both. |
 | `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. Ctrl with `=` or `-`, or with the wheel, zooms the window from there and Ctrl-0 puts its font back ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)). |
 | `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, sound on by default. |
-| `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
+| `-ab`, `-audio-backend <name>` | Play through one output alone: the build's own `pulse`, `alsa` or `wasapi`, a player, `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay` or `oss`, or `null` or `wav:path`. |
 
 ### Run
 

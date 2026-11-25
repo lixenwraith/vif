@@ -21,12 +21,12 @@ host the game.
 
 | Profile | Tags or target | Presentation | Audio | Raw socket sessions | Logging | Intended use |
 |---|---|---|---|---|---|---|
-| Full native | `make release` | Terminal renderer; on Linux, FreeBSD and Windows the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
+| Full native | `make release` | Terminal renderer; on Linux, FreeBSD and Windows the desktop window too, which `-g` opens | Included: the build's own speakers, else a player by name (§8) | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`terminal.Page`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Chrome extension | `make extension`: the `make wasm` bundle, packed | The page, in a tab of its own | The page's | No | Stub | The browser build installed in Chrome: solo play offline, or a session joined at the site once the player allows it (§5) |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time; on Windows a Win32 window GDI copies each frame to | Included; its own stream on PulseAudio or PipeWire where one answers, or WASAPI's on Windows | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window (`terminal/window`): Xlib, EGL, GLES 2 or desktop OpenGL loaded at run time; on Windows a Win32 window GDI copies each frame to | Included, as the full native build's; WASAPI's on Windows | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Steam depot | `make steam-linux`, `make steam-windows` | The desktop window, by default | Included | Yes | Included; a stub on Windows | The `vif_gui` build for linux/amd64 or windows/amd64 with the wad beside its `bin/`, as Steam installs it ([Packaging §9](packaging.md#9-steam)) |
 | Windows window | `make windows-gui`, `make windows-package` / `vif_gui novlog`, linked `-H=windowsgui` | The desktop window alone: a program with no console has no terminal | Included: the window's own speakers, through WASAPI | Yes | Stub | The `windows/amd64` zip and Steam depot, `bin\vif.exe` with the wad beside its `bin\` (§4) |
@@ -592,26 +592,32 @@ through XWayland. purego's `fakecgo` links the binary to the system libc, so a
 Linux client binary needs glibc and runs neither on musl nor under Termux;
 `vif_nogui` and `vif_headless` binaries stay static.
 
-The window's speakers are its own (`cmd/vif/pulse.go`, in every window build
-that has audio). As a run starts in the window with no `-ab`, `speakers` opens a
-playback stream through `libpulse-simple.so.0`, loaded with purego as the
-window's libraries are, and the engine plays through it as `Host.Audio`:
-PulseAudio answers it, and PipeWire through its pulse server. Where the library
-or one of its four symbols is missing, or no server takes the stream, it is nil
-and a backend is found by name as on a terminal; on FreeBSD `/dev/dsp` keeps OSS
-first. So the window sounds on a machine holding none of the engine's players,
-Steam's runtime among them, whose one player is a `pw-cat` the engine's
-arguments do not start. The stream asks of the device what the engine's `pacat`
-line asks, 12.5 ms, and holds 112.5 ms itself (`tlength` 125 ms, `minreq` 50 ms,
-`prebuf` 25 ms): a period's write returns at once on a quiet stream and waits
-once a stall has filled it, so what a stalled server, a waking device or a slow
+A native build has speakers of its own (`cmd/vif/speakers.go`), which a run that
+presents, in the terminal or the window, tries before the engine finds a player
+by name and plays through as `Host.Audio`: a stream on the sound server, then on
+Linux the sound card, and on Windows WASAPI's stream. `-ab` naming one, `pulse`,
+`alsa` or `wasapi`, opens it alone, and naming a player opens none. A failed
+write drops the writes after it and opens the output again at most once a
+second, so the mixer, which a write error silences for the run, hears of no
+loss. The log names the one that opened, why the others did not, and each loss.
+
+The stream (`cmd/vif/pulse.go`, in every build that links purego and has audio)
+goes through `libpulse-simple.so.0`, loaded with purego as the window's libraries
+are: PulseAudio answers it, and PipeWire through its pulse server. It opens
+nothing where the library or one of its three symbols is missing, where no server
+takes it, or on FreeBSD where `/dev/dsp` keeps OSS first. So a run sounds on a
+machine holding none of the engine's players, Steam's runtime among them. The
+stream asks of the device what the engine's `pacat` line asks, 12.5 ms, and
+holds 112.5 ms itself (`tlength` 125 ms, `minreq` 50 ms, `prebuf` 25 ms): a
+period's write returns at once on a quiet stream and waits once a stall has
+filled it, so what a stalled server, a waking device or a slow
 device clock queues stops there, where a pipe to `pacat` keeps up to 371 ms more
 until the run ends. Measured against `pacat` on its pipe, the engine alone at a
 50 ms period on a null sink (PipeWire 1.0.5, PulseAudio 16.1), a busy machine's
 starts set aside:
 
 ```
-                                          pacat on its pipe   the window's speakers
+                                          pacat on its pipe   the stream
 trigger to the server playing it, ms
   PipeWire, median / worst                51.1 / 78.6         45.6 / 77.5
   PulseAudio, median / worst              26.4 / 51.1         26.1 / 51.4
@@ -624,11 +630,24 @@ ten minutes on a loaded machine
   PulseAudio: gaps                        9                   12
 ```
 
-Latency and CPU are the pipe's; the bound is what the window gains. A server
-that goes mid-run leaves the run silent
-([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
-and every figure is a null sink's
-([todo](todo.md#hear-the-windows-speakers-on-real-devices)).
+Latency and CPU are the pipe's; the bound is what the stream gains, and every
+figure is a null sink's ([todo](todo.md#hear-the-builds-own-speakers-on-real-devices)).
+
+The card (`cmd/vif/alsa.go`, in every Linux build with audio, `vif_nogui`'s
+static one too) is played through the kernel's PCM interface, with no library:
+the first playback device, by card then device, that takes stereo in 16 or 32
+bits at 44.1 kHz or the least rate above it. A card at another rate, 48 kHz as
+most are, is fed through a windowed sinc of 32 taps a phase, stepping by whole
+frames of both rates so they never drift apart: flat to 18 kHz and 3 dB down at
+20, each image 76 dB or more under its tone, for 0.3 % of a core at 48 kHz. It is
+opened non-blocking, so a device another program holds answers busy at once and
+a write waits in Go's poller, never in the kernel; its ring holds two to two and a
+half mixer periods, a period of silence leads each start, and an underrun or a
+sleep prepares it again. Where a sound server listens for the user (PipeWire's or
+PulseAudio's socket in `XDG_RUNTIME_DIR`, or `PULSE_SERVER`) it opens nothing
+unless `-ab alsa` names it: the server owns the card and plays the run through
+it. It plays to the card at the levels the system set. In a VM on `snd-aloop`,
+44.1 kHz and 32 bits came back bit for bit, 48 kHz at 83 dB of signal to noise.
 
 On Windows the same `gui.go` opens `terminal/window`'s Win32 host, which loads
 nothing through purego: its messages are read on a thread of its own, keys come
@@ -883,8 +902,8 @@ dedicated profiles, the `android` module and the window's
 (`github.com/lixenwraith/terminal/window`), and runs the §3 dependency check,
 with others of its kind: `vif_nogui` links neither purego nor the window, on
 Windows either; the Windows window build links no purego and a Linux build none
-of Windows' system calls; and each window's speakers build into the window
-builds of its system alone. That is in addition to the normal test and vet
+of Windows' system calls; the stream and WASAPI's build into the window builds
+of their systems alone, and the card into every Linux build with audio. That is in addition to the normal test and vet
 gates. A release should also run:
 
 ```bash

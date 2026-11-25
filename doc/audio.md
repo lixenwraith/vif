@@ -67,28 +67,28 @@ What vif sets of the engine:
 - **Buffer.** `vif.toml` `[audio] buffer_ms`, 10–200 in steps of 10, is the
   mixer period (`AudioConfig.Buffer`), 50 ms when unset (library
   [§2](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#2-stream-contract)).
-- **Backend.** `-ab <name>`, long form `-audio-backend <name>`, restricts
-  selection to one backend (`ForceBackend`), `null` and `wav:path/to/out.wav`
-  among them (library
+- **Backend.** `-ab <name>`, long form `-audio-backend <name>`, opens the one
+  of the build's own speakers it names (`pulse`, `alsa`, `wasapi`) alone, or
+  restricts selection to one backend (`ForceBackend`), `null` and
+  `wav:path/to/out.wav` among them (library
   [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover)). `-mw[=DIR]`
   (`-music-wav`, `paths.music`) records the music bus (`RecordMusic`) to
   `vif-mus-<stamp>.wav` in the state root's `music/` directory, a sibling of
   `log/` ([layout §5](filesystem-layout.md#5-logs-journals-and-runtime-output));
   `-ab null -mw` records on a machine with no device. If no backend survives,
-  the service keeps the silent engine: gameplay continues, sound requests become
-  no-ops with rejection telemetry, and absence of a device is not an
-  application-start failure.
+  at the start or after a failover, the log says why and the service keeps the
+  silent engine: gameplay continues, sound requests become no-ops with rejection
+  telemetry, and absence of a device is not an application-start failure.
 - **Speakers.** A host that has its own hands them over as `app.Host.Audio`
   beside the run's `Config`, the engine's `Sink`, which a scenario change plays on
   through: Android's is its `AudioTrack`; the browser's posts each buffer that
-  sounds to the page, which plays it through an AudioWorklet; the desktop
-  window's is a stream on PulseAudio or on PipeWire's pulse server, opened where
-  one answers and `-ab` names no backend, and on Windows a shared WASAPI stream
-  on the default output device ([platforms
+  sounds to the page, which plays it through an AudioWorklet; a native build's
+  are its own, tried in turn as a presenting run starts: a stream on PulseAudio
+  or on PipeWire's pulse server, on Linux the sound card through the kernel, and
+  on Windows a shared WASAPI stream on the default output device ([platforms
   §8](multi-platform.md#8-adding-another-renderer-or-android-host)). A sink
-  stands in for detection: the first, failing mid-run, leaves the run silent
-  ([todo](todo.md#bring-the-windows-speakers-back-when-their-server-returns)),
-  and the second opens its stream again by itself.
+  stands in for detection, so each opens its output again by itself when it is
+  lost.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {
@@ -253,8 +253,9 @@ events and keep the sequencer unaware of gameplay concepts.
   README and its own source map (library
   [§11](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#11-source-map))
 - Game service: `internal/service/adapter_audio.go`
-- The desktop window's speakers: `cmd/vif/pulse.go`, and on Windows
-  `cmd/vif/wasapi.go` with its stand-in device in `wasapi_test.go`
+- The build's own speakers: `cmd/vif/speakers.go`, which tries `pulse.go`, then
+  `alsa.go`, and on Windows `wasapi.go` with its stand-in device in
+  `wasapi_test.go`
 - Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
   holds the mask both publish and the handover; `audio_none.go` the null systems
 - Mode and build selection, replay default: `internal/app/internal/config`,

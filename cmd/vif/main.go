@@ -98,7 +98,7 @@ func init() {
 	flagConfig.register(flag.CommandLine)
 	flagLogs.register(flag.CommandLine)
 	flagSession.register(flag.CommandLine)
-	audioHint := "Force an audio backend instead of detecting one"
+	audioHint := "Play through one output alone: pulse, alsa or wasapi, a player such as pw-cat, null, or wav:path"
 	flag.StringVar(&flagAudioBackend, "ab", "", audioHint)
 	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
 	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
@@ -301,8 +301,8 @@ func main() {
 	default:
 		err = app.Run(buildConfig(), presenting())
 	}
-	if windowQuiet != nil {
-		windowQuiet()
+	if speakersOff != nil {
+		speakersOff()
 	}
 
 	shutdownDiagnostics()
@@ -519,18 +519,14 @@ func logRuntimeReport(r core.RuntimeReport) {
 	status.Trigger(status.TrigRace)
 }
 
-// platformHost is the build's platform host, empty on the terminal. openWindow
-// makes it the desktop window, nil without one; windowByDefault opens it unless
-// -g=false, and windowOnly is a build with no terminal to play in instead;
-// windowMaximized and windowFullscreen are the state it opens in; windowSound
-// gives it speakers of its own as a run starts and windowQuiet closes them. pageSettings
-// is where a browser, which has no vif.toml, reads and writes its settings,
-// pagePlaces where it keeps the places its runs return to, across a reload, and
-// pagePopulations where it keeps what its bots learn.
+// platformHost is the build's platform host, empty on the terminal: openWindow makes
+// it the desktop window, nil without one, which windowByDefault opens unless -g=false
+// and windowOnly marks a build with no terminal to play in; it opens maximized or full
+// screen as asked. A browser, with no vif.toml, keeps its settings, its runs' places
+// and its bots' learning in pageSettings, pagePlaces and pagePopulations.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
-	windowSound, windowQuiet          func()
 	windowByDefault, windowOnly       bool
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
@@ -544,11 +540,14 @@ var (
 // box where a build has no console to say it on
 var complain = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
 
-// presenting is the platform host of a run that presents: a window's speakers
+// speakersOn gives a presenting run the build's own speakers; speakersOff closes them
+var speakersOn, speakersOff func()
+
+// presenting is the platform host of a run that presents: the build's own speakers
 // open only here, so a run that draws nothing holds no stream
 func presenting() app.Host {
-	if windowSound != nil {
-		windowSound()
+	if speakersOn != nil {
+		speakersOn()
 	}
 	return platformHost
 }

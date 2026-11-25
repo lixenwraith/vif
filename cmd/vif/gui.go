@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -16,30 +15,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// speakers opens the window's own speakers, set where the build has them; nil
-// where none answers, and a backend is then found by name as on the terminal
-var speakers func() io.WriteCloser
-
 // The window is in every Linux, FreeBSD and Windows build: -g opens it, a vif_gui
-// build by default (gui_default.go), and vif_nogui leaves it out of the binary. It
-// plays through its own speakers unless -ab names a backend, and the engine,
-// which opened none of a host's, leaves closing them to the run's end.
-func init() {
-	openWindow = func() { platformHost.Presentation = &windowHost{} }
-	windowSound = func() {
-		if speakers == nil || platformHost.Presentation == nil || platformHost.Audio != nil || flagAudioBackend != "" {
-			return
-		}
-		if s := speakers(); s != nil {
-			platformHost.Audio = s
-		}
-	}
-	windowQuiet = func() {
-		if platformHost.Audio != nil {
-			platformHost.Audio.Close()
-		}
-	}
-}
+// build by default (gui_default.go), and vif_nogui leaves it out of the binary
+func init() { openWindow = func() { platformHost.Presentation = &windowHost{} } }
 
 // windowHost is a desktop window as the run's Presentation. A scenario change
 // rebuilds the run, not the window: it opens on the first Init and closes when

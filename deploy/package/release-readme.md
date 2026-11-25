@@ -70,7 +70,8 @@ menu, and `:q` quits.
 <!-- end -->
 <!-- if steamlinux -->
 Sound goes to PulseAudio, or to PipeWire through its pulse server, whichever the
-system runs; `-ab <name>` in Launch Options names a player instead.
+system runs, and with neither to the sound card; `-ab <name>` in Launch Options
+names one (`pulse`, `alsa`) or a player instead.
 
 <!-- end -->
 <!-- if zip -->
@@ -139,15 +140,16 @@ menu, and `:q` quits.
 <!-- end -->
 <!-- if linux -->
 Sound is on: `Ctrl-S` cycles through the channels, and `-mute` starts muted. It
-plays through the first of `pacat` (PulseAudio or PipeWire),
-`pw-cat`, `aplay`, SoX's `play` or `ffplay` on `PATH`; with none, the game is
-silent.
+plays to PulseAudio or PipeWire itself, or with no sound server to the sound
+card, and else through the first of `pacat`, `pw-cat`, `aplay`, SoX's `play` or
+`ffplay` on `PATH`; with none, the game is silent.
 
 <!-- end -->
 <!-- if freebsd -->
 Sound is on: `Ctrl-S` cycles through the channels, and `-mute` starts muted. It
-plays through the first of `pacat`, `pw-cat`, `aplay`, SoX's `play` or `ffplay` on
-`PATH`, or else OSS on `/dev/dsp`.
+plays to PulseAudio itself where `/dev/dsp` is missing, and else through the
+first of `pacat`, `pw-cat`, `aplay`, SoX's `play` or `ffplay` on `PATH`, or OSS
+on `/dev/dsp`.
 
 <!-- end -->
 <!-- if web -->
