@@ -140,9 +140,11 @@ Target `vif` (release) with `vif-git` optional.
 1. `depends=('glibc')`: the binary links libc to load the desktop window's
    libraries at run time (a `vif_nogui` build is static). `makedepends=('go')`.
    `optdepends` for the window, `libx11` and `libglvnd` with a Mesa or vendor
-   driver, and for the audio players the engine probes, in its order:
-   `pulseaudio`/`pipewire-pulse` for `pacat`, `pipewire` for `pw-cat`,
-   `alsa-utils` for `aplay`, `sox` for `play`, `ffmpeg` for `ffplay`.
+   driver; `libpulse` for the game's own stream on `pulseaudio` or
+   `pipewire-pulse` (a machine with neither plays to the card itself); and for the
+   players the engine probes, in its order: `libpulse` for `pacat`,
+   `pipewire-audio` for `pw-cat`, `alsa-utils` for `aplay`, `sox` for `play`,
+   `ffmpeg` for `ffplay`.
 2. `build()` uses the repository's flags plus Arch's hardening:
    `CGO_ENABLED=0 go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
@@ -330,9 +332,9 @@ runtime's `libOpenGL.so.0` where GLES 2 does not load. Both checks passed there
 on a machine with no GPU (Xvfb, Mesa's llvmpipe), and in the runtime's tree
 alone, with no library of a host's, the window opened through `libOpenGL.so.0`
 and the window's speakers played to a sound server outside it through the
-runtime's own `libpulse-simple.so.0`. Without those speakers a run there is
-silent: its `pw-cat` (1.4.2) takes raw PCM only with `--raw`, which the engine's
-line does not pass. A Steam Deck and the Steam client's overlay are checked by
+runtime's own `libpulse-simple.so.0`. Where that stream opens nothing, the
+engine's line starts the runtime's `pw-cat` (1.4.2) with `--raw`, as PipeWire 1.4
+and later need. A Steam Deck and the Steam client's overlay are checked by
 hand.
 
 ### Upload

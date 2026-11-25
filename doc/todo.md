@@ -1154,10 +1154,10 @@ Publish `vif-git` alongside the release-based AUR package.
 - Affected files: `Makefile` (`windows`), `cmd/vif/wasapi.go`
 - Guide: [Build profiles](multi-platform.md) §4
 
-The terminal build for Windows has no sound: its speakers are the window's
-alone. Closes with the sink opened for a terminal run as well, which means the
-platform host carrying speakers with no presentation, or with ffplay on `PATH`
-tried in a build without `vif_noaudio`.
+The terminal build for Windows has no sound: it leaves the engine out, and
+WASAPI's speakers build into the window builds alone. A terminal run opens the
+build's own speakers as a window's does, so it closes with `wasapi.go` built
+without the window and the `windows` target keeping audio.
 Its mouse comes from Windows 10's own console host, and likely its flicker (§4);
 confirm that Windows Terminal has neither, with the terminal module's synchronized
 frames and re-hidden cursor. `sandbox/termbench` tells hosts apart: `rawin` prints the
@@ -2858,7 +2858,7 @@ reopen when it is no longer the one it opened.
 
 - Priority: P2
 - Affected files: `lixenwraith/audio` `mixer.go`, `cmd/vif/wasapi.go`,
-  `cmd/vif/pulse.go`
+  `cmd/vif/pulse.go`, `cmd/vif/alsa.go`
 
 The mixer renders on a ticker, the system's clock, and a device plays on its
 own: one that runs fast drains what its sink holds and plays a period of
@@ -2878,36 +2878,21 @@ whole device period before the device asks again. Returning 6 ms later took
 10 ms, where the device holds no spare period: hold a write only while the
 device keeps one, and measure it on Windows.
 
-### Hear the window's speakers on real devices
+### Hear the build's own speakers on real devices
 
 - Priority: P1
-- Affected files: `cmd/vif/pulse.go`, `doc/multi-platform.md`
+- Affected files: `cmd/vif/pulse.go`, `cmd/vif/alsa.go`, `doc/multi-platform.md`
 
-The window's speakers were measured on null sinks in a container. Owed, each
-beside `-ab pacat`: an hour of play on an ALSA device under PipeWire and under
-PulseAudio with the stream's latency read every minute (`pactl list
-sink-inputs`), which shows a device clock's drift (a pipe should creep toward
-its 371 ms on a slow one, the window stop at 112 ms); a Bluetooth sink; the
-first seconds after the device was suspended; ten minutes with nothing else
-running, counting dropouts; the game's CPU on a GPU; the game started by Steam,
-on a PulseAudio host, a PipeWire host and a Steam Deck (the runtime was checked
-in a chroot); FreeBSD without `/dev/dsp`.
-
-### Bring the window's speakers back when their server returns
-
-- Priority: P2
-- Affected files: `cmd/vif/pulse.go`
-- Guide: [platforms §8](multi-platform.md#8-adding-another-renderer-or-android-host)
-
-A sound server that goes mid-run (a session manager restarting it, a user
-stopping `pipewire-pulse`) fails the stream's write, and a host sink is the
-engine's only candidate: the run is silent until it ends. Smallest: in
-`pulseSpeaker.Write`, free a stream whose write failed and report the buffer
-written, then at most once a second try `pa_simple_new` again before dropping
-the next; the status bar needs a word of its own for it, since the engine no
-longer hears of the loss. With it, give `Close` a drain that gives up: a server
-that stops answering in the tenth of a second before a quit, after the mixer's
-last write returned, holds the exit in `pa_simple_drain`.
+The stream was measured on null sinks in a container, the card in a VM on
+`snd-aloop`. Owed, each beside `-ab pacat`: an hour of play on an ALSA device
+under PipeWire and under PulseAudio with the stream's latency read every minute
+(`pactl list sink-inputs`), which shows a device clock's drift (a pipe should
+creep toward its 371 ms on a slow one, the stream stop at 112 ms); a Bluetooth
+sink; the first seconds after the device was suspended; ten minutes with nothing
+else running, counting dropouts; the game's CPU on a GPU; the game started by
+Steam, on a PulseAudio host, a PipeWire host and a Steam Deck (the runtime was
+checked in a chroot); FreeBSD without `/dev/dsp`; the card on a machine with no
+sound server, a USB card unplugged and plugged back, and a sleep mid-run.
 
 ### Bring stapes to Android (stapes mobile)
 

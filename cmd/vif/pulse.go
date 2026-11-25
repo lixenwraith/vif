@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -13,9 +14,9 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// The window plays through the sound server itself, where one answers: a machine
+// The run plays through the sound server itself, where one answers: a machine
 // that starts it need hold none of the players the engine finds by name
-func init() { speakers = pulseSpeakers }
+func init() { speakerOpens["pulse"] = pulseSpeakers }
 
 // PulseAudio's blocking client library, which PipeWire's pulse server is spoken
 // to through as well
@@ -37,7 +38,6 @@ const (
 var (
 	paSimpleNew   func(server uintptr, name string, dir int32, device uintptr, stream string, spec *paSampleSpec, channels uintptr, attr *paBufferAttr, code *int32) uintptr
 	paSimpleWrite func(s uintptr, data []byte, size uintptr, code *int32) int32
-	paSimpleDrain func(s uintptr, code *int32) int32
 	paSimpleFree  func(s uintptr)
 )
 
@@ -55,73 +55,67 @@ type paSampleSpec struct {
 
 type paBufferAttr struct{ maxLength, targetLength, prebuf, minRequest, fragmentSize uint32 }
 
-// pulseSpeakers opens the stream the mixer plays through. Nil leaves the engine
-// to find a backend by name: where OSS is there to find, the library or one of
-// its symbols is missing, or no server takes the stream.
-func pulseSpeakers() io.WriteCloser {
-	if _, err := audio.DetectBackends("oss"); err == nil {
-		return nil
-	}
+// pulseLoad binds the library's three calls once, for every stream opened after
+var pulseLoad = sync.OnceValue(func() error {
 	lib, err := purego.Dlopen(libPulseSimple, purego.RTLD_NOW|purego.RTLD_LOCAL)
 	if err != nil {
-		return nil
+		return err
 	}
 	for name, fptr := range map[string]any{"pa_simple_new": &paSimpleNew, "pa_simple_write": &paSimpleWrite,
-		"pa_simple_drain": &paSimpleDrain, "pa_simple_free": &paSimpleFree} {
+		"pa_simple_free": &paSimpleFree} {
 		fn, err := purego.Dlsym(lib, name)
 		if err != nil {
-			return nil
+			return err
 		}
 		purego.RegisterFunc(fptr, fn)
 	}
+	return nil
+})
+
+// pulseSpeakers opens the stream the mixer plays through, kept playing across a
+// server that goes and comes back. Where OSS is there to find it opens none
+// unless -ab names it, since OSS comes first there.
+func pulseSpeakers(forced bool) (io.WriteCloser, error) {
+	if _, err := audio.DetectBackends("oss"); err == nil && !forced {
+		return nil, errors.New("OSS plays here")
+	}
+	if err := pulseLoad(); err != nil {
+		return nil, err
+	}
+	return reopening("pulse", pulseOpen)
+}
+
+func pulseOpen() (io.WriteCloser, error) {
 	spec := paSampleSpec{format: paSampleS16LE, rate: audio.AudioSampleRate, channels: audio.AudioChannels}
 	attr := paBufferAttr{maxLength: paDefault, targetLength: pulseBytes(pulseTarget), prebuf: pulseBytes(pulsePrebuf),
 		minRequest: pulseBytes(pulseRequest), fragmentSize: paDefault}
-	s := paSimpleNew(0, parameter.WindowTitle, paStreamPlayback, 0, "game", &spec, 0, &attr, nil)
+	var code int32
+	s := paSimpleNew(0, parameter.WindowTitle, paStreamPlayback, 0, "game", &spec, 0, &attr, &code)
 	if s == 0 {
-		return nil
+		return nil, fmt.Errorf("no sound server took the stream, error %d", code)
 	}
-	return &pulseSpeaker{stream: s}
+	return &pulseStream{s}, nil
 }
 
 func pulseBytes(d time.Duration) uint32 {
 	return uint32(audio.AudioSampleRate*d/time.Second) * audio.AudioBytesPerFrame
 }
 
-// pulseSpeaker is a playback stream on the sound server. A write blocks while the
+// pulseStream is a playback stream on the sound server. A write blocks while the
 // server holds its target length, which paces a mixer running ahead of the device.
-type pulseSpeaker struct {
-	mu     sync.Mutex // held through a write, so Close frees no stream a write is inside
-	stream uintptr
-}
+type pulseStream struct{ s uintptr }
 
-func (p *pulseSpeaker) Write(b []byte) (int, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.stream == 0 {
-		return 0, io.ErrClosedPipe
-	}
-	if len(b) == 0 {
-		return 0, nil
-	}
+func (p *pulseStream) Write(b []byte) (int, error) {
 	var code int32
-	if paSimpleWrite(p.stream, b, uintptr(len(b)), &code) < 0 {
-		return 0, fmt.Errorf("speakers: the sound server took no write, error %d", code)
+	if len(b) > 0 && paSimpleWrite(p.s, b, uintptr(len(b)), &code) < 0 {
+		return 0, fmt.Errorf("the sound server took no write, error %d", code)
 	}
 	return len(b), nil
 }
 
-// Close plays out what the mixer wrote and frees the stream. A write still inside
-// the library is one its server never took, and the stream is left to the exit.
-func (p *pulseSpeaker) Close() error {
-	if !p.mu.TryLock() {
-		return nil
-	}
-	defer p.mu.Unlock()
-	if p.stream != 0 {
-		paSimpleDrain(p.stream, nil)
-		paSimpleFree(p.stream)
-		p.stream = 0
-	}
+// Close frees the stream with no drain: a run fades out before its speakers close,
+// and a server that stopped answering would hold the exit in pa_simple_drain
+func (p *pulseStream) Close() error {
+	paSimpleFree(p.s)
 	return nil
 }
