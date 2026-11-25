@@ -12,8 +12,9 @@ const (
 
 	// A line fires its kind again each cooldown, counted from its last fire, while it
 	// holds three of it. The boost's cooldown leaves what its gust threw the time to
-	// walk back
+	// walk back. A strike reaches SquareStrikeReach shield radii from the middle.
 	SquareStrikeCooldown = 2 * time.Second
+	SquareStrikeReach    = 2.0
 	SquareBoostDuration  = time.Second
 	SquareBoostCooldown  = 8 * time.Second
 
@@ -34,13 +35,13 @@ const (
 	SquareWhirlDuration = 500 * time.Millisecond
 	SquareWhirlCooldown = 2 * time.Second
 
-	// A square's magic meter charges a second a second, and SquareMagicKill for each
-	// kill its cursor makes, up to SquareMagicFull, which a magic state, every row
+	// A square's dust meter charges a second a second, and SquareDustKill for each
+	// kill its cursor makes, up to SquareDustFull, which a magic state, every row
 	// and column summing alike, fills at once. Its next gust sheds that share of
-	// SquareMagicDust dust round the shield and empties it.
-	SquareMagicFull = 40 * time.Second
-	SquareMagicKill = time.Second
-	SquareMagicDust = 36
+	// SquareDustShed motes round the shield and empties it.
+	SquareDustFull = 40 * time.Second
+	SquareDustKill = time.Second
+	SquareDustShed = 36
 
 	// SquareShieldMargin is the columns the shield over the square reaches past its
 	// corners, which keeps its cursor's orbs clear of the legend, and SquareOrbGap

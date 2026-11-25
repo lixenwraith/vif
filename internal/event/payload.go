@@ -1904,7 +1904,7 @@ type SquareSpawnRequestPayload struct {
 }
 
 // SquareAlignedPayload names the kind that fired and its line: the top row, the
-// bottom row, the left column, the right
+// bottom row, the left column, the right, the middle row, the middle column
 type SquareAlignedPayload struct {
 	Kind component.SquareKind `toml:"kind"`
 	Line int                  `toml:"line"`

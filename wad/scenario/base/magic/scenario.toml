@@ -1,4 +1,4 @@
-description = "Magic: turn the rows and columns of a magic square under its shield; three of a kind along an edge strike the side of the map it faces, turn a wind round the shield, or boost it."
+description = "Magic: turn the rows and columns of a magic square under its shield; three attacks along an edge strike what nears the side it faces, and three whirls or defenses along any row or column turn a wind round the shield or boost it."
 min_players = 1
 max_players = 1
 
@@ -7,8 +7,9 @@ max_players = 1
 # stands under the shield of a cursor fixed at its middle; a touch costs the shield
 # one of the energy it starts with, which nothing gives back, the blocks heat once
 # it is down, and the game the last of both. Four gateways on the corners trickle
-# strays, and one sends a wave, one more each round. A turn that leaves the attack
-# on an edge strikes, ending what it faces whatever its rank.
+# strays, and one sends a wave, one more each round. The attack on an edge strikes
+# each 2 s, ending what nears the side it faces whatever its rank; a whirl or a
+# defense fires from the middle row and column too.
 
 # The least map that holds the square on blocks a row tall with its cursor's orbs
 # circling on it, 39 by 19, and a gateway's pylon in each corner a cell clear of
@@ -71,7 +72,7 @@ bg256 = 0
 
 # Eight ranks, a stray and a wave's body to each. A rank up flies faster and holds
 # more hit points, so the weapons take longer over it, and from the fifth on they
-# cannot stop it alone: the strikes a player turns must. The masses stand close, so
+# cannot stop it alone: the strikes must. The masses stand close, so
 # a wind carries every rank about alike. A touch costs the same at every rank, 1
 # energy off the shield or 10 heat off the blocks, so the shield's energy counts the
 # touches left, 200 a color.
@@ -214,8 +215,8 @@ frames = [
 ]
 
 # A wave's bodies, each in its rank's hue and marked in the attack's red, which
-# ends a wave at a stroke: sparks, shades, hexes, titans, then flares, specters,
-# curses and behemoths
+# ends what of a wave nears at a stroke: sparks, shades, hexes, titans, then flares,
+# specters, curses and behemoths
 [behaviors.spark]
 macro = "Rank1"
 width = 3
@@ -400,7 +401,7 @@ Gate4 = { macro = "Gate", n = 4, at = "bottom_left", x = 2, y = -1, next = "Play
 
 # Keys are the square's while it stands, Enter with them for the burst. The keys are
 # told a while in, so what ended the last game reads first, then what the shield's
-# energy is spent and earned by, what a line does, what the weapons do, what magic
+# energy is spent and earned by, what a line does, what the weapons do, what dust
 # is and what fills the burst.
 [states.Play]
 parent = "Root"
@@ -408,9 +409,9 @@ on_enter = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "123456789hjklasdf\r" }, reconcile = true },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "1-9 select a block; h l or a f turn its row, k j or s d its column" }, delay_ms = 2000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A touch costs the shield 1 of its 1,400, which nothing gives back; a wave you end pays 10 heat" }, delay_ms = 12000 },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "A turn leaving an attack along an edge strikes the side it faces; a whirl carries bodies a gateway round" }, delay_ms = 22000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "An attack on an edge strikes what nears its side; a whirl or a defense fires along any row or column" }, delay_ms = 22000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Weapons wear every body down and fall with the shield; a defense stands it a moment" }, delay_ms = 32000 },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Magic fills with time and kills, a magic square at once: a defense sheds it as dust, or the shield's fall" }, delay_ms = 42000 },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Dust fills with time and kills, a magic square at once: a defense sheds it, as the shield's fall does" }, delay_ms = 42000 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Each touch on the shield and each heat gained fill the burst a hundredth" }, delay_ms = 52000 },
     { action = "SpawnRegion", region = "flood", initial_state = "FloodPick" },
     { action = "SpawnRegion", region = "ramp", initial_state = "Level" },
