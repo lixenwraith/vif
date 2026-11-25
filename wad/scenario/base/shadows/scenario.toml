@@ -2,13 +2,11 @@ description = "Shadows: walk a dark maze to its goal by the light your steps thr
 min_players = 1
 max_players = 1
 
-# The map is the window, cut to whole blocks of the walk; the maze fills it, walled.
-# The goal is the middle of a room of three blocks by three, at random clear of the
-# maze's edge, and the cursor stands on an open block among the farthest from it by
-# the maze's way. Every step throws a right angle of light toward its way, which the
-# walls stop; the rest is dark. A sonar is a hidden drop that flies the maze's way
-# from the goal to the cursor, heard where it is, higher as it nears. At the goal the
-# maze lights, showing the walk from where it began; any key then lays a new maze.
+# The window cut to whole blocks, a walled maze over it; the goal mid-room, the
+# cursor far from it by the maze's way. Each step lights a right angle ahead that the
+# walls stop; the rest is dark. A sonar flies the way from the goal to the cursor,
+# heard where it is, higher as it nears. At the goal the maze lights, with the walk
+# drawn from where it began; any key then lays a new maze.
 
 [map]
 min_width = 55
