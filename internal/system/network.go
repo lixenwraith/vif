@@ -3558,7 +3558,7 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 		p.Energy = c.Current
 	}
 	if c, ok := s.world.Components.Heat.GetComponent(cursor); ok {
-		p.Heat, p.Overheat, p.EmberActive = c.Current, c.Overheat, c.EmberActive
+		p.Heat, p.Overheat, p.Burst, p.EmberActive = c.Current, c.Overheat, c.Burst, c.EmberActive
 	}
 	if c, ok := s.world.Components.Shield.GetComponent(cursor); ok {
 		p.ShieldActive, p.ShieldRadius, p.ShieldColor = c.Active, c.Radius, c.Color
@@ -3729,7 +3729,7 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 		c.Current = p.Energy
 	}
 	if c, ok := s.world.Components.Heat.GetPtr(cursor); ok {
-		c.Current, c.Overheat, c.EmberActive = p.Heat, p.Overheat, p.EmberActive
+		c.Current, c.Overheat, c.Burst, c.EmberActive = p.Heat, p.Overheat, p.Burst, p.EmberActive
 	}
 	if c, ok := s.world.Components.Shield.GetPtr(cursor); ok {
 		c.Active, c.Radius, c.Color = p.ShieldActive, p.ShieldRadius, p.ShieldColor
@@ -3764,6 +3764,7 @@ func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
 	cfg := s.world.Resources.Config
 	span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
 	if !heldInRange(p.Heat, p.HitPoints, p.WeaponCharges) || !upTo(p.Overheat, parameter.HeatMaxOverheat) ||
+		!upTo(p.Burst, parameter.BurstFull) ||
 		!upTo(p.ShieldRadius, span) || p.BoostRemaining < 0 || p.BoostTotal < 0 ||
 		!upTo(time.Duration(p.MainFireCooldown), parameter.WeaponCooldownMain) ||
 		!upTo(time.Duration(p.DamageImmunity), parameter.CombatDamageImmunityDuration) {

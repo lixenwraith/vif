@@ -248,6 +248,8 @@ const (
 	EventHeatBurst
 	// EventHeatEmberRequest (HeatEmberRequestPayload) [local] lights a cursor's ember or puts it out, its heat as it stands
 	EventHeatEmberRequest
+	// EventBurstSpendRequest (BurstSpendRequestPayload) [local] empties a cursor's burst meter
+	EventBurstSpendRequest
 	// EventEmberSpent (HeatBurstPayload) [bus] carries an owner's ember burning its heat out
 	EventEmberSpent
 

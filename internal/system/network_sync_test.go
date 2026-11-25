@@ -75,7 +75,7 @@ func TestASyncHoldingAValueItsOwnerCannotIsDroppedWhole(t *testing.T) {
 		cfg := w.Resources.Config
 		span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
 		p := &event.CursorStatePayload{Entity: remote, Slot: 2, Seq: 1,
-			Energy: -parameter.GodEnergyAmount, Heat: parameter.HeatMax, Overheat: parameter.HeatMaxOverheat,
+			Energy: -parameter.GodEnergyAmount, Heat: parameter.HeatMax, Overheat: parameter.HeatMaxOverheat, Burst: parameter.BurstFull,
 			ShieldActive: true, ShieldRadius: span, ShieldColor: color.RGB{R: 10, G: 20, B: 30},
 			BoostActive: true, BoostRemaining: int64(time.Hour), BoostTotal: int64(time.Hour),
 			MainFireCooldown: int64(parameter.WeaponCooldownMain), HitPoints: parameter.CombatInitialHPCursor,
@@ -97,6 +97,7 @@ func TestASyncHoldingAValueItsOwnerCannotIsDroppedWhole(t *testing.T) {
 		{"every value at its bound", nil},
 		{"heat past its meter", func(p *event.CursorStatePayload) { p.Heat++ }},
 		{"overheat past its meter", func(p *event.CursorStatePayload) { p.Overheat++ }},
+		{"burst past its meter", func(p *event.CursorStatePayload) { p.Burst++ }},
 		{"shield radius past the map's diagonal", func(p *event.CursorStatePayload) {
 			p.ShieldRadius = math.Nextafter(p.ShieldRadius, math.Inf(1))
 		}},
