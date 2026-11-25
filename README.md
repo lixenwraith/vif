@@ -112,7 +112,7 @@ change when the run read none of yours); the rest last the run.
 install. The ones most runs want:
 
 - `-s <name|path>` picks a scenario (`td`, `recall`, `blank`, `cave`, `armada`,
-  `magic`, `dummy`, `tutorial`), and `-d` plays the embedded one.
+  `magic`, `dummy`, `tutorial`, `shadows`), and `-d` plays the embedded one.
 - `-bot [N[:graph]]` seats bots beside you; `-watch` lets one play in your place
   ([Bots](doc/bots.md)).
 - `-g` plays in the desktop window, and `-cli` in the terminal whatever

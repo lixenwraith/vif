@@ -648,9 +648,26 @@ authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
 `tutorial` teaches the game's vi-style typing and editing a lesson at a time,
 `cave` is a side-scroller whose raiders are species its own behavior programs
 define, `armada` is a vertical scroller whose ranks, squadrons and flagship
-are seven more, and `magic` is a magic square held under its shield against the
-gateways on its map's corners. Each entry has
+are seven more, `magic` is a magic square held under its shield against the
+gateways on its map's corners, and `shadows` is a dark maze walked by light and by
+ear. Each entry has
 a short `description` for scenario listings.
+
+`shadows`, for one player, cuts the map to whole blocks of five by three and fills
+it with a walled maze (`EventMazeSpawned`); the goal is the middle of a room of
+three blocks by three drawn clear of the outer wall, and the cursor stands on an
+open block among the farthest from it by the maze's way. The cursor walks a block
+a press of `h`, `j`, `k`, `l` or an arrow and nothing else moves it (`[map]
+step`); a wall is a bump. The map is dark (`EventSightRequest`), and each step
+throws a right angle of light toward its way that the walls stop, showing their
+outlines a moment, the goal's `◎` among them when it falls there. A press of
+special fire, space, a right click, a double click or a double tap, sends a sonar
+from the goal: a hidden drop that flies the maze's way to the cursor, sounding
+where it is (`[loot]`'s `sound`), panned left or right, muffled below the cursor
+and fainter far off, higher the nearer it has come, and flashing as it arrives;
+there is no cooldown, and what auto-fire repeats sends none. Reaching the goal
+lights the maze and draws the walk from where it began, and any key lays the next
+maze.
 
 `tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each

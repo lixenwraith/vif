@@ -970,6 +970,12 @@ Docs · Libraries · Branches.
   spans and shot with Playwright, it shows real colors. `TERM=linux COLORTERM=`
   gives the console tier. The capture carries SGR state from one line into the
   next, so a converter that resets colors at each line paints wrong backgrounds.
+- A dark map (`EventSightRequest`) hides what a capture would read:
+  `:emit EventSightRequest { dark = false, trail = true }` lights it and draws the
+  walk so far. A scratch copy of the scenario whose status message prints a
+  variable (`message = "goal {}"` with `payload_vars`) names a cell, and the
+  cursor's entity number, captured off `EventCursorSpawned`, for `:emit
+  EventCursorMoveRequest { entity, x, y }`, which a stepped map still applies.
 - `tmux capture-pane -e` drops a line's trailing cells of the default colors, so a
   converter paints black where the theme's background stands: add `-N`.
 - A scenario whose keys are its only input plays headless from a `-script` of
@@ -1712,6 +1718,16 @@ Docs · Libraries · Branches.
 - A shipped scenario written in a form an older build's expander refuses takes
   the next `network.ProtocolVersion`: a joiner is sent the scenario's files and
   expands them itself, so the older build is refused at the door instead.
+- A maze spawn's `rooms` are areas cleared after the maze is carved, not the
+  generator's rooms, unless `room_count` asks for them: `maze.Result.Rooms` is then
+  empty, so what reads a room reads the payload's (`WallSystem.mazeLaid`). A room
+  one block in size on a block's middle clears that block and the eight round it.
+- `RandomVar` is a function of the run's seed, `seed_var` and `index_var` alone,
+  never of the variable it sets: two draws on one index draw one value, so each
+  takes its own index.
+- The shipped `[play] auto_fire = "on"` repeats special fire every cooldown, so a
+  transition on `EventFireSpecialRequest` meaning a press guards
+  `PayloadBoolEquals { field = "repeat", value = false }`, as `shadows` does.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
   `wad/scenario/` for its name (`tutorial` lists its systems one by one). A list

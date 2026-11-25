@@ -1,0 +1,155 @@
+description = "Shadows: walk a dark maze to its goal by the light your steps throw, or by ear: space, a right or a double click sends a sonar from the goal that comes to you along the way."
+min_players = 1
+max_players = 1
+
+# The map is the window, cut to whole blocks of the walk; the maze fills it, walled.
+# The goal is the middle of a room of three blocks by three, at random clear of the
+# maze's edge, and the cursor stands on an open block among the farthest from it by
+# the maze's way. Every step throws a right angle of light toward its way, which the
+# walls stop; the rest is dark. A sonar is a hidden drop that flies the maze's way
+# from the goal to the cursor, heard where it is, higher as it nears. At the goal the
+# maze lights, showing the walk from where it began; any key then lays a new maze.
+
+[map]
+min_width = 55
+min_height = 21
+step = "5x3"
+
+[systems]
+only_systems = ["cursor", "camera", "transient", "wall", "composite", "navigation", "loot", "flash", "timer", "death", "audio"]
+
+# Heard, not seen: its flash shows it arrive
+[loot.sonar]
+rune = "•"
+color = { r = 120, g = 220, b = 255 }
+glow = { r = 40, g = 90, b = 160 }
+sound = "tone_a4"
+hidden = true
+
+[loot.goal]
+rune = "◎"
+color = { r = 255, g = 200, b = 60 }
+glow = { r = 120, g = 90, b = 20 }
+
+[regions.main]
+initial = "Boot"
+
+# Boot: settled before the clock starts, drawn behind the start prompt. The map cut
+# to an odd count of blocks each way, as the maze's grid is, and the room's middle
+# block drawn from those two clear of the outer wall
+[states.Boot]
+parent = "Root"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "viewport_width", name = "cols" } },
+    { action = "ConfigToVar", payload = { field = "viewport_height", name = "rows" } },
+    { action = "DivideVar", payload = { name = "cols", delta = 5 } },
+    { action = "DivideVar", payload = { name = "rows", delta = 3 } },
+    { action = "DecrementVar", payload = { name = "cols", delta = 1 } },
+    { action = "DecrementVar", payload = { name = "rows", delta = 1 } },
+    { action = "DivideVar", payload = { name = "cols", delta = 2 } },
+    { action = "DivideVar", payload = { name = "rows", delta = 2 } },
+    { action = "MultiplyVar", payload = { name = "cols", delta = 2 } },
+    { action = "MultiplyVar", payload = { name = "rows", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "cols", delta = 1 } },
+    { action = "IncrementVar", payload = { name = "rows", delta = 1 } },
+    { action = "CopyVar", payload = { name = "map_w", source_var = "cols" } },
+    { action = "CopyVar", payload = { name = "map_h", source_var = "rows" } },
+    { action = "MultiplyVar", payload = { name = "map_w", delta = 5 } },
+    { action = "MultiplyVar", payload = { name = "map_h", delta = 3 } },
+
+    # room block x = 2 + draw * (cols - 4) / 1000, its middle cell 5x + 2; y alike
+    { action = "SetVar", payload = { name = "draw", value = 0 } },
+    { action = "RandomVar", payload = { name = "room_x", min = 0, max = 999, index_var = "draw" } },
+    { action = "SetVar", payload = { name = "draw", value = 1 } },
+    { action = "RandomVar", payload = { name = "room_y", min = 0, max = 999, index_var = "draw" } },
+    { action = "CopyVar", payload = { name = "span", source_var = "cols" } },
+    { action = "DecrementVar", payload = { name = "span", delta = 4 } },
+    { action = "MultiplyVar", payload = { name = "room_x", source_var = "span" } },
+    { action = "CopyVar", payload = { name = "span", source_var = "rows" } },
+    { action = "DecrementVar", payload = { name = "span", delta = 4 } },
+    { action = "MultiplyVar", payload = { name = "room_y", source_var = "span" } },
+    { action = "DivideVar", payload = { name = "room_x", delta = 1000 } },
+    { action = "DivideVar", payload = { name = "room_y", delta = 1000 } },
+    { action = "IncrementVar", payload = { name = "room_x", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "room_y", delta = 2 } },
+    { action = "MultiplyVar", payload = { name = "room_x", delta = 5 } },
+    { action = "MultiplyVar", payload = { name = "room_y", delta = 3 } },
+    { action = "IncrementVar", payload = { name = "room_x", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "room_y", delta = 1 } },
+
+    { action = "EmitEvent", event = "EventMapSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = false }, payload_vars = { width = "map_w", height = "map_h" } },
+    # A room one block asked clears it and the blocks round it: three by three
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.25, block_mask = "all", walled = true, visual = { box_style = "single", fg_color = { r = 170, g = 190, b = 220 }, render_fg = true }, rooms = [{ width = 5, height = 3 }] }, payload_vars = { "rooms.0.center_x" = "room_x", "rooms.0.center_y" = "room_y" } },
+]
+transitions = [
+    { trigger = "EventMazeSpawned", target = "Spawn", capture_vars = { room_x = "goal_x", room_y = "goal_y", far_x = "start_x", far_y = "start_y" } },
+]
+
+[states.Spawn]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { x = "start_x", y = "start_y" } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "Shadows" },
+    { trigger = "EventCursorSpawnFailed", target = "SpawnRetry" },
+]
+
+[states.SpawnRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "Spawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# The dark holds while the maze is walked; a capture installed mid-walk keeps it
+[states.Dark]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventSightRequest", payload = { dark = true }, reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventSightRequest", payload = { dark = false }, reconcile = true },
+]
+
+# Every press of special fire sends a sonar from the goal, with no cooldown; what
+# auto-fire or a held button repeats sends none
+[states.Shadows]
+parent = "Dark"
+on_enter = [
+    { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "goal", x = 0, y = 0, still = true }, payload_vars = { x = "goal_x", y = "goal_y" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Find the way in the dark: space, a right or a double click sends a sonar" } },
+]
+transitions = [
+    { trigger = "EventFireSpecialRequest", internal = true, guard = "PayloadBoolEquals", guard_args = { field = "repeat", value = false }, actions = [
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "sonar", x = 0, y = 0 }, payload_vars = { x = "goal_x", y = "goal_y" } },
+    ] },
+    { trigger = "EventCursorMoved", target = "Found", guard = "And", guard_args = { guards = [
+        { name = "PayloadIntCompareVar", args = { field = "x", op = "eq", var = "goal_x" } },
+        { name = "PayloadIntCompareVar", args = { field = "y", op = "eq", var = "goal_y" } },
+    ] } },
+]
+
+# The maze lit, the walk drawn from where it began; any key a moment on lays the next.
+# Printable keys are captured, so a letter or space is a press; an arrow walks.
+[states.Found]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventSightRequest", payload = { dark = false, trail = true } },
+    { action = "EmitEvent", event = "EventSoundRequest", payload = { sound = "chime" } },
+    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \r" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Found the goal: any key for a new maze" } },
+]
+transitions = [
+    { trigger = "EventInputPressed", target = "Next", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+    { trigger = "EventFireSpecialRequest", target = "Next", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 500 } },
+        { name = "PayloadBoolEquals", args = { field = "repeat", value = false } },
+    ] } },
+    { trigger = "EventCursorMoved", target = "Next", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.Next]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]
