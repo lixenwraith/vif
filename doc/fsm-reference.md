@@ -820,9 +820,10 @@ attack, whirl and defense, its blocks `block_height` rows or as many fewer as a 
 map needs to hold its cursor's orbs; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
-`EventSquareAligned { kind, line }` says an edge, 0 the top row, 1 the bottom, 2 the
-left column and 3 the right, fired its kind (0 attack, 1 whirl, 2 defense), once a
-cooldown while it holds (the attack only on a turn that leaves it there),
+`EventSquareAligned { kind, line }` says a line, 0 the top row, 1 the bottom, 2 the
+left column, 3 the right, 4 the middle row and 5 the middle column, fired its kind
+(0 attack, 1 whirl, 2 defense), once a cooldown while it holds, the middle ones no
+attack,
 `EventSquareShieldFell { entity }` that the cursor's shield fell with its energy,
 and `EventSquareHit { entity }` that a body struck the blocks with that shield down.
 

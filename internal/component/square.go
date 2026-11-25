@@ -22,7 +22,11 @@ const (
 const (
 	SquareSide   = 3
 	SquareBlocks = SquareSide * SquareSide
-	SquareLines  = 4 // its edges: the top row, the bottom row, the left column, the right
+
+	// A square's lines are its edges, the top row, the bottom row, the left column
+	// and the right, each facing its side of the map, then its middle row and column
+	SquareEdges = 4
+	SquareLines = SquareEdges + 2
 )
 
 // SquareWind is the wind a kind blows about the square as it fires: its force, the
@@ -35,9 +39,9 @@ type SquareWind struct {
 }
 
 // SquareKindSpec is what a line of one kind fires as its cursor's each time its
-// cooldown runs out, or with Turned only on a turn that leaves a line holding it: a
-// family on what stands in the part of the map the line faces, a boost of the
-// shield, a wind about the square, the square's magic shed as dust
+// cooldown runs out: a family on what stands near the side of the map the line
+// faces, which an edge alone does, a boost of the shield, a wind about the square,
+// the square's dust shed
 type SquareKindSpec struct {
 	Name     string
 	Attack   CombatAttackType // CombatAttackNone lands nothing
@@ -45,13 +49,12 @@ type SquareKindSpec struct {
 	Cooldown time.Duration    // from a fire until the line fires again
 	Boost    bool             // the shield takes no damage while it holds
 	Shed     bool
-	Turned   bool
 	Wind     SquareWind // a zero force blows none
 }
 
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
-	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Turned: true},
+	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown},
 	SquareWhirl: {Name: "whirl", Attack: CombatAttackNone, Duration: parameter.SquareWhirlDuration, Cooldown: parameter.SquareWhirlCooldown,
 		Wind: SquareWind{Force: parameter.SquareWhirlForce, Turn: math.Pi / 2, Duration: parameter.SquareWhirlDuration, Reach: parameter.SquareWhirlReach}},
 	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown,
@@ -76,9 +79,9 @@ type SquareComponent struct {
 	Digits   [SquareBlocks]uint8
 	Kinds    [SquareBlocks]SquareKind // by digit, less one
 	Selected [parameter.MaxPlayers]uint8
-	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of, 0 for none
+	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of and fires, 0 for none
 	Effects  [SquareKindCount]SquareEffect
-	Magic    time.Duration // its magic meter's charge, full at parameter.SquareMagicFull
+	Dust     time.Duration // its dust meter's charge, full at parameter.SquareDustFull
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells
@@ -184,10 +187,10 @@ func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect, mapW, mapH i
 // the line faces
 func (s *SquareComponent) Orb(l int, aspect vmath.Aspect, mapW, mapH int) vmath.Point {
 	// Quarter turns from the right: right, bottom, left, top
-	return s.OrbAt(float64([SquareLines]int{3, 1, 2, 0}[l])*math.Pi/2, aspect, mapW, mapH)
+	return s.OrbAt(float64([SquareEdges]int{3, 1, 2, 0}[l])*math.Pi/2, aspect, mapW, mapH)
 }
 
-// Faces is the test of whether a cell lies in line l's part of the map: the third
+// Faces is the test of whether a cell lies in edge l's part of the map: the third
 // on its side, past the edge of the middle block run on across the map
 func (s *SquareComponent) Faces(l int) func(x, y int) bool {
 	mx, my := s.Place(SquareBlocks / 2)
@@ -196,6 +199,15 @@ func (s *SquareComponent) Faces(l int) func(x, y int) bool {
 		return func(x, _ int) bool { return third(x, mx, s.Width) == side }
 	}
 	return func(_, y int) bool { return third(y, my, s.Height) == side }
+}
+
+// Strikes is the test of whether a cell lies where edge l's strike lands: in the
+// part of the map it faces, within SquareStrikeReach shield radii of the middle
+func (s *SquareComponent) Strikes(l int, aspect vmath.Aspect) func(x, y int) bool {
+	faces, reach := s.Faces(l), parameter.SquareStrikeReach*s.ShieldRadius(aspect)
+	cx, cy := s.Center()
+	invRx, invRy := vmath.EllipseInvRadiiSq(reach, aspect.FromCircular(reach))
+	return func(x, y int) bool { return faces(x, y) && vmath.EllipseContainsPoint(x, y, cx, cy, invRx, invRy) }
 }
 
 // third is 0 for v before [start, start+size), 1 inside it and 2 past it
@@ -221,7 +233,10 @@ func LinePlaces(column bool, i int) (places [SquareSide]int) {
 	return places
 }
 
-// EdgePlaces names the places along line l
-func EdgePlaces(l int) [SquareSide]int {
+// PlacesOf names the places along line l
+func PlacesOf(l int) [SquareSide]int {
+	if l >= SquareEdges {
+		return LinePlaces(l > SquareEdges, SquareSide/2)
+	}
 	return LinePlaces(l >= 2, l%2*(SquareSide-1))
 }

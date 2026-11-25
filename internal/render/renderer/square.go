@@ -99,13 +99,13 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
-// flash tints the part of the map a line faces in its kind's glow, a share of the
-// way from full to gone; a console draws none
+// flash tints where a line's strike lands in its kind's glow, a share of the way
+// from full to gone; a console draws none
 func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind, line int, left float64) {
 	if r.console != nil {
 		return
 	}
-	faces := sq.Faces(line)
+	faces := sq.Strikes(line, ctx.CellAspect)
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
@@ -304,7 +304,7 @@ func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffe
 }
 
 // legend stands each kind under a column of the square, in kind order, lit while a
-// line holds three of the kind, and over its outer columns its magic meter and its
+// line holds three of the kind, and over its outer columns its dust meter and its
 // viewer's burst meter, each lit when full
 func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, burst int) {
 	_, h := sq.Size()
@@ -319,17 +319,17 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 		r.entry(ctx, buf, x, sq.Y+h+1, sq.Width, &component.SquareKinds[kind], sq.Effects[kind], &visual.SquareKinds[kind], aligned[kind])
 	}
 	x, y := sq.Legend(0)
-	r.entry(ctx, buf, x, y, sq.Width, &squareMagic, component.SquareEffect{Cooldown: parameter.SquareMagicFull - sq.Magic},
-		&visual.SquareMagic, sq.Magic >= parameter.SquareMagicFull)
+	r.entry(ctx, buf, x, y, sq.Width, &squareDust, component.SquareEffect{Cooldown: parameter.SquareDustFull - sq.Dust},
+		&visual.SquareDust, sq.Dust >= parameter.SquareDustFull)
 	x, y = sq.Legend(component.SquareSide - 1)
 	r.entry(ctx, buf, x, y, sq.Width, &squareBurst, component.SquareEffect{Cooldown: time.Duration(parameter.BurstFull - burst)},
 		&visual.SquareBurst, burst >= parameter.BurstFull)
 }
 
-// squareMagic and squareBurst are the legend's entries over the square: a name, and
+// squareDust and squareBurst are the legend's entries over the square: a name, and
 // in the place of a cooldown what its meter is full at
 var (
-	squareMagic = component.SquareKindSpec{Name: "magic", Cooldown: parameter.SquareMagicFull}
+	squareDust  = component.SquareKindSpec{Name: "dust", Cooldown: parameter.SquareDustFull}
 	squareBurst = component.SquareKindSpec{Name: "burst", Cooldown: parameter.BurstFull}
 )
 

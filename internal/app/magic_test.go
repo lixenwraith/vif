@@ -65,7 +65,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 	var cursor core.Entity
 	var at vmath.Point
 	var radius float64
-	var faced [component.SquareLines]int
+	var faced [component.SquareEdges]int
 	read := func() {
 		w.RunSafe(func() {
 			for _, e := range w.Components.Square.Entities() {
@@ -76,7 +76,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 			if shield, ok := w.Components.Shield.GetPtr(cursor); ok {
 				radius = shield.Radius
 			}
-			faced = [component.SquareLines]int{}
+			faced = [component.SquareEdges]int{}
 			w.Components.Gateway.Each(func(_ core.Entity, g *component.GatewayComponent) bool {
 				gate, _ := w.Positions.GetPosition(g.AnchorEntity)
 				for l := range faced {
@@ -88,7 +88,7 @@ func TestMagicFightsThroughACursorFixedOnItsSquare(t *testing.T) {
 			})
 		})
 	}
-	want := [component.SquareLines]int{2, 2, 2, 2}
+	want := [component.SquareEdges]int{2, 2, 2, 2}
 	for range 100 {
 		if read(); faced == want {
 			break
