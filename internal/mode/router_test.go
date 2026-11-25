@@ -942,3 +942,33 @@ func TestOnlyTheWalkMovesASteppedCursor(t *testing.T) {
 		t.Fatalf("a stepped cursor was placed at %v by what is not its walk", cells)
 	}
 }
+
+// TestAFireRepeatSaysItIsOne: special fire a press asks for is no repeat, and the
+// fire auto-fire repeats is one, so a scenario can answer presses alone.
+func TestAFireRepeatSaysItIsOne(t *testing.T) {
+	w := engine.NewWorld()
+	clock := engine.NewManualClock()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, clock)
+	ctx.AutoFire.Store(engine.AutoFireBoth)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	repeats := func() (got []bool) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.FireSpecialRequestPayload); ok {
+				got = append(got, p.Repeat)
+			}
+		}
+		return got
+	}
+	for intent := machine.Process(runeKey(' ')); intent != nil; intent = machine.Next() {
+		r.Handle(intent)
+	}
+	if got := repeats(); !slices.Equal(got, []bool{false}) {
+		t.Fatalf("space asked for special fire as repeats %v, want one press", got)
+	}
+	clock.Step(parameter.AutoFireInterval)
+	r.ProcessInputTick()
+	if got := repeats(); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("auto-fire asked for special fire as repeats %v, want one repeat", got)
+	}
+}

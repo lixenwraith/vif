@@ -450,8 +450,10 @@ cycles both weapons → off → main only → both weapons. `:auto on`, `:auto o
 and `:auto main` select a state directly. Main-only repeats the main-fire
 path, including ready equipped weapons, without requesting special attacks.
 Manual and held-button attacks remain available in every state. Held-button and
-auto-fire deadlines share de-duplication within each cooldown slot. `a` remains
-ordinary text in Insert, Search, and Command modes.
+auto-fire deadlines share de-duplication within each cooldown slot, and a special
+fire request either makes says so (`FireSpecialRequestPayload.Repeat`), so a
+scenario that answers special fire, as `shadows`' sonar does, answers presses
+alone. `a` remains ordinary text in Insert, Search, and Command modes.
 
 ## 8. APM signal
 

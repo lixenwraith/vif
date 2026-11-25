@@ -1016,6 +1016,7 @@ func (p *FireSpecialRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecFireSpecialRequestPayload = structCodec{size: unsafe.Sizeof(FireSpecialRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Repeat), kind: kindBool},
 }}
 
 func (p *DeathWaveRequestPayload) codec() (*structCodec, unsafe.Pointer) {

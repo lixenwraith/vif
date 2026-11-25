@@ -588,6 +588,7 @@ type MountPulse struct {
 // FireSpecialRequestPayload names the cursor firing its special
 type FireSpecialRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
+	Repeat bool        `toml:"repeat"` // auto-fire's or a held button's, where false is a press
 }
 
 // --- Heat ---

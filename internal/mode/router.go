@@ -1855,7 +1855,7 @@ func (r *Router) ProcessInputTick() bool {
 	}
 	if o, due := r.fireDue(now, &r.lastFireSpec, auto == engine.AutoFireBoth, mouse && r.mouseRightHeld); due {
 		r.ctx.PushEventFull(event.EventFireSpecialRequest,
-			&event.FireSpecialRequestPayload{Entity: player}, o, core.DomainPlayer)
+			&event.FireSpecialRequestPayload{Entity: player, Repeat: true}, o, core.DomainPlayer)
 		emitted = true
 	}
 	return emitted
