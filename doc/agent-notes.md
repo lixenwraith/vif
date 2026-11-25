@@ -266,6 +266,12 @@ Docs · Libraries · Branches.
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient
   origin diverges every replay whose recording made it.
+- A headless `Tick` steps through an own pause, a step's or the menu's
+  (`Scheduler.RunTicks` runs `stepTick`), and stops only at a hold, so a test of a
+  pause reads `TimeCtl.OwnPause` and `Held`, never the tick count. A random walk of
+  keys (`takeEvent`), menu ops (`menuOp`) and aways (`setAway`) on `newApp` over a
+  `framePresentation` reads them after each step; `q` waits for a register, so a
+  command typed after it is Normal keys.
 - The dispatch hands an event to the FSM before its systems, so a transition on
   `EventScreenResize` acts on the map as it stood: what must follow a resize is
   an engine hook (`engine.Reflower`), not a scenario's transition.

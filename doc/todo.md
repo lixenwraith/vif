@@ -2611,6 +2611,10 @@ The console landed ([Input §9](input-and-modes.md#9-command-mode)). Open:
   drag over its rows would suit a phone better.
 - Help and telemetry still center on the whole screen under a touch keyboard, whose
   covered rows only the console keeps above (`ComputeConsoleGeometry`).
+- With Wait to start off, `:n` typed on the console's line plays the new game behind
+  the console: the reset's unpause (`Scheduler.executeReset`) ends the pause the
+  console asked again. Closes with the reset asking it once more after its entry
+  actions settle, while an overlay or the command line that pauses stands open.
 
 The options Lixen did not take (2026-11-14), each with what would reopen it:
 
