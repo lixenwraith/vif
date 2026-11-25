@@ -86,11 +86,11 @@ func (a *App) InputTick() bool {
 	return true
 }
 
-// SetupLevel resizes the map independently of the viewport; cropOnResize=false
+// SetupMap resizes the map independently of the viewport; cropOnResize=false
 // decouples them, so a headless run emulates either mode. Reports false when a
 // live session refused it (see shareOperator).
-func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) bool {
-	return a.shareOperator("resize the map", event.EventLevelSetup, &event.LevelSetupPayload{
+func (a *App) SetupMap(width, height int, clearEntities, cropOnResize bool) bool {
+	return a.shareOperator("resize the map", event.EventMapSetup, &event.MapSetupPayload{
 		Width:         width,
 		Height:        height,
 		ClearEntities: clearEntities,

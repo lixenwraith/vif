@@ -19,8 +19,8 @@ type SharedStateSaver interface {
 
 // SharedStateChecker lets a carrier refuse a record before anything is written,
 // when acceptance depends on live state a staging world lacks: a genetic registry's
-// species set is entered by a level transition. The live instance asks it in the
-// dry run before any store is touched, so it must not mutate anything.
+// species set grows as a region's transition declares species. The live instance
+// asks it in the dry run before any store is touched, so it must not mutate anything.
 type SharedStateChecker interface {
 	CheckShared(data []byte) error
 }

@@ -417,7 +417,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	ctx.TimeCtl = NewTimeControl(clock, reg)
 
 	// 4. Config Resource
-	// Initial: Map = Viewport, CropOnResize on until a level setup says otherwise
+	// Initial: Map = Viewport, CropOnResize on until a map setup says otherwise
 	world.Resources.Config = &ConfigResource{
 		MapWidth:       viewportWidth,
 		MapHeight:      viewportHeight,

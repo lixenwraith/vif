@@ -781,7 +781,7 @@ close, `Flush` sends the closed production epoch. `Cross` stamps a crossing
 with this instance's playout lead and schedules every copy, the producer's
 included, for that one apply tick; there is no producer copy published sooner. The
 artifacts that decide what the world *is* — roster, run, shared species, the
-progression a region gates its spawns on, the defeat that rebuilds the level — are
+progression a region gates its spawns on, the defeat that rebuilds the map — are
 `barrierBound` and also close the capture fence at production. Each participant's
 lead follows its own path to the authority: the worst recent age at which the
 authority committed its epochs, stamped on the committed copies, plus a relay

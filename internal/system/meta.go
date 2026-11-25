@@ -121,7 +121,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventInputReport,
 		event.EventModeChanged,
 		event.EventModeRequest,
-		event.EventLevelSetup,
+		event.EventMapSetup,
 		event.EventScreenResize,
 		event.EventMetaTelemetryRequest,
 		event.EventMetaDebugRequest,
@@ -189,9 +189,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 			s.ctx.AskMode(p.Mode)
 		}
 
-	case event.EventLevelSetup:
-		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
-			s.handleLevelSetup(payload)
+	case event.EventMapSetup:
+		if payload, ok := ev.Payload.(*event.MapSetupPayload); ok {
+			s.handleMapSetup(payload)
 		}
 
 	case event.EventScreenResize:
@@ -520,7 +520,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	// them; without this the last resize's verdict outlives the session
 	s.ctx.PublishMapLock()
 
-	// Grid tracks map dimensions; a level-sized grid would outlive the level
+	// Grid tracks map dimensions; one sized to the last map would outlive it
 	s.ctx.World.Positions.Resize(config.MapWidth, config.MapHeight)
 
 	// 6. Release the scenario's captured keys and clear the status. The play mode and
@@ -558,8 +558,8 @@ func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayloa
 	s.ctx.SetStatusMessage(payload.Message, payload.Kind)
 }
 
-// handleLevelSetup reconfigures map dimensions and clears entities
-func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
+// handleMapSetup reconfigures map dimensions and clears entities
+func (s *MetaSystem) handleMapSetup(payload *event.MapSetupPayload) {
 	width := payload.Width
 	height := payload.Height
 	cropOnResize := payload.CropOnResize
@@ -577,7 +577,7 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 		cropOnResize = true
 	}
 
-	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize, payload.PreserveLoot)
+	s.world.SetupMap(width, height, payload.ClearEntities, cropOnResize, payload.PreserveLoot)
 	// Encounter transitions preserve defeat; a reset clears it before rearming.
 	if payload.ClearEntities && !payload.PreserveLoot {
 		s.defeated = [parameter.MaxPlayers]bool{}

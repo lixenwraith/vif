@@ -15,7 +15,7 @@ initial = "PlayerBoot"
 background = true
 
 # Boot: settled before the clock starts, drawn behind the start prompt; the game
-# begins at the first Tick, after the press. Set the level up here; play from
+# begins at the first Tick, after the press. Set the map up here; play from
 # MainStart on
 [states.MainBoot]
 parent = "Root"

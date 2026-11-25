@@ -34,7 +34,7 @@ const (
 	ProtectFromSplash
 
 	// ProtectAll makes an entity immune to every protected mechanic and lets it
-	// survive a level clear; World.DestroyEntity does not check it, so its callers must
+	// survive a map setup's clear; World.DestroyEntity does not check it, so its callers must
 	ProtectAll ProtectionFlags = 0xFF
 
 	// ProtectScenery is a glyph placed as scenery: rock, walls, species, deletes and

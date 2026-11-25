@@ -320,7 +320,7 @@ func (s *GeneticSystem) processPendingDeaths() {
 }
 
 // processTracking updates closest approach and retires entities that lost
-// NavigationComponent (OOB, resize, level change).
+// NavigationComponent (OOB, resize, map change).
 // Sorted iteration: completeTracking folds a non-commutative EMA and reports
 // fitness in call order.
 func (s *GeneticSystem) processTracking() {
@@ -514,7 +514,7 @@ func (s *GeneticSystem) sortedRegistrationsLocked() []event.GeneticRegisterSpeci
 }
 
 // reconcileRegistrationsLocked brings this instance's registered species set to the
-// capture's before the populations are imported. A guest past a level transition the
+// capture's before the populations are imported. A guest past a region's transition the
 // authority has not reached drops the species it declared; one short of it registers
 // the capture's declaration. Registry.Import then finds the exact set it requires.
 // Caller MUST hold mu.
@@ -551,8 +551,8 @@ func (s *GeneticSystem) heldRegistrationLocked(species component.SpeciesType) bo
 }
 
 // CheckShared reports whether this instance could install the record without
-// touching anything. A staging world has never entered a level region, so its empty
-// registered set accepts what the live world would refuse; asked of the live system
+// touching anything. A staging world has never entered a region declaring species,
+// so its empty registered set accepts what the live world would refuse; asked of the live system
 // before the store pass, a refusal cannot leave a world half-installed. The
 // reconciliation in LoadShared is what makes the answer yes.
 func (s *GeneticSystem) CheckShared(data []byte) error {

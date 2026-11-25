@@ -380,7 +380,7 @@ func (a *App) initWorld() error {
 	cfg.CursorsOffMap, cfg.CursorsFixed, cfg.ContentBlocks = a.scenario.CursorsOffMap, a.scenario.CursorsFixed, a.scenario.ContentBlocks
 	cfg.NavRefreshTicks, cfg.NavRebuildTicks = a.scenario.NavRefreshTicks, a.scenario.NavRebuildTicks
 	if w, h := cfg.FloorMapSize(cfg.MapWidth, cfg.MapHeight); w != cfg.MapWidth || h != cfg.MapHeight {
-		a.world.SetupLevel(w, h, false, cfg.CropOnResize, false)
+		a.world.SetupMap(w, h, false, cfg.CropOnResize, false)
 	}
 	a.applyMapLatch()
 
@@ -551,7 +551,7 @@ func (a *App) applyMapLatch() {
 		a.cfg.CropOnResize == cfg.CropOnResize {
 		return
 	}
-	a.world.SetupLevel(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize, false)
+	a.world.SetupMap(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize, false)
 }
 
 // initInput builds the intent pipeline. Kept headless because intents are the

@@ -393,7 +393,7 @@ Docs · Libraries · Branches.
 - `LockMap` latches the world as session-shared, which also engages the playout
   barrier: a run in no session whose map must not follow its screen, as a person's
   under `-size`, latches `World.FixMap` instead. `World.MapSizeLocal` answers for
-  both and gates the resize's crop, the reset's return to the viewport, a level
+  both and gates the resize's crop, the reset's return to the viewport, a map
   setup of no size and a held game starting over, so a new path that sizes a map
   from a screen asks it.
 - A run that shows nothing reads its terminal off any standard stream still on it
@@ -402,6 +402,10 @@ Docs · Libraries · Branches.
   named (`runConfig.restarted`), never from the live `m.cfg`: what a command wrote
   there, a phrase, a policy, a door, is gone at the next restart unless the ask
   carries it (`RestartAsk`, `restartRequest`, which `replaceWith` alone latches).
+- A session property a host sets travels four ways, and a new one checks each: the
+  offer (`offerLocked`), a joiner's wiring (`configForJoin`, cleared by `alone`), a
+  leave that forgets it (`leaveSessionLocked`'s `left`) and a host's scenario change
+  (`RestartAsk`); `-no-cheats` takes all four.
 
 ## Determinism and the harness
 

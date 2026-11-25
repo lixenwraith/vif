@@ -13,7 +13,7 @@ func InitRegistry() {
 		return
 	}
 	registryInit = true
-	RegisterType("EventLevelSetup", EventLevelSetup)
+	RegisterType("EventMapSetup", EventMapSetup)
 	RegisterType("EventScreenResize", EventScreenResize)
 	RegisterType("EventSoundRequest", EventSoundRequest)
 	RegisterType("EventAudioMuteToggle", EventAudioMuteToggle)
@@ -249,7 +249,7 @@ func InitRegistry() {
 // annotation in type.go. Index is the EventType; an unlisted slot is ClassUnset,
 // which replicates nothing.
 var eventClasses = [EventTypeCount]EventClass{
-	EventLevelSetup:                      ClassShared,
+	EventMapSetup:                        ClassShared,
 	EventScreenResize:                    ClassLocal,
 	EventSoundRequest:                    ClassLocal,
 	EventAudioMuteToggle:                 ClassLocal,

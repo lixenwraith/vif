@@ -16,7 +16,7 @@ import (
 
 // payloadNew allocates each event's registered payload.
 var payloadNew = [EventTypeCount]func() any{
-	EventLevelSetup:                      func() any { return new(LevelSetupPayload) },
+	EventMapSetup:                        func() any { return new(MapSetupPayload) },
 	EventScreenResize:                    func() any { return new(ScreenResizePayload) },
 	EventSoundRequest:                    func() any { return new(SoundRequestPayload) },
 	EventAudioMuteToggle:                 func() any { return new(AudioMuteTogglePayload) },
@@ -206,7 +206,7 @@ var payloadNew = [EventTypeCount]func() any{
 
 // payloadCodecs is each event's payload table.
 var payloadCodecs = [EventTypeCount]*structCodec{
-	EventLevelSetup:                      &codecLevelSetupPayload,
+	EventMapSetup:                        &codecMapSetupPayload,
 	EventScreenResize:                    &codecScreenResizePayload,
 	EventSoundRequest:                    &codecSoundRequestPayload,
 	EventAudioMuteToggle:                 &codecAudioMuteTogglePayload,
@@ -394,16 +394,16 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventDebugGraphToggle:                &codecDebugFlowGroupPayload,
 }
 
-func (p *LevelSetupPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecLevelSetupPayload, unsafe.Pointer(p)
+func (p *MapSetupPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMapSetupPayload, unsafe.Pointer(p)
 }
 
-var codecLevelSetupPayload = structCodec{size: unsafe.Sizeof(LevelSetupPayload{}), fields: []field{
-	{off: unsafe.Offsetof(LevelSetupPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(LevelSetupPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(LevelSetupPayload{}.ClearEntities), kind: kindBool},
-	{off: unsafe.Offsetof(LevelSetupPayload{}.PreserveLoot), kind: kindBool},
-	{off: unsafe.Offsetof(LevelSetupPayload{}.CropOnResize), kind: kindBool},
+var codecMapSetupPayload = structCodec{size: unsafe.Sizeof(MapSetupPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MapSetupPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MapSetupPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MapSetupPayload{}.ClearEntities), kind: kindBool},
+	{off: unsafe.Offsetof(MapSetupPayload{}.PreserveLoot), kind: kindBool},
+	{off: unsafe.Offsetof(MapSetupPayload{}.CropOnResize), kind: kindBool},
 }}
 
 func (p *ScreenResizePayload) codec() (*structCodec, unsafe.Pointer) {

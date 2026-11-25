@@ -630,8 +630,8 @@ func tickToStatBoundary(a *App) {
 // A refusal has to arrive before the world is written, and the staging pass cannot
 // always make it. StageShared asks whether this build can load the capture, which is
 // the whole question for most carriers but not for one whose acceptance depends on
-// state the staging world lacks: the genetic registry's species set is entered by a
-// level region a staging world has never been in. The pre-flight below is for that.
+// state the staging world lacks: the genetic registry's species set grows in a
+// region a staging world has never entered. The pre-flight below is for that.
 
 // TestACarrierRefusalLeavesTheLiveWorldUntouched drives the refusal through the
 // live install path and asserts the world is exactly what it was.

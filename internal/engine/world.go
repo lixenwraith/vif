@@ -584,7 +584,7 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 func (w *World) MapSizeLocal() bool { return !w.mapFixed.Load() && !w.SessionShared() }
 
 // FixMap latches the map as its run's player fixed it: no resize crops it, and a
-// new game and a level reset keep its bounds, as a shared map's are kept.
+// new game and a map setup of no size keep its bounds, as a shared map's are kept.
 func (w *World) FixMap() { w.mapFixed.Store(true) }
 
 // MapFixed reports the map as fixed by its run's player (FixMap).
@@ -1342,16 +1342,16 @@ func (w *World) CursorSlot(e core.Entity) (uint8, bool) {
 	return c.Slot, true
 }
 
-// === Level ===
+// === Map ===
 
-// SetupLevel reconfigures map dimensions and optionally clears entities
+// SetupMap reconfigures map dimensions and optionally clears entities
 // Respects Protection component - entities with ProtectAll survive
 // Repositions cursor if outside new bounds
-func (w *World) SetupLevel(width, height int, clearEntities, cropOnResize, preserveLoot bool) {
+func (w *World) SetupMap(width, height int, clearEntities, cropOnResize, preserveLoot bool) {
 	config := w.Resources.Config
 
-	// Floored and clamped before it is recorded, not just before it is allocated. A
-	// LevelSetup payload is replicated, so these dimensions can arrive from any
+	// Floored and clamped before it is recorded, not just before it is allocated. An
+	// EventMapSetup payload is replicated, so these dimensions can arrive from any
 	// participant; clamping here keeps Config and the grid describing one map, where
 	// clamping only inside the grid would leave logic reading bounds no cell exists for.
 	width, height = config.FloorMapSize(width, height)
