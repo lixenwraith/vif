@@ -1210,8 +1210,11 @@ Docs · Libraries · Branches.
   modules decompressed (`soundcore`, `snd`, `snd-timer`, `snd-pcm`, `snd-aloop`,
   `snd-dummy`) and a static `vif_nogui` test binary that `-overlay` adds a scratch
   test to boots and runs in 15 s. `snd-aloop pcm_substreams=1` makes a held device
-  busy and captures on device 1, bit for bit, what device 0 plays; `snd-dummy
-  model=ac97` is a 48 kHz-only card.
+  busy and captures on device 1, bit for bit, what device 0 plays, at the rate and
+  width the side opened first set: its capture opened at 48 kHz or in 32 bits
+  makes a card that takes no other. `snd-dummy model=ac97` is a 48 kHz-only card.
+  A test paced by `time.Sleep` falls behind the device and underruns; pace it by a
+  ticker, as the mixer is.
 
 ## Measuring
 

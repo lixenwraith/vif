@@ -635,17 +635,19 @@ figure is a null sink's ([todo](todo.md#hear-the-builds-own-speakers-on-real-dev
 
 The card (`cmd/vif/alsa.go`, in every Linux build with audio, `vif_nogui`'s
 static one too) is played through the kernel's PCM interface, with no library:
-the first playback device, by card then device, that takes 16-bit stereo at
-44.1 kHz. It is opened non-blocking, so a device another program holds answers
-busy at once and a write waits in Go's poller, never in the kernel; its ring
-holds two to two and a half mixer periods, a period of silence leads each start,
-and an underrun or a sleep prepares it again. Where a sound server listens for
-the user (PipeWire's or PulseAudio's socket in `XDG_RUNTIME_DIR`, or
-`PULSE_SERVER`) it opens nothing unless `-ab alsa` names it: the server owns the
-card and plays the run through it. It plays at the card's mixer levels, which it
-leaves to the system's tools, so a card left muted plays silence. In a VM on
-`snd-aloop` what it wrote came back bit for bit and a 48 kHz-only card was
-passed over.
+the first playback device, by card then device, that takes stereo in 16 or 32
+bits at 44.1 kHz or the least rate above it. A card at another rate, 48 kHz as
+most are, is fed through a windowed sinc of 32 taps a phase, stepping by whole
+frames of both rates so they never drift apart: flat to 18 kHz and 3 dB down at
+20, each image 76 dB or more under its tone, for 0.3 % of a core at 48 kHz. It is
+opened non-blocking, so a device another program holds answers busy at once and
+a write waits in Go's poller, never in the kernel; its ring holds two to two and a
+half mixer periods, a period of silence leads each start, and an underrun or a
+sleep prepares it again. Where a sound server listens for the user (PipeWire's or
+PulseAudio's socket in `XDG_RUNTIME_DIR`, or `PULSE_SERVER`) it opens nothing
+unless `-ab alsa` names it: the server owns the card and plays the run through
+it. It plays to the card at the levels the system set. In a VM on `snd-aloop`,
+44.1 kHz and 32 bits came back bit for bit, 48 kHz at 83 dB of signal to noise.
 
 On Windows the same `gui.go` opens `terminal/window`'s Win32 host, which loads
 nothing through purego: its messages are read on a thread of its own, keys come

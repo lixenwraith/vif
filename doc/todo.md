@@ -2892,7 +2892,8 @@ sink; the first seconds after the device was suspended; ten minutes with nothing
 else running, counting dropouts; the game's CPU on a GPU; the game started by
 Steam, on a PulseAudio host, a PipeWire host and a Steam Deck (the runtime was
 checked in a chroot); FreeBSD without `/dev/dsp`; the card on a machine with no
-sound server, a USB card unplugged and plugged back, and a sleep mid-run.
+sound server, at 44.1 and at 48 kHz, a USB card unplugged and plugged back, and a
+sleep mid-run.
 
 ### Bring stapes to Android (stapes mobile)
 
