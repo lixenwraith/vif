@@ -545,7 +545,8 @@ spawn equips a whole cursor that stands where it landed: its player's keys, poin
 and touch move it nowhere, and it and its crosshair are not drawn, while its
 shield, weapons and loot are a free cursor's. With `step = "5x3"` a cursor walks a
 block of that size a press of `h`, `j`, `k`, `l` or an arrow, a cell at a time, and
-nothing else places it, so a scenario spawns it in a block's middle.
+nothing else places it, so a scenario spawns it in a block's middle; it draws no
+crosshair, as it aims at nothing.
 
 Capture the entity to address that cursor in later actions:
 
