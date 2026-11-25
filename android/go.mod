@@ -10,7 +10,7 @@ require (
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/lixenwraith/ascimage v0.1.4 // indirect
-	github.com/lixenwraith/audio v0.41.0 // indirect
+	github.com/lixenwraith/audio v0.46.2 // indirect
 	github.com/lixenwraith/auth v0.5.3 // indirect
 	github.com/lixenwraith/color v0.1.7 // indirect
 	github.com/lixenwraith/genetic v0.4.0 // indirect
