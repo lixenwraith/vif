@@ -660,7 +660,7 @@ open block among the farthest from it by the maze's way. The cursor walks a bloc
 a press of `h`, `j`, `k`, `l` or an arrow and nothing else moves it (`[map]
 step`); a wall is a bump. The map is dark (`EventSightRequest`), and each step
 throws a right angle of light toward its way that the walls stop, showing their
-outlines a moment, the goal's `◎` among them when it falls there. A press of
+outlines a moment, the goal's `♦` among them when it falls there. A press of
 special fire, space, a right click, a double click or a double tap, sends a sonar
 from the goal: a hidden drop that flies the maze's way to the cursor, sounding
 where it is (`[loot]`'s `sound`), panned left or right, muffled below the cursor

@@ -32,7 +32,7 @@ const (
 	SightStepReach = 8
 	SightFade      = 600 * time.Millisecond
 	SightTrailRune = '·'
-	SightStartRune = '◆'
+	SightStartRune = '■'
 )
 
 var (

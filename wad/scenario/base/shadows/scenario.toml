@@ -25,7 +25,7 @@ sound = "tone_a4"
 hidden = true
 
 [loot.goal]
-rune = "◎"
+rune = "♦"
 color = { r = 255, g = 200, b = 60 }
 glow = { r = 120, g = 90, b = 20 }
 
