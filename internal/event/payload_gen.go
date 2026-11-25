@@ -151,6 +151,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGrayoutStart:                    func() any { return new(CursorScopePayload) },
 	EventGrayoutEnd:                      func() any { return new(CursorScopePayload) },
 	EventStrobeRequest:                   func() any { return new(StrobeRequestPayload) },
+	EventSightRequest:                    func() any { return new(SightPayload) },
 	EventSpiritSpawnRequest:              func() any { return new(SpiritSpawnRequestPayload) },
 	EventLightningSpawnRequest:           func() any { return new(LightningSpawnRequestPayload) },
 	EventLightningUpdateRequest:          func() any { return new(LightningUpdateRequestPayload) },
@@ -173,6 +174,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWallCompositeSpawnRequest:       func() any { return new(WallCompositeSpawnRequestPayload) },
 	EventWallPatternSpawnRequest:         func() any { return new(WallPatternSpawnRequestPayload) },
 	EventMazeSpawnRequest:                func() any { return new(MazeSpawnRequestPayload) },
+	EventMazeSpawned:                     func() any { return new(MazeSpawnedPayload) },
 	EventCaveStart:                       func() any { return new(CaveStartPayload) },
 	EventCaveStop:                        func() any { return new(CaveStopPayload) },
 	EventCavePace:                        func() any { return new(CavePacePayload) },
@@ -342,6 +344,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGrayoutStart:                    &codecCursorScopePayload,
 	EventGrayoutEnd:                      &codecCursorScopePayload,
 	EventStrobeRequest:                   &codecStrobeRequestPayload,
+	EventSightRequest:                    &codecSightPayload,
 	EventSpiritSpawnRequest:              &codecSpiritSpawnRequestPayload,
 	EventLightningSpawnRequest:           &codecLightningSpawnRequestPayload,
 	EventLightningUpdateRequest:          &codecLightningUpdateRequestPayload,
@@ -364,6 +367,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWallCompositeSpawnRequest:       &codecWallCompositeSpawnRequestPayload,
 	EventWallPatternSpawnRequest:         &codecWallPatternSpawnRequestPayload,
 	EventMazeSpawnRequest:                &codecMazeSpawnRequestPayload,
+	EventMazeSpawned:                     &codecMazeSpawnedPayload,
 	EventCaveStart:                       &codecCaveStartPayload,
 	EventCaveStop:                        &codecCaveStopPayload,
 	EventCavePace:                        &codecCavePacePayload,
@@ -424,6 +428,10 @@ func (p *SoundRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecSoundRequestPayload = structCodec{size: unsafe.Sizeof(SoundRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SoundRequestPayload{}.ID), kind: kindInt, size: unsafe.Sizeof(model.SoundID(0))},
 	{off: unsafe.Offsetof(SoundRequestPayload{}.Name), kind: kindString},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Placed), kind: kindBool},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Pitch), kind: kindFloat},
 }}
 
 func (p *AudioMuteTogglePayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1011,6 +1019,7 @@ func (p *FireSpecialRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecFireSpecialRequestPayload = structCodec{size: unsafe.Sizeof(FireSpecialRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Repeat), kind: kindBool},
 }}
 
 func (p *DeathWaveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1695,6 +1704,15 @@ var codecStrobeRequestPayload = structCodec{size: unsafe.Sizeof(StrobeRequestPay
 	{off: unsafe.Offsetof(StrobeRequestPayload{}.Cursor), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
+func (p *SightPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSightPayload, unsafe.Pointer(p)
+}
+
+var codecSightPayload = structCodec{size: unsafe.Sizeof(SightPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SightPayload{}.Dark), kind: kindBool},
+	{off: unsafe.Offsetof(SightPayload{}.Trail), kind: kindBool},
+}}
+
 func (p *SpiritSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecSpiritSpawnRequestPayload, unsafe.Pointer(p)
 }
@@ -1995,6 +2013,20 @@ var codecMazeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MazeSpawnRequ
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Walled), kind: kindBool},
+}}
+
+func (p *MazeSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMazeSpawnedPayload, unsafe.Pointer(p)
+}
+
+var codecMazeSpawnedPayload = structCodec{size: unsafe.Sizeof(MazeSpawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.CellWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.CellHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.RoomX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.RoomY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.FarX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.FarY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *CaveStartPayload) codec() (*structCodec, unsafe.Pointer) {

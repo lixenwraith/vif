@@ -68,6 +68,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventGrayoutStart,
 		event.EventGrayoutEnd,
 		event.EventStrobeRequest,
+		event.EventSightRequest,
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
 		event.EventKrakenBurnRequest,
@@ -112,6 +113,11 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventStrobeRequest:
 		if payload, ok := ev.Payload.(*event.StrobeRequestPayload); ok && s.ownedHere(payload.Cursor) {
 			s.handleStrobeRequest(payload)
+		}
+
+	case event.EventSightRequest:
+		if p, ok := ev.Payload.(*event.SightPayload); ok {
+			s.world.Resources.View.Sight = engine.SightState{Dark: p.Dark, Trail: p.Trail}
 		}
 
 	case event.EventExplosionVisualRequest:

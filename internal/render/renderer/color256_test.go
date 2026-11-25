@@ -126,7 +126,8 @@ const consoleGlyphs = "·×÷°±•‼←↑→↓≈≡≤≥─│┌┐└�
 // code's tables, and the shipped scenarios, whose programs' frames and messages draw too.
 func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 	t.Parallel()
-	glyphs := []rune{visual.MissileTrailChar256, visual.OrbFullChar256, visual.HealthBarChar, parameter.OverlayPinMarker256}
+	glyphs := []rune{visual.MissileTrailChar256, visual.OrbFullChar256, visual.HealthBarChar, parameter.OverlayPinMarker256,
+		visual.SightTrailRune, visual.SightStartRune}
 	for _, set := range [][]rune{visual.Density256Chars[:], visual.MissileHeadChars256[:], visual.BulletHeadChars256[:],
 		visual.BoxDrawSingleLUT[:], visual.BoxDrawDoubleLUT[:]} {
 		glyphs = append(glyphs, set...)

@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 231
+const EventTypeCount = 233
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -175,6 +175,7 @@ func InitRegistry() {
 	RegisterType("EventGrayoutStart", EventGrayoutStart)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd)
 	RegisterType("EventStrobeRequest", EventStrobeRequest)
+	RegisterType("EventSightRequest", EventSightRequest)
 	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest)
 	RegisterType("EventSpiritScatterRequest", EventSpiritScatterRequest)
 	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest)
@@ -200,6 +201,7 @@ func InitRegistry() {
 	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest)
 	RegisterType("EventWallPatternSpawnRequest", EventWallPatternSpawnRequest)
 	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest)
+	RegisterType("EventMazeSpawned", EventMazeSpawned)
 	RegisterType("EventCaveStart", EventCaveStart)
 	RegisterType("EventCaveStop", EventCaveStop)
 	RegisterType("EventCavePace", EventCavePace)
@@ -412,6 +414,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGrayoutStart:                    ClassLocal,
 	EventGrayoutEnd:                      ClassLocal,
 	EventStrobeRequest:                   ClassLocal,
+	EventSightRequest:                    ClassLocal,
 	EventSpiritSpawnRequest:              ClassStamped,
 	EventSpiritScatterRequest:            ClassLocal,
 	EventSpiritDespawnRequest:            ClassStamped,
@@ -437,6 +440,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventWallCompositeSpawnRequest:       ClassShared,
 	EventWallPatternSpawnRequest:         ClassShared,
 	EventMazeSpawnRequest:                ClassShared,
+	EventMazeSpawned:                     ClassShared,
 	EventCaveStart:                       ClassShared,
 	EventCaveStop:                        ClassShared,
 	EventCavePace:                        ClassShared,

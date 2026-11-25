@@ -65,7 +65,12 @@ A captured key is the scenario's one input hook, whatever produces it:
   `engine.ticks` it was made at, which the barrier holds within the lead and late
   commit of its apply tick. On a map with `cursors = false` the slot has no cursor
   at all, and these are the player's only inputs; with `cursors = "fixed"` they,
-  the fire keys and the commands are, the cursor taking no motion.
+  the fire keys and the commands are, the cursor taking no motion. With `step`
+  the cursor walks blocks of that size (`Router.askWalk`): a motion's way a block
+  a press, a count that many, each cell crossed on the input tick it falls due,
+  and a wall or the map's edge a bump; every other placement, a jump's, a mark's or
+  the pointer's, is refused where it is pushed (`World.PushCursorMove`,
+  `PushPointerMove`), and the walk's goes by `PushCursorWalk`.
 - **Timing.** A scenario judges a press by its `tick`, not by when it arrives: a
   press made at a window's close can arrive up to `engine.input_horizon` ticks
   later, none solo and `NetworkApplyHorizonTicks` (2 s) in a session, so a miss
@@ -445,8 +450,10 @@ cycles both weapons → off → main only → both weapons. `:auto on`, `:auto o
 and `:auto main` select a state directly. Main-only repeats the main-fire
 path, including ready equipped weapons, without requesting special attacks.
 Manual and held-button attacks remain available in every state. Held-button and
-auto-fire deadlines share de-duplication within each cooldown slot. `a` remains
-ordinary text in Insert, Search, and Command modes.
+auto-fire deadlines share de-duplication within each cooldown slot, and a special
+fire request either makes says so (`FireSpecialRequestPayload.Repeat`), so a
+scenario that answers special fire, as `shadows`' sonar does, answers presses
+alone. `a` remains ordinary text in Insert, Search, and Command modes.
 
 ## 8. APM signal
 

@@ -246,7 +246,7 @@ transport the app attaches.
 | `Adaptation` | Per-gateway route-selection learner weights and pre-sampled route pools. |
 | `Genetics` | Population registry spawners sample genotypes from. |
 | `Transient` | Player-domain explosion presentation, the Krakens burning away, the Devourers drawing back and the walls a maze laid fading in. |
-| `View` | Player-domain screen effects: grayout, strobe and this instance's button echo. |
+| `View` | Player-domain screen effects: grayout, strobe, sight (a dark map, a trail) and this instance's button echo. |
 | `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
 | `DevourerShape` | The Devourer's body as its system last built it, which its renderers read for that frame instead of building it again; derived, so a snapshot never carries it. |
 | `NavigationDebug` | Per-runtime operator view of navigation internals. |

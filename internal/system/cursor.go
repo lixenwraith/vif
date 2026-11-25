@@ -438,7 +438,9 @@ func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
 	w := s.world
 	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
-	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: !w.Resources.Config.CursorsFixed})
+	// A crosshair aims, which a fixed cursor and one walking blocks do not
+	config := w.Resources.Config
+	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: !config.CursorsFixed && !config.Stepped()})
 	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
 	w.Components.Shield.SetComponent(e, component.ShieldComponent{Radius: parameter.PlayerShieldRadius})

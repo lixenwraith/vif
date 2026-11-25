@@ -1,6 +1,10 @@
 package visual
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/color"
+)
 
 // Strobe envelope configuration
 const (
@@ -16,6 +20,24 @@ const (
 const (
 	GrayoutDuration = 1 * time.Second // Unused, logic commented out in transient system to be wired in if needed
 	GrayoutMask     = MaskGlyph
+)
+
+// Sight: the moving cursor's light holds SightLightHold past its last step, longer
+// than a block's slowest cell takes, and what it fell on fades over SightFade. A
+// move of up to SightStepReach cells along one axis between frames is the walk
+// going on. A trail draws its cells as SightTrailRune and its first, where the walk
+// began, as SightStartRune.
+const (
+	SightLightHold = 80 * time.Millisecond
+	SightStepReach = 8
+	SightFade      = 600 * time.Millisecond
+	SightTrailRune = '·'
+	SightStartRune = '■'
+)
+
+var (
+	RgbSightTrail = color.RGB{R: 70, G: 110, B: 160}
+	RgbSightStart = color.RGB{R: 255, G: 190, B: 60}
 )
 
 // Dim configuration

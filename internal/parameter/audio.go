@@ -58,6 +58,16 @@ func BinauralPresetNames() []string {
 	return names
 }
 
+// A placed sound is heard from the cursor: panned by its column against half the
+// view's width, quieter with distance down to PlacedFarGain dB at the view's
+// corner, and low-passed as it lies below, from PlacedBelowCutoff Hz a row down to
+// PlacedDeepCutoff at the view's bottom edge, as stereo has no ahead and behind
+const (
+	PlacedFarGain     = -18.0
+	PlacedBelowCutoff = 6000.0
+	PlacedDeepCutoff  = 700.0
+)
+
 // AudioMaskCycle advances the rotation: silence -> effects -> music -> all -> silence
 func AudioMaskCycle(m uint8) uint8 {
 	return (m + 1) & AudioChanAll

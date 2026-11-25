@@ -32,9 +32,11 @@ var stampingPush = map[string]bool{
 // call sites name no event constant. A helper exists where the crossing must not
 // leave without its local answer, a D-18 prediction or an input echo. Both walks
 // resolve a helper to the type and method it stands for, and
-// TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body.
+// TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body,
+// or the helper it stands on.
 var crossingHelpers = map[string]string{
 	"PushCursorMove":   "EventCursorMoveRequest",
+	"PushCursorWalk":   "EventCursorMoveRequest",
 	"PushPointerMove":  "EventCursorMoveRequest",
 	"PushInputPress":   "EventInputPressed",
 	"PushInputRelease": "EventInputReleased",
@@ -203,10 +205,12 @@ func TestCrossingHelpersPushWhatTheyDeclare(t *testing.T) {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "PushCrossing" {
+			if !ok {
 				return true
 			}
-			if ev := eventConstName(call.Args[0]); ev != "" {
+			if ev, helper := crossingHelpers[sel.Sel.Name]; helper && sel.Sel.Name != fn.Name.Name {
+				found[fn.Name.Name] = ev
+			} else if ev := eventConstName(call.Args[0]); sel.Sel.Name == "PushCrossing" && ev != "" {
 				found[fn.Name.Name] = ev
 			}
 			return true

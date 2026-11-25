@@ -37,10 +37,16 @@ type ScreenResizePayload struct {
 // --- Audio ---
 
 // SoundRequestPayload names the sound to play: Go emitters pass the resolved ID,
-// configuration passes the name, which AudioSystem resolves when ID is zero
+// configuration passes the name, which AudioSystem resolves when ID is zero. A
+// placed sound sounds from its cell as the cursor this instance drives hears it,
+// and any sound Pitch semitones off its own.
 type SoundRequestPayload struct {
-	ID   model.SoundID `toml:"sound_id"`
-	Name string        `toml:"sound"`
+	ID     model.SoundID `toml:"sound_id"`
+	Name   string        `toml:"sound"`
+	X      int           `toml:"x"`
+	Y      int           `toml:"y"`
+	Placed bool          `toml:"placed"`
+	Pitch  float64       `toml:"pitch"`
 }
 
 type AudioMuteToggleMode uint8
@@ -210,6 +216,13 @@ type CursorDefeatStatePayload struct {
 // CursorCrushedPayload names the cursor scrolling rock pressed against the left edge
 type CursorCrushedPayload struct {
 	Entity core.Entity `toml:"entity"`
+}
+
+// SightPayload is how a map shows: Dark hides every cell the light of the cursor
+// this instance drives has not just fallen on, and Trail draws the cells it walked
+type SightPayload struct {
+	Dark  bool `toml:"dark"`
+	Trail bool `toml:"trail"`
 }
 
 // CursorScopePayload scopes local effects to an owned cursor, or all local cursors
@@ -575,6 +588,7 @@ type MountPulse struct {
 // FireSpecialRequestPayload names the cursor firing its special
 type FireSpecialRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
+	Repeat bool        `toml:"repeat"` // auto-fire's or a held button's, where false is a press
 }
 
 // --- Heat ---
@@ -1678,6 +1692,20 @@ type MazeSpawnRequestPayload struct {
 	// Mixed/smaller structs and scalars
 	Visual        component.WallVisualConfig `toml:"visual"`
 	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
+	Walled        bool                       `toml:"walled"` // keeps the outer wall, which is open otherwise
+}
+
+// MazeSpawnedPayload is a maze as laid: its block, the cell in the middle of its
+// first room, and the middle of an open block among the farthest from that room by
+// the maze's own way, drawn at random, where a cursor that must cross it stands; -1
+// for a cell the maze has none of
+type MazeSpawnedPayload struct {
+	CellWidth  int `toml:"cell_width"`
+	CellHeight int `toml:"cell_height"`
+	RoomX      int `toml:"room_x"`
+	RoomY      int `toml:"room_y"`
+	FarX       int `toml:"far_x"`
+	FarY       int `toml:"far_y"`
 }
 
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the

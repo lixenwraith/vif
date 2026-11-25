@@ -530,6 +530,25 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 	}
 }
 
+// Shade keeps keep of a cell's colors, the rest going to base, and at none kept
+// leaves it a cell nothing painted: darkness the light has not reached
+func (b *RenderBuffer) Shade(x, y int, keep float64, base color.RGB) {
+	if keep >= 1 || !b.inBounds(x, y) {
+		return
+	}
+	i := y*b.width + x
+	if keep <= 0 {
+		b.cells[i], b.touched[i], b.coarse[i], b.masks[i] = terminal.Cell{}, false, false, visual.MaskNone
+		return
+	}
+	cell := &b.cells[i]
+	b.resolvePalette(cell, true, b.touched[i])
+	cell.Fg = color.Lerp(base, cell.Fg, keep)
+	if b.touched[i] {
+		cell.Bg = color.Lerp(base, cell.Bg, keep)
+	}
+}
+
 // === OUTPUT ===
 
 // finalize gives every cell nothing painted its region's background: the theme

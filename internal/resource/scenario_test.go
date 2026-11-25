@@ -379,7 +379,7 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 
 // TestAMapPlacesCursorsUnlessItSaysNot: [map] cursors = false takes the cursors off
 // the map, "fixed" stands them unmoved, true or no key leaves them free on it, and
-// anything else is refused.
+// anything else is refused, as is a step for cursors that stand unmoved.
 func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
 	for _, c := range []struct {
 		table         string
@@ -392,6 +392,8 @@ func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
 		{"[map]\ncursors = \"fixed\"\n", false, true, false},
 		{"[map]\ncursors = 0\n", false, false, true},
 		{"[map]\ncursors = \"free\"\n", false, false, true},
+		{"[map]\ncursors = \"fixed\"\nstep = \"5x3\"\n", false, true, true},
+		{"[map]\nstep = \"5x0\"\n", false, false, true},
 	} {
 		entry := "[regions.main]\nfile = \"main.toml\"\n" + c.table
 		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}

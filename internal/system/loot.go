@@ -293,6 +293,9 @@ func (s *LootSystem) Update() {
 		if newGridX != curX || newGridY != curY {
 			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
+		if int(lootComp.Type) < len(s.kinds) && s.kinds[lootComp.Type].Sound != "" {
+			s.sound(lootComp, s.kinds[lootComp.Type].Sound, newGridX, newGridY)
+		}
 
 		activeCount++
 	}
@@ -344,6 +347,26 @@ func (s *LootSystem) homingTarget(
 		vmath.Magnitude(ownerCenterX-kineticComp.PreciseX, ownerCenterY-kineticComp.PreciseY),
 		1.0, parameter.LootFlowLookahead)
 	return kineticComp.PreciseX + flowX*lookahead, kineticComp.PreciseY + flowY*lookahead, true
+}
+
+// sound sounds a drop from where it flies once a LootSoundPeriod, the first as it
+// sets out, pitched up by the share of its owner's route it has covered: the way
+// that route goes is heard, and how far along it the drop has come
+func (s *LootSystem) sound(drop *component.LootComponent, name string, x, y int) {
+	if drop.Route > 0 {
+		if drop.Sounded += s.world.Resources.Time.DeltaTime; drop.Sounded < parameter.LootSoundPeriod {
+			return
+		}
+	}
+	drop.Sounded = 0
+	if slot, ok := s.world.CursorSlot(drop.Owner); ok {
+		if field := s.world.Resources.Pursuit.Field(slot); field != nil {
+			if left := field.GetDistance(x, y); left >= 0 {
+				drop.Left, drop.Route = left, max(drop.Route, left, 1)
+			}
+		}
+	}
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{Name: name, X: x, Y: y, Placed: true, Pitch: drop.Rise()})
 }
 
 // --- Drop Resolution ---
@@ -470,11 +493,14 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		},
 	})
 
-	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
-		Active: true,
-		Type:   component.ShieldTypeLoot,
-		Radius: parameter.LootShieldRadius,
-	})
+	// A hidden kind's drop wears no shield, which is what draws a drop
+	if !s.kinds[lootType].Hidden {
+		s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
+			Active: true,
+			Type:   component.ShieldTypeLoot,
+			Radius: parameter.LootShieldRadius,
+		})
+	}
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
@@ -663,6 +689,11 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component
 		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X: pos.X, Y: pos.Y, Char: s.kinds[lootType].Look.Rune,
 		})
+		if sound := s.kinds[lootType].Sound; sound != "" {
+			s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
+				Name: sound, X: pos.X, Y: pos.Y, Placed: true, Pitch: parameter.LootSoundRise,
+			})
+		}
 	}
 
 	s.statCollects.Add(1)
