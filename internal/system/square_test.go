@@ -228,14 +228,15 @@ func TestALineFacesTheGatewaysOnItsSide(t *testing.T) {
 // side of the outer orbit
 func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 	w, _, sq := newSquare(t)
-	aspect := w.Resources.Config.CellAspect
+	cfg := w.Resources.Config
+	aspect := cfg.CellAspect
 	cx, cy := sq.Center()
 	reach := sq.ShieldRadius(aspect) + parameter.SquareOrbGap
 	rx, ry := int(math.Round(reach)), int(math.Round(aspect.FromCircular(reach)))
 	for l, want := range [component.SquareLines]vmath.Point{
 		{X: cx, Y: cy - ry}, {X: cx, Y: cy + ry}, {X: cx - rx, Y: cy}, {X: cx + rx, Y: cy},
 	} {
-		if got := sq.Orb(l, aspect); got != want {
+		if got := sq.Orb(l, aspect, cfg.MapWidth, cfg.MapHeight); got != want {
 			t.Errorf("line %d stands its orb at %v, want %v", l, got, want)
 		}
 	}

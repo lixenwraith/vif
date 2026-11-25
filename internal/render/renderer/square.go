@@ -84,7 +84,7 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 		look := &visual.SquareOrbs[kind]
 		line := sq.Line(component.SquareKind(kind))
 		if line < 0 {
-			r.orb(ctx, buf, sq.OrbAt(turn, ctx.CellAspect), look, spec.Name, visual.SquareOrbIdle, 0)
+			r.orb(ctx, buf, sq.OrbAt(turn, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight), look, spec.Name, visual.SquareOrbIdle, 0)
 			continue
 		}
 		since := spec.Cooldown - effect.Cooldown
@@ -95,7 +95,7 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 		if effect.Cooldown > 0 && since < parameter.OrbFlashDuration {
 			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
 		}
-		r.orb(ctx, buf, sq.Orb(line, ctx.CellAspect), look, spec.Name, 1, burst)
+		r.orb(ctx, buf, sq.Orb(line, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight), look, spec.Name, 1, burst)
 	}
 }
 
@@ -129,7 +129,7 @@ func (r *SquareRenderer) streaks(ctx render.RenderContext, buf *render.RenderBuf
 		head := turn + float64(i)*vmath.TwoPi/visual.SquareWhirlStreaks
 		last := vmath.Point{X: -1}
 		for n := range visual.SquareWhirlTail {
-			at := sq.OrbAt(head-sense*float64(n)/orbit, ctx.CellAspect)
+			at := sq.OrbAt(head-sense*float64(n)/orbit, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight)
 			sx, sy, visible := ctx.MapToScreen(at.X, at.Y)
 			if at == last || !visible {
 				continue
