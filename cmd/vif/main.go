@@ -599,6 +599,7 @@ func buildConfig() app.Config {
 	// shares the address of each guest that may take it over, which nobody is
 	// signed up for by a default.
 	cfg.Membership.Migrate = flagSession.authority == authorityMigrate
+	cfg.Membership.NoCheats = flagSession.noCheats
 	cfg.Membership.SlowPolicy = &flagSession.slow
 	cfg.Membership.ShedPolicy = &flagSession.shed
 	if cfg.FitSize = flagSession.size == sizeFit; flagSession.size != "" && !cfg.FitSize {
@@ -700,6 +701,7 @@ type sessionFlags struct {
 	players    int
 	bot        string
 	authority  string
+	noCheats   bool
 	listen     string
 	relay      string
 	cert, key  string
@@ -790,6 +792,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 			"survivor playing alone, %q hands it to a guest that allowed taking over "+
 			"([play] takeover), whose address the session shares. Default %q",
 		authorityHost, authorityMigrate, authorityHost))
+	fs.BoolVar(&f.noCheats, "no-cheats", false,
+		"Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts")
 }
 
 // authorityMigrate and authorityHost are the two -authority words, the ones

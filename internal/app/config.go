@@ -103,7 +103,7 @@ type wiring struct {
 }
 
 // configForJoin applies the host-authored simulation identity to local operator
-// options, and the session's -players to the run's wiring.
+// options, and the session's -players and -no-cheats to the run's wiring.
 func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	fromAnchor, err := ConfigFromAnchor(o.Anchor.Anchor)
 	if err != nil {
@@ -128,7 +128,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	local.TickInterval = fromAnchor.TickInterval
-	local.wiring.membership.SessionPlayers = o.Players
+	local.wiring.membership.SessionPlayers, local.wiring.membership.SessionNoCheats = o.Players, o.NoCheats
 	// The session's rate is its host's, a script's or bot's pace included; a
 	// harness's manual clock is driven by Tick and takes none.
 	if !local.Mode.Driven() || local.wiring.scriptedSession {
@@ -188,7 +188,8 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	}
 	c.Membership.HostAddress, c.wiring.resumeHost = "", next.Host
 	if next.Host != "" {
-		c.Membership.Migrate = next.Migrate // the session's, whoever set it: :host's word, or the host it came from
+		// The session's, whoever set them: :host's word, or the host it came from
+		c.Membership.Migrate, c.wiring.membership.SessionNoCheats = next.Migrate, next.NoCheats
 	}
 	switch {
 	case next.Rejoin:
@@ -229,7 +230,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 // alone is c as a run in no session.
 func (c runConfig) alone() *runConfig {
 	c.Membership.JoinAddress, c.Membership.SessionName, c.Membership.Watch = "", "", false
-	c.wiring.membership.SessionPlayers = 0
+	c.wiring.membership.SessionPlayers, c.wiring.membership.SessionNoCheats = 0, false
 	return &c
 }
 

@@ -140,7 +140,7 @@ type EnumDef struct {
 
 // EventDef is one entry in the generated registry
 type EventDef struct {
-	Name    string // constant identifier, e.g. "EventLevelSetup"
+	Name    string // constant identifier, e.g. "EventMapSetup"
 	Payload string // payload struct name; "" = registered as nil
 	Class   string // replication class constant, e.g. "ClassBus"
 }

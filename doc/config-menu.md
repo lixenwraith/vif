@@ -100,7 +100,9 @@ the reason. **Restart game** starts the game over from its scenario's first tick
 `:n` does. **Console** opens the console in the menu's place, as backtick and
 `:console` do ([Input §9](input-and-modes.md#9-command-mode)): on a touch screen,
 whose keyboard shows no backtick on its first page, it is the way there. **Game
-speed** runs from 1/8x through 8x, in a session the host's.
+speed** runs from 1/8x through 8x, in a session the host's. **God** and **Demon**
+act as `:god` and `:demon` do and close the menu; a run started with `-no-cheats`,
+or a session whose host was, reads them unavailable, as the commands refuse.
 
 ### Scenarios
 
@@ -238,8 +240,9 @@ new arrival resumes such a host. A session with other people keeps running. The
 menu's title ends with what the game does meanwhile: `game paused`, `game running`
 or `game waiting to start`; turning Pause in menu on or off with the menu open
 shows at once. Game → Pause, `:pause` and `p` are another kind of pause, which
-stands until resumed, whatever opens or closes; with the command line's pause off,
-they are how a game is paused from the keyboard.
+stands until resumed, whatever opens or closes, and takes the place of a step's, so
+their resume runs the game; with the command line's pause off, they are how a game
+is paused from the keyboard.
 
 ## Key binding and persistence
 

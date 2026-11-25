@@ -90,7 +90,7 @@ func TestAMapCellPointerReachesOnlyWhatTheViewportShows(t *testing.T) {
 	a := mustHeadless(t, fixtureSeed, 100, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	if !a.SetupLevel(400, 120, true, false) {
+	if !a.SetupMap(400, 120, true, false) {
 		t.Fatal("a solo run refused a map larger than its viewport")
 	}
 	tickUntilCursor(t, a)

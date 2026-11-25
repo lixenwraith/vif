@@ -57,8 +57,8 @@ A person's run under `-size` plays a map fixed at that size, or under `-size fit
 at their screen's as the run is built (`applyMapLatch`, `World.FixMap`). The screen
 still sizes all else, the status bar, the overlays and the view, which shows a
 smaller map centered and follows the cursor over a larger one. No resize crops
-the map or starts a waiting game over, a new game keeps its bounds and a level
-reset to the viewport leaves them, as in a session
+the map or starts a waiting game over, a new game keeps its bounds and a map
+setup of no size leaves them, as in a session
 ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)), with nothing
 else of a session's: the barrier `LockMap` engages stays off. Such a host's
 guests play on that map, a joiner who is a dedicated host's first person reports

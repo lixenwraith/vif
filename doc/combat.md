@@ -76,7 +76,7 @@ there. A tracer takes the cursor's polarity when fired: a positive one turns the
 red glyphs it crosses into blossom, a negative one turns blue ones green and
 releases decay from them.
 
-**`mount`** (shared) fires the one weapon a Shared host carries. A level attaches
+**`mount`** (shared) fires the one weapon a Shared host carries. A scenario attaches
 it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width, the
 `energy` and `heat` a hit costs, and a `pulse` table), capturing the host from
 `EventSpeciesCreated` as a gateway is attached; a species may set the component
@@ -103,7 +103,7 @@ damage through `Scale`; its cooldown runs from firing, so they also fire more of
 A ray mount cycles on its host's `RayComponent`: at rest until ready, then a
 warning with the ray laid and locked (its lane, or straight at the aim), then firing,
 striking the cursors inside every `RayHitInterval`, then rest for its interval. A
-laned ray needs no cursor in range; that is the level obstacle. Width is the
+laned ray needs no cursor in range; that is the map's obstacle. Width is the
 mount's to set; a cursor's is fixed.
 
 Storm's red and green circles carry mounts, their rows in `circleVariants`, which

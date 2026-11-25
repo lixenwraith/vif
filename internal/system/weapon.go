@@ -407,7 +407,7 @@ func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
 	}
 }
 
-// removeWeapon takes one kind from a cursor, its orb with it; a level takes the
+// removeWeapon takes one kind from a cursor, its orb with it; a scenario takes the
 // gun away this way for a region fought without it
 func (s *WeaponSystem) removeWeapon(cursor core.Entity, weapon component.WeaponType) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)

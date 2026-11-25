@@ -443,7 +443,7 @@ within a run. A `max` below `min` fails the load.
 
 Reads a `ConfigResource` field value into an FSM variable at execution time. Enables
 dynamic position arithmetic based on runtime dimensions. Under a shared map the
-viewport fields read the map bounds, so a level laid out around them is the same on
+viewport fields read the map bounds, so a map laid out around them is the same on
 every participant (D-14).
 
 Available fields (same set as `ConfigIntCompare`):

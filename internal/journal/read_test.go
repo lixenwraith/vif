@@ -64,7 +64,7 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 	p := write(t, "a.jsonl",
 		anchorLine,
 		`{"sub":"heartbeat","fields":{}}`, // a foreign line is skipped, not an error
-		record(1, "EventLevelSetup", "shared", "command"),
+		record(1, "EventMapSetup", "shared", "command"),
 		record(2, "EventCharacterTyped", "player", "input"),
 		`{"sub":"end","fields":{"jrun":0,"jtick":1107,"boundary":3}}`,
 	)
@@ -90,7 +90,7 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 		t.Errorf("anchor round-trip lost fields: %+v", a)
 	}
 
-	if got := s.Records[0]; got.Type != event.EventLevelSetup ||
+	if got := s.Records[0]; got.Type != event.EventMapSetup ||
 		got.Domain != core.DomainShared || got.Tick != 1 {
 		t.Errorf("record 0 round-trip: %+v", got)
 	}
@@ -114,7 +114,7 @@ func TestLoadReassemblesRotatedFiles(t *testing.T) {
 
 	later := strings.Replace(anchorLine, `"jseq":0,"jrun":0,"jtick":0`, `"jseq":2,"jrun":0,"jtick":600`, 1)
 	first := write(t, "1.jsonl", anchorLine,
-		record(1, "EventLevelSetup", "shared", "command"),
+		record(1, "EventMapSetup", "shared", "command"),
 		written(1, 1), written(1, 2),
 		record(2, "EventCharacterTyped", "player", "input"),
 		later)
@@ -154,7 +154,7 @@ func TestReplicatedSelectsTheTransportedSet(t *testing.T) {
 	event.EnsureRegistry()
 
 	p := write(t, "c.jsonl", anchorLine,
-		record(1, "EventLevelSetup", "shared", "command"),               // shared: kept
+		record(1, "EventMapSetup", "shared", "command"),                 // shared: kept
 		record(2, "EventCharacterTyped", "player", "input"),             // local: dropped
 		record(3, "EventExplosionRequest", "player", "system"),          // bus: kept
 		record(4, "EventCombatAttackDirectRequest", "shared", "system"), // stamped shared: kept
@@ -190,8 +190,8 @@ func TestLoadRejectsUnknownNames(t *testing.T) {
 
 	for _, tc := range []struct{ name, line string }{
 		{"event", record(1, "EventNoSuchThing", "shared", "command")},
-		{"domain", record(1, "EventLevelSetup", "sideways", "command")},
-		{"origin", record(1, "EventLevelSetup", "shared", "nowhere")},
+		{"domain", record(1, "EventMapSetup", "sideways", "command")},
+		{"origin", record(1, "EventMapSetup", "shared", "nowhere")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := Load(write(t, "bad.jsonl", anchorLine, tc.line)); err == nil {

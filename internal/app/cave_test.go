@@ -285,8 +285,8 @@ func TestARaiderKilledInAPairDropsEachPlayerOneU(t *testing.T) {
 	apps := []*App{host, guest}
 	for _, a := range apps {
 		tickUntilCursor(t, a)
-		if !a.SetupLevel(100, 30, true, false) {
-			t.Fatal("level setup refused before the session was live")
+		if !a.SetupMap(100, 30, true, false) {
+			t.Fatal("map setup refused before the session was live")
 		}
 		a.Tick(1)
 	}

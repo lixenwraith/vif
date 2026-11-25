@@ -394,7 +394,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 }
 
 // TestASizingHostIsNotRefusedByItsOwnLiveSession: the guest a host sizes from is on
-// the link, so the session is live when the level setup is pushed. That push is the
+// the link, so the session is live when the map setup is pushed. That push is the
 // host authoring the bounds before the roster closes, not an operator request, and
 // the refusal a live session answers operators with must not reach it.
 func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
@@ -524,7 +524,7 @@ func fixedMapScenario(t *testing.T) string {
 	root := t.TempDir()
 	dir := writeScenario(t, root, "fixed", "A map of its own size.")
 	main := "[states]\nMainStart = { parent = \"Root\", on_enter = [{ action = \"EmitEvent\", " +
-		"event = \"EventLevelSetup\", payload = { width = 90, height = 30, crop_on_resize = false } }] }\n"
+		"event = \"EventMapSetup\", payload = { width = 90, height = 30, crop_on_resize = false } }] }\n"
 	if err := os.WriteFile(filepath.Join(dir, "main.toml"), []byte(main), 0o600); err != nil {
 		t.Fatal(err)
 	}

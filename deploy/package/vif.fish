@@ -15,6 +15,7 @@ complete -c vif -o name -x -d 'Name this host answers to, so one address can ser
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested'
 complete -c vif -o bot -d 'Add bots alongside you: one where no count is given, the scenario\'s own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear'
 complete -c vif -o authority -x -a 'host migrate' -d 'What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares'
+complete -c vif -o no-cheats -d 'Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts, a successor\'s included; the menu\'s God and Demon read unavailable'
 complete -c vif -o slow-window -x -d 'Window a participant\'s lateness is judged over; host only, 0 never evicts (default 20s)'
 complete -c vif -o slow-late -x -d 'Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)'
 complete -c vif -o slow-bytes -x -d '...and at least this many bytes per second of it on its link; 0 ignores throughput (default 8192)'

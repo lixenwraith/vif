@@ -432,7 +432,7 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 			if ev.Type == event.EventGameResetRequest {
 				resets++
 			}
-			if p, ok := ev.Payload.(*event.LevelSetupPayload); ok && p.ClearEntities && !p.PreserveLoot {
+			if p, ok := ev.Payload.(*event.MapSetupPayload); ok && p.ClearEntities && !p.PreserveLoot {
 				resets++
 			}
 		})

@@ -55,7 +55,7 @@ type configNode struct {
 
 // configPages is the menu's pages, each a group of its sections and rows
 var configPages = []configNode{
-	{kind: kindGroup, key: "game", label: "Game", description: "The game running now: pause it, restart it from its scenario's first tick, or change its speed.", nodes: []configNode{
+	{kind: kindGroup, key: "game", label: "Game", description: "The game running now: pause it, restart it from its scenario's first tick, change its speed, or play it as god or demon.", nodes: []configNode{
 		{kind: kindAction, key: "pause", label: "Pause", name: pauseName, command: "pause", read: enterValue, disabled: pauseRefused,
 			description: "Stop the game until Resume, as the command :pause or the key p in Normal mode does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
 		{kind: kindAction, key: "restart", label: "Restart game", command: "new", read: enterValue, confirm: true, disabled: hostOnly("Only the host can restart the game in a session"),
@@ -67,6 +67,8 @@ var configPages = []configNode{
 			change: func(ctx *engine.GameContext, d int) {
 				handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
 			}, disabled: speedRefused},
+		commandAction("god", "God", "Max heat, full positive energy and every weapon, as the command :god does.", "god"),
+		commandAction("demon", "Demon", "Max heat, full negative energy and every weapon, as the command :demon does.", "demon"),
 	}, extra: replayConfigOptions},
 	{kind: kindGroup, key: "scenarios", label: "Scenarios", description: "Choose a scenario and start a game of it, or name one that is not listed.", extra: scenarioConfigOptions},
 	{kind: kindGroup, key: "multiplayer", label: "Multiplayer", description: "Host this game, join or leave a session, drop players, and add or remove your bots.", extra: multiplayerConfigOptions},

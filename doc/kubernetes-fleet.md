@@ -162,7 +162,11 @@ What bounds a stranger:
 - `-authority host`, which is every run's default and what keeps that one port the
   only one. A migrate session gives each guest that takes over a listening port and
   publishes the addresses inside the session; a fleet session is its address, so it
-  has no reason to want the other shape.
+  has no reason to want the other shape;
+- `-no-cheats`, so every build of this game refuses the grants (`:god` and the
+  rest) in a public match and reads God and Demon unavailable; a client changed to
+  ignore the offer still writes its own cursor's state, which no host bounds
+  ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 
 The firewall requirements in [Deployment §2](kube-docker-deploy.md#2-the-public-edge)
 are what stand in front of the rest: the forwarded surface is the front door's 7777
@@ -262,7 +266,7 @@ By hand, on a dev machine — see [`script/README.md`](../script/README.md):
 
 # the flag set the containers run; from another terminal, its probe and a join
 ./bin/vif -serve 127.0.0.1:7777 -probe 127.0.0.1:7778 -name 0123456789abcdef \
-    -authority host -d -size 120x40 -players 4 -first-join 90s -empty 90s -drain 20s
+    -authority host -no-cheats -d -size 120x40 -players 4 -first-join 90s -empty 90s -drain 20s
 curl -s http://127.0.0.1:7778/health          # and /metrics
 ./bin/vif -join vif://127.0.0.1:7777/0123456789abcdef
 ```

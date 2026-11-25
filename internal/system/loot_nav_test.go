@@ -15,7 +15,7 @@ func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 	w, owner, _ := testCursorWorld(t)
 	loot := ready(NewLootSystem(w)).(*LootSystem)
 	drop := dropLoot(w, loot, 35, 20, owner)
-	w.SetupLevel(20, 12, true, false, true)
+	w.SetupMap(20, 12, true, false, true)
 	loot.Update()
 	pos, ok := w.Positions.GetPosition(drop)
 	if !ok || !w.Components.Loot.HasEntity(drop) || !w.Positions.InBounds(pos) {
@@ -25,7 +25,7 @@ func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 		t.Fatal("preserved loot could not reach its owner after the resize")
 	}
 	drop = dropLoot(w, loot, 15, 10, owner)
-	w.SetupLevel(20, 12, true, false, false)
+	w.SetupMap(20, 12, true, false, false)
 	if w.Components.Loot.HasEntity(drop) {
 		t.Fatal("a game reset preserved the previous run's loot")
 	}

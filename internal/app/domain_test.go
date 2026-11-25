@@ -574,7 +574,7 @@ func TestAppsScopeOperatorState(t *testing.T) {
 
 	for _, x := range []*App{a, b} {
 		tickUntilCursor(t, x)
-		x.SetupLevel(100, 30, true, false)
+		x.SetupMap(100, 30, true, false)
 	}
 
 	a.Resize(140, 44)
@@ -739,7 +739,7 @@ func cellKeys[C interface {
 	return out
 }
 
-// TestEmbedderSharedMutationIsRefusedInALiveSession. SetupLevel and Region carry
+// TestEmbedderSharedMutationIsRefusedInALiveSession. SetupMap and Region carry
 // ClassShared payloads: applied locally they change one instance's map bounds or FSM
 // regions and no correction repairs the result. event.OnWire admits only Bus and
 // Stamped, so a ClassShared event reaches no peer whoever pushes it — the authority
@@ -770,8 +770,8 @@ func TestEmbedderSharedMutationIsRefusedInALiveSession(t *testing.T) {
 		name string
 		app  *App
 	}{{"host", host}, {"guest", guest}} {
-		if x.app.SetupLevel(60, 20, true, false) {
-			t.Fatalf("%s published a level setup into a live session", x.name)
+		if x.app.SetupMap(60, 20, true, false) {
+			t.Fatalf("%s published a map setup into a live session", x.name)
 		}
 		if x.app.Region(event.RegionPause, "main", "") {
 			t.Fatalf("%s published an FSM region change into a live session", x.name)

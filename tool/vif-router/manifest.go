@@ -71,6 +71,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 		// player whose link named another session.
 		"-name", id,
 		"-authority", "host",
+		"-no-cheats", // a public match: no player sets their own energy, heat or weapons
 		"-l=/var/log/vif-fleet",
 		"-log-session-id=" + id,
 		"-lv", cfg.LogLevel,

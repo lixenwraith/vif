@@ -150,7 +150,7 @@ func (s *NavigationSystem) Priority() int {
 func (s *NavigationSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
-		event.EventLevelSetup,
+		event.EventMapSetup,
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,
 		event.EventNavigationRegraph,
@@ -169,8 +169,8 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventLevelSetup:
-		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+	case event.EventMapSetup:
+		if payload, ok := ev.Payload.(*event.MapSetupPayload); ok {
 			s.resize(payload.Width, payload.Height)
 		}
 

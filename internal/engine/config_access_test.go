@@ -45,7 +45,7 @@ func TestEveryConfigKeyIsClassified(t *testing.T) {
 
 // TestTheDrawableExtentFollowsTheLatch is the D-14 read a map script makes. A run
 // that owns its bounds draws on its terminal; under the latch the terminal is one
-// instance's and the map is everyone's, so a script sizing a level from "the
+// instance's and the map is everyone's, so a script sizing the map from "the
 // viewport" must not resize the shared map to whichever terminal grew.
 func TestTheDrawableExtentFollowsTheLatch(t *testing.T) {
 	w := NewWorld()

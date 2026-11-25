@@ -148,14 +148,14 @@ func (s *CursorSystem) move(p *event.CursorMoveRequestPayload, own bool) {
 	x := max(0, min(p.X, config.MapWidth-1))
 	y := max(0, min(p.Y, config.MapHeight-1))
 
-	// Announce unconditionally: a same-cell request is a reconcile (resize, level setup)
+	// Announce unconditionally: a same-cell request is a reconcile (resize, map setup)
 	// and consumers still need it; the store write is what elides
 	if x != pos.X || y != pos.Y {
 		s.world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	}
 
 	// The applied cell is the authority. It settles one D-18 prediction if this
-	// instance requested it, and replaces the queue if it did not — a level setup,
+	// instance requested it, and replaces the queue if it did not — a map setup,
 	// a wall push-out or a peer's reset places the local cursor too.
 	s.world.ReconcileLocalCursor(e, x, y, own)
 

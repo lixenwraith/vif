@@ -1686,9 +1686,9 @@ func runSplitSettleScript(t *testing.T, a *App) int {
 	t.Helper()
 	r := newScriptRunner(t, a)
 
-	// SetupLevel clamps the cursor and queues CursorMoved; the motion below records
+	// SetupMap clamps the cursor and queues CursorMoved; the motion below records
 	// an absolute position that a later pass would otherwise overwrite
-	a.SetupLevel(60, 30, true, true)
+	a.SetupMap(60, 30, true, true)
 	if !a.Inject(intentMotion(input.MotionRight, 8)) {
 		t.Fatal("quit")
 	}
@@ -1971,7 +1971,7 @@ func TestResizeReflowsAndRejects(t *testing.T) {
 			t.Parallel()
 			replayAndCompare(t, func(t *testing.T, a *App) int {
 				r := newScriptRunner(t, a)
-				a.SetupLevel(60, 30, true, crop)
+				a.SetupMap(60, 30, true, crop)
 				r.step(2, intentMotion(input.MotionRight, 8))
 				r.step(2, intentMotion(input.MotionDown, 6))
 
@@ -2148,14 +2148,14 @@ func TestInputTickSerializesCursorLifecycle(t *testing.T) {
 	}
 }
 
-// TestReplayResetThenCursor pins the window the soak diverges in: a level whose map
+// TestReplayResetThenCursor pins the window the soak diverges in: a map that
 // differs from the viewport, a reset, then cursor and mode intents applied before any
 // tick of the new run, while the FSM reset is still pending
 func TestReplayResetThenCursor(t *testing.T) {
 	t.Parallel()
 	replayAndCompare(t, func(t *testing.T, a *App) int {
 		r := newScriptRunner(t, a)
-		a.SetupLevel(40, 16, true, false) // map decoupled from the viewport
+		a.SetupMap(40, 16, true, false) // map decoupled from the viewport
 		r.step(2, intentMotion(input.MotionRight, 6))
 
 		a.Reset(false)

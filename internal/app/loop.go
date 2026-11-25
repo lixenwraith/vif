@@ -644,7 +644,7 @@ func (a *App) pushMenu(snapshot []byte) {
 	a.menuHost.Menu(snapshot)
 }
 
-// renderContext reads everything a frame draws from in one critical section: LevelSetup
+// renderContext reads everything a frame draws from in one critical section: map setup
 // and reset handlers mutate Config under updateMutex, so it is read with the cursor and
 // the continuous clock, tick-written stamps being quantized and stepping a slowed
 // animation. Each is a local copy: a render writes no tick-owned resource. The menu's
