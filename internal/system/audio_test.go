@@ -243,3 +243,27 @@ func TestTheConductorSendsTheBedThePlayersSettingAsks(t *testing.T) {
 		t.Fatalf("dynamic from off starts at %g Hz, want the tempo's %g", m.bed.Beat, tempo)
 	}
 }
+
+// TestAPlacedSoundIsHeardFromTheCursor: a sound placed left of the cursor pans left,
+// one below it is muffled and one above it open, the further quieter, its pitch kept.
+func TestAPlacedSoundIsHeardFromTheCursor(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	s := NewAudioSystem(w).(*AudioSystem)
+	cursor, ok := w.LocalCursor()
+	if !ok {
+		t.Fatal("no local cursor")
+	}
+	at := func(dx, dy int) audio.Placement {
+		return s.placement(&event.SoundRequestPayload{X: cursor.X + dx, Y: cursor.Y + dy, Placed: true, Pitch: 3})
+	}
+	near, leftBelow, rightAbove := at(1, 0), at(-10, 4), at(10, -4)
+	if leftBelow.Pan >= 0 || rightAbove.Pan <= 0 {
+		t.Errorf("pans %.2f left and %.2f right, want them either side of the middle", leftBelow.Pan, rightAbove.Pan)
+	}
+	if leftBelow.Cutoff == 0 || rightAbove.Cutoff != 0 {
+		t.Errorf("cutoffs %.0f below and %.0f above, want a low-pass below alone", leftBelow.Cutoff, rightAbove.Cutoff)
+	}
+	if leftBelow.Gain >= near.Gain || near.Pitch != 3 {
+		t.Errorf("far gain %.1f against near %.1f, pitch %.1f: want the far quieter and the pitch kept", leftBelow.Gain, near.Gain, near.Pitch)
+	}
+}

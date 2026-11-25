@@ -95,7 +95,12 @@ What vif sets of the engine:
   sound = "chime" }`, or gives a button one, and `AudioSystem` resolves the name
   as it plays; such a name skips startup resolution, so a mistyped one is silent
   and counts only as a bad-ID rejection. The sfx volume is the player's `[play]
-  sfx_volume`.
+  sfx_volume`. `pitch` moves any sound that many semitones, and `placed = true`
+  sounds it from its cell `x`, `y` as the cursor this instance drives hears it
+  (`AudioSystem.placement`, the library's `PlayAt`): panned by its column against
+  half the view's width, quieter with distance to 18 dB down at the view's corner,
+  and low-passed as it lies below the cursor, the deeper the duller, since stereo
+  has no ahead and behind.
 - **Mute.** `Ctrl-S` cycles the composed audio mask through silence, sfx only,
   music only, and both. Every build starts with both on, as the embedded
   `vif.toml`'s `[play]` says, until the player's own settings say otherwise;

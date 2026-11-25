@@ -37,10 +37,16 @@ type ScreenResizePayload struct {
 // --- Audio ---
 
 // SoundRequestPayload names the sound to play: Go emitters pass the resolved ID,
-// configuration passes the name, which AudioSystem resolves when ID is zero
+// configuration passes the name, which AudioSystem resolves when ID is zero. A
+// placed sound sounds from its cell as the cursor this instance drives hears it,
+// and any sound Pitch semitones off its own.
 type SoundRequestPayload struct {
-	ID   model.SoundID `toml:"sound_id"`
-	Name string        `toml:"sound"`
+	ID     model.SoundID `toml:"sound_id"`
+	Name   string        `toml:"sound"`
+	X      int           `toml:"x"`
+	Y      int           `toml:"y"`
+	Placed bool          `toml:"placed"`
+	Pitch  float64       `toml:"pitch"`
 }
 
 type AudioMuteToggleMode uint8

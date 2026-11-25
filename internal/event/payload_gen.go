@@ -422,6 +422,10 @@ func (p *SoundRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecSoundRequestPayload = structCodec{size: unsafe.Sizeof(SoundRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SoundRequestPayload{}.ID), kind: kindInt, size: unsafe.Sizeof(model.SoundID(0))},
 	{off: unsafe.Offsetof(SoundRequestPayload{}.Name), kind: kindString},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Placed), kind: kindBool},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Pitch), kind: kindFloat},
 }}
 
 func (p *AudioMuteTogglePayload) codec() (*structCodec, unsafe.Pointer) {
