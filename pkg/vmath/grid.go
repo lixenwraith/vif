@@ -235,3 +235,45 @@ func (r Ray) Contains(x, y int) bool {
 
 // Octants are the eight grid directions clockwise from east, y growing down
 var Octants = [8][2]int{{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}}
+
+// ShadowCast lights a wedge out from (x, y) along (dx, dy), one of the four axis
+// directions, up to reach cells: spread cells across for each cell along, either
+// side. A cell opaque reports is lit and shades what lies behind it, an open one is
+// lit where its middle is in sight: symmetric shadowcasting, so of two open cells
+// either sees the other when it sees the first.
+func ShadowCast(x, y, dx, dy int, spread float64, reach int, opaque func(x, y int) bool, lit func(x, y int)) {
+	type row struct {
+		depth      int
+		start, end float64
+	}
+	px, py := IntAbs(dy), IntAbs(dx)
+	slope := func(depth, col int) float64 { return float64(2*col-1) / float64(2*depth) }
+	rows := []row{{1, -spread, spread}}
+	for len(rows) > 0 {
+		r := rows[len(rows)-1]
+		rows = rows[:len(rows)-1]
+		if r.depth > reach || r.start > r.end {
+			continue
+		}
+		d := float64(r.depth)
+		lo, hi := int(math.Floor(d*r.start+0.5)), int(math.Ceil(d*r.end-0.5))
+		wasWall, any := false, false
+		for col := lo; col <= hi; col++ {
+			cx, cy := x+r.depth*dx+col*px, y+r.depth*dy+col*py
+			wall := opaque(cx, cy)
+			if wall || float64(col) >= d*r.start && float64(col) <= d*r.end {
+				lit(cx, cy)
+			}
+			switch {
+			case any && wasWall && !wall:
+				r.start = slope(r.depth, col)
+			case any && !wasWall && wall:
+				rows = append(rows, row{r.depth + 1, r.start, slope(r.depth, col)})
+			}
+			wasWall, any = wall, true
+		}
+		if any && !wasWall {
+			rows = append(rows, row{r.depth + 1, r.start, r.end})
+		}
+	}
+}

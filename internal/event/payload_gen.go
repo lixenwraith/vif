@@ -150,6 +150,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGrayoutStart:                    func() any { return new(CursorScopePayload) },
 	EventGrayoutEnd:                      func() any { return new(CursorScopePayload) },
 	EventStrobeRequest:                   func() any { return new(StrobeRequestPayload) },
+	EventSightRequest:                    func() any { return new(SightPayload) },
 	EventSpiritSpawnRequest:              func() any { return new(SpiritSpawnRequestPayload) },
 	EventLightningSpawnRequest:           func() any { return new(LightningSpawnRequestPayload) },
 	EventLightningUpdateRequest:          func() any { return new(LightningUpdateRequestPayload) },
@@ -340,6 +341,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGrayoutStart:                    &codecCursorScopePayload,
 	EventGrayoutEnd:                      &codecCursorScopePayload,
 	EventStrobeRequest:                   &codecStrobeRequestPayload,
+	EventSightRequest:                    &codecSightPayload,
 	EventSpiritSpawnRequest:              &codecSpiritSpawnRequestPayload,
 	EventLightningSpawnRequest:           &codecLightningSpawnRequestPayload,
 	EventLightningUpdateRequest:          &codecLightningUpdateRequestPayload,
@@ -1686,6 +1688,15 @@ var codecStrobeRequestPayload = structCodec{size: unsafe.Sizeof(StrobeRequestPay
 	{off: unsafe.Offsetof(StrobeRequestPayload{}.Intensity), kind: kindFloat},
 	{off: unsafe.Offsetof(StrobeRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(StrobeRequestPayload{}.Cursor), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *SightPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSightPayload, unsafe.Pointer(p)
+}
+
+var codecSightPayload = structCodec{size: unsafe.Sizeof(SightPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SightPayload{}.Dark), kind: kindBool},
+	{off: unsafe.Offsetof(SightPayload{}.Trail), kind: kindBool},
 }}
 
 func (p *SpiritSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

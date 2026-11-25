@@ -467,6 +467,8 @@ const (
 	EventGrayoutEnd
 	// EventStrobeRequest (StrobeRequestPayload) [local] triggers screen flash effect
 	EventStrobeRequest
+	// EventSightRequest (SightPayload) [local] sets how this instance shows the map: dark but where its moving cursor's light falls, and the trail that cursor walked
+	EventSightRequest
 
 	// --- Spirit ---
 

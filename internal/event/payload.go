@@ -218,6 +218,13 @@ type CursorCrushedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
+// SightPayload is how a map shows: Dark hides every cell the light of the cursor
+// this instance drives has not just fallen on, and Trail draws the cells it walked
+type SightPayload struct {
+	Dark  bool `toml:"dark"`
+	Trail bool `toml:"trail"`
+}
+
 // CursorScopePayload scopes local effects to an owned cursor, or all local cursors
 // when zero. Shared FSM emissions need this scope to preserve D-6.
 type CursorScopePayload struct {

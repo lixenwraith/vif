@@ -292,7 +292,16 @@ which concrete renderer produced them:
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
 - strobe supplies a deferred background overlay for otherwise untouched cells;
   a console shows it in one step, in its nearest background, while the envelope
-  is past half its peak.
+  is past half its peak;
+- sight, before them all, keeps of a dark map's cells only what the local
+  cursor's light just fell on (`EventSightRequest { dark }`): each step throws a
+  right angle of light on the screen toward its way, its sides diagonal to the
+  screen's edges whatever the cell's aspect, which walls stop
+  (`vmath.ShadowCast`, symmetric shadowcasting), and a lit cell fades back to
+  nothing painted over `SightFade` (`RenderBuffer.Shade`). It reads the light off
+  the cursor's own cell from frame to frame, so a replay and a spectator see it as
+  its player did, and with `trail` it draws the cells the cursor walked since it
+  last jumped, its first marked as where the walk began.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.
@@ -390,7 +399,7 @@ also the visual stacking order; exact integer priorities are in
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Overlay effects | `square`, opaque over the shield and every field, then `landing`, `button`, `splash`, `marker` |
-| Post-process | `grayout`, `strobe`, `dim` |
+| Post-process | `sight`, `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
 | Debug and telemetry | `flowfield`, `machine`, `pinned_state`, `overlay` |
 

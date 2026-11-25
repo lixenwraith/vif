@@ -28,6 +28,13 @@ type ViewResource struct {
 	Grayout    GrayoutState
 	Strobe     StrobeState
 	ButtonEcho ButtonEchoState
+	Sight      SightState
+}
+
+// SightState is how the map shows: Dark leaves only what the moving cursor's light
+// falls on, a moment each, and Trail draws the cells the cursor walked
+type SightState struct {
+	Dark, Trail bool
 }
 
 // ButtonEchoState is this instance's latest own press of a button, lit at production;
@@ -76,6 +83,7 @@ func (r *ViewResource) Reset() {
 	r.Grayout = GrayoutState{}
 	r.Strobe = StrobeState{}
 	r.ButtonEcho = ButtonEchoState{}
+	r.Sight = SightState{}
 }
 
 // --- Explosion API ---
