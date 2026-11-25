@@ -231,7 +231,14 @@ species through its member footprint and is never pushed back. A hit applies the
 rule's collision profile (`internal/profile/collision.go`) as an impulse along
 the radial and opens a kinetic-immunity window (`SoftCollisionImmunityDuration`)
 that steering and flocking read as displacement; an immune or enraged target is
-skipped. A second matrix adds continuous flocking separation: swarms and quasars
+skipped. A push loses each part that runs into a side its target stands against,
+the map's edge or a wall it bounces off by its footprint (`open`), as the bounce
+would; one left with nothing is none and opens no window, so a body pressed into a
+corner steers out instead of taking the push again each time its window closes. A
+pair on one cell, a push's or a flock's, parts a way it draws each tick (`apart`),
+so a pile scatters every way. In `magic` at 130 by 30, two minutes of bodies no
+weapon wears left 42 of 174 standing five seconds or more between a gateway's pylon
+and its corner before, none after. A second matrix adds continuous flocking separation: swarms and quasars
 repel each other and drains, and drains repel only drains, so shared motion
 never reads drain positions. A data species with mass takes the swarm's and
 quasar's part in both, across an ellipse half its footprint; one without takes

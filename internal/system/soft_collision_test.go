@@ -169,3 +169,86 @@ func TestSoftCollisionBlocksHoldEveryBodyInReach(t *testing.T) {
 		}
 	}
 }
+
+// softTarget stands a swarm at rest with its header at (x, y), open to every push
+func softTarget(w *engine.World, x, y int) core.Entity {
+	e := w.CreateEntity(core.DomainShared)
+	w.Components.Swarm.SetComponent(e, component.SwarmComponent{})
+	w.Components.Combat.SetComponent(e, component.CombatComponent{HitPoints: 1})
+	w.Components.Kinetic.SetComponent(e, component.KineticComponent{})
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	return e
+}
+
+// TestASoftPushRunsNoneIntoASideItsTargetStandsAgainst: a pylon pushing a body up
+// and right pushes it up alone against a wall at its right, and not at all from
+// the map's corner it stands in, where the body takes no immunity and steers on
+func TestASoftPushRunsNoneIntoASideItsTargetStandsAgainst(t *testing.T) {
+	foot := component.Footprints[component.SpeciesSwarm]
+	for _, tc := range []struct {
+		name       string
+		wall       bool
+		corner     bool
+		wantX      bool
+		wantPushed bool
+	}{
+		{name: "open", wantX: true, wantPushed: true},
+		{name: "wall", wall: true, wantPushed: true},
+		{name: "corner", corner: true},
+	} {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+		cfg := w.Resources.Config
+		x, y := 10, 10
+		if tc.corner {
+			x, y = cfg.MapWidth-foot.Width+foot.HeaderX, foot.HeaderY
+		}
+		body := softTarget(w, x, y)
+		pylon := w.CreateEntity(core.DomainShared)
+		w.Components.Pylon.SetComponent(pylon, component.PylonComponent{SpawnX: x - 1, SpawnY: y + 1})
+		if tc.wall {
+			wall := w.CreateEntity(core.DomainShared)
+			w.Positions.SetPosition(wall, component.PositionComponent{X: x - foot.HeaderX + foot.Width, Y: y})
+			w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockKinetic})
+		}
+		s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
+		s.rebuildCaches()
+		s.processAllCollisions()
+
+		k, _ := w.Components.Kinetic.GetComponent(body)
+		c, _ := w.Components.Combat.GetComponent(body)
+		if pushed := c.RemainingKineticImmunity > 0; pushed != tc.wantPushed || tc.wantPushed && k.VelY >= 0 {
+			t.Errorf("%s: velocity (%.2f, %.2f), immune %t; want pushed up %t", tc.name, k.VelX, k.VelY, pushed, tc.wantPushed)
+		}
+		if right := k.VelX > -k.VelY/2; right != tc.wantX {
+			t.Errorf("%s: velocity (%.2f, %.2f) runs right %t, want %t", tc.name, k.VelX, k.VelY, right, tc.wantX)
+		}
+	}
+}
+
+// TestABodyOnItsSourcesCellPartsEveryWay: a body standing on its source's cell is
+// pushed a way drawn anew each tick, to either side, not always the same one
+func TestABodyOnItsSourcesCellPartsEveryWay(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	body := softTarget(w, 20, 10)
+	pylon := w.CreateEntity(core.DomainShared)
+	w.Components.Pylon.SetComponent(pylon, component.PylonComponent{SpawnX: 20, SpawnY: 10})
+	s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
+	var left, right int
+	for range 16 {
+		w.Resources.Game.State.IncrementGameTicks()
+		w.Components.Kinetic.SetComponent(body, component.KineticComponent{})
+		w.Components.Combat.SetComponent(body, component.CombatComponent{HitPoints: 1})
+		s.rebuildCaches()
+		s.processAllCollisions()
+		if k, _ := w.Components.Kinetic.GetComponent(body); k.VelX < 0 {
+			left++
+		} else if k.VelX > 0 {
+			right++
+		}
+	}
+	if left == 0 || right == 0 {
+		t.Fatalf("a body on its source's cell parted left %d and right %d times in 16 ticks, want both", left, right)
+	}
+}
