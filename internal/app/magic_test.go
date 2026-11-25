@@ -132,11 +132,11 @@ func TestMagicsWeaponsWearEveryBody(t *testing.T) {
 	}
 }
 
-// TestMagicKeepsAHeatBurstForEnter: heat filling its overheat in the shipped magic
-// leaves the overheat full with the ember that fighter lights put out, whole through
-// what special fire spends, and Enter then runs a death wave out from the cursor
-// and empties it
-func TestMagicKeepsAHeatBurstForEnter(t *testing.T) {
+// TestMagicsBurstFillsByHeatAndHitsForEnter: in the shipped magic each hit the
+// cursor's shield takes and each heat it gains fill its burst meter, overheat
+// bursting with no ember, and Enter runs a death wave out from the cursor on a full
+// meter alone, emptying it
+func TestMagicsBurstFillsByHeatAndHitsForEnter(t *testing.T) {
 	t.Parallel()
 	a := newMagic(t)
 	w := a.World()
@@ -158,22 +158,28 @@ func TestMagicKeepsAHeatBurstForEnter(t *testing.T) {
 		a.Inject(a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}))
 		a.Tick(3)
 	}
-	if enter(); waves() != 0 {
-		t.Fatal("Enter ran a death wave with no overheat to spend")
+	push := func(et event.EventType, p any) {
+		a.Context().PushEventOrigin(et, p, event.OriginDebug)
+		a.Settle()
 	}
-	a.Context().PushEventOrigin(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Entity: cursor, Delta: parameter.HeatMaxOverheat}, event.OriginDebug)
-	a.Settle()
-	a.Tick(3)
-	if n := waves(); n != 0 || heat.Current != parameter.HeatMax || heat.Overheat != parameter.HeatMaxOverheat || heat.EmberActive {
-		t.Fatalf("a filled overheat runs %d death waves over heat %d+%d with the ember lit %t; want none, 100+100 and no ember",
-			n, heat.Current, heat.Overheat, heat.EmberActive)
+	hit := func(n int) {
+		for range n {
+			push(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{Entity: cursor, Value: -1})
+		}
 	}
-	// What a dust blast spends is given back, so the burst stays whole
-	a.Context().PushEventOrigin(event.EventHeatSpendRequest, &event.HeatSpendRequestPayload{Entity: cursor, Amount: parameter.SpecialAttackHeatCost}, event.OriginDebug)
-	a.Settle()
-	a.Tick(2)
-	if enter(); waves() != 1 || heat.Current != parameter.HeatMax || heat.Overheat != 0 {
-		t.Fatalf("Enter on a full overheat runs %d death waves and leaves heat %d+%d; want one and 100+0", waves(), heat.Current, heat.Overheat)
+	short := parameter.BurstFull - parameter.BurstPerShieldHit
+	hit(short / parameter.BurstPerShieldHit)
+	if enter(); waves() != 0 || heat.Burst != short {
+		t.Fatalf("Enter on a burst a hit short runs %d death waves and leaves it at %d; want none at %d", waves(), heat.Burst, short)
+	}
+	hit(1)
+	if enter(); waves() != 1 || heat.Burst != 0 {
+		t.Fatalf("Enter on a burst filled by hits runs %d death waves and leaves it at %d; want one and empty", waves(), heat.Burst)
+	}
+	push(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Entity: cursor, Delta: parameter.HeatMaxOverheat})
+	if enter(); waves() != 2 || heat.Burst != 0 || heat.EmberActive {
+		t.Fatalf("Enter on a burst filled by %d heat, which burst the overheat, ran %d death waves in all, left it at %d with the ember lit %t; want two, empty, no ember",
+			parameter.HeatMaxOverheat, waves(), heat.Burst, heat.EmberActive)
 	}
 }
 
