@@ -219,7 +219,7 @@ var topics = []topicDef{
 			{Actions: []string{"overlay_filter"}, Scope: input.SectionOverlay, Desc: "Search every page: rows matching all the words typed list with their page and act in place; Enter keeps the search, Escape clears it"},
 			{Actions: []string{"overlay_close"}, Scope: input.SectionOverlay, Desc: "Clear a search, back to the pages, then close; changes stay applied"},
 			{Keys: "Values in brackets", Desc: "Unavailable or read only; the explanation below gives the reason"},
-			{Keys: "Pages", Desc: "Game: pause, restart, speed. Scenarios: mark one, then Start. Multiplayer: session, players, bots. Settings: saved preferences. Developer: logs, profiles, overlays. Launch options: flags and files"},
+			{Keys: "Pages", Desc: "Game: pause, restart, speed, god and demon. Scenarios: mark one, then Start. Multiplayer: session, players, bots. Settings: saved preferences. Developer: logs, profiles, overlays. Launch options: flags and files"},
 			{Actions: []string{"motion_up", "motion_down"}, Scope: input.SectionText, Desc: "Forms: move between fields, or leave a row's text box; Left/Right and Home/End edit the cursor position"},
 			{Actions: []string{"text_confirm"}, Scope: input.SectionText, Desc: "Forms: submit all fields; Escape cancels without submitting"},
 			{Keys: "Pausing", Desc: "Solo play pauses while the menu is open unless Settings > Pause in menu is off, and a live session runs on; the title says which. Game > Pause stops either until Resume. Replays keep only viewer controls"},
