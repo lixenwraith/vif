@@ -552,6 +552,8 @@ const (
 	EventWallPatternSpawnRequest
 	// EventMazeSpawnRequest (MazeSpawnRequestPayload) [shared] signals maze generation and wall spawning
 	EventMazeSpawnRequest
+	// EventMazeSpawned (MazeSpawnedPayload) [shared] answers a maze laid: its block, its first room's middle and an open block far from it by the maze's way
+	EventMazeSpawned
 	// EventCaveStart (CaveStartPayload) [shared] fills the map with a cave and scrolls it left, in place of any running one
 	EventCaveStart
 	// EventCaveStop (CaveStopPayload) [shared] halts the cave's scroll at once or eased to a rest, leaving its walls where they stand

@@ -1690,6 +1690,20 @@ type MazeSpawnRequestPayload struct {
 	// Mixed/smaller structs and scalars
 	Visual        component.WallVisualConfig `toml:"visual"`
 	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
+	Walled        bool                       `toml:"walled"` // keeps the outer wall, which is open otherwise
+}
+
+// MazeSpawnedPayload is a maze as laid: its block, the cell in the middle of its
+// first room, and the middle of an open block among the farthest from that room by
+// the maze's own way, drawn at random, where a cursor that must cross it stands; -1
+// for a cell the maze has none of
+type MazeSpawnedPayload struct {
+	CellWidth  int `toml:"cell_width"`
+	CellHeight int `toml:"cell_height"`
+	RoomX      int `toml:"room_x"`
+	RoomY      int `toml:"room_y"`
+	FarX       int `toml:"far_x"`
+	FarY       int `toml:"far_y"`
 }
 
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the

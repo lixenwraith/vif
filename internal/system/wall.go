@@ -1001,7 +1001,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		Width:             mazeWidth,
 		Height:            mazeHeight,
 		Braiding:          payload.Braiding,
-		RemoveBorders:     true,
+		RemoveBorders:     !payload.Walled,
 		RoomCount:         payload.RoomCount,
 		Rooms:             rooms,
 		DefaultRoomWidth:  payload.DefaultRoomWidth / payload.CellWidth,
@@ -1092,6 +1092,41 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 			First: laid.first, Last: laid.last, Duration: time.Duration(payload.FadeInMs) * time.Millisecond,
 		})
 	}
+	s.world.PushEvent(event.EventMazeSpawned, s.mazeLaid(payload, result))
+}
+
+// mazeLaid names a maze as laid: the middle of its first room's middle block, the
+// one asked for or else the one drawn, and an open block drawn from those within
+// the last quarter of the way from that room, or from the maze's start with none
+func (s *WallSystem) mazeLaid(p *event.MazeSpawnRequestPayload, result maze.Result) *event.MazeSpawnedPayload {
+	laid := &event.MazeSpawnedPayload{CellWidth: p.CellWidth, CellHeight: p.CellHeight, RoomX: -1, RoomY: -1, FarX: -1, FarY: -1}
+	cell := func(at maze.Point) (int, int) {
+		return at.X*p.CellWidth + p.CellWidth/2, at.Y*p.CellHeight + p.CellHeight/2
+	}
+	from, room := result.Start, false
+	switch {
+	case len(p.Rooms) > 0 && (p.Rooms[0].CenterX != 0 || p.Rooms[0].CenterY != 0):
+		from, room = maze.Point{X: p.Rooms[0].CenterX / p.CellWidth, Y: p.Rooms[0].CenterY / p.CellHeight}, true
+	case len(result.Rooms) > 0:
+		r := result.Rooms[0]
+		from, room = maze.Point{X: r.X + r.Width/2, Y: r.Y + r.Height/2}, true
+	}
+	if room {
+		laid.RoomX, laid.RoomY = cell(from)
+	}
+	dist := maze.Distances(result.Grid, from)
+	far := slices.Max(dist)
+	var picks []int
+	for i, d := range dist {
+		if far > 0 && 4*d >= 3*far {
+			picks = append(picks, i)
+		}
+	}
+	if len(picks) > 0 {
+		i, cols := picks[s.genRng.IntN(len(picks))], len(result.Grid[0])
+		laid.FarX, laid.FarY = cell(maze.Point{X: i % cols, Y: i / cols})
+	}
+	return laid
 }
 
 // computeBoxCharsInArea draws a batch's box characters once all its walls stand, since

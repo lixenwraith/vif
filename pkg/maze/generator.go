@@ -731,6 +731,31 @@ func forceOpen(grid [][]bool, p Point) {
 	}
 }
 
+// Distances is each cell's steps from from along the grid's passages, row after
+// row, -1 for a wall and for a passage from never reaches
+func Distances(grid [][]bool, from Point) []int {
+	rows, cols := len(grid), 0
+	if rows > 0 {
+		cols = len(grid[0])
+	}
+	dist := slices.Repeat([]int{-1}, rows*cols)
+	if from.X < 0 || from.Y < 0 || from.X >= cols || from.Y >= rows || grid[from.Y][from.X] == Wall {
+		return dist
+	}
+	dist[from.Y*cols+from.X] = 0
+	for queue := []Point{from}; len(queue) > 0; queue = queue[1:] {
+		p := queue[0]
+		for _, d := range steps {
+			n := Point{p.X + d.X, p.Y + d.Y}
+			if n.X >= 0 && n.Y >= 0 && n.X < cols && n.Y < rows && grid[n.Y][n.X] == Passage && dist[n.Y*cols+n.X] < 0 {
+				dist[n.Y*cols+n.X] = dist[p.Y*cols+p.X] + 1
+				queue = append(queue, n)
+			}
+		}
+	}
+	return dist
+}
+
 func solveBFS(grid [][]bool, start, end Point) []Point {
 	if start.X < 0 || start.Y < 0 || end.X < 0 || end.Y < 0 {
 		return nil

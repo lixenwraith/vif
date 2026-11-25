@@ -470,10 +470,15 @@ resizing crops it, and clear or preserve entities. Camera offsets translate
 between map, viewport, and screen coordinates.
 
 `EventMazeSpawnRequest` divides the map into maze cells of `cell_width` by
-`cell_height`, carves a maze with open borders, optional braiding and random or
-placed rooms, and fills the remaining cells with walls; a placed room is cleared
-with a margin of one maze cell. With `fade_in_ms` the walls block at once and
-fade in from the ground over that time, as the Kraken's and the tower's do. Pattern
+`cell_height`, carves a maze with open borders, or a walled outer edge with
+`walled`, optional braiding and random or placed rooms, and fills the remaining
+cells with walls; a placed room is cleared with a margin of one maze cell. With
+`fade_in_ms` the walls block at once and fade in from the ground over that time,
+as the Kraken's and the tower's do. The wall system answers each maze with
+`EventMazeSpawned { cell_width, cell_height, room_x, room_y, far_x, far_y }`: the
+middle cell of its first room's middle block, and of an open block drawn from those
+in the last quarter of the way from that room by the maze's passages
+(`maze.Distances`), where a scenario stands what must cross the maze. Pattern
 assets can also become wall layouts. The maze generator is in [AI, physics, and
 evolution](ai-physics-and-evolution.md#7-maze-generation) §7. Navigation then
 uses either flow fields toward a target or precomputed multi-route graphs

@@ -173,6 +173,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWallCompositeSpawnRequest:       func() any { return new(WallCompositeSpawnRequestPayload) },
 	EventWallPatternSpawnRequest:         func() any { return new(WallPatternSpawnRequestPayload) },
 	EventMazeSpawnRequest:                func() any { return new(MazeSpawnRequestPayload) },
+	EventMazeSpawned:                     func() any { return new(MazeSpawnedPayload) },
 	EventCaveStart:                       func() any { return new(CaveStartPayload) },
 	EventCaveStop:                        func() any { return new(CaveStopPayload) },
 	EventCavePace:                        func() any { return new(CavePacePayload) },
@@ -364,6 +365,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWallCompositeSpawnRequest:       &codecWallCompositeSpawnRequestPayload,
 	EventWallPatternSpawnRequest:         &codecWallPatternSpawnRequestPayload,
 	EventMazeSpawnRequest:                &codecMazeSpawnRequestPayload,
+	EventMazeSpawned:                     &codecMazeSpawnedPayload,
 	EventCaveStart:                       &codecCaveStartPayload,
 	EventCaveStop:                        &codecCaveStopPayload,
 	EventCavePace:                        &codecCavePacePayload,
@@ -1999,6 +2001,20 @@ var codecMazeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MazeSpawnRequ
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Walled), kind: kindBool},
+}}
+
+func (p *MazeSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMazeSpawnedPayload, unsafe.Pointer(p)
+}
+
+var codecMazeSpawnedPayload = structCodec{size: unsafe.Sizeof(MazeSpawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.CellWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.CellHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.RoomX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.RoomY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.FarX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnedPayload{}.FarY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *CaveStartPayload) codec() (*structCodec, unsafe.Pointer) {

@@ -685,3 +685,53 @@ func TestACaveRecordNoStartLeavesIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestAWalledMazeAnswersWithItsRoomAndAFarBlock: a maze laid walled keeps its outer
+// wall and answers with the middle of its room's middle block and of an open block
+// the room reaches only the long way round.
+func TestAWalledMazeAnswersWithItsRoomAndAFarBlock(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())
+	walls := ready(NewWallSystem(w)).(*WallSystem)
+	walls.HandleEvent(event.GameEvent{Type: event.EventMazeSpawnRequest, Payload: &event.MazeSpawnRequestPayload{
+		CellWidth: 5, CellHeight: 3, BlockMask: component.WallBlockAll, Walled: true,
+		Rooms: []event.MazeRoomSpec{{CenterX: 60, CenterY: 18, Width: 15, Height: 9}},
+	}})
+	var laid *event.MazeSpawnedPayload
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.MazeSpawnedPayload); ok {
+			laid = p
+		}
+	}
+	if laid == nil {
+		t.Fatal("the maze answered nothing")
+	}
+	open := func(x, y int) bool { return !w.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockCursor) }
+	for _, c := range [][2]int{{laid.RoomX, laid.RoomY}, {laid.FarX, laid.FarY}} {
+		if c[0]%5 != 2 || c[1]%3 != 1 || !open(c[0], c[1]) {
+			t.Fatalf("answered %+v: (%d, %d) is no open block's middle", *laid, c[0], c[1])
+		}
+	}
+	if vmath.IntAbs(laid.RoomX-60) > 5 || vmath.IntAbs(laid.RoomY-18) > 3 {
+		t.Errorf("the room's middle is (%d, %d), asked about (60, 18)", laid.RoomX, laid.RoomY)
+	}
+	if open(2, 1) || open(60, 1) {
+		t.Error("a walled maze left its outer wall open")
+	}
+	// By the maze's blocks the far one lies within the last quarter of the way out
+	dist := map[[2]int]int{{laid.RoomX / 5, laid.RoomY / 3}: 0}
+	far := 0
+	for queue := [][2]int{{laid.RoomX / 5, laid.RoomY / 3}}; len(queue) > 0; queue = queue[1:] {
+		b := queue[0]
+		far = max(far, dist[b])
+		for _, d := range [][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}} {
+			n := [2]int{b[0] + d[0], b[1] + d[1]}
+			if _, seen := dist[n]; !seen && n[0] >= 0 && n[1] >= 0 && n[0] < 24 && n[1] < 13 && open(n[0]*5+2, n[1]*3+1) {
+				dist[n], queue = dist[b]+1, append(queue, n)
+			}
+		}
+	}
+	if d, ok := dist[[2]int{laid.FarX / 5, laid.FarY / 3}]; !ok || 4*d < 3*far {
+		t.Errorf("the far block (%d, %d) is %d blocks from the room, reached %t, the farthest %d: want it within the last quarter", laid.FarX, laid.FarY, d, ok, far)
+	}
+}
