@@ -50,6 +50,13 @@ const (
 // Collection radius (Chebyshev)
 const LootCollectRadius = 2
 
+// A sounding drop sounds where it is every LootSoundPeriod of its flight, pitched
+// up as it covers its owner's route, by LootSoundRise semitones at its end
+const (
+	LootSoundPeriod = 250 * time.Millisecond
+	LootSoundRise   = 5.0
+)
+
 // Shield (shared across all loot types)
 const (
 	LootShieldRadius     = 2.75

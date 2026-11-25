@@ -31,6 +31,8 @@ type kindDoc struct {
 	Reward string     `toml:"reward"`
 	Weapon string     `toml:"weapon"`
 	Delta  int        `toml:"delta"`
+	Sound  string     `toml:"sound"`
+	Hidden bool       `toml:"hidden"`
 }
 
 // tableDoc is one table: whose kill rolls it, and its tiers in roll order
@@ -135,7 +137,7 @@ func checkLootName(what, name string) error {
 
 // kind validates d and makes it the kind's plain data
 func (d *kindDoc) kind(name string) (component.LootKind, error) {
-	k := component.LootKind{LootSpec: component.LootSpec{Name: name, Delta: d.Delta}}
+	k := component.LootKind{LootSpec: component.LootSpec{Name: name, Delta: d.Delta}, Sound: d.Sound, Hidden: d.Hidden}
 	var errs []error
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
 
@@ -151,12 +153,16 @@ func (d *kindDoc) kind(name string) (component.LootKind, error) {
 	}
 
 	i := slices.Index(component.RewardNames[:], d.Reward)
-	if i <= int(component.RewardNone) {
-		fail("reward %q is not one of %s", d.Reward, strings.Join(component.RewardNames[1:], ", "))
+	if i < int(component.RewardNone) {
+		fail("reward %q is not one of %s, or none", d.Reward, strings.Join(component.RewardNames[1:], ", "))
 		return k, errors.Join(errs...)
 	}
 	k.Reward = component.RewardType(i)
-	if k.Reward == component.RewardWeapon {
+	switch {
+	case k.Reward == component.RewardNone && (d.Weapon != "" || d.Delta != 0):
+		fail("weapon %q and delta %d: a kind with no reward grants nothing", d.Weapon, d.Delta)
+	case k.Reward == component.RewardNone:
+	case k.Reward == component.RewardWeapon:
 		w := slices.IndexFunc(component.WeaponSpecs[:], func(s component.WeaponSpec) bool { return s.Name == d.Weapon })
 		switch {
 		case w < 0:
@@ -170,7 +176,7 @@ func (d *kindDoc) kind(name string) (component.LootKind, error) {
 		default:
 			k.Weapon = component.WeaponType(w)
 		}
-	} else {
+	default:
 		switch {
 		case d.Weapon != "":
 			fail("weapon %q: %s charges no weapon", d.Weapon, d.Reward)

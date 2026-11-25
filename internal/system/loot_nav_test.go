@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -515,5 +516,52 @@ func TestAReaderOutOfSightReadsItsFieldEveryRefresh(t *testing.T) {
 	joiner := ready(NewNavigationSystem(w)).(*NavigationSystem)
 	if err := joiner.LoadShared(phase); err != nil || joiner.refreshTicks != nav.refreshTicks || nav.refreshTicks == 0 {
 		t.Fatalf("an install took refresh phase %d of the sender's %d (%v)", joiner.refreshTicks, nav.refreshTicks, err)
+	}
+}
+
+// TestASoundingDropIsHeardAlongItsRouteAndNotSeen: a hidden sounding drop wears no
+// shield, sounds placed where it flies once a period, its first as it sets out at
+// its own pitch and higher as it covers its owner's route round a wall, and at the
+// top of its rise as it is collected.
+func TestASoundingDropIsHeardAlongItsRouteAndNotSeen(t *testing.T) {
+	w, owner := soloCursorWorld(t)
+	wallWithGap(w, 10)
+	w.Resources.Loot.Kinds = []component.LootKind{{LootSpec: component.LootSpec{Name: "sonar"},
+		Look: component.LootLook{Rune: '*'}, Sound: "tone_a4", Hidden: true}}
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
+	loot.spawnLootWithBurst(component.LootCount, 30, 5, 0, 0, owner, component.LootComponent{})
+	drops := w.Components.Loot.GetAllEntities()
+	if len(drops) != 1 || w.Components.Shield.HasEntity(drops[0]) {
+		t.Fatalf("%d drops, shielded %t: want one hidden drop, wearing none", len(drops), len(drops) == 1 && w.Components.Shield.HasEntity(drops[0]))
+	}
+	var pitches []float64
+	ticks := 0
+	for ; ticks < 600 && w.Components.Loot.HasEntity(drops[0]); ticks++ {
+		nav.Update()
+		loot.Update()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.SoundRequestPayload:
+				if !p.Placed || p.Name != "tone_a4" {
+					t.Fatalf("the drop asked for %+v, want its own sound placed", *p)
+				}
+				pitches = append(pitches, p.Pitch)
+			}
+			if ev.Type == event.EventDeathBatch {
+				deaths.HandleEvent(ev)
+			}
+		}
+	}
+	n := len(pitches)
+	if w.Components.Loot.HasEntity(drops[0]) || n < 4 {
+		t.Fatalf("after %d ticks the drop stands %t, sounding %d times: want it collected, sounding along the way", ticks, w.Components.Loot.HasEntity(drops[0]), n)
+	}
+	if period := int(parameter.LootSoundPeriod / w.Resources.Time.DeltaTime); n-1 > ticks/period+1 {
+		t.Errorf("%d sounds in %d ticks, want one a period of %d ticks and the arrival's", n, ticks, period)
+	}
+	if pitches[0] != 0 || pitches[n-1] != parameter.LootSoundRise || pitches[n-2] <= pitches[1] {
+		t.Errorf("pitches %v: want the first at its own, rising along the route, and the arrival's at %v", pitches, parameter.LootSoundRise)
 	}
 }

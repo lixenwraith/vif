@@ -1293,9 +1293,11 @@ kind`).
 rune = "*"                          # The glyph it draws: one rune, not a space
 color = { r = 255, g = 255, b = 255 }  # The rune's
 glow = { r = 60, g = 60, b = 200 }  # Its shield's
-reward = "energy"                   # weapon, heat or energy
+reward = "energy"                   # weapon, heat or energy; left out, collecting grants nothing
 delta = 500                         # Heat or energy it adds, above 0; a weapon reward
                                     # names its weapon instead (weapon = "gun"), one charge
+sound = "tone_a4"                   # Sounded from where a drop flies, a period apart (optional)
+hidden = true                       # Wears no shield, seen only in its flash as collected (optional)
 
 [drops.raider]
 killer = "player"                   # Rolls only for a kill a cursor dealt; "any", the default, for every kill
@@ -1308,6 +1310,10 @@ tiers = [                           # Rolled in order, at most 8, each dropping 
 ]
 ```
 
+- `sound`: placed where the drop flies every `parameter.LootSoundPeriod`, the first
+  as it sets out, pitched up by the share of its owner's route it has covered, up to
+  `LootSoundRise` semitones, the top of which it sounds as it is collected; a
+  mistyped name is silent, as a button's is.
 - `rate`: an entry's chance, above 0 and at most 1, which grows by as much again
   for each roll in a row it misses, on streaks the table keeps for each cursor
   until the game starts over, every species naming it sharing them; a tier's
