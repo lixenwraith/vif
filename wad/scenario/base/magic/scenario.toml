@@ -368,8 +368,8 @@ body = { trigger = "Tick", target = "FloodRun", guard = "VarEquals", guard_args 
 # --- The square ---
 
 # Boot: the square stands behind the start prompt, and the gateways open after the
-# press at the first level's paces, a stray a gateway every 9 s and a wave's body
-# every 3.2 s from one gateway, which each round of the ranks starts a step quicker
+# press at the first level's paces, a stray a gateway every 4.5 s and a wave's body
+# every 1.6 s from one gateway, which each round of the ranks starts a step quicker
 # (the `_base` variables) and with a wave more. The shield steps its color every
 # 200 energy. The map follows the screen, and its pylons, square and cursor keep
 # their places on it.
@@ -380,10 +380,10 @@ on_enter = [
     { action = "SetVar", payload = { name = "stray", value = 0 } },
     { action = "SetVar", payload = { name = "tide", value = 8 } },
     { action = "SetVar", payload = { name = "waves", value = 1 } },
-    { action = "SetVar", payload = { name = "trickle_ms", value = 9000 } },
-    { action = "SetVar", payload = { name = "trickle_base", value = 9000 } },
-    { action = "SetVar", payload = { name = "flood_ms", value = 3200 } },
-    { action = "SetVar", payload = { name = "flood_base", value = 3200 } },
+    { action = "SetVar", payload = { name = "trickle_ms", value = 4500 } },
+    { action = "SetVar", payload = { name = "trickle_base", value = 4500 } },
+    { action = "SetVar", payload = { name = "flood_ms", value = 1600 } },
+    { action = "SetVar", payload = { name = "flood_base", value = 1600 } },
     { action = "SetVar", payload = { name = "need", value = 30 } },
     { action = "SetVar", payload = { name = "need_base", value = 30 } },
 ]
