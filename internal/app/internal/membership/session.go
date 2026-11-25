@@ -333,9 +333,9 @@ func (m *Membership) adoptLobbyGeometry() {
 	}
 
 	// Through the two authorities rather than by writing Config: the resize is what
-	// moves this instance's viewport, and the level setup is what moves the shared
+	// moves this instance's viewport, and the map setup is what moves the shared
 	// map (D-14). Both are recorded events, so a replay of this run reaches the
-	// same bounds the same way. Pushed as adoptMapLatch does, not through SetupLevel:
+	// same bounds the same way. Pushed as adoptMapLatch does, not through SetupMap:
 	// the guest on the link makes the session live, and this is no operator request.
 	m.run.Resize(report.Width, report.Height)
 	var vw, vh int
@@ -343,8 +343,8 @@ func (m *Membership) adoptLobbyGeometry() {
 		cfg := m.world.Resources.Config
 		vw, vh = cfg.ViewportWidth, cfg.ViewportHeight
 	})
-	m.ctx.PushEventOrigin(event.EventLevelSetup,
-		&event.LevelSetupPayload{Width: vw, Height: vh, CropOnResize: true}, event.OriginDebug)
+	m.ctx.PushEventOrigin(event.EventMapSetup,
+		&event.MapSetupPayload{Width: vw, Height: vh, CropOnResize: true}, event.OriginDebug)
 	m.scheduler.Settle()
 	by := "person"
 	if bots {
@@ -1381,6 +1381,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		Door:           m.doorVerifierLocked(),
 		FixedAuthority: m.fixedAuthority(),
 		Players:        m.playersSet(),
+		NoCheats:       m.cfg.NoCheats || m.wiring.SessionNoCheats,
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
 		// what it offered — a reset between the two cannot turn a valid join into a

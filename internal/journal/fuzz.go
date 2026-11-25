@@ -27,7 +27,7 @@ type FuzzOptions struct {
 	// DisableOverlays excludes the paused overlay round trip, which advances one clock.
 	DisableOverlays bool
 
-	// MapSetups allows the operator level setup. It is the D-14 authority and is
+	// MapSetups allows the operator map setup. It is the D-14 authority and is
 	// replicated only because every instance runs the same map script; one injected
 	// into a single participant is an operator action its peers never see.
 	MapSetups bool
@@ -49,7 +49,7 @@ type FuzzTarget interface {
 	Tick(int)
 	Inject(...*input.Intent) bool
 	InputTick() bool
-	SetupLevel(width, height int, clearEntities, cropOnResize bool) bool
+	SetupMap(width, height int, clearEntities, cropOnResize bool) bool
 	Resize(width, height int)
 	Reset(purge bool) bool
 	Region(op, region, state string) bool
@@ -149,9 +149,9 @@ func fuzzActionTable(opt FuzzOptions) []fuzzAction {
 	if !opt.Resizes {
 		resize = 0
 	}
-	level := 2
+	mapSetup := 2
 	if !opt.MapSetups {
-		level = 0
+		mapSetup = 0
 	}
 	t := []fuzzAction{
 		{(*FuzzDriver).actTick, tick},
@@ -164,7 +164,7 @@ func fuzzActionTable(opt FuzzOptions) []fuzzAction {
 		{(*FuzzDriver).actCharMotion, 4},
 		{(*FuzzDriver).actCommand, command},
 		{(*FuzzDriver).actResize, resize},
-		{(*FuzzDriver).actLevel, level},
+		{(*FuzzDriver).actMapSetup, mapSetup},
 		{(*FuzzDriver).actSearch, 2},
 		{(*FuzzDriver).actOverlay, overlay},
 	}
@@ -376,9 +376,9 @@ func (d *FuzzDriver) actResize() bool {
 	return true
 }
 
-// actLevel resizes the map independently of the viewport, in both crop modes
-func (d *FuzzDriver) actLevel() bool {
-	_ = d.a.SetupLevel(20+d.rng.Intn(100), 10+d.rng.Intn(30),
+// actMapSetup resizes the map independently of the viewport, in both crop modes
+func (d *FuzzDriver) actMapSetup() bool {
+	_ = d.a.SetupMap(20+d.rng.Intn(100), 10+d.rng.Intn(30),
 		d.rng.Intn(2) == 0, d.rng.Intn(2) == 0)
 	return true
 }

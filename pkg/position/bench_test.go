@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// benchShapes are the maps the costs are read on: a scrolling level's, a sixth of
+// benchShapes are the maps the costs are read on: a scrolling scenario's, a sixth of
 // its cells held, and the ceiling's, two fifths of them a maze's walls.
 var benchShapes = []struct {
 	name          string

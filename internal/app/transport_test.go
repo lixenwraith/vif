@@ -38,20 +38,20 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	// The host takes the anchor it offers too, running the level setup its guest
+	// The host takes the anchor it offers too, running the map setup its guest
 	// adopted, so the two see one event sequence.
 	if err := a.Join(an); err != nil {
 		t.Fatalf("host latch: %v", err)
 	}
 
-	// The geometry is settled before the link exists. SetupLevel carries a
+	// The geometry is settled before the link exists. SetupMap carries a
 	// ClassShared payload, so inside a live session only the authority may produce
 	// one (App.shareOperator); running it on both while each is still alone is what
 	// makes the two worlds identical without either authoring for the other.
 	for _, x := range []*App{a, b} {
 		tickUntilCursor(t, x)
-		if !x.SetupLevel(100, 30, true, false) {
-			t.Fatal("level setup refused before the session was live")
+		if !x.SetupMap(100, 30, true, false) {
+			t.Fatal("map setup refused before the session was live")
 		}
 		x.Tick(1)
 	}
@@ -280,7 +280,7 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 
 	// Only the live participant is scripted, so the two operator actions that
 	// rewrite shared state on the instance that runs them — an FSM region op and a
-	// level setup — have no counterpart on the observer.
+	// map setup — have no counterpart on the observer.
 	opt := parityScript(seed, steps)
 	opt.Regions = false
 	opt.MapSetups = false
@@ -916,7 +916,7 @@ func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
 	}
 
 	// A placement the prediction did not produce. Stamped shared, so it is not a
-	// crossing and CursorSystem applies it at once — a level setup, a wall push-out
+	// crossing and CursorSystem applies it at once — a map setup, a wall push-out
 	// and a reset all reach the local cursor this way.
 	snap := start
 	snap.X -= 4
@@ -961,7 +961,7 @@ func parityScript(seed uint64, steps int) journal.FuzzOptions {
 
 // TestSharedSnapshotParityAcrossTerminalSizes is the D-11 criterion: two instances of
 // one seed on different terminals agree on every shared record. Both are constructed
-// at one size and diverge only after SetupLevel decouples the map from the viewport
+// at one size and diverge only after SetupMap decouples the map from the viewport
 // — different sizes would bake different map bounds into the FSM's entry actions,
 // which run inside New.
 func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
@@ -976,7 +976,7 @@ func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 
 	for _, x := range []*App{a, b} {
 		tickUntilCursor(t, x)
-		x.SetupLevel(100, 30, true, false)
+		x.SetupMap(100, 30, true, false)
 		x.Tick(1)
 	}
 	assertSharedParity(t, a, b, -2)

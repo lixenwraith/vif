@@ -148,7 +148,7 @@ A correction must not be repairing entity allocation or run numbering.
 The last two are the least obvious. Applied a lead early on its producer, a ninth
 drain would enter the escalation and build that region's world before anyone else
 had it, and a downed cursor would run `MonitorGlobalReset` alone — canceling every
-region and clearing the level — until the next correction, published while the
+region and clearing the map — until the next correction, published while the
 authority was still in `MonitorActive`, put the pre-reset world back.
 
 Nobody's input waits on any of these. What the player did is the drain dying or the
@@ -157,7 +157,7 @@ the same lead everywhere instead of on all but one instance.
 
 A latch the barrier feeds needs a second rule: whatever the agreed artifact sets
 must be cleared by the world it rebuilds, not by a later artifact. `MetaSystem`
-clears the defeat latch on the `EventLevelSetup` that carries `clear_entities`
+clears the defeat latch on the `EventMapSetup` that carries `clear_entities`
 without `preserve_loot`, and ignores reports produced before it, because the
 un-defeat crossing arrives a lead after `MonitorArm` has already re-armed the
 roster — long enough for the guard to fire a second reset.
@@ -659,6 +659,13 @@ a successor keeps offering it, a scenario change reopens the door under it
 (`RestartAsk.Migrate`), and `:session` names it. Under `host` the address *is* the
 session: an orchestrator replacing a pod at the same address is the reconnect its
 guests want, and a guest's own port would be for nothing.
+
+A host started with `-no-cheats` refuses the grants (`:god`, `:demon`, `:energy`,
+`:heat`, `:boost`, `:w`) to the whole session the same way: every offer carries it
+(`SessionOffer.NoCheats`), a successor keeps it and a scenario change reopens under
+it (`RestartAsk.NoCheats`), and each participant refuses them itself, since what
+they set reaches the others through its owner's sync, which no host bounds. A run
+that leaves the session takes them back, unless its own `-no-cheats` refuses them.
 
 ### 5.1 Succession
 
@@ -1507,7 +1514,7 @@ An own pause, speed, step, breakpoints and raw shared mutation (`:system`, `:emi
 cannot stop or mutate only one copy of it; a host whose only links are its own bot
 seats may still pause (`SessionState.SeatsOnly`), and the host's hold stops every
 participant (§3.6). The programmatic surface refuses by the event's declared class
-(`App.shareOperator`): `App.SetupLevel` and `App.Region` carry `ClassShared`
+(`App.shareOperator`): `App.SetupMap` and `App.Region` carry `ClassShared`
 payloads, which `event.OnWire` never transports, so no participant may originate one
 in a live session — the authority included. `App.Reset` is `ClassBus`, so it crosses
 on the authority and is refused on a guest, as `:new` is.

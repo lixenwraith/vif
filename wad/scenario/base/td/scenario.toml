@@ -6,7 +6,7 @@ max_players = 16
 
 macro_files = ["td_macros.toml"]
 
-# For front-ends: td_main's level setup is what holds the map at this size
+# For front-ends: td_main's map setup is what holds the map at this size
 [map]
 fixed = "500x250"
 

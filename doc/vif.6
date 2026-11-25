@@ -73,6 +73,9 @@ Add bots alongside you: one where no count is given, the scenario's own bot wher
 .B \-authority host|migrate
 What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares
 .TP
+.B \-no\-cheats
+Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts, a successor's included; the menu's God and Demon read unavailable
+.TP
 .B \-slow\-window <dur>
 Window a participant's lateness is judged over; host only, 0 never evicts (default 20s)
 .TP
@@ -258,7 +261,7 @@ work from a keyboard.
 Game pauses the game until Resume, as :pause (:p) or p does, restarts it from its
 scenario's first tick, as :n does, and sets its speed; in a session only the host
 can, and every participant follows at the same tick. Its Console row opens the
-console. A replay adds its restart.
+console, and God and Demon act as :god and :demon do. A replay adds its restart.
 .PP
 Scenarios lists the scenarios the configuration roots hold, each by its name,
 or by its path below scenario/ where the name reaches another, the running one

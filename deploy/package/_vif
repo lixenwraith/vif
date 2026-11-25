@@ -16,6 +16,7 @@ _arguments \
   '-players[Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested]:n: ' \
   '-bot[Add bots alongside you: one where no count is given, the scenario'\''s own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear]' \
   '-authority[What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares]:value:(host migrate)' \
+  '-no-cheats[Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts, a successor'\''s included; the menu'\''s God and Demon read unavailable]' \
   '-slow-window[Window a participant'\''s lateness is judged over; host only, 0 never evicts (default 20s)]:dur: ' \
   '-slow-late[Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)]:n: ' \
   '-slow-bytes[...and at least this many bytes per second of it on its link; 0 ignores throughput (default 8192)]:n: ' \

@@ -61,6 +61,11 @@ type Membership struct {
 	// negation). See doc/multi-player.md §5.
 	Migrate bool
 
+	// NoCheats refuses :god, :demon, :energy, :heat, :boost and :w in this run and
+	// in every session it hosts, whose offer carries it to each player and successor
+	// (SessionOffer.NoCheats): -no-cheats.
+	NoCheats bool
+
 	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
 	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
 	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.

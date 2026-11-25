@@ -3245,6 +3245,52 @@ func TestAFullSessionGivesTheLongestWaitingWraithsPlaceToANewcomer(t *testing.T)
 	}
 }
 
+// TestNoCheatsHoldsItsRunAndEveryGuestTillItLeaves: a host's -no-cheats refuses the
+// grants to its own run and, through its offer, to each guest, the command and the
+// menu's row saying one sentence; a guest that leaves takes them back.
+func TestNoCheatsHoldsItsRunAndEveryGuestTillItLeaves(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHosting(t, Membership{NoCheats: true})
+	stop := tickInBackground(host)
+	defer stop()
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+	arrival(t, host, guest)
+	// godSays is what a's :god answers and what its menu's God row reads
+	godSays := func(a *App) (answer, row string) {
+		ctx := a.Context()
+		a.World().RunSafe(func() { mode.ExecuteCommand(ctx, "god") })
+		answer = ctx.GetStatusMessage()
+		a.Inject(&input.Intent{Type: input.IntentConfigMenu})
+		ctx.SetOverlaySelection("game")
+		a.Inject(&input.Intent{Type: input.IntentOverlayActivate})
+		a.World().RunSafe(func() {
+			for _, r := range ctx.GetOverlayContent().Menu.Rows {
+				if r.Key == "game/god" {
+					row = r.Disabled
+				}
+			}
+		})
+		a.Inject(&input.Intent{Type: input.IntentConfigMenu})
+		return answer, row
+	}
+	for _, c := range []struct {
+		who         string
+		a           *App
+		answer, row string
+	}{
+		{"the host", host, "Cheats unavailable in this run: :god", "Cheats unavailable in this run"},
+		{"its guest", guest, "Cheats unavailable in this session: :god", "Cheats unavailable in this session"},
+	} {
+		if answer, row := godSays(c.a); answer != c.answer || row != c.row {
+			t.Fatalf("%s's :god answers %q and its God row reads %q; want %q and %q", c.who, answer, row, c.answer, c.row)
+		}
+	}
+	guest.membership.LeaveSession() // as Run's loop does
+	if answer, row := godSays(guest); answer != ":god" || row != "" {
+		t.Fatalf("after leaving, the guest's :god answers %q and its God row reads %q; want both taken", answer, row)
+	}
+}
+
 // assignedSlot is the slot an offer gives the participant it is addressed to.
 func assignedSlot(o network.SessionOffer) uint8 {
 	entry, _ := o.Entry(o.Assigned)

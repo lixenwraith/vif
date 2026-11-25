@@ -23,7 +23,7 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 	const screenW, screenH = 80, 24
 	world := engine.NewWorld()
 	gameCtx := engine.NewGameContextWithClock(world, screenW, screenH, engine.NewManualClock())
-	world.SetupLevel(20, 8, false, false, false)
+	world.SetupMap(20, 8, false, false, false)
 
 	cfg := world.Resources.Config
 	cursor := world.CreateEntity(core.DomainShared)

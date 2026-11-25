@@ -428,7 +428,7 @@ func (m *Membership) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" && (!m.seatsOnly() || m.keptPlayersLocked()) {
 			return false, errors.New("this participant has no address its session can return to")
 		}
-		req.Migrate = !m.authority.Fixed()
+		req.Migrate, req.NoCheats = !m.authority.Fixed(), m.cfg.NoCheats || m.wiring.SessionNoCheats
 		m.sessionMu.Lock()
 		req.Door = m.doorVerifierLocked()
 		m.sessionMu.Unlock()
@@ -1048,16 +1048,20 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 		kept = append(kept, p)
 	}
 	// Nothing names the session left: not the address a restart would go back to,
-	// nor the name the next one would answer to, nor the ceiling it was opened with.
-	// The -relay door alone answers to that name, for the people it kept. A gate in
-	// flight reads its offer under the session lock alone, so they change under it.
+	// nor the name the next one would answer to, nor the ceiling it was opened with,
+	// nor its refusal of cheats. The -relay door alone answers to that name, for the
+	// people it kept. A gate in flight reads its offer under the session lock alone,
+	// so they change under it.
 	left := struct {
 		join, host, name string
 		players          int
-	}{m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers}
+		noCheats         bool
+	}{m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers, m.wiring.SessionNoCheats}
 	m.sessionMu.Lock()
 	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = "", "", "", 0
+	m.wiring.SessionNoCheats = false
 	m.sessionMu.Unlock()
+	m.ctx.SessionNoCheats.Store(false)
 	// The place the run left keeps its record as it stands, for a return to that
 	// session; the one it opens issues its own.
 	prior := m.place.Swap(nil)
@@ -1065,7 +1069,9 @@ func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPor
 		m.place.Store(prior)
 		m.sessionMu.Lock()
 		m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = left.join, left.host, left.name, left.players
+		m.wiring.SessionNoCheats = left.noCheats
 		m.sessionMu.Unlock()
+		m.ctx.SessionNoCheats.Store(left.noCheats)
 		for _, c := range carried {
 			m.places.forget(c)
 		}

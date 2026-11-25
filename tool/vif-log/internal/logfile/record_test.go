@@ -57,7 +57,7 @@ func TestRecordNamesTheAnchorByItsSub(t *testing.T) {
 func TestFieldsTextFlattensMultiLineValues(t *testing.T) {
 	// A journal payload is TOML: it carries newlines, and one row of the list
 	// is one line of the terminal.
-	r, _, _ := parse(t, jrn(1, 1, "shared", "EventLevelSetup", `x = 1\ny = 2\n`))
+	r, _, _ := parse(t, jrn(1, 1, "shared", "EventMapSetup", `x = 1\ny = 2\n`))
 
 	fields := r.FieldsText()
 	if strings.ContainsAny(fields, "\n\r\t") {

@@ -64,7 +64,7 @@ template applied to every admitted cursor, not only slot zero.
 Cursor entities cannot be destroyed through ordinary gameplay because their
 protection mask is `ProtectAll`. `CursorSystem` owns explicit despawn. A game
 reset (`:n` or defeat) clears the world but keeps the roster's membership, and
-the boot state's spawn request rebuilds every slot from it; a level setup keeps
+the boot state's spawn request rebuilds every slot from it; a map setup keeps
 cursors and moves each into the new bounds.
 
 ## 3. Typing rules
@@ -357,7 +357,7 @@ rates are gameplay balance data in `internal/profile/loot.go`; documentation doe
 not duplicate every rate because those values are expected to change during
 tuning.
 
-A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
+A scenario rewards an encounter with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above unless `still` keeps it at its cell;
 `return_ms` brings one collected back to its cell that long after, a countdown in
@@ -463,7 +463,7 @@ they hung ([ECS §7](ecs-and-events.md#death-effects)).
 
 Walls are grid entities with a block mask (cursor, kinetic movers, particles,
 spawning) and foreground, background or box-drawing visuals. A new wall displaces
-what stands on its cell. Level setup can size the logical map independently of
+what stands on its cell. Map setup can size the logical map independently of
 the terminal viewport, never below the scenario's `[map]` minimum, decide whether
 resizing crops it, and clear or preserve entities. Camera offsets translate
 between map, viewport, and screen coordinates.

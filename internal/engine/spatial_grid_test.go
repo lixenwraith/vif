@@ -436,7 +436,7 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 	drawn(typeable)
 }
 
-// BenchmarkPlacements reads the binding's writes on a scrolling level's map: a
+// BenchmarkPlacements reads the binding's writes on a scrolling scenario's map: a
 // layer of glyphs shifted a column, one shared body and one wall moved a cell, and
 // a batch of ten placed and taken back.
 func BenchmarkPlacements(b *testing.B) {

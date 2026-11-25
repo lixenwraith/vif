@@ -43,10 +43,10 @@ const (
 	// tick sentinel (fsm.Transition.Event == 0)
 	EventNone EventType = iota
 
-	// --- Level ---
+	// --- Map ---
 
-	// EventLevelSetup (LevelSetupPayload) [shared] signals map dimension change and optional entity clear
-	EventLevelSetup
+	// EventMapSetup (MapSetupPayload) [shared] signals map dimension change and optional entity clear
+	EventMapSetup
 	// EventScreenResize (ScreenResizePayload) [local] signals terminal dimension change
 	EventScreenResize
 

@@ -109,10 +109,10 @@ Each names the choice taken and what the other would have cost.
   geometry package.
 - Bounds, the grid's: `Config.MapWidth` and `MapHeight` stay Shared authority
   (D-14), and every path that writes them resizes the grid before a query runs (a
-  level setup, the reset, a crop, a copy), so the index answers within its grid and
+  map setup, the reset, a crop, a copy), so the index answers within its grid and
   reads no bounds live. Reading them through `Frame` on every probe cost the glyph
   renderer, which asks a wall per scenery glyph a frame, a quarter of its time; a
-  writer that does not resize the grid is a bug, and `TestSetupLevelRecordsOnlyBoundsTheGridHolds`
+  writer that does not resize the grid is a bug, and `TestSetupMapRecordsOnlyBoundsTheGridHolds`
   pins the pair.
 - Blocks, a plane of bits per mask asked, read with the bits of the merged
   surfaces that stop the mask: a probe tests one pointer, which says the plane is
@@ -321,7 +321,7 @@ container, medians compared, the branch's bench files on both; td's tick is
 A difference inside the band is noise, and a reading that holds in every round is
 not; a tick reads in two modes there, a third apart, so a few percent is read by
 the minimum of seven rounds beside the median. The package's own benches
-(`pkg/position` `bench_test.go`) read each operation on a scrolling level's map
+(`pkg/position` `bench_test.go`) read each operation on a scrolling scenario's map
 and on the ceiling's with a maze's walls. What each change read, against the
 main it landed on:
 

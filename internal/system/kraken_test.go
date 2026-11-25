@@ -19,7 +19,7 @@ import (
 func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vmath.Point) {
 	t.Helper()
 	w, _, _ := testCursorWorld(t)
-	w.SetupLevel(180, 90, false, false, false)
+	w.SetupMap(180, 90, false, false, false)
 	s := ready(NewKrakenSystem(w)).(*KrakenSystem)
 	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
 	if w.Components.Kraken.CountEntities() != 1 {
@@ -47,7 +47,7 @@ func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vma
 func TestAKrakenRisesWithTheHitPointsItsRequestNames(t *testing.T) {
 	for _, tc := range []struct{ asked, want int }{{120, 120}, {0, parameter.KrakenInitialHP}, {-5, parameter.KrakenInitialHP}} {
 		w, _, _ := testCursorWorld(t)
-		w.SetupLevel(180, 90, false, false, false)
+		w.SetupMap(180, 90, false, false, false)
 		s := ready(NewKrakenSystem(w)).(*KrakenSystem)
 		s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45, HP: tc.asked})
 		e := w.Components.Kraken.Entities()[0]
@@ -243,7 +243,7 @@ func TestKrakenChargeTargetsThroughWallsAndSkipsCoveredCursors(t *testing.T) {
 
 func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	w.SetupLevel(180, 90, false, false, false)
+	w.SetupMap(180, 90, false, false, false)
 	s := ready(NewKrakenSystem(w)).(*KrakenSystem)
 	walls, death := ready(NewWallSystem(w)).(*WallSystem), ready(NewDeathSystem(w)).(*DeathSystem)
 	var leg vmath.Point
@@ -507,7 +507,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 		}
 	}
 	motion.PreciseX, motion.PreciseY = 170.5, 80.5
-	w.SetupLevel(80, 30, false, false, false)
+	w.SetupMap(80, 30, false, false, false)
 	s.Update()
 	if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
 		t.Fatal("map shrink left Kraken's body out of bounds")

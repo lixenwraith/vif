@@ -49,7 +49,7 @@ type Scenario struct {
 	// when the scenario sets none
 	MapMinWidth, MapMinHeight int
 	// MapFixedWidth and MapFixedHeight are [map] fixed, the size the scenario says
-	// its map holds throughout, for front-ends; its level setups are what hold it
+	// its map holds throughout, for front-ends; its map setups are what hold it
 	MapFixedWidth, MapFixedHeight int
 	// CursorsOffMap is [map] cursors = false: a player holds a roster slot with no
 	// cursor on the map, and plays through the keys and buttons the scenario takes.

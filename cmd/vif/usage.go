@@ -51,6 +51,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"bot"}, arg: "[N[:graph]|graph|verb ...]", hint: "Add bots alongside you: one where no count is given, the scenario's own bot where no graph is, default where it carries none; -host/-join keep your player. Or a verb of :bot that keeps bot files, which acts and exits: list, create, import, export, clear"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares"},
+			{names: []string{"no-cheats"}, hint: "Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts, a successor's included; the menu's God and Demon read unavailable"},
 			{names: []string{"slow-window"}, arg: "<dur>",
 				hint: fmt.Sprintf("Window a participant's lateness is judged over; host only, 0 never evicts (default %s)", parameter.NetworkSlowWindow)},
 			{names: []string{"slow-late"}, arg: "<n>",
@@ -300,7 +301,7 @@ work from a keyboard.
 Game pauses the game until Resume, as :pause (:p) or p does, restarts it from its
 scenario's first tick, as :n does, and sets its speed; in a session only the host
 can, and every participant follows at the same tick. Its Console row opens the
-console. A replay adds its restart.
+console, and God and Demon act as :god and :demon do. A replay adds its restart.
 .PP
 Scenarios lists the scenarios the configuration roots hold, each by its name,
 or by its path below scenario/ where the name reaches another, the running one

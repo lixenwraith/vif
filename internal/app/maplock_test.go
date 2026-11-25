@@ -229,7 +229,7 @@ func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
 }
 
 // TestAMapNeverCropsBelowItsScenarioFloor: a scenario's [map] floor holds at boot,
-// under a smaller terminal, across a reset and through a level setup the cell cap
+// under a smaller terminal, across a reset and through a map setup the cell cap
 // trims, while a larger terminal still crops the map to itself.
 func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	t.Parallel()
@@ -264,7 +264,7 @@ func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	a.Reset(false)
 	a.Tick(1)
 	expect("after a reset", 50, 100)
-	a.SetupLevel(1500, 30, false, true)
+	a.SetupMap(1500, 30, false, true)
 	a.Tick(1)
 	expect("past the cell cap", parameter.MaxMapCells/100, 100)
 }
@@ -318,7 +318,7 @@ func assertOffMap(t *testing.T, a *App, slot uint8) {
 }
 
 // TestAMapWithoutCursorsRostersItsPlayerOffIt: [map] cursors = false rosters the boot
-// spawn's slot with nothing on the map, through a reset and a level setup that
+// spawn's slot with nothing on the map, through a reset and a map setup that
 // clears the map; a motion moves nothing, and a captured key still presses from
 // that slot.
 func TestAMapWithoutCursorsRostersItsPlayerOffIt(t *testing.T) {
@@ -362,7 +362,7 @@ func TestAMapWithoutCursorsRostersItsPlayerOffIt(t *testing.T) {
 	a.Reset(false)
 	a.Tick(2)
 	assertOffMap(t, a, 0)
-	a.SetupLevel(60, 20, true, false)
+	a.SetupMap(60, 20, true, false)
 	a.Tick(1)
 	assertOffMap(t, a, 0)
 	var count int

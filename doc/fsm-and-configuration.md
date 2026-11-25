@@ -144,8 +144,8 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `bots` | The bot documents made for the scenario's map, files of its own listed in order and named by their files; the first is the bot a seat that names no graph plays ([Bots: Writing a graph](bots.md#writing-a-graph)). |
 | `systems.disabled_systems` | Systems the baseline leaves off. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. `behavior` toggles too, so a list that narrows names it to run data species. |
-| `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
-| `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
+| `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and map setup; a smaller terminal crops the view and the camera follows the cursor. |
+| `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's map setups are what hold it. A scenario whose regions size the map differently leaves it out. |
 | `navigation.field_refresh_ticks` | How often, in ticks, a navigator or drop out of sight reads its flow field, holding the way it read between ([Navigation §4](navigation-design.md#4-throttle-phase-and-laziness)); 1, every tick, when unset. |
 | `navigation.route_rebuild_ticks` | The fewest ticks between two rebuilds of a stale gateway route graph; 20 when unset. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization: its boot, settled before the clock starts (§5). Omit for a region spawned later. |
@@ -224,7 +224,7 @@ The first `Tick` is the game's start. Every initial state's entry, and every
 transition an event of that settle triggers, runs before the clock starts: when the
 scenario loads and at each reset, under the start hold a game waits in for its
 player's press, where a host's lobby stands and where a joiner lands. That world
-is drawn behind the start prompt, so the boot spawns the cursor and sets the level
+is drawn behind the start prompt, so the boot spawns the cursor and sets the map
 up, and what belongs to the started game waits for a `Tick` transition out of it: a
 region the boot spawns runs its own entry in the same settle, and a timer armed
 there would stand frozen on the held map until the press. Every shipped scenario
@@ -552,7 +552,7 @@ flowchart TD
   for `EventCursorSpawned` (or retry `EventCursorSpawnFailed`) before emitting
   player-state events. A new world intentionally contains no cursor.
 - Open play on the first `Tick`: the initial state is the boot, settled before the
-  clock starts (§5), where the cursor is spawned and the level set up; a `Tick`
+  clock starts (§5), where the cursor is spawned and the map set up; a `Tick`
   transition out of it starts what the game counts, as every shipped scenario's does.
 - Put one encounter family in one external state file.
 - Spawn boss/side regions dynamically and pause the loop they supersede.
@@ -577,8 +577,8 @@ sequence ends, and resets on `session.any_defeated`. This guard aggregates
 replicated owner defeat reports; it does not read instance-local energy or heat
 mirrors. It counts the persons' cursors in play, or every bot's in play where no
 person holds a place, so a bot's defeat resets nothing beside a person. Encounter
-`EventLevelSetup` actions that clear pair `clear_entities = true` with
-`preserve_loot = true`, so a level change keeps uncollected rewards; a Kraken's
+`EventMapSetup` actions that clear pair `clear_entities = true` with
+`preserve_loot = true`, so a map change keeps uncollected rewards; a Kraken's
 return to `main` clears only its maze, keeping the text, and the Devourer's
 region clears nothing. A defeat emits
 `EventGameResetRequest`, the same new game `:n` starts, which clears the world,

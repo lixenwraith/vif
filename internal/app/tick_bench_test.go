@@ -25,7 +25,7 @@ import (
 
 // BenchmarkHeadlessTicks measures one simulation tick on a driven App: the embedded
 // scenario played by one cursor; td, which an unattended run restarts every few
-// seconds, so its ticks carry a level's maze and route graphs; and cave, its
+// seconds, so its ticks carry a maze and its route graphs; and cave, its
 // scenery drifting over the scrolling rock. Run with -benchtime=<n>x so every run
 // simulates the same ticks of one seed and allocations compare exactly.
 func BenchmarkHeadlessTicks(b *testing.B) {
