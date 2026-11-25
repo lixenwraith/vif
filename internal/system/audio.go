@@ -3,6 +3,7 @@
 package system
 
 import (
+	"math"
 	"sync/atomic"
 
 	"github.com/lixenwraith/audio"
@@ -167,9 +168,29 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 			if id == audio.SoundNone && p.Name != "" {
 				id = audio.SoundIDByName(p.Name)
 			}
-			s.player.Play(id)
+			s.player.PlayAt(id, s.placement(p))
 		}
 	}
+}
+
+// placement is where a sound sounds from the cursor this instance drives, its cell
+// read against half the view each way; a sound placed with no cursor to hear it,
+// or not placed, sounds in the middle
+func (s *AudioSystem) placement(p *event.SoundRequestPayload) audio.Placement {
+	at := audio.Placement{Pitch: p.Pitch}
+	cursor, ok := s.world.LocalCursor()
+	if !p.Placed || !ok {
+		return at
+	}
+	config := s.world.Resources.Config
+	dx := float64(p.X-cursor.X) / float64(max(config.ViewportWidth/2, 1))
+	dy := float64(p.Y-cursor.Y) / float64(max(config.ViewportHeight/2, 1))
+	at.Pan = max(-1, min(dx, 1))
+	at.Gain = parameter.PlacedFarGain * min(math.Hypot(dx, dy)/math.Sqrt2, 1)
+	if dy > 0 {
+		at.Cutoff = parameter.PlacedBelowCutoff * math.Pow(parameter.PlacedDeepCutoff/parameter.PlacedBelowCutoff, min(dy, 1))
+	}
+	return at
 }
 
 // Apply the preference through scenario gates; MusicSystem owns sequencer control.

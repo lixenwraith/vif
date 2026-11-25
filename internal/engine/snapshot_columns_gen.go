@@ -1061,6 +1061,15 @@ func encodeColumnsLoot(dst []byte, rows []StoreEntry[component.LootComponent]) [
 		dst = appendF64(dst, rows[i].Value.FlowY)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Sounded)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Route)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Left)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.LastIntX)
 	}
 	for i := range rows {
@@ -1117,6 +1126,15 @@ func decodeColumnsLoot(r *columnReader) []StoreEntry[component.LootComponent] {
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.FlowY, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Sounded, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Route, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Left, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.LastIntX, r)

@@ -1,6 +1,9 @@
 package vmath
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 const traceCap = 8192
 
@@ -215,5 +218,36 @@ func TestRayCellsAreExactlyItsContents(t *testing.T) {
 				t.Fatalf("ray %+v enumerates %d cells, want %d", r, len(cells), want)
 			}
 		}
+	}
+}
+
+// TestAShadowCastLightsItsWedgeAndAWallShadesWhatIsBehindIt: in the open a cast
+// lights each cell whose middle lies within its spread and none further out, and a
+// wall across its way is lit while the cells straight behind it are not.
+func TestAShadowCastLightsItsWedgeAndAWallShadesWhatIsBehindIt(t *testing.T) {
+	cast := func(dx, dy int, spread float64, wall [2]int) map[[2]int]bool {
+		lit := map[[2]int]bool{}
+		ShadowCast(0, 0, dx, dy, spread, 8, func(x, y int) bool { return [2]int{x, y} == wall },
+			func(x, y int) { lit[[2]int{x, y}] = true })
+		return lit
+	}
+	for _, c := range []struct {
+		dx, dy int
+		spread float64
+	}{{1, 0, 0.5}, {0, -1, 2}} {
+		lit := cast(c.dx, c.dy, c.spread, [2]int{99, 99})
+		for along := 1; along <= 8; along++ {
+			for across := -20; across <= 20; across++ {
+				x, y := along*c.dx+across*IntAbs(c.dy), along*c.dy+across*IntAbs(c.dx)
+				if want := math.Abs(float64(across)) <= c.spread*float64(along); lit[[2]int{x, y}] != want {
+					t.Fatalf("way (%d, %d): cell %d along, %d across lit %t, want %t", c.dx, c.dy, along, across, !want, want)
+				}
+			}
+		}
+	}
+	lit := cast(1, 0, 0.5, [2]int{3, 0})
+	if !lit[[2]int{3, 0}] || lit[[2]int{4, 0}] || lit[[2]int{7, 0}] {
+		t.Fatalf("a wall at (3, 0) lit %t, the cells behind it at 4 and 7 %t and %t: want the wall alone",
+			lit[[2]int{3, 0}], lit[[2]int{4, 0}], lit[[2]int{7, 0}])
 	}
 }

@@ -119,6 +119,18 @@ type Router struct {
 	// button's release goes to the button pressed, wherever the pointer lets go
 	holds []heldInput
 
+	// walk is a stepped cursor's way through its blocks: the way the block it is
+	// crossing goes and the cells of it still to cross, then the way the blocks asked
+	// after it go and how many, the game time its next cell is due, and the way a
+	// wall last refused, which a press that way does not bump again
+	walk struct {
+		dx, dy, cells int
+		next          [2]int
+		blocks        int
+		due           time.Time
+		bumped        [2]int
+	}
+
 	// Fire anchors, shared by auto-fire and held-button preventing stacked requests
 	lastFireMain time.Time
 	lastFireSpec time.Time
@@ -567,6 +579,10 @@ func charCells(x, y, endX int) MotionResult {
 }
 
 func (r *Router) handleMotion(intent *input.Intent) bool {
+	if r.ctx.World.Resources.Config.Stepped() {
+		r.askWalk(intent)
+		return r.handleModeSwitch(intent)
+	}
 	motionFn, ok := r.motionLUT[intent.Motion]
 	if !ok {
 		return true
@@ -578,6 +594,72 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 		OpMove(r.ctx, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
 	return r.handleModeSwitch(intent) // A, I and vim's a enter Insert once moved
+}
+
+// walkWays are the motions a stepped cursor walks by, each the way it goes
+var walkWays = map[input.MotionOp][2]int{
+	input.MotionLeft: {-1, 0}, input.MotionRight: {1, 0}, input.MotionUp: {0, -1}, input.MotionDown: {0, 1},
+}
+
+// askWalk walks a stepped cursor count blocks the way a motion goes, after the
+// block it is crossing; any other motion takes it nowhere
+func (r *Router) askWalk(intent *input.Intent) {
+	way, ok := walkWays[intent.Motion]
+	if !ok {
+		return
+	}
+	count := max(intent.Count, 1)
+	if r.walk.cells > 0 && r.walk.next == way {
+		r.walk.blocks = max(r.walk.blocks, count)
+		return
+	}
+	r.walk.next, r.walk.blocks = way, count
+	if r.walk.cells == 0 {
+		r.walkOn(r.ctx.TimeCtl.Now())
+	}
+}
+
+// walkOn steps the walk a cell once one is due, the first of a block at once; a
+// block a wall or the map's edge stands in ends the walk, a bump the first time
+// the cursor is pressed against it
+func (r *Router) walkOn(now time.Time) {
+	w, config := r.ctx.World, r.ctx.World.Resources.Config
+	pos, ok := w.LocalCursor()
+	if !ok || !config.Stepped() {
+		r.walk.cells, r.walk.blocks = 0, 0
+		return
+	}
+	if r.walk.cells == 0 {
+		if r.walk.blocks == 0 {
+			return
+		}
+		r.walk.blocks--
+		way, cells := r.walk.next, config.CursorStepX
+		if way[0] == 0 {
+			cells = config.CursorStepY
+		}
+		for i := 1; i <= cells; i++ {
+			x, y := pos.X+way[0]*i, pos.Y+way[1]*i
+			if x < 0 || y < 0 || x >= config.MapWidth || y >= config.MapHeight || isCursorBlocked(r.ctx, x, y) {
+				if r.walk.blocks = 0; r.walk.bumped != way {
+					r.walk.bumped = way
+					r.ctx.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.MetalHit})
+				}
+				return
+			}
+		}
+		r.walk.dx, r.walk.dy, r.walk.cells, r.walk.due = way[0], way[1], cells, now
+	}
+	if now.Before(r.walk.due) {
+		return
+	}
+	cells := config.CursorStepX
+	if r.walk.dx == 0 {
+		cells = config.CursorStepY
+	}
+	w.PushCursorWalk(w.Resources.Player.Entity, pos.X+r.walk.dx, pos.Y+r.walk.dy)
+	r.walk.cells, r.walk.bumped = r.walk.cells-1, [2]int{}
+	r.walk.due = now.Add(parameter.StepWalkDuration / time.Duration(cells))
 }
 
 func (r *Router) handleCharMotion(intent *input.Intent) bool {
@@ -1763,6 +1845,7 @@ func (r *Router) ProcessInputTick() bool {
 	auto := r.ctx.AutoFire.Load()
 	mouse := !r.ctx.MouseDisabled.Load()
 	player := r.ctx.World.Resources.Player.Entity
+	r.walkOn(now)
 
 	emitted := false
 	if o, due := r.fireDue(now, &r.lastFireMain, auto != engine.AutoFireOff, mouse && r.mouseLeftHeld); due {
@@ -1772,7 +1855,7 @@ func (r *Router) ProcessInputTick() bool {
 	}
 	if o, due := r.fireDue(now, &r.lastFireSpec, auto == engine.AutoFireBoth, mouse && r.mouseRightHeld); due {
 		r.ctx.PushEventFull(event.EventFireSpecialRequest,
-			&event.FireSpecialRequestPayload{Entity: player}, o, core.DomainPlayer)
+			&event.FireSpecialRequestPayload{Entity: player, Repeat: true}, o, core.DomainPlayer)
 		emitted = true
 	}
 	return emitted

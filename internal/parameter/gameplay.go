@@ -124,6 +124,11 @@ const (
 	// jitter on a phone's 6 px cells, where a press farther off is play however fast
 	MouseDoubleClickWindow       = 300 * time.Millisecond
 	MouseDoubleClickSlackPercent = 2
+
+	// StepWalkDuration is the game time a stepped cursor takes over one block of its
+	// map's step, its cells evenly spaced, so a block across and a block down are
+	// one beat
+	StepWalkDuration = 150 * time.Millisecond
 )
 
 // Initial input state, applied once at GameContext construction, changed state persist through game reset

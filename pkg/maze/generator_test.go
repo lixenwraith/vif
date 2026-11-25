@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math/rand/v2"
+	"slices"
 	"testing"
 )
 
@@ -115,4 +116,20 @@ func appendResult(b []byte, r Result) []byte {
 		points(room.Entries)
 	}
 	return b
+}
+
+// TestDistancesCountTheStepsAlongThePassages: a passage's distance is its steps from
+// the cell along passages, round a wall, and a wall or a cell cut off is -1.
+func TestDistancesCountTheStepsAlongThePassages(t *testing.T) {
+	grid := [][]bool{
+		{Passage, Wall, Passage, Wall},
+		{Passage, Wall, Passage, Wall},
+		{Passage, Passage, Passage, Wall},
+		{Wall, Wall, Wall, Passage},
+	}
+	got := Distances(grid, Point{0, 0})
+	want := []int{0, -1, 6, -1, 1, -1, 5, -1, 2, 3, 4, -1, -1, -1, -1, -1}
+	if !slices.Equal(got, want) {
+		t.Fatalf("distances %v, want %v", got, want)
+	}
 }

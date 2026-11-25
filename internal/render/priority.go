@@ -69,6 +69,7 @@ const (
 	PriorityMarker
 
 	// === Post-Processing (order matters) ===
+	PrioritySight // over every map layer, so darkness hides them all; the cursor draws after
 	PriorityGrayout
 	PriorityStrobe
 	PriorityDim

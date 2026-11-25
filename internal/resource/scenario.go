@@ -56,6 +56,9 @@ type Scenario struct {
 	// CursorsFixed is cursors = "fixed": each stands where the scenario spawned it,
 	// unmoved by its player and undrawn.
 	CursorsOffMap, CursorsFixed bool
+	// MapStepWidth and MapStepHeight are [map] step, the block a cursor walks a
+	// press, zero when the scenario sets none
+	MapStepWidth, MapStepHeight int
 	// NavRefreshTicks and NavRebuildTicks are [navigation] field_refresh_ticks and
 	// route_rebuild_ticks, zero when the scenario sets none
 	NavRefreshTicks, NavRebuildTicks int
@@ -606,9 +609,9 @@ func (s *Scenario) readPlayers(doc map[string]any) error {
 	return nil
 }
 
-// readMap reads [map] min_width, min_height, fixed and cursors. A size the grid
-// cannot hold is refused rather than clamped: it names what the scenario's layout
-// needs, and it arrives from a peer as readily as from disk.
+// readMap reads [map] min_width, min_height, fixed, step and cursors. A size the
+// grid cannot hold is refused rather than clamped: it names what the scenario's
+// layout needs, and it arrives from a peer as readily as from disk.
 func (s *Scenario) readMap(v any) error {
 	table, ok := v.(map[string]any)
 	if !ok {
@@ -623,11 +626,15 @@ func (s *Scenario) readMap(v any) error {
 			s.CursorsOffMap = ok && !cursors
 			continue
 		}
-		if key == "fixed" {
+		if key == "fixed" || key == "step" {
+			w, h := &s.MapFixedWidth, &s.MapFixedHeight
+			if key == "step" {
+				w, h = &s.MapStepWidth, &s.MapStepHeight
+			}
 			text, _ := value.(string)
-			if _, err := fmt.Sscanf(text, "%dx%d", &s.MapFixedWidth, &s.MapFixedHeight); err != nil ||
-				fmt.Sprintf("%dx%d", s.MapFixedWidth, s.MapFixedHeight) != text || s.MapFixedWidth < 1 || s.MapFixedHeight < 1 {
-				return errors.New(`map.fixed must be "WxH", positive integers`)
+			if _, err := fmt.Sscanf(text, "%dx%d", w, h); err != nil ||
+				fmt.Sprintf("%dx%d", *w, *h) != text || *w < 1 || *h < 1 {
+				return fmt.Errorf(`map.%s must be "WxH", positive integers`, key)
 			}
 			continue
 		}
@@ -645,6 +652,9 @@ func (s *Scenario) readMap(v any) error {
 	}
 	if w, h := position.Clamp(max(s.MapMinWidth, 1), max(s.MapMinHeight, 1)); w < s.MapMinWidth || h < s.MapMinHeight {
 		return fmt.Errorf("map floor %dx%d is larger than a map can be", s.MapMinWidth, s.MapMinHeight)
+	}
+	if s.MapStepWidth > 0 && (s.CursorsOffMap || s.CursorsFixed) {
+		return errors.New("map.step walks a cursor the map's cursors setting leaves unmoved")
 	}
 	if s.MapFixedWidth > 0 {
 		if w, h := position.Clamp(s.MapFixedWidth, s.MapFixedHeight); w != s.MapFixedWidth || h != s.MapFixedHeight ||

@@ -68,10 +68,14 @@ type LootLook struct {
 	Glow  color.RGB
 }
 
-// LootKind is a loot kind whole: what collecting it grants and how a drop of it looks
+// LootKind is a loot kind whole: what collecting it grants and how a drop of it
+// looks. A kind with a Sound sounds it from where a drop flies, and a Hidden one
+// is seen only as it is collected: a drop heard rather than seen.
 type LootKind struct {
 	LootSpec
-	Look LootLook
+	Look   LootLook
+	Sound  string
+	Hidden bool
 }
 
 // DropEntry is one loot kind a tier can roll
@@ -123,6 +127,15 @@ func (s *LootSet) Names() []string {
 	return names
 }
 
+// Rise is a sounding drop's pitch in semitones: the share of its owner's route it
+// has covered, of LootSoundRise
+func (l *LootComponent) Rise() float64 {
+	if l.Route <= 0 {
+		return 0
+	}
+	return parameter.LootSoundRise * max(0, 1-float64(l.Left)/float64(l.Route))
+}
+
 // LootComponent represents a collectible loot drop entity
 type LootComponent struct {
 	Type LootType
@@ -141,6 +154,12 @@ type LootComponent struct {
 	// FlowX, FlowY are the way its owner's field led when the drop, out of sight,
 	// last read it, held until it reads again; zero homes on the owner
 	FlowX, FlowY float64
+
+	// A sounding drop's flight since it last sounded, its owner's route from where
+	// it first sounded, which its pitch rises over, and what was left of it when it
+	// last read it; zero before it has sounded
+	Sounded     time.Duration
+	Route, Left int
 
 	// Grid tracking
 	LastIntX int

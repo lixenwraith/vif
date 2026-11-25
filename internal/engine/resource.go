@@ -305,6 +305,11 @@ type ConfigResource struct {
 	CursorsOffMap bool `toml:"-"`
 	CursorsFixed  bool `toml:"-"`
 
+	// CursorStepX and CursorStepY are the scenario's [map] step: a cursor walks
+	// blocks of that many columns and rows, a cell at a time, and nothing else moves
+	// it (World.PushCursorWalk); zero for a cursor free to go anywhere
+	CursorStepX, CursorStepY int `toml:"-"`
+
 	// ContentBlocks is the scenario's [content] blocks: the spawner lays a corpus
 	// block's lines together where a slot holds them, else a line at a time
 	ContentBlocks bool `toml:"-"`
@@ -329,6 +334,9 @@ type ConfigResource struct {
 	// colors, whose theme draws entries 0-15 but xterm's cube as it is
 	TextConsole bool `toml:"-"`
 }
+
+// Stepped reports a map whose cursors walk its step's blocks alone
+func (c *ConfigResource) Stepped() bool { return c.CursorStepX > 0 && c.CursorStepY > 0 }
 
 // FloorMapSize raises a map size to the scenario's floor and bounds it to the grid,
 // the one rule every writer of the map's size applies. The cell cap trims height,
