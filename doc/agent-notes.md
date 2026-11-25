@@ -862,7 +862,7 @@ Docs · Libraries · Branches.
   charges ends ten 30-point bodies a second. What presses a full loadout is a
   body's hit points and speed against its walk, never its numbers, and a strike
   that ends whatever it faces every 2 s outruns any rank: `magic`'s strike ends
-  every rank and fires only on a turn for that (`SquareKindSpec.Turned`).
+  every rank and reaches two shield radii for that (`SquareStrikeReach`).
 - Each kill boosts a plain shield half a second, and a boosted shield takes no
   touch, so a horde the weapons can kill never costs it: under a stepped shield
   (`ShieldComponent.Step`) a kill earns none, which is what lets `magic` count

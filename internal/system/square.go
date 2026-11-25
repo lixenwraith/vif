@@ -16,9 +16,9 @@ import (
 
 // SquareSystem keeps a magic square: nine blocks a player selects by digit and turns
 // a row or column at a time (squareTurns), under the shield of the cursor standing
-// on it, which it sizes to cover them. An edge holding three blocks of a kind fires
+// on it, which it sizes to cover them. A line holding three blocks of a kind fires
 // the kind's effect (component.SquareKinds) as that cursor's each time its cooldown
-// runs out, the attack only on a turn that leaves it there.
+// runs out, the middle row and column only a kind with no side to strike.
 type SquareSystem struct {
 	world *engine.World
 	on    []core.Entity // a body's members on the blocks, reused
@@ -124,7 +124,7 @@ func (s *SquareSystem) Update() {
 			effect := &sq.Effects[kind]
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
 		}
-		s.trigger(e, sq, false)
+		s.trigger(e, sq)
 		return true
 	})
 }
@@ -326,7 +326,7 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 	if sq.IsMagic() {
 		sq.Dust = parameter.SquareDustFull
 	}
-	s.trigger(e, sq, true)
+	s.trigger(e, sq)
 }
 
 // shed empties the square's dust meter into dust, the share of SquareDustShed it
@@ -353,31 +353,32 @@ func (s *SquareSystem) shed(sq *component.SquareComponent) {
 	s.world.PushLocal(event.EventParticleSpawnBatch, batch)
 }
 
-// squareLines reads the kind each line holds three of
+// squareLines reads the kind each line holds three of and fires: the middle row and
+// column face no side, so none fires a kind that strikes
 func squareLines(sq *component.SquareComponent) (lines [component.SquareLines]uint8) {
 	for l := range lines {
-		places := component.EdgePlaces(l)
+		places := component.PlacesOf(l)
 		kind := sq.KindAt(places[0])
-		if kind < component.SquareKindCount && sq.KindAt(places[1]) == kind && sq.KindAt(places[2]) == kind {
+		if kind < component.SquareKindCount && sq.KindAt(places[1]) == kind && sq.KindAt(places[2]) == kind &&
+			(l < component.SquareEdges || component.SquareKinds[kind].Attack == component.CombatAttackNone) {
 			lines[l] = uint8(kind) + 1
 		}
 	}
 	return lines
 }
 
-// trigger fires each kind a line holds three of whose cooldown has run out, one
-// that fires on a turn only when turned
-func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent, turned bool) {
+// trigger fires each kind a line holds three of whose cooldown has run out
+func (s *SquareSystem) trigger(e core.Entity, sq *component.SquareComponent) {
 	for l, kind := range sq.Lines {
-		if kind != 0 && sq.Effects[kind-1].Ready() && (turned || !component.SquareKinds[kind-1].Turned) {
+		if kind != 0 && sq.Effects[kind-1].Ready() {
 			s.fire(e, sq, component.SquareKind(kind-1), l)
 		}
 	}
 }
 
 // fire runs each part of a kind's effect as its cursor's: its family on what stands
-// in the part line faces, a boost for as long as it holds, its wind about the
-// square, and the square's dust shed
+// where line strikes, a boost for as long as it holds, its wind about the square,
+// and the square's dust shed
 func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind component.SquareKind, line int) {
 	spec := &component.SquareKinds[kind]
 	cursor := s.owner(sq)
@@ -398,13 +399,13 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }
 
-// strike lands a family as cursor's on every body with a member in the part of the
-// map line faces, and reports whether any stood there
+// strike lands a family as cursor's on every body with a member where line strikes
+// (SquareComponent.Strikes), and reports whether any stood there
 func (s *SquareSystem) strike(sq *component.SquareComponent, cursor core.Entity, attack component.CombatAttackType, line int) bool {
 	if cursor == 0 {
 		return false
 	}
-	bodies := FindTargetsIn(s.world, sq.Faces(line), position.ScopeShared, cursor)
+	bodies := FindTargetsIn(s.world, sq.Strikes(line, s.world.Resources.Config.CellAspect), position.ScopeShared, cursor)
 	for _, g := range bodies {
 		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,

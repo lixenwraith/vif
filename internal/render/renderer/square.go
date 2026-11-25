@@ -99,13 +99,13 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
-// flash tints the part of the map a line faces in its kind's glow, a share of the
-// way from full to gone; a console draws none
+// flash tints where a line's strike lands in its kind's glow, a share of the way
+// from full to gone; a console draws none
 func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind, line int, left float64) {
 	if r.console != nil {
 		return
 	}
-	faces := sq.Faces(line)
+	faces := sq.Strikes(line, ctx.CellAspect)
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {

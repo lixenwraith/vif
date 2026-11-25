@@ -234,19 +234,17 @@ To settle: the shield's count and what a touch costs the blocks, the eight ranks
 hit points and speeds, the paces, how a rank and a round quicken them and the waves
 a round adds, each kind's duration and cooldown, the whirl's carry and the gust's
 throw, the carrier's weapons, what charges the dust meter and the burst meter, and
-what the dust's blast does.
+what the dust's blast does. The headless survival table Gameplay §10 carried went
+with strikes by turn across the map: a probe's figures under strikes each cooldown
+within reach, and the middle lines firing, replace it.
 
 The options Lixen did not take (2026-11-25), each with what would reopen it:
 
-- An attack edge striking every 2 s while it holds, now that a strike ends every
-  rank: a probe turning once a second then stood 1,050 s on 80 by 40, against 728
-  with a strike a turn, and was never touched on 200 by 60. Reopen if strikes by
-  turn prove too busy for a phone.
 - An attack striking once per line formed, struck again only by breaking and
-  forming the line, two turns a strike: the hardest of the three. Reopen if a strike
-  a turn proves too easy at a turn a second.
-- The attack's repeat kept with a longer cooldown, about 5 s: no key keeps it
-  striking, so the late game's pressure returns only in part. Reopen with the first.
+  forming the line, two turns a strike: the hardest of the three. Reopen if strikes
+  each cooldown within reach prove too easy.
+- The attack's repeat with a longer cooldown, about 5 s: no key keeps it striking,
+  so the late game's pressure returns only in part. Reopen with the one above.
 - A burst fired at any charge, its death wave reaching that share of the map:
   ends sitting on a full meter, at the cost of a reach on the death wave (its event
   and the pulse). Reopen if a full meter still waits unused in play.
@@ -260,8 +258,8 @@ The options Lixen did not take (2026-11-25), each with what would reopen it:
 - Affected files: `wad/scenario/base/magic/scenario.toml` (`Gate`, the ranks)
 
 A body's walk from a corner grows with the map, and the weapons and strikes have
-that much longer over it: a probe turning once a second stood 728 s at 80 by 40 and
-past 30 minutes untouched at 200 by 60.
+that much longer over it: a probe turning once a second, under strikes by turn
+across the map, stood 728 s at 80 by 40 and past 30 minutes untouched at 200 by 60.
 Gateways a fixed walk from the square, or a pace by the map's size, closes it.
 
 ### Leave magic's dust to the player's key

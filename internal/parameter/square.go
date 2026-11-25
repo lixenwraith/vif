@@ -12,8 +12,9 @@ const (
 
 	// A line fires its kind again each cooldown, counted from its last fire, while it
 	// holds three of it. The boost's cooldown leaves what its gust threw the time to
-	// walk back
+	// walk back. A strike reaches SquareStrikeReach shield radii from the middle.
 	SquareStrikeCooldown = 2 * time.Second
+	SquareStrikeReach    = 2.0
 	SquareBoostDuration  = time.Second
 	SquareBoostCooldown  = 8 * time.Second
 

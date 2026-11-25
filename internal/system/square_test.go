@@ -19,8 +19,14 @@ import (
 // 80 by 40 world, a cursor standing on its middle cell
 func newSquare(t *testing.T) (*engine.World, *SquareSystem, *component.SquareComponent) {
 	t.Helper()
+	return newSquareOn(t, 80, 40)
+}
+
+// newSquareOn is newSquare's square and cursor on a screen of width by height
+func newSquareOn(t *testing.T, width, height int) (*engine.World, *SquareSystem, *component.SquareComponent) {
+	t.Helper()
 	w := engine.NewWorld()
-	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+	engine.NewGameContextWithClock(w, width, height, engine.NewManualClock())
 	s := ready(NewSquareSystem(w)).(*SquareSystem)
 	s.HandleEvent(event.GameEvent{Type: event.EventSquareSpawnRequest, Payload: &event.SquareSpawnRequestPayload{
 		X: 40, Y: 18, Layout: "672159834", Groups: []string{"213", "654", "879"}, ShieldStep: 200,
@@ -113,33 +119,33 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 	return kinds
 }
 
-// TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn: with the kinds down the columns
-// the two on the edges fire at once, a turn away and back inside the cooldown firing
-// nothing and the middle column's never; then a whirl or a defense fires again as its
-// cooldown runs out, and the attack only on a turn that leaves it there. A defense's
-// fire boosts its cursor and blows a gust out from the middle; a whirl turns a wind.
-func TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn(t *testing.T) {
+// TestALineFiresItsKindEachCooldownTheMiddleNoAttack: with the kinds down the
+// columns each fires at once and again as its cooldown runs out, a turn away and
+// back inside the cooldown firing nothing, save an attack down the middle column,
+// which faces no side. A defense's fire boosts its cursor and blows a gust out from
+// the middle; a whirl turns a wind.
+func TestALineFiresItsKindEachCooldownTheMiddleNoAttack(t *testing.T) {
 	for _, c := range []struct {
 		keys  []string
-		edges []component.SquareKind // the left column's, then the right's
+		fired []component.SquareKind // the left column's, the right's, the middle's
 	}{
-		{[]string{"5", "h", "3", "l"}, []component.SquareKind{component.SquareWhirl, component.SquareAttack}},
-		{[]string{"7", "l", "3", "h"}, []component.SquareKind{component.SquareAttack, component.SquareDefense}},
+		{[]string{"5", "h", "3", "l"}, []component.SquareKind{component.SquareWhirl, component.SquareAttack, component.SquareDefense}},
+		{[]string{"7", "l", "3", "h"}, []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareWhirl}},
+		{[]string{"7", "h", "1", "l"}, []component.SquareKind{component.SquareDefense, component.SquareWhirl}},
 	} {
-		w, s, sq := newSquare(t)
+		w, s, _ := newSquare(t)
 		cursor := w.Resources.Player.Slot(0)
 		pressSquare(s, c.keys...)
 		events := slices.Clone(w.Resources.Event.Queue.Consume())
-		if got := squareFired(events); !slices.Equal(got, c.edges) {
-			t.Fatalf("%v fired %v, want the edges' %v", c.keys, got, c.edges)
+		if got := squareFired(events); !slices.Equal(got, c.fired) {
+			t.Fatalf("%v fired %v, want %v", c.keys, got, c.fired)
 		}
 		boosts, gusts, whirls := 0, 0, 0
-		cx, cy := sq.Center()
 		for _, ev := range events {
 			if p, ok := ev.Payload.(*event.BoostActivatePayload); ok && p.Entity == cursor && p.Duration == parameter.SquareBoostDuration {
 				boosts++
 			}
-			if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial && p.X == cx && p.Y == cy {
+			if p, ok := ev.Payload.(*event.WindStartPayload); ok && p.Radial {
 				switch {
 				case p.Force == parameter.SquareWindForce && p.Direction == 0:
 					gusts++
@@ -148,16 +154,8 @@ func TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn(t *testing.T) {
 				}
 			}
 		}
-		defends, turns := 0, 0
-		if slices.Contains(c.edges, component.SquareDefense) {
-			defends = 1
-		}
-		if slices.Contains(c.edges, component.SquareWhirl) {
-			turns = 1
-		}
-		if gusts != defends || whirls != turns || boosts != defends {
-			t.Fatalf("%v blew %d gusts, turned %d winds and boosted %d times, want %d, %d and a boost a gust",
-				c.keys, gusts, whirls, boosts, defends, turns)
+		if gusts != 1 || whirls != 1 || boosts != 1 {
+			t.Fatalf("%v blew %d gusts, turned %d winds and boosted %d times, want one each", c.keys, gusts, whirls, boosts)
 		}
 		pressSquare(s, "l", "h")
 		if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {
@@ -179,18 +177,12 @@ func TestAnEdgeFiresAgainEachCooldownTheAttackOnATurn(t *testing.T) {
 		}
 		for kind, spec := range component.SquareKinds {
 			want := 0
-			if slices.Contains(c.edges, component.SquareKind(kind)) && !spec.Turned {
+			if slices.Contains(c.fired, component.SquareKind(kind)) {
 				want = ticks(spec.Cooldown)
 			}
 			if again[kind] != want {
 				t.Errorf("%v: %s fired again at tick %d, want %d", c.keys, spec.Name, again[kind], want)
 			}
-		}
-		l := sq.Line(component.SquareAttack)
-		along := map[bool]string{false: "h", true: "k"}[l >= 2]
-		pressSquare(s, string(rune('0'+sq.Digits[component.EdgePlaces(l)[0]])), along)
-		if got := squareFired(w.Resources.Event.Queue.Consume()); !slices.Equal(got, []component.SquareKind{component.SquareAttack}) {
-			t.Fatalf("%v then a turn along the attack's edge fired %v, want the attack", c.keys, got)
 		}
 	}
 }
@@ -213,7 +205,7 @@ func TestALineFacesTheGatewaysOnItsSide(t *testing.T) {
 		{"middle", cx, cy, nil},
 	} {
 		var got []int
-		for l := range component.SquareLines {
+		for l := range component.SquareEdges {
 			if sq.Faces(l)(c.x, c.y) {
 				got = append(got, l)
 			}
@@ -233,7 +225,7 @@ func TestAnOrbStandsOnTheSideItsLineFaces(t *testing.T) {
 	cx, cy := sq.Center()
 	reach := sq.ShieldRadius(aspect) + parameter.SquareOrbGap
 	rx, ry := int(math.Round(reach)), int(math.Round(aspect.FromCircular(reach)))
-	for l, want := range [component.SquareLines]vmath.Point{
+	for l, want := range [component.SquareEdges]vmath.Point{
 		{X: cx, Y: cy - ry}, {X: cx, Y: cy + ry}, {X: cx - rx, Y: cy}, {X: cx + rx, Y: cy},
 	} {
 		if got := sq.Orb(l, aspect, cfg.MapWidth, cfg.MapHeight); got != want {
@@ -268,32 +260,38 @@ func TestASquareSizesItsCursorsShieldToCoverIt(t *testing.T) {
 	}
 }
 
-// TestAStrikeKillsWhatStandsInTheThirdItsLineFaces: attack in the left column lands
-// as its cursor's on the swarm standing left of the square and on none above it,
-// takes every hit point it holds whatever their count, and marks the fire as landed
-func TestAStrikeKillsWhatStandsInTheThirdItsLineFaces(t *testing.T) {
-	w, s, sq := newSquare(t)
+// TestAStrikeKillsWhatStandsInItsThirdWithinItsReach: attack in the right column
+// lands as its cursor's on the swarm standing right of the square within two shield
+// radii of its middle, on none further right nor above it, takes every hit point it
+// holds whatever their count, and marks the fire as landed
+func TestAStrikeKillsWhatStandsInItsThirdWithinItsReach(t *testing.T) {
+	w, s, sq := newSquareOn(t, 140, 40)
 	cursor := w.Resources.Player.Slot(0)
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	cx, cy := sq.Center()
-	left, above := standSwarm(w, 4, cy), standSwarm(w, cx, 2)
+	reach := int(parameter.SquareStrikeReach * sq.ShieldRadius(w.Resources.Config.CellAspect))
+	near, far, above := standSwarm(w, cx+reach-4, cy), standSwarm(w, cx+reach+4, cy), standSwarm(w, cx, 2)
 	hp := 100 * parameter.CombatInitialHPSwarm
-	for _, swarm := range []core.Entity{left, above} {
+	for _, swarm := range []core.Entity{near, far, above} {
 		c, _ := w.Components.Combat.GetPtr(swarm)
 		c.HitPoints = hp
 	}
-	pressSquare(s, "7", "l", "3", "h")
+	pressSquare(s, "5", "h", "3", "l")
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && (p.OwnerEntity != cursor || p.OriginEntity != cursor) {
 			t.Fatalf("a %s lands as %d's from %d, want its cursor's", component.CombatAttackNames[p.AttackType], p.OwnerEntity, p.OriginEntity)
 		}
 		combat.HandleEvent(ev)
 	}
-	struck, _ := w.Components.Combat.GetPtr(left)
-	spared, _ := w.Components.Combat.GetPtr(above)
-	if struck.HitPoints != 0 || struck.LastDamagedBy != cursor || spared.HitPoints != hp {
-		t.Fatalf("the swarm left of the square holds %d hit points, last hit by %d, and the one above it %d: want none by cursor %d, and %d",
-			struck.HitPoints, struck.LastDamagedBy, spared.HitPoints, cursor, hp)
+	struck, _ := w.Components.Combat.GetPtr(near)
+	if struck.HitPoints != 0 || struck.LastDamagedBy != cursor {
+		t.Fatalf("the swarm right of the square within reach holds %d hit points, last hit by %d, want none by cursor %d",
+			struck.HitPoints, struck.LastDamagedBy, cursor)
+	}
+	for name, swarm := range map[string]core.Entity{"past its reach": far, "above it": above} {
+		if spared, _ := w.Components.Combat.GetPtr(swarm); spared.HitPoints != hp {
+			t.Errorf("the swarm %s holds %d hit points, want %d", name, spared.HitPoints, hp)
+		}
 	}
 	if !sq.Effects[component.SquareAttack].Struck {
 		t.Fatal("a strike that killed left its fire marked as landing on nothing")
