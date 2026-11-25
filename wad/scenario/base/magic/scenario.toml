@@ -10,11 +10,12 @@ max_players = 1
 # strays, and one sends a wave, one more each round. A turn that leaves the attack
 # on an edge strikes, ending what it faces whatever its rank.
 
-# Room for the square's shield, the two orbits round it and the gateways' pylons
-# clear of both; a smaller screen scrolls over the map rather than crop it
+# The least map that holds the square on blocks a row tall with its cursor's orbs
+# circling on it, 39 by 19, and a gateway's pylon in each corner a cell clear of
+# their orbit; the outer orbit flattens to the map, and a smaller screen scrolls
 [map]
-min_width = 80
-min_height = 40
+min_width = 41
+min_height = 19
 cursors = "fixed"
 
 [systems]
@@ -372,7 +373,7 @@ body = { trigger = "Tick", target = "FloodRun", guard = "VarEquals", guard_args 
 # every 1.6 s from one gateway, which each round of the ranks starts a step quicker
 # (the `_base` variables) and with a wave more. The shield steps its color every
 # 200 energy. The map follows the screen, and its pylons, square and cursor keep
-# their places on it.
+# their places on it, the blocks as tall as its rows leave room for.
 [states.Setup]
 parent = "Root"
 on_enter = [

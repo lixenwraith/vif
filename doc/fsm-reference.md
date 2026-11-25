@@ -816,7 +816,8 @@ square Enter's, which a scenario captures as `\r` to spend its cursor's burst
 meter as it likes. `EventSquareSpawnRequest { x, y, layout,
 groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
-attack, whirl and defense; one square stands at a time, and it fights through the
+attack, whirl and defense, its blocks `block_height` rows or as many fewer as a small
+map needs to hold its cursor's orbs; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
 `EventSquareAligned { kind, line }` says an edge, 0 the top row, 1 the bottom, 2 the
