@@ -1398,6 +1398,9 @@ Docs · Libraries · Branches.
 - A steer is timed in the game, not in a loop: a field read of an entity after
   its scan runs cold there. Two binaries timed side by side differ by 30 ns a
   steer from run to run, so each plays alone, in turn, three rounds or more.
+- A scratch probe's files are excluded by a pattern (`internal/app/zz_probe*_test.go`
+  in `.git/info/exclude`), not by name: `git add -A internal` takes a second probe a
+  named line misses, and its build tag keeps every gate green over it.
 - A status counter a scratch probe adds is registered in its system's
   constructor: the registry freezes once the world is built, and a later
   `Ints.Get` hands back a detached cell that reads zero.
