@@ -277,7 +277,7 @@ The lobby at https://lixen.com/vif/lobby/ hosts games on demand and lists the
 running ones, each with a link to join it by:
 
 ```sh
-vif -join vif://lixen.com:7777/<game>
+vif -join vifs://lixen.com:7777/<game>
 vif -join https://lixen.com            # host a new game there and join it
 ```
 
