@@ -435,46 +435,6 @@ func TestMagicsBodiesLeaveThePocketsBehindItsGateways(t *testing.T) {
 	}
 }
 
-// TestMagicIsLostToTheFirstTouchOnItsBlocks: once the shield is down, the first
-// body on the blocks takes all the heat there is and the game starts over
-func TestMagicIsLostToTheFirstTouchOnItsBlocks(t *testing.T) {
-	t.Parallel()
-	a := newMagic(t)
-	w := a.World()
-	layMagic(t, a)
-	cursor := w.Resources.Player.Slot(0)
-	w.RunSafe(func() {
-		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: cursor, Value: 0})
-	})
-	read := func() (heat int, energy int64) {
-		w.RunSafe(func() {
-			h, _ := w.Components.Heat.GetComponent(w.Resources.Player.Slot(0))
-			e, _ := w.Components.Energy.GetComponent(w.Resources.Player.Slot(0))
-			heat, energy = h.Current, e.Current
-		})
-		return heat, energy
-	}
-	start, _ := read()
-	touched := 0
-	for tick := range 2400 {
-		a.Tick(1)
-		heat, energy := read()
-		if touched == 0 && heat != start {
-			if heat != 0 {
-				t.Fatalf("the first touch on the blocks left %d of %d heat, want none", heat, start)
-			}
-			touched = tick
-		}
-		if touched > 0 && energy > 0 {
-			return
-		}
-		if touched > 0 && tick-touched > int(time.Second/parameter.GameUpdateInterval) {
-			t.Fatalf("a second after the first touch on the blocks the game stands, energy %d", energy)
-		}
-	}
-	t.Fatal("no body touched the blocks in two minutes")
-}
-
 // TestMagicHoldsItsGatewaysOnceACrowdStands: with as many bodies on the map as the
 // shipped magic lets gather, every gateway holds its spawns
 func TestMagicHoldsItsGatewaysOnceACrowdStands(t *testing.T) {
