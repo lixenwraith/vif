@@ -858,11 +858,9 @@ columns past its corners and steps ([Shield](#shield)): it starts with 1,400
 energy, a touch costs it 1 at every rank and nothing gives any back, so its energy
 counts the touches left and its color 200 to a step, red, yellow, green, blue,
 purple, pink, light gray. With no energy the shield is down for good, the weapons
-fall as in `fighter` and the square sheds its dust, and the blocks take the touches: a
-body on them costs 10 heat, of the 100 the cursor starts with, and is thrown off
-as the shield threw it. The game is lost to a touch on the blocks with neither
-energy nor heat left, under a red strobe as long as `fighter`'s, and starts over on
-"The square has fallen".
+fall as in `fighter` and the square sheds its dust, and the blocks take the touches: the
+first body on them costs all the heat there is, and the game is lost to it, under
+a red strobe as long as `fighter`'s, starting over on "The square has fallen".
 
 An edge faces its side of the map, past the edge of the middle block run on across
 the map, which holds the gateways on that side's two corners. Attack strikes every
