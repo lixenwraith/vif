@@ -576,3 +576,26 @@ func TestAKindFillingTheSpellFiresItsSpell(t *testing.T) {
 		}
 	}
 }
+
+// TestTheAttackOrbStrikesWhatItTouches: the attack's orb, turning round the outer
+// orbit, lands a strike as the cursor's on a body within its reach, and on none
+// further off
+func TestTheAttackOrbStrikesWhatItTouches(t *testing.T) {
+	w, s, sq := newSquareOn(t, 140, 40)
+	cursor := w.Resources.Player.Slot(0)
+	cfg := w.Resources.Config
+	stepSquare(w, s)
+	at := sq.OrbOf(component.SquareAttack, w.Resources.Time.GameTime, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+	touching := standSwarm(w, at.X, at.Y)
+	cx, cy := sq.Center()
+	away := standSwarm(w, 2*cx-at.X, 2*cy-at.Y)
+	struck := map[core.Entity]bool{}
+	for _, ev := range stepSquare(w, s) {
+		if p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok && p.OwnerEntity == cursor && p.AttackType == component.CombatAttackStrike {
+			struck[p.TargetEntity] = true
+		}
+	}
+	if !struck[touching] || struck[away] {
+		t.Fatalf("the orb at %v struck the body on it %t and the one across the square %t, want only the first", at, struck[touching], struck[away])
+	}
+}

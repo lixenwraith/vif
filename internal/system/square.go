@@ -128,8 +128,24 @@ func (s *SquareSystem) Update() {
 		}
 		s.trigger(e, sq)
 		s.spell(sq, dt)
+		s.orbStrike(sq)
 		return true
 	})
+}
+
+// orbStrike lands each striking kind's family from its orb, as the square's
+// cursor's, on every body with a member within the orb's reach
+func (s *SquareSystem) orbStrike(sq *component.SquareComponent) {
+	cfg := s.world.Resources.Config
+	cursor := s.owner(sq)
+	invRx, invRy := vmath.EllipseInvRadiiSq(parameter.SquareOrbReach, cfg.CellAspect.FromCircular(parameter.SquareOrbReach))
+	for kind, spec := range component.SquareKinds {
+		if spec.Attack == component.CombatAttackNone {
+			continue
+		}
+		at := sq.OrbOf(component.SquareKind(kind), s.world.Resources.Time.GameTime, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+		s.land(cursor, spec.Attack, func(x, y int) bool { return vmath.EllipseContainsPoint(x, y, at.X, at.Y, invRx, invRy) })
+	}
 }
 
 // spell runs the square's spell a tick: it lights its places a wait after it last

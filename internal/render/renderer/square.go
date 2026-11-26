@@ -69,8 +69,6 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // of the side its line faces, bursting as it fires, or dim and turning round the
 // outer orbit while no line holds the kind
 func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
-	period := int64(parameter.SquareOrbIdlePeriod)
-	turn := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
 	for kind, spec := range component.SquareKinds {
 		effect := sq.Effects[kind]
 		if held := float64(effect.Active) / float64(max(spec.Duration, 1)); held > 0 {
@@ -85,9 +83,10 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 		look := &visual.SquareOrbs[kind]
+		at := sq.OrbOf(component.SquareKind(kind), ctx.GameTime, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight)
 		line := sq.Line(component.SquareKind(kind))
 		if line < 0 {
-			r.orb(ctx, buf, sq.OrbAt(turn, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight), look, spec.Name, visual.SquareOrbIdle, 0)
+			r.orb(ctx, buf, at, look, spec.Name, visual.SquareOrbIdle, 0)
 			continue
 		}
 		since := spec.Cooldown - effect.Cooldown
@@ -98,7 +97,7 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 		if effect.Cooldown > 0 && since < parameter.OrbFlashDuration {
 			burst = 1 - since.Seconds()/parameter.OrbFlashDuration.Seconds()
 		}
-		r.orb(ctx, buf, sq.Orb(line, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight), look, spec.Name, 1, burst)
+		r.orb(ctx, buf, at, look, spec.Name, 1, burst)
 	}
 }
 

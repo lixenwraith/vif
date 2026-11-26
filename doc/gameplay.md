@@ -870,7 +870,9 @@ lands: what the side's gateways send falls as it nears, not across the map.
 Its orb, a white core between a red and a blue lobe, stands on an outer orbit ten
 columns past the shield and clear of the cursor's own orbs, which circle the
 shield's edge: at the middle of the side its edge faces, and dim, turning round
-the orbit, while no edge holds the attack. The tempest turns a radial wind (§9) a
+the orbit once each 8 s, while no edge holds the attack. Standing or turning, it
+strikes every body within its corona, three columns, as the cursor's
+(`SquareComponent.OrbOf`). The tempest turns a radial wind (§9) a
 quarter round the square for 0.5 s of each 2 s, fading to nothing 40 columns past
 the shield: a burst that carries a body walking in clockwise, the median one 87
 degrees on an 80 by 24 screen and 122 on 130 by 30, into the part an attack faces,

@@ -8,8 +8,8 @@ max_players = 1
 # one of the energy it starts with, which nothing gives back, and once it is down
 # the first touch on the blocks ends the game. Four gateways on the corners trickle
 # strays, and one sends a wave, one more each round. The attack on an edge strikes
-# each 2 s, ending what nears the side it faces whatever its rank; a tempest or a
-# defense fires from the middle row and column too.
+# each 2 s, ending what nears the side it faces whatever its rank, and its orb ends
+# what it touches; a tempest or a defense fires from the middle row and column too.
 
 # The least map that holds the square on blocks a row tall with its cursor's orbs
 # circling on it, 39 by 19, and a gateway's pylon in each corner a cell clear of

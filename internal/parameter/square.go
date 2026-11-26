@@ -58,6 +58,8 @@ const (
 	SquareShieldMargin = 4
 	SquareOrbGap       = OrbOrbitRadiusX - PlayerShieldRadius + 2*OrbCoronaRadiusX + 2
 
-	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds
+	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds;
+	// an orb strikes what stands within SquareOrbReach columns of it, its corona's
 	SquareOrbIdlePeriod = 8 * time.Second
+	SquareOrbReach      = OrbCoronaRadiusX
 )
