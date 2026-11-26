@@ -324,7 +324,7 @@ func RefusePublish(conn net.Conn, cause error) {
 // connection, publishing again with a growing wait when it drops and resuming its
 // name, and serves each connection the router asks for.
 type DoorTunnel struct {
-	Router  string // the router's front door, host:port
+	Router  string // the router's front door: host:port, or vifs://host:port under TLS
 	Session string // the name this run's door answers to
 	// Dial opens a connection to the router; nil dials TCP.
 	Dial func(addr string) (net.Conn, error)

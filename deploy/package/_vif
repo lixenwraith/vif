@@ -22,7 +22,7 @@ _arguments \
   '-slow-bytes[...and at least this many bytes per second of it on its link; 0 ignores throughput (default 8192)]:n: ' \
   '-shed-window[Window the host'\''s own tick keeping is judged over; past 10% of its ticks dropped, it drops its newest bot, then player; host only, 0 never sheds (default 10s)]:dur: ' \
   '-listen[Listen here so this run can take a migrate session over, whatever \[play\] takeover says; -join only, and the session shares the address]:addr: ' \
-  '-relay[Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only]:addr: ' \
+  '-relay[Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router> (vifs:// under TLS); -join only]:addr: ' \
   '-size[Size a run'\''s map is fixed at, WxH or fit for its screen'\''s as it starts: a player'\''s keeps it however their screen is resized, and a desktop window opens at it. Without it a player'\''s map follows their screen, a run no player sits at plays 120x40, and a -serve session its first player'\''s]:WxH|fit: ' \
   '-probe[Health and metrics endpoint; -serve only]:addr: ' \
   '-first-join[Exit if no guest connects within this; -serve only, 0 waits forever]:dur: ' \

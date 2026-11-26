@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,15 +21,22 @@ import (
 // routerStandIn is a front door for doors alone, as vif-router places them: a run's
 // publication becomes a control connection, a dial on a door's name is spliced to
 // the connection the run opens back for it.
-func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
+func routerStandIn(t *testing.T, scheme string) (string, *network.TunnelHub) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if scheme == "vifs://" {
+		cfg, err := link.SelfSignedTLS([]string{"127.0.0.1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln = tls.NewListener(ln, cfg)
+	}
 	t.Cleanup(func() { _ = ln.Close() })
 	addr := ln.Addr().String()
-	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, 4, 0)
+	hub := network.NewTunnelHub(func(id string) string { return scheme + addr + "/" + id }, 4, 0)
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -85,18 +93,25 @@ func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
 	return addr, hub
 }
 
-// TestARelayPublishesItsDoorThroughTheRouter: a guest with -relay vif://<router>
-// publishes its door through the router rather than binding one, the chain names the
-// link the router gave it, and a person who dials that link joins through the guest,
-// the router placing the dial on the connection the guest opened back.
+// TestARelayPublishesItsDoorThroughTheRouter: a guest with -relay vif://<router>, or
+// vifs:// at a front door under TLS, publishes its door through the router rather
+// than binding one, the chain names the link the router gave it, and a person who
+// dials that link joins through the guest, the router placing the dial on the
+// connection the guest opened back.
 func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
+	for _, scheme := range []string{"vif://", "vifs://"} {
+		t.Run(strings.TrimSuffix(scheme, "://"), func(t *testing.T) { relayThroughRouter(t, scheme) })
+	}
+}
+
+func relayThroughRouter(t *testing.T, scheme string) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
 	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"default"}}}, "default", nil)
 	waitForCursors(t, host, 2)
-	router, hub := routerStandIn(t)
+	router, hub := routerStandIn(t, scheme)
 	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
-		RelayAddress: "vif://" + router}}, "default", nil)
+		RelayAddress: scheme + router}}, "default", nil)
 	waitForCursors(t, host, 3)
 	relayID := link.PeerID(relay.membership.LocalParticipant())
 	var door string
@@ -109,7 +124,11 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	if err != nil || e.Addr != router || !hub.Has(e.Name) {
 		t.Fatalf("the relay's door is %q (%v); want a link at the router naming a door it carries", door, err)
 	}
-	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: e.Addr, SessionName: e.Name}}, "default", nil)
+	join := e.Addr
+	if e.TLS {
+		join = "vifs://" + e.Addr
+	}
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: join, SessionName: e.Name}}, "default", nil)
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}

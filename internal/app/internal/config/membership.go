@@ -116,16 +116,20 @@ type PlaceStore interface {
 	Store([]byte) error
 }
 
-// RelayRouter is the router -relay names with the vif:// scheme, to publish this
-// run's door through rather than an address to bind: a door behind a NAT, reached at
-// the router's address (doc/multi-player.md §5.6).
+// RelayRouter is the router -relay names with the vif:// scheme, or vifs:// where its
+// front door is under TLS, to publish this run's door through rather than an address
+// to bind: a door behind a NAT, reached at the router's address (doc/multi-player.md
+// §5.6). It returns what the door's tunnel dials, vifs:// kept.
 func RelayRouter(relay string) (string, bool) {
-	if !strings.HasPrefix(relay, "vif://") {
+	if !strings.HasPrefix(relay, "vif://") && !strings.HasPrefix(relay, "vifs://") {
 		return "", false
 	}
 	e, err := link.ParseEndpoint(relay)
 	if err != nil || e.Addr == "" {
 		return "", false
+	}
+	if e.TLS {
+		return "vifs://" + e.Addr, true
 	}
 	return e.Addr, true
 }
