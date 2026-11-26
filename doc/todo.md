@@ -233,8 +233,9 @@ numbers are what a play test settles.
 To settle: the shield's count and what a touch costs the blocks, the eight ranks'
 hit points and speeds, the paces, how a rank and a round quicken them and the waves
 a round adds, each kind's duration and cooldown, the tempest's carry and the gust's
-throw, the carrier's weapons, what charges the dust meter and the burst meter, and
-what the dust's blast does. The headless survival table Gameplay §10 carried went
+throw, the carrier's weapons, what charges the dust meter and the burst meter,
+what the dust's blast does, and the spell's wait, hold and boost and the confuse's
+kick. The headless survival table Gameplay §10 carried went
 with strikes by turn across the map: a probe's figures under strikes each cooldown
 within reach, and the middle lines firing, replace it.
 

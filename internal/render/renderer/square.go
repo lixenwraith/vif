@@ -48,8 +48,11 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		for p := range sq.Digits {
 			r.block(ctx, buf, sq, p)
 		}
+		r.spell(ctx, buf, sq)
 		if int(slot) < len(sq.Selected) {
-			r.frame(ctx, buf, sq, sq.Selected[slot])
+			if place := slices.Index(sq.Digits[:], sq.Selected[slot]); sq.Selected[slot] != 0 && place >= 0 {
+				r.frame(ctx, buf, sq, place, visual.RgbSquareFrame, visual.ConBrightWhite)
+			}
 		}
 		burst := 0
 		if heat, ok := world.Components.Heat.GetPtr(world.Resources.Player.Slot(slot)); ok {
@@ -269,11 +272,43 @@ func (r *SquareRenderer) mark(buf *render.RenderBuffer, sx, sy int, ch rune, tc 
 	buf.SetFgOnly(sx, sy, ch, tc, attr)
 }
 
-// frame rings the block of the viewer's selected digit in the gap round it
-func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, digit uint8) {
-	place := slices.Index(sq.Digits[:], digit)
-	if digit == 0 || place < 0 {
+// spell frames each place a lit spell holds, turning between its colors, and, as
+// one is filled, tints what is within reach in the kind's glow, fading
+func (r *SquareRenderer) spell(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
+	if sq.SpellLit {
+		period := int64(visual.SquareSpellPulse)
+		phase := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
+		tc := color.Lerp(visual.SquareSpell.Block, visual.SquareSpell.Glow, (1+vmath.Sin(phase))/2)
+		for p := range component.SquareBlocks {
+			if sq.Spell&(1<<p) != 0 {
+				r.frame(ctx, buf, sq, p, tc, visual.SquareSpell.Console)
+			}
+		}
 		return
+	}
+	since := parameter.SquareSpellWait - sq.SpellTimer
+	if sq.SpellCast == 0 || since >= visual.SquareStrikeFlash || r.console != nil {
+		return
+	}
+	within, glow := sq.Within(ctx.CellAspect), visual.SquareKinds[sq.SpellCast-1].Glow
+	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			if sx, sy, visible := ctx.MapToScreen(x, y); visible && within(x, y) {
+				buf.SetBgScreen(sx, sy, glow, visual.RgbBackground, visual.SquareStrikeAlpha*(1-float64(since)/float64(visual.SquareStrikeFlash)))
+			}
+		}
+	}
+}
+
+// frame rings the block at a place in the gap round it, doubled where a lit spell
+// holds the place
+func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, place int, tc color.RGB, console uint8) {
+	edges := [6]rune{visual.BorderSingleTopLeft, visual.BorderSingleTopRight, visual.BorderSingleBottomLeft,
+		visual.BorderSingleBottomRight, visual.BorderSingleHorizontal, visual.BorderSingleVertical}
+	if sq.SpellLit && sq.Spell&(1<<place) != 0 {
+		edges = [6]rune{visual.BorderDoubleTopLeft, visual.BorderDoubleTopRight, visual.BorderDoubleBottomLeft,
+			visual.BorderDoubleBottomRight, visual.BorderDoubleHorizontal, visual.BorderDoubleVertical}
 	}
 	x, y := sq.Place(place)
 	left, top, right, bottom := x-1, y-1, x+sq.Width, y+sq.Height
@@ -282,30 +317,31 @@ func (r *SquareRenderer) frame(ctx render.RenderContext, buf *render.RenderBuffe
 			var ch rune
 			switch {
 			case fy == top && fx == left:
-				ch = visual.BorderSingleTopLeft
+				ch = edges[0]
 			case fy == top && fx == right:
-				ch = visual.BorderSingleTopRight
+				ch = edges[1]
 			case fy == bottom && fx == left:
-				ch = visual.BorderSingleBottomLeft
+				ch = edges[2]
 			case fy == bottom && fx == right:
-				ch = visual.BorderSingleBottomRight
+				ch = edges[3]
 			case fy == top || fy == bottom:
-				ch = visual.BorderSingleHorizontal
+				ch = edges[4]
 			case fx == left || fx == right:
-				ch = visual.BorderSingleVertical
+				ch = edges[5]
 			default:
 				continue
 			}
 			if sx, sy, visible := ctx.MapToScreen(fx, fy); visible {
-				r.mark(buf, sx, sy, ch, visual.RgbSquareFrame, visual.ConBrightWhite, terminal.AttrBold)
+				r.mark(buf, sx, sy, ch, tc, console, terminal.AttrBold)
 			}
 		}
 	}
 }
 
 // legend stands each kind under a column of the square, in kind order, lit while a
-// line holds three of the kind, and over its outer columns its dust meter and its
-// viewer's burst meter, each lit when full
+// line holds three of the kind, and over its columns its dust meter, its spell's,
+// filling to the spell's lighting and draining while it stays lit, and its viewer's
+// burst meter, each lit when full
 func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, burst int) {
 	_, h := sq.Size()
 	var aligned [component.SquareKindCount]bool
@@ -321,15 +357,23 @@ func (r *SquareRenderer) legend(ctx render.RenderContext, buf *render.RenderBuff
 	x, y := sq.Legend(0)
 	r.entry(ctx, buf, x, y, sq.Width, &squareDust, component.SquareEffect{Cooldown: parameter.SquareDustFull - sq.Dust},
 		&visual.SquareDust, sq.Dust >= parameter.SquareDustFull)
+	spell, wait := squareSpell, component.SquareEffect{Cooldown: sq.SpellTimer}
+	if sq.SpellLit {
+		spell.Cooldown = parameter.SquareSpellHold
+		wait = component.SquareEffect{Active: sq.SpellTimer, Cooldown: parameter.SquareSpellHold - sq.SpellTimer}
+	}
+	x, y = sq.Legend(component.SquareSide / 2)
+	r.entry(ctx, buf, x, y, sq.Width, &spell, wait, &visual.SquareSpell, sq.SpellLit)
 	x, y = sq.Legend(component.SquareSide - 1)
 	r.entry(ctx, buf, x, y, sq.Width, &squareBurst, component.SquareEffect{Cooldown: time.Duration(parameter.BurstFull - burst)},
 		&visual.SquareBurst, burst >= parameter.BurstFull)
 }
 
-// squareDust and squareBurst are the legend's entries over the square: a name, and
-// in the place of a cooldown what its meter is full at
+// squareDust, squareSpell and squareBurst are the legend's entries over the square:
+// a name, and in the place of a cooldown what its meter is full at
 var (
 	squareDust  = component.SquareKindSpec{Name: "dust", Cooldown: parameter.SquareDustFull}
+	squareSpell = component.SquareKindSpec{Name: "spell", Cooldown: parameter.SquareSpellWait}
 	squareBurst = component.SquareKindSpec{Name: "burst", Cooldown: parameter.BurstFull}
 )
 

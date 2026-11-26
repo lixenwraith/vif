@@ -2,6 +2,7 @@ package system
 
 import (
 	"math"
+	"math/bits"
 	"slices"
 	"testing"
 	"time"
@@ -471,5 +472,107 @@ func TestADefenseStandsTheShieldItsCursorHasNoEnergyFor(t *testing.T) {
 	}
 	if _, down := asked(); shield.Raised || down != 1 {
 		t.Fatalf("past the defense's hold the shield is raised %t and asked down %d times, want lowered and once", shield.Raised, down)
+	}
+}
+
+// TestASpellLightsAWaitAfterItWentOutForItsHold: a spell lights SquareSpellPlaces
+// places no kind fills a wait after the square stands, goes out unfilled when its
+// hold runs out, and lights other places a wait after that
+func TestASpellLightsAWaitAfterItWentOutForItsHold(t *testing.T) {
+	w, s, sq := newSquare(t)
+	ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
+	lightsAt := func() (int, uint16) {
+		for tick := 1; tick <= 2*ticks(parameter.SquareSpellWait); tick++ {
+			w.Resources.Game.State.IncrementGameTicks()
+			if stepSquare(w, s); sq.SpellLit {
+				return tick, sq.Spell
+			}
+		}
+		t.Fatal("no spell lit")
+		return 0, 0
+	}
+	at, first := lightsAt()
+	if at != ticks(parameter.SquareSpellWait) || bits.OnesCount16(first) != parameter.SquareSpellPlaces ||
+		sq.SpellKind(first) != component.SquareKindCount {
+		t.Fatalf("a spell lit %b at tick %d, want %d places no kind fills at %d",
+			first, at, parameter.SquareSpellPlaces, ticks(parameter.SquareSpellWait))
+	}
+	for range ticks(parameter.SquareSpellHold) {
+		stepSquare(w, s)
+	}
+	if sq.SpellLit {
+		t.Fatal("an unfilled spell stays lit past its hold")
+	}
+	if at, again := lightsAt(); at != ticks(parameter.SquareSpellWait) || again == first {
+		t.Fatalf("the next spell lit %b at tick %d, want other places than %b at %d", again, at, first, ticks(parameter.SquareSpellWait))
+	}
+}
+
+// TestAKindFillingTheSpellFiresItsSpell: a kind's blocks moved into a lit spell's
+// places put it out and fire the kind's spell as the cursor's: an attack strikes and
+// a tempest confuses every body within reach on every side and none past it, and a
+// defense holds its boost and the raised shield SquareSpellBoost
+func TestAKindFillingTheSpellFiresItsSpell(t *testing.T) {
+	for kind, spec := range component.SquareKinds {
+		w, s, sq := newSquareOn(t, 140, 40)
+		cursor := w.Resources.Player.Slot(0)
+		cx, cy := sq.Center()
+		reach := int(parameter.SquareStrikeReach * sq.ShieldRadius(w.Resources.Config.CellAspect))
+		near := []core.Entity{standSwarm(w, cx-reach+4, cy), standSwarm(w, cx+reach-4, cy), standSwarm(w, cx, cy-reach/2+3)}
+		far := standSwarm(w, cx+reach+4, cy)
+		for range int(parameter.SquareSpellWait / parameter.GameUpdateInterval) {
+			stepSquare(w, s)
+		}
+		if !sq.SpellLit {
+			t.Fatal("no spell lit")
+		}
+		// Its blocks into the lit places, the rest after them in order
+		var digits []uint8
+		for d := uint8(1); d <= component.SquareBlocks; d++ {
+			if sq.Kinds[d-1] == component.SquareKind(kind) {
+				digits = append([]uint8{d}, digits...)
+			} else {
+				digits = append(digits, d)
+			}
+		}
+		for p := range component.SquareBlocks {
+			if sq.Spell&(1<<p) != 0 {
+				sq.Digits[p], digits = digits[0], digits[1:]
+			}
+		}
+		for p := range component.SquareBlocks {
+			if sq.Spell&(1<<p) == 0 {
+				sq.Digits[p], digits = digits[0], digits[1:]
+			}
+		}
+		sq.Lines = [component.SquareLines]uint8{}
+		landed := map[core.Entity]component.CombatAttackType{}
+		boost := time.Duration(0)
+		for _, ev := range stepSquare(w, s) {
+			switch p := ev.Payload.(type) {
+			case *event.CombatAttackAreaRequestPayload:
+				if p.OwnerEntity == cursor {
+					landed[p.TargetEntity] = p.AttackType
+				}
+			case *event.BoostActivatePayload:
+				if p.Entity == cursor {
+					boost = p.Duration
+				}
+			}
+		}
+		if sq.SpellLit || sq.SpellCast != uint8(kind)+1 {
+			t.Fatalf("%s filling the spell left it lit %t, taken by %d", spec.Name, sq.SpellLit, sq.SpellCast)
+		}
+		for _, body := range near {
+			if got, ok := landed[body]; spec.Spell != component.CombatAttackNone && (!ok || got != spec.Spell) {
+				t.Errorf("%s's spell landed %v on a body within reach, want %s", spec.Name, got, component.CombatAttackNames[spec.Spell])
+			}
+		}
+		if _, ok := landed[far]; ok || spec.Spell == component.CombatAttackNone && len(landed) != 0 {
+			t.Errorf("%s's spell landed %v, past its reach or where it lands none", spec.Name, landed)
+		}
+		if boost != spec.SpellBoost || spec.SpellBoost > 0 && sq.Effects[kind].Active != spec.SpellBoost {
+			t.Errorf("%s's spell boosted %v and holds %v, want %v", spec.Name, boost, sq.Effects[kind].Active, spec.SpellBoost)
+		}
 	}
 }

@@ -22,12 +22,16 @@ var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
-// SquareDust and SquareBurst are the legend entries over the square, its dust
-// meter and its cursor's overheat, each drawn as a kind's
+// SquareDust, SquareSpell and SquareBurst are the legend entries over the square,
+// its dust meter, its spell's and its cursor's overheat, each drawn as a kind's; the
+// spell's places are framed in its colors, turning between them each SquareSpellPulse
 var (
 	SquareDust  = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
+	SquareSpell = SquareKindColors{Block: color.BrightLime, Glow: color.PaleGreen, Track: color.DarkGreen, Console: ConBrightGreen}
 	SquareBurst = SquareKindColors{Block: color.ElectricViolet, Glow: color.PaleLavender, Track: color.DarkViolet, Console: ConBrightMagenta}
 )
+
+const SquareSpellPulse = 800 * time.Millisecond
 
 // SquareOrb is the orb of a kind that strikes, on the square's outer orbit: its
 // glyph's color, the two its corona turns in, and a console's

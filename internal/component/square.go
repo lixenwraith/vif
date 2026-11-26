@@ -41,24 +41,28 @@ type SquareWind struct {
 // SquareKindSpec is what a line of one kind fires as its cursor's each time its
 // cooldown runs out: a family on what stands near the side of the map the line
 // faces, which an edge alone does, a boost of the shield, a wind about the square,
-// the square's dust shed
+// the square's dust shed; and what its blocks filling a lit spell fire: a family on
+// every body within reach, all round, and the effect held SpellBoost long
 type SquareKindSpec struct {
-	Name     string
-	Attack   CombatAttackType // CombatAttackNone lands nothing
-	Duration time.Duration    // how long the effect holds once fired
-	Cooldown time.Duration    // from a fire until the line fires again
-	Boost    bool             // the shield takes no damage while it holds
-	Shed     bool
-	Wind     SquareWind // a zero force blows none
+	Name       string
+	Attack     CombatAttackType // CombatAttackNone lands nothing
+	Duration   time.Duration    // how long the effect holds once fired
+	Cooldown   time.Duration    // from a fire until the line fires again
+	Boost      bool             // the shield takes no damage while it holds
+	Shed       bool
+	Wind       SquareWind // a zero force blows none
+	Spell      CombatAttackType
+	SpellBoost time.Duration
 }
 
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
-	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown},
+	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown, Spell: CombatAttackStrike},
 	SquareTempest: {Name: "tempest", Attack: CombatAttackNone, Duration: parameter.SquareTempestDuration, Cooldown: parameter.SquareTempestCooldown,
-		Wind: SquareWind{Force: parameter.SquareTempestForce, Turn: math.Pi / 2, Duration: parameter.SquareTempestDuration, Reach: parameter.SquareTempestReach}},
+		Wind: SquareWind{Force: parameter.SquareTempestForce, Turn: math.Pi / 2, Duration: parameter.SquareTempestDuration, Reach: parameter.SquareTempestReach}, Spell: CombatAttackConfuse},
 	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown,
-		Boost: true, Shed: true, Wind: SquareWind{Force: parameter.SquareWindForce, Duration: parameter.SquareWindDuration, Reach: parameter.SquareWindReach}},
+		Boost: true, Shed: true, Wind: SquareWind{Force: parameter.SquareWindForce, Duration: parameter.SquareWindDuration, Reach: parameter.SquareWindReach},
+		Spell: CombatAttackNone, SpellBoost: parameter.SquareSpellBoost},
 }
 
 // SquareEffect is what is left of one kind's hold and cooldown, both counted from
@@ -82,6 +86,14 @@ type SquareComponent struct {
 	Lines    [SquareLines]uint8 // 1 + the kind a line holds three of and fires, 0 for none
 	Effects  [SquareKindCount]SquareEffect
 	Dust     time.Duration // its dust meter's charge, full at parameter.SquareDustFull
+
+	// The spell: the places it lights, a bit each, whether they are lit, what is
+	// left of its phase, the wait until they light or the time left to fill them,
+	// and 1 + the kind whose blocks last filled it, 0 for none
+	Spell      uint16
+	SpellLit   bool
+	SpellTimer time.Duration
+	SpellCast  uint8
 
 	X, Y          int // the top-left cell
 	Width, Height int // a block's cells
@@ -202,12 +214,36 @@ func (s *SquareComponent) Faces(l int) func(x, y int) bool {
 }
 
 // Strikes is the test of whether a cell lies where edge l's strike lands: in the
-// part of the map it faces, within SquareStrikeReach shield radii of the middle
+// part of the map it faces, within reach
 func (s *SquareComponent) Strikes(l int, aspect vmath.Aspect) func(x, y int) bool {
-	faces, reach := s.Faces(l), parameter.SquareStrikeReach*s.ShieldRadius(aspect)
+	faces, within := s.Faces(l), s.Within(aspect)
+	return func(x, y int) bool { return faces(x, y) && within(x, y) }
+}
+
+// Within is the test of whether a cell lies within reach of the square: inside
+// SquareStrikeReach shield radii of its middle, all round
+func (s *SquareComponent) Within(aspect vmath.Aspect) func(x, y int) bool {
+	reach := parameter.SquareStrikeReach * s.ShieldRadius(aspect)
 	cx, cy := s.Center()
 	invRx, invRy := vmath.EllipseInvRadiiSq(reach, aspect.FromCircular(reach))
-	return func(x, y int) bool { return faces(x, y) && vmath.EllipseContainsPoint(x, y, cx, cy, invRx, invRy) }
+	return func(x, y int) bool { return vmath.EllipseContainsPoint(x, y, cx, cy, invRx, invRy) }
+}
+
+// SpellKind is the kind whose blocks fill every place lit, SquareKindCount when
+// none does
+func (s *SquareComponent) SpellKind(places uint16) SquareKind {
+	kind := SquareKindCount
+	for p := range SquareBlocks {
+		if places&(1<<p) == 0 {
+			continue
+		}
+		if at := s.KindAt(p); kind == SquareKindCount {
+			kind = at
+		} else if at != kind {
+			return SquareKindCount
+		}
+	}
+	return kind
 }
 
 // third is 0 for v before [start, start+size), 1 inside it and 2 past it

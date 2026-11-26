@@ -15,8 +15,15 @@ const (
 	// walk back. A strike reaches SquareStrikeReach shield radii from the middle.
 	SquareStrikeCooldown = 2 * time.Second
 	SquareStrikeReach    = 2.0
-	SquareBoostDuration  = time.Second
-	SquareBoostCooldown  = 8 * time.Second
+
+	// The spell lights SquareSpellPlaces places SquareSpellWait after it last went
+	// out and stays lit SquareSpellHold; a defense filling it holds SquareSpellBoost
+	SquareSpellPlaces   = 3
+	SquareSpellWait     = 10 * time.Second
+	SquareSpellHold     = 5 * time.Second
+	SquareSpellBoost    = 5 * time.Second
+	SquareBoostDuration = time.Second
+	SquareBoostCooldown = 8 * time.Second
 
 	// SquareWindForce is the gust a defense blows out from the square's middle for
 	// SquareWindDuration, fading to nothing SquareWindReach columns past the shield:
