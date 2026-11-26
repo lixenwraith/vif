@@ -15,8 +15,15 @@ const (
 	// walk back. A strike reaches SquareStrikeReach shield radii from the middle.
 	SquareStrikeCooldown = 2 * time.Second
 	SquareStrikeReach    = 2.0
-	SquareBoostDuration  = time.Second
-	SquareBoostCooldown  = 8 * time.Second
+
+	// The spell lights SquareSpellPlaces places SquareSpellWait after it last went
+	// out and stays lit SquareSpellHold; a defense filling it holds SquareSpellBoost
+	SquareSpellPlaces   = 3
+	SquareSpellWait     = 10 * time.Second
+	SquareSpellHold     = 5 * time.Second
+	SquareSpellBoost    = 5 * time.Second
+	SquareBoostDuration = time.Second
+	SquareBoostCooldown = 8 * time.Second
 
 	// SquareWindForce is the gust a defense blows out from the square's middle for
 	// SquareWindDuration, fading to nothing SquareWindReach columns past the shield:
@@ -26,14 +33,15 @@ const (
 	SquareWindReach    = 30.0
 	SquareWindDuration = 500 * time.Millisecond
 
-	// SquareWhirlForce is the wind a whirl turns round the square for
-	// SquareWhirlDuration of each SquareWhirlCooldown, fading to nothing
-	// SquareWhirlReach columns past the shield: a burst that carries a body walking
-	// in about a quarter round the shield, to where the next gateway's come in
-	SquareWhirlForce    = 300.0
-	SquareWhirlReach    = 40.0
-	SquareWhirlDuration = 500 * time.Millisecond
-	SquareWhirlCooldown = 2 * time.Second
+	// SquareTempestForce is the wind a tempest turns round the square for
+	// SquareTempestDuration of each SquareTempestCooldown, fading to nothing
+	// SquareTempestReach columns past the shield: a burst that carries a body walking
+	// in a quarter to a third round the shield on a small map, and holds most circling
+	// on a large one
+	SquareTempestForce    = 600.0
+	SquareTempestReach    = 40.0
+	SquareTempestDuration = 500 * time.Millisecond
+	SquareTempestCooldown = 2 * time.Second
 
 	// A square's dust meter charges a second a second, and SquareDustKill for each
 	// kill its cursor makes, up to SquareDustFull, which a magic state, every row
@@ -50,6 +58,8 @@ const (
 	SquareShieldMargin = 4
 	SquareOrbGap       = OrbOrbitRadiusX - PlayerShieldRadius + 2*OrbCoronaRadiusX + 2
 
-	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds
+	// SquareOrbIdlePeriod is a turn of the orbit by the orb of a kind no line holds;
+	// an orb strikes what stands within SquareOrbReach columns of it, its corona's
 	SquareOrbIdlePeriod = 8 * time.Second
+	SquareOrbReach      = OrbCoronaRadiusX
 )

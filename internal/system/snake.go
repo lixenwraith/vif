@@ -173,7 +173,7 @@ func (s *SnakeSystem) Update() {
 
 		// A stunned head stays put; a displaced one coasts without steering, as the
 		// other composite movers do, so a knockback carries
-		if headCombat.Status[component.StatusStun].Remaining <= 0 {
+		if !headCombat.Held() {
 			s.updateHeadMovement(snakeComp.HeadEntity, headComp, headCombat.RemainingKineticImmunity == 0, dtSec)
 		}
 

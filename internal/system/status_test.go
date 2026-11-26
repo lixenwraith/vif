@@ -1,6 +1,8 @@
 package system
 
 import (
+	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -136,5 +138,47 @@ func TestOnlyAWardBlocksABurnTick(t *testing.T) {
 	combat.Update()
 	if state.HitPoints != hp-1 {
 		t.Fatal("the window a direct hit spent blocked the burn tick")
+	}
+}
+
+// TestAConfuseKicksItsBodyAWayDrawnAnewEachPeriod: a confuse area hit leaves its
+// status for ConfuseDuration, kicking the body ConfuseKick cells a second each
+// ConfusePeriod, the way differing kick to kick, and nothing once it runs out
+func TestAConfuseKicksItsBodyAWayDrawnAnewEachPeriod(t *testing.T) {
+	w, first, _ := testCursorWorld(t)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	target := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity: target, CombatEntityType: component.CombatEntitySwarm, HitPoints: 100,
+	})
+	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+		OwnerEntity: first, OriginEntity: first, TargetEntity: target,
+		HitEntities: []core.Entity{target}, AttackType: component.CombatAttackConfuse,
+	})
+	state, _ := w.Components.Combat.GetPtr(target)
+	if got := state.Status[component.StatusConfuse].Remaining; got != parameter.ConfuseDuration || state.HitPoints != 100 {
+		t.Fatalf("a confuse left %v and %d hit points, want %v and no damage", got, state.HitPoints, parameter.ConfuseDuration)
+	}
+	w.Resources.Time.DeltaTime = parameter.ConfusePeriod
+	kinetic, _ := w.Components.Kinetic.GetPtr(target)
+	var ways []float64
+	for range int(parameter.ConfuseDuration/parameter.ConfusePeriod) + 2 {
+		kinetic.VelX, kinetic.VelY = 0, 0
+		w.Resources.Game.State.IncrementGameTicks()
+		combat.Update()
+		if speed := math.Hypot(kinetic.VelX, kinetic.VelY); speed != 0 {
+			if math.Abs(speed-parameter.ConfuseKick) > 0.01 {
+				t.Fatalf("a kick of %.2f cells a second, want %v", speed, parameter.ConfuseKick)
+			}
+			ways = append(ways, math.Atan2(kinetic.VelY, kinetic.VelX))
+		}
+	}
+	if len(ways) != int(parameter.ConfuseDuration/parameter.ConfusePeriod) {
+		t.Fatalf("%d kicks over the confuse, want one a period", len(ways))
+	}
+	if slices.Min(ways) == slices.Max(ways) {
+		t.Fatal("every kick went the same way")
 	}
 }

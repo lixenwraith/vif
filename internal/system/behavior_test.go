@@ -867,22 +867,25 @@ func TestAWardenAtZeroHitPointsDiesAsItsDataSpecies(t *testing.T) {
 	}
 }
 
-// TestCombatRefusesToStunAShieldedDataSpecies: a state flagged Shielded refuses the
-// stun as the quasar's shield does
-func TestCombatRefusesToStunAShieldedDataSpecies(t *testing.T) {
+// TestCombatRefusesToMoveAShieldedDataSpecies: a state flagged Shielded refuses a
+// status that moves its body, a stun or a confuse, as the quasar's shield does
+func TestCombatRefusesToMoveAShieldedDataSpecies(t *testing.T) {
 	ctx, _, header := newWardenWorld(t, wardenX+4, wardenY)
 	w := ctx.World
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	c, _ := w.Components.Combat.GetPtr(header)
-
-	b.Shielded = true
-	if combat.applyStunEffect(header, c, 0) {
-		t.Fatal("a shielded warden was stunned")
-	}
-	b.Shielded = false
-	if !combat.applyStunEffect(header, c, 0) {
-		t.Fatal("an unshielded warden refused the stun")
+	for _, atk := range []component.CombatAttackType{component.CombatAttackPulse, component.CombatAttackConfuse} {
+		attack := profile.Attack(atk, component.CombatEntityCursor, component.CombatEntitySwarm)
+		c.Status = [component.StatusCount]component.Status{}
+		b.Shielded = true
+		if combat.applyStatus(header, header, c, nil, false, attack, 0) {
+			t.Fatalf("a shielded warden took a %s", component.StatusSpecs[attack.Status].Name)
+		}
+		b.Shielded = false
+		if !combat.applyStatus(header, header, c, nil, false, attack, 0) {
+			t.Fatalf("an unshielded warden refused a %s", component.StatusSpecs[attack.Status].Name)
+		}
 	}
 }
 
@@ -912,13 +915,13 @@ func TestADataSpeciesIsKnockedBackByItsOwnMass(t *testing.T) {
 // species by the row its prototype builds, a family it names taking its keys and
 // the rest its combat row's profile
 func TestADataSpeciesTakesEachAttackByItsOwnRow(t *testing.T) {
-	program := strings.Replace(wardenProgram, "mass = 2.0", "mass = 2.0\nattacks = { pulse = { damage = 0, stun = false } }", 1)
+	program := strings.Replace(wardenProgram, "mass = 2.0", "mass = 2.0\nattacks = { pulse = { damage = 0, status = false } }", 1)
 	ctx, _, header := newProgramWorld(t, program, wardenX+4, wardenY)
 	w := ctx.World
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	c, _ := w.Components.Combat.GetPtr(header)
 	if pulse := combat.attack(component.CombatAttackPulse, component.CombatEntityCursor, header, c); pulse == nil ||
-		pulse.DamageValue != 0 || pulse.EffectMask&component.CombatEffectStun != 0 {
+		pulse.DamageValue != 0 || pulse.EffectMask&component.CombatEffectStatus != 0 {
 		t.Fatalf("a pulse lands %+v, want no damage and no stun", pulse)
 	}
 	swarm := profile.Attack(component.CombatAttackTracer, component.CombatEntityCursor, component.CombatEntitySwarm)

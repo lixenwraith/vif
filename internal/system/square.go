@@ -1,7 +1,9 @@
 package system
 
 import (
+	"math/bits"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -125,8 +127,73 @@ func (s *SquareSystem) Update() {
 			effect.Active, effect.Cooldown = max(effect.Active-dt, 0), max(effect.Cooldown-dt, 0)
 		}
 		s.trigger(e, sq)
+		s.spell(sq, dt)
+		s.orbStrike(sq)
 		return true
 	})
+}
+
+// orbStrike lands each striking kind's family from its orb, as the square's
+// cursor's, on every body with a member within the orb's reach
+func (s *SquareSystem) orbStrike(sq *component.SquareComponent) {
+	cfg := s.world.Resources.Config
+	cursor := s.owner(sq)
+	invRx, invRy := vmath.EllipseInvRadiiSq(parameter.SquareOrbReach, cfg.CellAspect.FromCircular(parameter.SquareOrbReach))
+	for kind, spec := range component.SquareKinds {
+		if spec.Attack == component.CombatAttackNone {
+			continue
+		}
+		at := sq.OrbOf(component.SquareKind(kind), s.world.Resources.Time.GameTime, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+		s.land(cursor, spec.Attack, func(x, y int) bool { return vmath.EllipseContainsPoint(x, y, at.X, at.Y, invRx, invRy) })
+	}
+}
+
+// spell runs the square's spell a tick: it lights its places a wait after it last
+// went out, and a kind's blocks filling them before its hold runs out fire the
+// kind's spell; filled or not, it goes out and waits again
+func (s *SquareSystem) spell(sq *component.SquareComponent, dt time.Duration) {
+	sq.SpellTimer -= dt
+	switch kind := sq.SpellKind(sq.Spell); {
+	case sq.SpellLit && kind < component.SquareKindCount:
+		s.castSpell(sq, kind)
+		sq.SpellLit, sq.SpellTimer, sq.SpellCast = false, parameter.SquareSpellWait, uint8(kind)+1
+	case sq.SpellTimer > 0:
+	case sq.SpellLit:
+		sq.SpellLit, sq.SpellTimer = false, parameter.SquareSpellWait
+	default:
+		sq.Spell, sq.SpellLit, sq.SpellTimer, sq.SpellCast = s.spellPlaces(sq), true, parameter.SquareSpellHold, 0
+	}
+}
+
+// spellPlaces draws the places a spell lights from the tick, alike on every
+// instance: SquareSpellPlaces of them no kind's blocks fill already, not the last
+func (s *SquareSystem) spellPlaces(sq *component.SquareComponent) uint16 {
+	draw := vmath.MixChain(s.world.Resources.Game.State.GetGameTicks(), s.world.Resources.Rand.DomainRoot(core.DomainShared))
+	for {
+		var places uint16
+		for bits.OnesCount16(places) < parameter.SquareSpellPlaces {
+			draw = vmath.Mix64(draw)
+			places |= 1 << (draw % component.SquareBlocks)
+		}
+		if places != sq.Spell && sq.SpellKind(places) == component.SquareKindCount {
+			return places
+		}
+	}
+}
+
+// castSpell casts a kind's spell as the square's cursor's: its family on every body
+// with a member within reach, all round, and its effect held SpellBoost long, the
+// shield boosted and raised as a defense's fire raises it
+func (s *SquareSystem) castSpell(sq *component.SquareComponent, kind component.SquareKind) {
+	spec := &component.SquareKinds[kind]
+	cursor := s.owner(sq)
+	if spec.Spell != component.CombatAttackNone {
+		s.land(cursor, spec.Spell, sq.Within(s.world.Resources.Config.CellAspect))
+	}
+	if effect := &sq.Effects[kind]; spec.SpellBoost > 0 && cursor != 0 {
+		effect.Active = max(effect.Active, spec.SpellBoost)
+		s.world.PushLocal(event.EventBoostActivate, &event.BoostActivatePayload{Entity: cursor, Duration: effect.Active})
+	}
 }
 
 // Reflow keeps a square's middle by the edge or the middle it stood by as the map
@@ -167,6 +234,7 @@ func (s *SquareSystem) spawn(p *event.SquareSpawnRequestPayload) {
 	if w > cfg.MapWidth || h > cfg.MapHeight {
 		return
 	}
+	sq.SpellTimer = parameter.SquareSpellWait
 	sq.X = min(max(p.X-w/2, 0), cfg.MapWidth-w)
 	sq.Y = min(max(p.Y-h/2, 0), cfg.MapHeight-h)
 	for place := range sq.Digits {
@@ -383,7 +451,7 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 	spec := &component.SquareKinds[kind]
 	cursor := s.owner(sq)
 	sq.Effects[kind] = component.SquareEffect{Active: spec.Duration, Cooldown: spec.Cooldown,
-		Struck: spec.Attack != component.CombatAttackNone && s.strike(sq, cursor, spec.Attack, line)}
+		Struck: spec.Attack != component.CombatAttackNone && s.land(cursor, spec.Attack, sq.Strikes(line, s.world.Resources.Config.CellAspect))}
 	if spec.Boost && cursor != 0 {
 		s.world.PushLocal(event.EventBoostActivate, &event.BoostActivatePayload{Entity: cursor, Duration: spec.Duration})
 	}
@@ -399,13 +467,13 @@ func (s *SquareSystem) fire(e core.Entity, sq *component.SquareComponent, kind c
 	s.world.PushEvent(event.EventSquareAligned, &event.SquareAlignedPayload{Kind: kind, Line: line})
 }
 
-// strike lands a family as cursor's on every body with a member where line strikes
-// (SquareComponent.Strikes), and reports whether any stood there
-func (s *SquareSystem) strike(sq *component.SquareComponent, cursor core.Entity, attack component.CombatAttackType, line int) bool {
+// land lands a family as cursor's on every body with a member in a part of the map,
+// and reports whether any stood there
+func (s *SquareSystem) land(cursor core.Entity, attack component.CombatAttackType, part func(x, y int) bool) bool {
 	if cursor == 0 {
 		return false
 	}
-	bodies := FindTargetsIn(s.world, sq.Strikes(line, s.world.Resources.Config.CellAspect), position.ScopeShared, cursor)
+	bodies := FindTargetsIn(s.world, part, position.ScopeShared, cursor)
 	for _, g := range bodies {
 		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,

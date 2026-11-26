@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 type CombatEntityType int
@@ -72,6 +73,7 @@ const (
 	CombatAttackBurn      // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
 	CombatAttackStrike    // a magic square's strike, all a body's hit points
 	CombatAttackDeathWave // a death wave, all a body's hit points as its edge passes
+	CombatAttackConfuse   // a magic square's tempest sigil: no damage, a confuse
 	CombatAttackTypeCount
 )
 
@@ -90,6 +92,7 @@ var CombatAttackNames = [CombatAttackTypeCount]string{
 	CombatAttackBurn:         "burn",
 	CombatAttackStrike:       "strike",
 	CombatAttackDeathWave:    "death_wave",
+	CombatAttackConfuse:      "confuse",
 }
 
 // Effect Types
@@ -99,18 +102,50 @@ const CombatEffectNone CombatEffectMask = 0
 const (
 	CombatEffectEnergyDrain CombatEffectMask = 1 << iota
 	CombatEffectKinetic
-	CombatEffectStun
+	CombatEffectStatus // the hit leaves its profile's status
 )
 
-// StatusKind indexes CombatComponent.Status: one slot per kind, no stacking
+// StatusKind indexes CombatComponent.Status and StatusSpecs: one slot per kind, no
+// stacking
 type StatusKind uint8
 
 const (
-	StatusStun StatusKind = iota // movement suppressed
-	StatusBurn                   // periodic damage credited to Source
-	StatusWard                   // every hit refused; set by the entity's own species
+	StatusStun StatusKind = iota
+	StatusBurn
+	StatusWard
+	StatusConfuse
 	StatusCount
 )
+
+// StatusTick is what a status does each period while it runs
+type StatusTick uint8
+
+const (
+	StatusTickNone   StatusTick = iota
+	StatusTickDamage            // its magnitude in hit points, credited to its source
+	StatusTickKick              // its body thrown a way drawn anew, at parameter.ConfuseKick
+)
+
+// StatusSpec is what a status does to the body it runs on, which every species reads
+// alike: whether it holds the body still, refused by one shielded from being moved
+// (Moves), lengthened by a hit while it runs or left to run out, landed on the member
+// an ablative composite's hit struck, and its tick. A profile naming no duration or
+// period leaves the status's own.
+type StatusSpec struct {
+	Name             string
+	Duration, Period time.Duration
+	Holds, Moves     bool
+	Refresh, Member  bool
+	Tick             StatusTick
+}
+
+// StatusSpecs holds what each status does; a ward is set by its own species, no hit
+var StatusSpecs = [StatusCount]StatusSpec{
+	StatusStun:    {Name: "stun", Duration: parameter.PulseStunDuration, Holds: true, Moves: true},
+	StatusBurn:    {Name: "burn", Refresh: true, Member: true, Tick: StatusTickDamage},
+	StatusWard:    {Name: "ward"},
+	StatusConfuse: {Name: "confuse", Duration: parameter.ConfuseDuration, Period: parameter.ConfusePeriod, Moves: true, Refresh: true, Tick: StatusTickKick},
+}
 
 // Status is one effect a hit or the entity's own species left on a combat entity,
 // aged by combat each tick
@@ -168,4 +203,14 @@ type CombatComponent struct {
 
 	// Status is indexed by StatusKind
 	Status [StatusCount]Status
+}
+
+// Held reports a status running that holds the body still
+func (c *CombatComponent) Held() bool {
+	for kind, spec := range StatusSpecs {
+		if spec.Holds && c.Status[kind].Remaining > 0 {
+			return true
+		}
+	}
+	return false
 }

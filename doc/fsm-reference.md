@@ -816,13 +816,13 @@ square Enter's, which a scenario captures as `\r` to spend its cursor's burst
 meter as it likes. `EventSquareSpawnRequest { x, y, layout,
 groups, block_width, block_height, shield_step }` lays it centered on the cell,
 `layout` the nine digits row by row and `groups` the digits of each kind in order,
-attack, whirl and defense, its blocks `block_height` rows or as many fewer as a small
+attack, tempest and defense, its blocks `block_height` rows or as many fewer as a small
 map needs to hold its cursor's orbs; one square stands at a time, and it fights through the
 cursor standing on it, whose shield it sizes to cover it and, with a `shield_step`,
 steps by that much energy ([Gameplay: Shield](gameplay.md#shield)).
 `EventSquareAligned { kind, line }` says a line, 0 the top row, 1 the bottom, 2 the
 left column, 3 the right, 4 the middle row and 5 the middle column, fired its kind
-(0 attack, 1 whirl, 2 defense), once a cooldown while it holds, the middle ones no
+(0 attack, 1 tempest, 2 defense), once a cooldown while it holds, the middle ones no
 attack,
 `EventSquareShieldFell { entity }` that the cursor's shield fell with its energy,
 and `EventSquareHit { entity }` that a body struck the blocks with that shield down.
@@ -1119,9 +1119,9 @@ dead_zone = 0.5                     # Snap radius at the target once slow
 restitution = 0.5                   # Speed kept off a wall or the map's edge, 0 to 1
 
 [prototype.attacks]                 # Its own attack row: each family named replaces its combat row's keys (optional)
-pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and knockback (where the row takes it)
+pulse = { damage = 0, status = false }  # damage, status (where the family leaves one) and knockback (where the row takes it)
 missile = { damage = 9, death = "flash" }  # death: what a kill by the family leaves, in place of the prototype's own
-                                    # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, strike, death_wave
+                                    # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn, strike, death_wave, confuse
 
 [prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
 color = { r = 255, g = 120, b = 0 }  # The beams' color

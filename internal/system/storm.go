@@ -698,7 +698,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		circleBuffer[circleCount] = circleState{
 			entity:  stormComp.Circles[i],
 			circle:  circleComp,
-			stunned: ok && combatComp.Status[component.StatusStun].Remaining > 0,
+			stunned: ok && combatComp.Held(),
 		}
 		circleCount++
 	}
@@ -1173,7 +1173,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			x:         circlePos.X,
 			y:         circlePos.Y,
 			hasCursor: hasCursor,
-			stunned:   ok && combatComp.Status[component.StatusStun].Remaining > 0,
+			stunned:   ok && combatComp.Held(),
 		}
 		flags, suspended := s.graphs[circleComp.Index].Step(&circleComp.Machine, &s.ctx, dt)
 

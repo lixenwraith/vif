@@ -668,7 +668,7 @@ smaller part of it.
   `Resources.Behaviors`). Footprint (at most `BehaviorFootprintMax` cells each
   way) and header offset, hit points, the combat row its own starts from (`swarm`
   or `quasar`, the unit composites whose damage lands on their header) with each
-  attack family's damage, stun and knockback its `[prototype.attacks]` names, its
+  attack family's damage, status and knockback its `[prototype.attacks]` names, its
   materialize style (the swarm's, with the color and timings its
   `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
