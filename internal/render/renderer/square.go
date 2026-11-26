@@ -69,6 +69,10 @@ func (r *SquareRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // of the side its line faces, bursting as it fires, or dim and turning round the
 // outer orbit while no line holds the kind
 func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent) {
+	// The orbs turn on the tick's clock, which they strike by, carried to the frame
+	t := r.gameCtx.World.Resources.Time
+	since, _ := sinceTick(ctx, t)
+	elapsed := t.GameElapsed() + since
 	for kind, spec := range component.SquareKinds {
 		effect := sq.Effects[kind]
 		if held := float64(effect.Active) / float64(max(spec.Duration, 1)); held > 0 {
@@ -83,7 +87,7 @@ func (r *SquareRenderer) fields(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 		look := &visual.SquareOrbs[kind]
-		at := sq.OrbOf(component.SquareKind(kind), ctx.GameTime, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight)
+		at := sq.OrbOf(component.SquareKind(kind), elapsed, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight)
 		line := sq.Line(component.SquareKind(kind))
 		if line < 0 {
 			r.orb(ctx, buf, at, look, spec.Name, visual.SquareOrbIdle, 0)

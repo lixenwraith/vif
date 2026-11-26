@@ -585,7 +585,7 @@ func TestTheAttackOrbStrikesWhatItTouches(t *testing.T) {
 	cursor := w.Resources.Player.Slot(0)
 	cfg := w.Resources.Config
 	stepSquare(w, s)
-	at := sq.OrbOf(component.SquareAttack, w.Resources.Time.GameTime, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+	at := sq.OrbOf(component.SquareAttack, w.Resources.Time.GameElapsed(), cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
 	touching := standSwarm(w, at.X, at.Y)
 	cx, cy := sq.Center()
 	away := standSwarm(w, 2*cx-at.X, 2*cy-at.Y)

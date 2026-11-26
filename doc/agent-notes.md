@@ -231,6 +231,13 @@ Docs · Libraries · Branches.
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant. A comment or doc giving ticks in
   seconds says "at the default tick", 20 a second: 300 ticks once read five seconds.
+- A frame's `ctx.GameTime` is the pacing clock, which a live run starts at its
+  launch and a new game does not rewind; a driven run's manual clock starts at
+  `SimEpoch`, as the simulation does. A phase a renderer takes off the frame's clock
+  agrees with the simulation in every test and headless run and parts from it only
+  live, where the square's orb was drawn 142° from where it struck. Draw simulated
+  motion from `TimeResource.GameElapsed` plus `sinceTick`
+  (`TestAnOrbIsDrawnWhereItStrikes`).
 - A staging world's `Config` is written out field by field (`App.newStagingApp`),
   and a field left out takes its default. It names what decides the simulation and
   an install does not write, as the run's tick: `World.tick` stays as built, and the
