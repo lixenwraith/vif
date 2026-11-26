@@ -195,15 +195,15 @@ func (s *SquareComponent) OrbAt(angle float64, aspect vmath.Aspect, mapW, mapH i
 	return vmath.Point{X: x, Y: y}
 }
 
-// OrbOf is the cell the orb of a kind that strikes stands at, at a game time: the
-// middle of the side its line faces, or turning round the outer orbit once each
-// SquareOrbIdlePeriod while no line holds the kind
-func (s *SquareComponent) OrbOf(kind SquareKind, now time.Time, aspect vmath.Aspect, mapW, mapH int) vmath.Point {
+// OrbOf is the cell the orb of a kind that strikes stands at, a game time elapsed
+// into the run: the middle of the side its line faces, or turning round the outer
+// orbit once each SquareOrbIdlePeriod while no line holds the kind
+func (s *SquareComponent) OrbOf(kind SquareKind, elapsed time.Duration, aspect vmath.Aspect, mapW, mapH int) vmath.Point {
 	if l := s.Line(kind); l >= 0 {
 		return s.Orb(l, aspect, mapW, mapH)
 	}
-	period := int64(parameter.SquareOrbIdlePeriod)
-	return s.OrbAt(float64(now.UnixNano()%period)/float64(period)*vmath.TwoPi, aspect, mapW, mapH)
+	turn := float64(elapsed%parameter.SquareOrbIdlePeriod) / float64(parameter.SquareOrbIdlePeriod)
+	return s.OrbAt(turn*vmath.TwoPi, aspect, mapW, mapH)
 }
 
 // Orb is the cell a line's orb stands at on the outer orbit, the middle of the side

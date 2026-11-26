@@ -143,7 +143,7 @@ func (s *SquareSystem) orbStrike(sq *component.SquareComponent) {
 		if spec.Attack == component.CombatAttackNone {
 			continue
 		}
-		at := sq.OrbOf(component.SquareKind(kind), s.world.Resources.Time.GameTime, cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
+		at := sq.OrbOf(component.SquareKind(kind), s.world.Resources.Time.GameElapsed(), cfg.CellAspect, cfg.MapWidth, cfg.MapHeight)
 		s.land(cursor, spec.Attack, func(x, y int) bool { return vmath.EllipseContainsPoint(x, y, at.X, at.Y, invRx, invRy) })
 	}
 }
