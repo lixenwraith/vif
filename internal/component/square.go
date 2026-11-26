@@ -14,7 +14,7 @@ type SquareKind uint8
 
 const (
 	SquareAttack SquareKind = iota
-	SquareWhirl
+	SquareTempest
 	SquareDefense
 	SquareKindCount
 )
@@ -55,8 +55,8 @@ type SquareKindSpec struct {
 // SquareKinds holds what each kind fires
 var SquareKinds = [SquareKindCount]SquareKindSpec{
 	SquareAttack: {Name: "attack", Attack: CombatAttackStrike, Cooldown: parameter.SquareStrikeCooldown},
-	SquareWhirl: {Name: "whirl", Attack: CombatAttackNone, Duration: parameter.SquareWhirlDuration, Cooldown: parameter.SquareWhirlCooldown,
-		Wind: SquareWind{Force: parameter.SquareWhirlForce, Turn: math.Pi / 2, Duration: parameter.SquareWhirlDuration, Reach: parameter.SquareWhirlReach}},
+	SquareTempest: {Name: "tempest", Attack: CombatAttackNone, Duration: parameter.SquareTempestDuration, Cooldown: parameter.SquareTempestCooldown,
+		Wind: SquareWind{Force: parameter.SquareTempestForce, Turn: math.Pi / 2, Duration: parameter.SquareTempestDuration, Reach: parameter.SquareTempestReach}},
 	SquareDefense: {Name: "defense", Attack: CombatAttackNone, Duration: parameter.SquareBoostDuration, Cooldown: parameter.SquareBoostCooldown,
 		Boost: true, Shed: true, Wind: SquareWind{Force: parameter.SquareWindForce, Duration: parameter.SquareWindDuration, Reach: parameter.SquareWindReach}},
 }

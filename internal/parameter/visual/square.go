@@ -18,7 +18,7 @@ type SquareKindColors struct {
 // SquareKinds holds each kind's colors
 var SquareKinds = [component.SquareKindCount]SquareKindColors{
 	component.SquareAttack:  {Block: color.Vermilion, Glow: color.Coral, Track: color.DarkCrimson, Console: ConRed},
-	component.SquareWhirl:   {Block: color.Gold, Glow: color.Apricot, Track: color.DarkGold, Console: ConYellow},
+	component.SquareTempest: {Block: color.Gold, Glow: color.Apricot, Track: color.DarkGold, Console: ConYellow},
 	component.SquareDefense: {Block: color.BrightCyan, Glow: color.SkyTeal, Track: color.Teal, Console: ConCyan},
 }
 
@@ -78,13 +78,13 @@ const (
 	SquareStrikeFlash = 250 * time.Millisecond
 	SquareStrikeAlpha = 0.15
 
-	// A turning wind draws SquareWhirlStreaks streaks on the outer orbit while it
-	// blows, each SquareWhirlTail columns fading back from a head of at most
-	// SquareWhirlAlpha of the kind's glow, round the orbit once each SquareWhirlTurn
-	SquareWhirlStreaks = 4
-	SquareWhirlTail    = 22
-	SquareWhirlAlpha   = 0.8
-	SquareWhirlTurn    = 2400 * time.Millisecond
+	// A turning wind draws SquareTempestStreaks streaks on the outer orbit while it
+	// blows, each SquareTempestTail columns fading back from a head of at most
+	// SquareTempestAlpha of the kind's glow, round the orbit once each SquareTempestTurn
+	SquareTempestStreaks = 4
+	SquareTempestTail    = 22
+	SquareTempestAlpha   = 0.8
+	SquareTempestTurn    = 2400 * time.Millisecond
 )
 
 // SquareMeterEighths fill a meter's last cell an eighth at a time, from the left

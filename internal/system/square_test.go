@@ -123,15 +123,15 @@ func squareFired(events []event.GameEvent) (kinds []component.SquareKind) {
 // columns each fires at once and again as its cooldown runs out, a turn away and
 // back inside the cooldown firing nothing, save an attack down the middle column,
 // which faces no side. A defense's fire boosts its cursor and blows a gust out from
-// the middle; a whirl turns a wind.
+// the middle; a tempest turns a wind.
 func TestALineFiresItsKindEachCooldownTheMiddleNoAttack(t *testing.T) {
 	for _, c := range []struct {
 		keys  []string
 		fired []component.SquareKind // the left column's, the right's, the middle's
 	}{
-		{[]string{"5", "h", "3", "l"}, []component.SquareKind{component.SquareWhirl, component.SquareAttack, component.SquareDefense}},
-		{[]string{"7", "l", "3", "h"}, []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareWhirl}},
-		{[]string{"7", "h", "1", "l"}, []component.SquareKind{component.SquareDefense, component.SquareWhirl}},
+		{[]string{"5", "h", "3", "l"}, []component.SquareKind{component.SquareTempest, component.SquareAttack, component.SquareDefense}},
+		{[]string{"7", "l", "3", "h"}, []component.SquareKind{component.SquareAttack, component.SquareDefense, component.SquareTempest}},
+		{[]string{"7", "h", "1", "l"}, []component.SquareKind{component.SquareDefense, component.SquareTempest}},
 	} {
 		w, s, _ := newSquare(t)
 		cursor := w.Resources.Player.Slot(0)
@@ -140,7 +140,7 @@ func TestALineFiresItsKindEachCooldownTheMiddleNoAttack(t *testing.T) {
 		if got := squareFired(events); !slices.Equal(got, c.fired) {
 			t.Fatalf("%v fired %v, want %v", c.keys, got, c.fired)
 		}
-		boosts, gusts, whirls := 0, 0, 0
+		boosts, gusts, tempests := 0, 0, 0
 		for _, ev := range events {
 			if p, ok := ev.Payload.(*event.BoostActivatePayload); ok && p.Entity == cursor && p.Duration == parameter.SquareBoostDuration {
 				boosts++
@@ -149,13 +149,13 @@ func TestALineFiresItsKindEachCooldownTheMiddleNoAttack(t *testing.T) {
 				switch {
 				case p.Force == parameter.SquareWindForce && p.Direction == 0:
 					gusts++
-				case p.Force == parameter.SquareWhirlForce && p.Direction == math.Pi/2 && p.Duration == parameter.SquareWhirlDuration:
-					whirls++
+				case p.Force == parameter.SquareTempestForce && p.Direction == math.Pi/2 && p.Duration == parameter.SquareTempestDuration:
+					tempests++
 				}
 			}
 		}
-		if gusts != 1 || whirls != 1 || boosts != 1 {
-			t.Fatalf("%v blew %d gusts, turned %d winds and boosted %d times, want one each", c.keys, gusts, whirls, boosts)
+		if gusts != 1 || tempests != 1 || boosts != 1 {
+			t.Fatalf("%v blew %d gusts, turned %d winds and boosted %d times, want one each", c.keys, gusts, tempests, boosts)
 		}
 		pressSquare(s, "l", "h")
 		if got := squareFired(w.Resources.Event.Queue.Consume()); len(got) != 0 {

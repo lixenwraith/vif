@@ -438,7 +438,7 @@ a blocked tracer drains to its stop point.
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; evolution picks which of the seven types in `parameter.EyeTypeTable` a gateway spawns. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
-| Magic square | Nine blocks laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`), under the shield of the cursor standing on it, which the square sizes to reach past its corners and steps by its `ShieldStep`; with that shield down a body on the blocks costs the cursor its touch in heat, is thrown off, and crosses `EventSquareHit`. A player selects a block by its digit and turns its row or column a place, by key or by dragging the block; a row or column holding three of a kind fires the kind's effect from `component.SquareKinds` as that cursor's each time its cooldown runs out, the middle row and column a whirl or a defense alone: a strike from the kind's orb on what nears the side of the map its edge faces (`SquareComponent.Strikes`), a wind turned round the square, or a boost that stands the shield with a gust of radial wind. Its dust meter (`SquareComponent.Dust`) charges with time and its cursor's kills, a turn into a magic state (`IsMagic`) fills it, and its next gust sheds it as dust round the shield, as its shield falling does (`EventSquareShieldFell`). `magic` (§10) is its scenario. |
+| Magic square | Nine blocks laid three by three, each standing for a digit and one of three kinds (Shared domain, `SquareSystem`), under the shield of the cursor standing on it, which the square sizes to reach past its corners and steps by its `ShieldStep`; with that shield down a body on the blocks costs the cursor its touch in heat, is thrown off, and crosses `EventSquareHit`. A player selects a block by its digit and turns its row or column a place, by key or by dragging the block; a row or column holding three of a kind fires the kind's effect from `component.SquareKinds` as that cursor's each time its cooldown runs out, the middle row and column a tempest or a defense alone: a strike from the kind's orb on what nears the side of the map its edge faces (`SquareComponent.Strikes`), a wind turned round the square, or a boost that stands the shield with a gust of radial wind. Its dust meter (`SquareComponent.Dust`) charges with time and its cursor's kills, a turn into a magic state (`IsMagic`) fills it, and its next gust sheds it as dust round the shield, as its shield falling does (`EventSquareShieldFell`). `magic` (§10) is its scenario. |
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor, the charge's end marked from the spin's first tick; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
 | Devourer | Boss that is the map's edges: it creeps in over three seconds to a bezel `DevourerBezel` of the shorter side thick, a row counting two columns, and leaves a rounded rectangle open whose walls swell, ripple round the loop and breathe, a frame every 100 ms (`DevourerFrame`), hitbox and shading together. Its footprint demolishes walls, takes the glyphs and gold members it covers in a flash, clears nuggets, and strikes the cursors it touches, 10,000 energy a tick through a shield and its heat bare. While fewer than four guts stand, every four to six seconds an omen lights a ray between two walls for two seconds, and a gut forms along it: a 1,000-hit-point intestine wall to wall that writhes, strikes as the body does, lights where a hit lands, and fades when shot through, no kill. It rises with `DevourerInitialHP` (10,000) hit points, or the `hp` its spawn request names; its body is no target, and loses what its guts lose, no more than each had, so ten guts cut kill it. Guts are too massive to knock back or stun, and its health bar stands on the view's top row. A kill drops a heat, an emitter or two more energy in its place, and four energy, from the open space's middle. One stands at a time. |
 | Gateway | Timed anchored spawner. It emits eye, snake or swarm spawn requests with their target group and route/adaptation metadata, or lands a data species, each swarm and data species keeping the gateway that sent it. A second request on its anchor re-arms it with another species and pace, `EventGatewaySendRequest` has it send one of a species at once, it holds its spawns while an `EventGatewayHoldRequest` naming its anchor, or none, lasts, and it disappears when its anchor is gone. Armed with `wave = true` it marks the data species it sends, and `EventGatewayWaveDefeated` names its anchor and cell once it is armed otherwise and the last of them is dead. |
@@ -837,7 +837,7 @@ the blocks are as tall as the map leaves the cursor's orbs room to circle, three
 down to one (`SquareComponent.Fit`), and the outer orbit flattens to the map. A
 smaller screen keeps the smallest map and looks at the square from its middle.
 The square stands there: the Lo Shu square, 6 7 2 over 1 5 9 over 8 3 4, its digits in
-three kinds, 2 1 3 attack, 6 5 4 whirl and 8 7 9 defense, one of each along every
+three kinds, 2 1 3 attack, 6 5 4 tempest and 8 7 9 defense, one of each along every
 row and column. The scenario captures 1-9, h j k l, a s d f and Enter: a digit selects its
 block, h and l turn the block's row a place left and right, the last block round to
 the first (1 5 9 turned right is 9 1 5), and j and k its column down and up; a and
@@ -848,7 +848,7 @@ height along its column, turns that line a place, the first turn keeping the dra
 to that line. The square's lines are its rows and columns: one holding three of a
 kind fires the kind at once, and again each time its cooldown, 2 s from its last
 fire and 8 s for the defense, runs out while the line holds. An attack strikes
-the side an edge faces, so the middle row and column fire a whirl or a defense
+the side an edge faces, so the middle row and column fire a tempest or a defense
 and never the attack. Since a row turn keeps the row's kinds, and the square's
 rows are turns of one another, aligning one column by row turns aligns all three:
 a player chooses the kind in the middle, where an attack stands idle.
@@ -872,12 +872,12 @@ lands: what the side's gateways send falls as it nears, not across the map.
 Its orb, a white core between a red and a blue lobe, stands on an outer orbit ten
 columns past the shield and clear of the cursor's own orbs, which circle the
 shield's edge: at the middle of the side its edge faces, and dim, turning round
-the orbit, while no edge holds the attack. The whirl turns a radial wind (§9) a
+the orbit, while no edge holds the attack. The tempest turns a radial wind (§9) a
 quarter round the square for 0.5 s of each 2 s, fading to nothing 40 columns past
-the shield: a burst that carries a body walking in clockwise to about where the
-next gateway's come in, the median body of a rank 57 to 116 degrees on maps from
-80 by 40 to 200 by 60, and so into the part an attack faces, while streaks turn on
-the outer orbit. Defense boosts the shield for 1 s, standing it that long with no
+the shield: a burst that carries a body walking in clockwise, the median one 87
+degrees on an 80 by 24 screen and 122 on 130 by 30, into the part an attack faces,
+and on 160 by 50 keeps most circling, 49 of 174 reaching the shield in two
+minutes while it holds a line; streaks turn on the outer orbit while it blows. Defense boosts the shield for 1 s, standing it that long with no
 energy left, and blows a gust: a radial wind (§9) out from the square for 0.5 s
 that fades to nothing 30 columns past the shield and throws what stands by it some
 25 columns back, with no knockback and no immunity; a body walks back in 6 to 9 s,

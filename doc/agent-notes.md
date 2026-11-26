@@ -890,8 +890,9 @@ Docs · Libraries · Branches.
   and fades with distance for that; measure a wind by a body's distance a tick.
 - A wind turned round a cell holds off as one blown out of it does: at force 500
   for 0.7 s of each 2 s, fading over 30 columns, 7 in 100 of `magic`'s lightest
-  bodies reached the shield. Read a whirl by the degrees a body is carried from
-  its gateway to the shield, the share carried 45 to 135, the share that arrives
+  bodies reached the shield. Read a tempest by the degrees a body is carried from
+  its gateway to the shield, summed tick by tick since one carried past half a turn
+  reads backward, the share carried 45 to 135, the share that arrives
   and when fixed lines fall: a scratch test writes `SquareComponent.Lines` each
   tick, which only a turn recomputes, and `App.Position().Run` moving marks the
   fall. A wind's pull is its force over a body's mass, so ranks carried alike need

@@ -121,14 +121,14 @@ func (r *SquareRenderer) flash(ctx render.RenderContext, buf *render.RenderBuffe
 // the way the wind carries bodies, all fading over the wind's last third; a console
 // draws their heads in dots
 func (r *SquareRenderer) streaks(ctx render.RenderContext, buf *render.RenderBuffer, sq *component.SquareComponent, kind int, held, sense float64) {
-	period := int64(visual.SquareWhirlTurn)
+	period := int64(visual.SquareTempestTurn)
 	turn := sense * float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
 	orbit := sq.ShieldRadius(ctx.CellAspect) + parameter.SquareOrbGap
 	colors := &visual.SquareKinds[kind]
-	for i := range visual.SquareWhirlStreaks {
-		head := turn + float64(i)*vmath.TwoPi/visual.SquareWhirlStreaks
+	for i := range visual.SquareTempestStreaks {
+		head := turn + float64(i)*vmath.TwoPi/visual.SquareTempestStreaks
 		last := vmath.Point{X: -1}
-		for n := range visual.SquareWhirlTail {
+		for n := range visual.SquareTempestTail {
 			at := sq.OrbAt(head-sense*float64(n)/orbit, ctx.CellAspect, ctx.MapWidth, ctx.MapHeight)
 			sx, sy, visible := ctx.MapToScreen(at.X, at.Y)
 			if at == last || !visible {
@@ -137,7 +137,7 @@ func (r *SquareRenderer) streaks(ctx render.RenderContext, buf *render.RenderBuf
 			last = at
 			if r.console == nil {
 				buf.SetBgScreen(sx, sy, colors.Glow, visual.RgbBackground,
-					visual.SquareWhirlAlpha*min(3*held, 1)*(1-float64(n)/visual.SquareWhirlTail))
+					visual.SquareTempestAlpha*min(3*held, 1)*(1-float64(n)/visual.SquareTempestTail))
 			} else if n == 0 {
 				buf.SetFgOnly(sx, sy, '·', color.RGB{R: colors.Console}, terminal.AttrFg256)
 			}

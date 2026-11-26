@@ -26,14 +26,15 @@ const (
 	SquareWindReach    = 30.0
 	SquareWindDuration = 500 * time.Millisecond
 
-	// SquareWhirlForce is the wind a whirl turns round the square for
-	// SquareWhirlDuration of each SquareWhirlCooldown, fading to nothing
-	// SquareWhirlReach columns past the shield: a burst that carries a body walking
-	// in about a quarter round the shield, to where the next gateway's come in
-	SquareWhirlForce    = 300.0
-	SquareWhirlReach    = 40.0
-	SquareWhirlDuration = 500 * time.Millisecond
-	SquareWhirlCooldown = 2 * time.Second
+	// SquareTempestForce is the wind a tempest turns round the square for
+	// SquareTempestDuration of each SquareTempestCooldown, fading to nothing
+	// SquareTempestReach columns past the shield: a burst that carries a body walking
+	// in a quarter to a third round the shield on a small map, and holds most circling
+	// on a large one
+	SquareTempestForce    = 600.0
+	SquareTempestReach    = 40.0
+	SquareTempestDuration = 500 * time.Millisecond
+	SquareTempestCooldown = 2 * time.Second
 
 	// A square's dust meter charges a second a second, and SquareDustKill for each
 	// kill its cursor makes, up to SquareDustFull, which a magic state, every row

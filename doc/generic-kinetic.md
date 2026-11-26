@@ -186,7 +186,7 @@ starts one field of the wind: the uniform one, or with `radial` one about a cell
 where the direction turns it from straight out, a quarter turn round the cell
 clockwise on screen, and a `reach` fades it. A valid start replaces the field of
 its form, the uniform one or the radial one about its cell turned its way, and
-blows beside every other, so a magic square's gust and whirl add;
+blows beside every other, so a magic square's gust and tempest add;
 invalid/non-finite or non-positive input is ignored, and `EventWindCancel` stops
 every field. Direction is the vector
 entities travel toward, not the point the wind originates from. Under the current
