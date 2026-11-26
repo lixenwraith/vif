@@ -230,7 +230,7 @@ func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
 // materialize style, which the program names, over the swarm's
 func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
 	src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\n"+
-		"attacks = { pulse = { damage = 0, stun = false }, missile = { damage = 9, death = \"flash\" } }\n"+
+		"attacks = { pulse = { damage = 0, status = false }, missile = { damage = 9, death = \"flash\" } }\n"+
 		"materialize = { color = { r = 1, g = 2, b = 3 }, fill_ms = 100 }", 1)
 	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)}, nil)
 	if err != nil {
@@ -249,7 +249,7 @@ func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
 		}
 		switch atk {
 		case component.CombatAttackPulse:
-			want.Damage, want.Effects = 0, base.EffectMask&^component.CombatEffectStun
+			want.Damage, want.Effects = 0, base.EffectMask&^component.CombatEffectStatus
 		case component.CombatAttackMissile:
 			want.Damage, want.Death = 9, component.DeathFlash
 		}
@@ -421,7 +421,7 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"one frame a period", `pattern_ms = 500`, `pattern_ms = 0`, `program 'warden': prototype: pattern_ms 0: 2 frames need a positive period`, 1},
 		{"header", `header = { x = 1, y = 0 }`, `header = { x = 4, y = 0 }`, "program 'warden': prototype: header {4, 0} outside the 4×2 footprint", 1},
 		{"attack family", `mass = 2.0`, "mass = 2.0\nattacks = { punch = { damage = 1 } }", `program 'warden': prototype: attacks: "punch" is not one of tracer, shield`, 1},
-		{"direct stun", `mass = 2.0`, "mass = 2.0\nattacks = { tracer = { stun = true } }", `program 'warden': prototype: attacks: tracer: only an area hit stuns`, 1},
+		{"no status", `mass = 2.0`, "mass = 2.0\nattacks = { tracer = { status = true } }", `program 'warden': prototype: attacks: tracer: the swarm row takes no status from it`, 1},
 		{"knockback", `mass = 2.0`, "mass = 2.0\nattacks = { pulse = { knockback = true } }", `program 'warden': prototype: attacks: pulse: the swarm row takes no knockback from it`, 1},
 		{"negative damage", `mass = 2.0`, "mass = 2.0\nattacks = { ray = { damage = -1 } }", `program 'warden': prototype: attacks: ray: damage -1 is negative`, 1},
 		{"attack death", `mass = 2.0`, "mass = 2.0\nattacks = { ray = { death = \"particle\" } }", `program 'warden': prototype: attacks: ray: death "particle" is not one of none, flash, fadeout, scatter`, 1},

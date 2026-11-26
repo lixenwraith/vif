@@ -148,6 +148,12 @@ const (
 	BurnDamage   = 1
 	BurnPeriod   = 1000 * time.Millisecond
 	BurnDuration = 3000 * time.Millisecond
+
+	// A confuse throws its body ConfuseKick cells a second a way drawn anew each
+	// ConfusePeriod for ConfuseDuration, beside whatever steers it
+	ConfuseDuration = 5 * time.Second
+	ConfusePeriod   = 500 * time.Millisecond
+	ConfuseKick     = 8.0
 )
 
 // Mounted weapons: a hit costs a cursor energy through an active shield, heat without one

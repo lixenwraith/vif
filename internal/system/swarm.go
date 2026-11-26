@@ -309,7 +309,7 @@ func (s *SwarmSystem) Update() {
 			swarm:   swarmComp,
 			combat:  combatComp,
 			kinetic: kineticComp,
-			stunned: combatComp.Status[component.StatusStun].Remaining > 0,
+			stunned: combatComp.Held(),
 			dtSec:   dtSec,
 		}
 

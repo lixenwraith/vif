@@ -153,15 +153,15 @@ is below the cap.
 ## 5. Resolution, statuses, and what crosses
 
 Hits on species resolve through the profile matrix in `internal/profile/combat.go`,
-`[attack][attacker][defender]`: damage type and value, knockback, stun, chains.
-The damage type picks the resolver: direct, area, or over-time, which leaves a
-status instead of taking hit points. Damage allowances are per player and attack
+`[attack][attacker][defender]`: damage type and value, knockback, the status it
+leaves, chains. The damage type picks the resolver: direct, area, or over-time,
+which leaves its status instead of taking hit points. Damage allowances are per player and attack
 family within the target's immunity window (D-3); chained effects keep their
-originating weapon's allowance. Knockback and stun immunity each cover all players
+originating weapon's allowance. Knockback and status immunity each cover all players
 and weapons; a knockback stronger than the one that opened the kinetic window
 resets it and lands. A data species is hit by a row of its own
 (`profile.DataRow`, built in `NewCombatSystem`): its combat row's profiles, each
-family dealing the damage and leaving the stun and knockback its prototype's
+family dealing the damage and leaving the status and knockback its prototype's
 `attacks` name. One with a mass of its own is pushed as its row's profile pushes
 that mass (`profile.Reweigh`), so a heavier one is knocked back less.
 Species-authored invulnerability is the ward status and blocks every
@@ -174,18 +174,27 @@ landed, as a gut's does; the digest compares neither.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time, a
 period and its timer, a magnitude, the crediting cursor and the family it records
-under. Combat ages every slot each tick. The ward is the one slot a hit never
-writes: quasar shields, storm phase, the shielded snake head and a data species'
-`Shielded` state refresh it from their own systems, and combat refuses every hit's
-damage and every tick while it runs; each of the four also refuses a stun while it
-holds. Stun suppresses movement and is never refreshed while it runs, so a target
-under fire from two players still leaves it. Burn is the charged pulse's chained
-over-time attack, `CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for
-`BurnDuration`, the last refresher credited, each tick recorded under the burn
-family, flashing the target and setting `LastDamagedBy` on it and its header.
-Nothing spends the burn family's immunity, so only a ward refuses a burn or its
-tick; a tick spends no window, so a player's own burn never blocks their direct
-hits. The digest names every slot field, so a status is compared state.
+under. Combat ages every slot each tick, and what each kind does is its row of
+`component.StatusSpecs`: whether it holds its body still, which every species reads
+as `CombatComponent.Held`, whether a body shielded from being moved refuses it,
+whether a hit while it runs lengthens it or leaves it to run out, whether it lands
+on the member an ablative hit struck, and what its tick does. A profile with
+`CombatEffectStatus` leaves its `Status` through one path, `CombatSystem.applyStatus`,
+for its `Duration`, the status's own when it names none. The ward is the one slot a
+hit never writes: quasar shields, storm phase, the shielded snake head and a data
+species' `Shielded` state refresh it from their own systems, and combat refuses every
+hit's damage and every tick while it runs; each of the four also shields its body
+from being moved (`unmovable`). Stun holds its body still and is never refreshed
+while it runs, so a target under fire from two players still leaves it. Burn is the
+charged pulse's chained over-time attack, `CombatAttackBurn`: `BurnDamage` every
+`BurnPeriod` for `BurnDuration`, the last refresher credited, each tick recorded
+under the burn family, flashing the target and setting `LastDamagedBy` on it and its
+header. Nothing spends the burn family's immunity, so only a ward refuses a burn or
+its tick; a tick spends no window, so a player's own burn never blocks their direct
+hits. Confuse, the area family `CombatAttackConfuse`, kicks its body `ConfuseKick`
+cells a second a way its tick and entity draw each `ConfusePeriod` for
+`ConfuseDuration`, beside whatever steers it. The digest names every slot field, so
+a status is compared state.
 
 A magic square's attack is that of the cursor standing on it, which owns and
 originates it, so a kill is that cursor's: `strike` takes whatever hit points a
@@ -269,5 +278,6 @@ bullet integrate after combat; `transient` ages explosion centers late.
 Telemetry: the `weapon` card holds the loadout, orbs and tracers in flight,
 the `weapon.fired` and `weapon.rejects` groups the counters, `weapon.tracer_*` the
 sweep; the `combat.damage.family` group is the damage each attack family deals,
-which is how a weapon's effect reads; `combat.effect_burn` and `combat.burn_ticks`
-count burns left and ticks landed; `mount`, `pulse`, `missile` and `bullet` hold their own.
+which is how a weapon's effect reads; `combat.effect_<status>`,
+`combat.refused_<status>` and `combat.ticks_<status>` count each status left, refused
+and ticked; `mount`, `pulse`, `missile` and `bullet` hold their own.

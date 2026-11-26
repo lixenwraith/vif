@@ -23,8 +23,9 @@ type AttackProfile struct {
 	Chain   *AttackProfile
 	Charged *AttackProfile
 
-	// A CombatDamageOverTime profile leaves Status, ticking DamageValue every Period
-	// for Duration; a stun lasts Duration, parameter.PulseStunDuration when zero
+	// With CombatEffectStatus the hit leaves Status for Duration, the status's own
+	// when zero (component.StatusSpecs); an over-time profile deals no damage of its
+	// own, its status ticking DamageValue every Period
 	Status           component.StatusKind
 	Period, Duration time.Duration
 
@@ -165,6 +166,7 @@ var (
 	bulletProfiles       [component.CombatEntityCount]AttackProfile
 	rayProfiles          [component.CombatEntityCount]AttackProfile
 	burnProfiles         [component.CombatEntityCount]AttackProfile
+	confuseProfiles      [component.CombatEntityCount]AttackProfile
 	selfDestructProfiles [component.CombatEntityCount]AttackProfile
 )
 
@@ -249,7 +251,7 @@ func init() {
 		register(&missileProfiles[d])
 	}
 
-	// Pulse: stun, no knockback
+	// Pulse: stun, no knockback; a confuse lands where a stun does
 	for _, d := range cursorDefenders {
 		pulseProfiles[d] = AttackProfile{
 			AttackType:  component.CombatAttackPulse,
@@ -257,13 +259,23 @@ func init() {
 			Defender:    d,
 			DamageType:  component.CombatDamageArea,
 			DamageValue: parameter.CombatDamagePulse,
-			EffectMask:  component.CombatEffectStun,
+			EffectMask:  component.CombatEffectStatus,
+			Status:      component.StatusStun,
 		}
 		register(&pulseProfiles[d])
+		confuseProfiles[d] = AttackProfile{
+			AttackType: component.CombatAttackConfuse,
+			Attacker:   component.CombatEntityCursor,
+			Defender:   d,
+			DamageType: component.CombatDamageArea,
+			EffectMask: component.CombatEffectStatus,
+			Status:     component.StatusConfuse,
+		}
+		register(&confuseProfiles[d])
 	}
-	// Too massive to stun, as no collision set knocks them back
+	// Too massive to stun or confuse, as no collision set knocks them back
 	for _, d := range [...]component.CombatEntityType{component.CombatEntityKraken, component.CombatEntityDevourerGut} {
-		pulseProfiles[d].EffectMask = 0
+		pulseProfiles[d].EffectMask, confuseProfiles[d].EffectMask = 0, 0
 	}
 
 	// Burn: the charged pulse's follow-up
@@ -274,6 +286,7 @@ func init() {
 			Defender:    d,
 			DamageType:  component.CombatDamageOverTime,
 			DamageValue: parameter.BurnDamage,
+			EffectMask:  component.CombatEffectStatus,
 			Status:      component.StatusBurn,
 			Period:      parameter.BurnPeriod,
 			Duration:    parameter.BurnDuration,
