@@ -162,7 +162,7 @@ func (s *EyeSystem) Update() {
 		}
 
 		// Stun: skip movement and animation
-		if combatComp.Status[component.StatusStun].Remaining > 0 {
+		if combatComp.Held() {
 			activeCount++
 			continue
 		}

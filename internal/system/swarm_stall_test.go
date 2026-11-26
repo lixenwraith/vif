@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
@@ -134,13 +135,14 @@ func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	c, _ := w.Components.Combat.GetPtr(header)
-	if !combat.applyStunEffect(header, c, 0) {
+	pulse := profile.Attack(component.CombatAttackPulse, component.CombatEntityCursor, component.CombatEntitySwarm)
+	if !combat.applyStatus(header, header, c, nil, false, pulse, 0) {
 		t.Fatal("the first stun was refused")
 	}
 	c.Status[component.StatusStun].Remaining -= parameter.GameUpdateInterval
 	held := c.Status[component.StatusStun].Remaining
 
-	if combat.applyStunEffect(header, c, 0) {
+	if combat.applyStatus(header, header, c, nil, false, pulse, 0) {
 		t.Fatal("a second stun was applied while one was running")
 	}
 	if c.Status[component.StatusStun].Remaining != held {

@@ -634,7 +634,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 		// Flocking does not apply if dead, immune to kinetic shifts (recently hit), enraged (attacking), or stunned
 		c := s.near[k].combat
 		s.sums[k].open = s.near[k].kinetic != nil && c != nil && c.HitPoints > 0 && c.RemainingKineticImmunity <= 0 &&
-			!c.IsEnraged && c.Status[component.StatusStun].Remaining <= 0
+			!c.IsEnraged && !c.Held()
 	}
 
 	// Accumulate repulsion from all active sources

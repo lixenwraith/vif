@@ -56,7 +56,7 @@ states = { Seek = { on_update = [{ action = "Home" }] } }
 [macros.Body.body.prototype]
 combat = "swarm"
 death = "scatter"
-attacks = { pulse = { stun = false }, strike = { death = "flash" }, lightning = { death = "flash" }, death_wave = { death = "flash" } }
+attacks = { pulse = { status = false }, strike = { death = "flash" }, lightning = { death = "flash" }, death_wave = { death = "flash" } }
 width = "${width}"
 height = "${height}"
 header = "${header}"

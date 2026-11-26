@@ -247,7 +247,7 @@ func (s *QuasarSystem) Update() {
 		s.ctx = quasarCtx{
 			entity:  headerEntity,
 			quasar:  quasarComp,
-			stunned: combatComp.Status[component.StatusStun].Remaining > 0,
+			stunned: combatComp.Held(),
 			inRange: s.isCursorInZapRange(headerEntity, quasarComp),
 			dt:      dt,
 			dtSec:   dtSec,

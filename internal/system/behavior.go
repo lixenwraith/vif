@@ -269,7 +269,7 @@ func (s *BehaviorSystem) Update() {
 		}
 
 		// A stun freezes the animation as it freezes the step
-		if c.combat.Status[component.StatusStun].Remaining <= 0 && len(c.proto.Look.Frames) > 1 {
+		if !c.combat.Held() && len(c.proto.Look.Frames) > 1 {
 			b.PatternElapsed += dt
 			for b.PatternElapsed >= c.proto.Pattern {
 				b.PatternElapsed -= c.proto.Pattern
@@ -928,7 +928,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		_, _, ok := c.target()
 		return ok
 	}))
-	v.Predicate("Stunned", reads(func(c *behaviorCtx) bool { return c.combat.Status[component.StatusStun].Remaining > 0 }))
+	v.Predicate("Stunned", reads(func(c *behaviorCtx) bool { return c.combat.Held() }))
 	v.Predicate("HPFraction", func(a *fractionArgs) (func(*behaviorCtx) bool, error) {
 		return func(c *behaviorCtx) bool {
 			return a.Op.Holds(float64(c.combat.HitPoints)/float64(c.proto.HitPoints), a.Value)

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"math"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,6 @@ type CombatSystem struct {
 	statDirect        *atomic.Int64
 	statArea          *atomic.Int64
 	statKnock         *atomic.Int64
-	statStun          *atomic.Int64
 	statDamage        *atomic.Int64
 	statImmune        *atomic.Int64
 	statUnprofiled    *atomic.Int64
@@ -47,7 +47,6 @@ type CombatSystem struct {
 	statRelation      *atomic.Int64
 	statCursor        *atomic.Int64
 	statKineticImmune *atomic.Int64
-	statStunImmune    *atomic.Int64
 
 	statLive              [component.CombatEntityCount]*atomic.Int64
 	statDamageFamily      [component.CombatAttackTypeCount]*atomic.Int64
@@ -57,12 +56,12 @@ type CombatSystem struct {
 	statAbsorbDefender    [component.CombatEntityCount]*atomic.Int64
 	statEffectEnergyDrain *atomic.Int64
 	statEffectKinetic     *atomic.Int64
-	statEffectStun        *atomic.Int64
-	statEffectBurn        *atomic.Int64
-	statBurnTicks         *atomic.Int64
 	statChainFollowups    *atomic.Int64
 	statChainDepthTotal   *atomic.Int64
 	statChainDepthMax     *atomic.Int64
+
+	// Each status's landings, refusals and ticks
+	statStatus, statRefused, statTicks [component.StatusCount]*atomic.Int64
 
 	toggle
 }
@@ -78,7 +77,6 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statDirect = reg.Ints.Get("combat.hits_direct")
 	s.statArea = reg.Ints.Get("combat.hits_area")
 	s.statKnock = reg.Ints.Get("combat.knockbacks")
-	s.statStun = reg.Ints.Get("combat.stuns")
 	s.statDamage = reg.Ints.Get("combat.damage_dealt")
 	s.statImmune = reg.Ints.Get("combat.immune_rejects")
 	s.statUnprofiled = reg.Ints.Get("combat.unprofiled")
@@ -89,12 +87,13 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statRelation = reg.Ints.Get("combat.relation_rejects")
 	s.statCursor = reg.Ints.Get("combat.cursor_rejects")
 	s.statKineticImmune = reg.Ints.Get("combat.kinetic_immune_rejects")
-	s.statStunImmune = reg.Ints.Get("combat.stun_immune_rejects")
 	s.statEffectEnergyDrain = reg.Ints.Get("combat.effect_energy_drain")
 	s.statEffectKinetic = reg.Ints.Get("combat.effect_kinetic")
-	s.statEffectStun = reg.Ints.Get("combat.effect_stun")
-	s.statEffectBurn = reg.Ints.Get("combat.effect_burn")
-	s.statBurnTicks = reg.Ints.Get("combat.burn_ticks")
+	for kind, spec := range component.StatusSpecs {
+		s.statStatus[kind] = reg.Ints.Get("combat.effect_" + spec.Name)
+		s.statRefused[kind] = reg.Ints.Get("combat.refused_" + spec.Name)
+		s.statTicks[kind] = reg.Ints.Get("combat.ticks_" + spec.Name)
+	}
 	s.statChainFollowups = reg.Ints.Get("combat.chain_followups")
 	s.statChainDepthTotal = reg.Ints.Get("combat.chain_depth_total")
 	s.statChainDepthMax = reg.Ints.Get("combat.chain_depth_max")
@@ -123,7 +122,6 @@ func (s *CombatSystem) Init() {
 	s.statDirect.Store(0)
 	s.statArea.Store(0)
 	s.statKnock.Store(0)
-	s.statStun.Store(0)
 	s.statDamage.Store(0)
 	s.statImmune.Store(0)
 	s.statUnprofiled.Store(0)
@@ -135,12 +133,8 @@ func (s *CombatSystem) Init() {
 		s.statRelation,
 		s.statCursor,
 		s.statKineticImmune,
-		s.statStunImmune,
 		s.statEffectEnergyDrain,
 		s.statEffectKinetic,
-		s.statEffectStun,
-		s.statEffectBurn,
-		s.statBurnTicks,
 		s.statChainFollowups,
 		s.statChainDepthTotal,
 		s.statChainDepthMax,
@@ -149,6 +143,11 @@ func (s *CombatSystem) Init() {
 	}
 	for _, stat := range s.statDamageFamily {
 		stat.Store(0)
+	}
+	for kind := range component.StatusCount {
+		s.statStatus[kind].Store(0)
+		s.statRefused[kind].Store(0)
+		s.statTicks[kind].Store(0)
 	}
 	for i := range component.CombatEntityCount {
 		s.statLive[i].Store(0)
@@ -262,7 +261,7 @@ func (s *CombatSystem) Update() {
 			slot.Remaining -= dt
 			if slot.Period > 0 {
 				for slot.Timer -= dt; slot.Timer <= 0; slot.Timer += slot.Period {
-					s.tickStatus(combatEntity, combatComp, slot)
+					s.tickStatus(combatEntity, combatComp, component.StatusKind(k), slot)
 				}
 			}
 			if slot.Remaining <= 0 {
@@ -440,7 +439,10 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		return
 	}
 	if attack.DamageType == component.CombatDamageOverTime {
-		s.applyOverTime(payload, attack, targetCombatComp, headerComp, isComposite)
+		if attack.EffectMask&component.CombatEffectStatus != 0 &&
+			s.applyStatus(targetEntity, hitEntity, targetCombatComp, headerComp, isComposite, attack, payload.OwnerEntity) {
+			s.statDirect.Add(1)
+		}
 		return
 	}
 	if attack.DamageType != component.CombatDamageDirect {
@@ -722,15 +724,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		}
 	}
 
-	// Apply stun effect
-	if attack.EffectMask&component.CombatEffectStun != 0 && !targetDead {
-		if s.applyStunEffect(targetEntity, targetCombatComp, attack.Duration) {
-			s.statStun.Add(1)
-			s.statEffectStun.Add(1)
-			resolved = true
-		} else {
-			s.statStunImmune.Add(1)
-		}
+	if attack.EffectMask&component.CombatEffectStatus != 0 && !targetDead &&
+		s.applyStatus(targetEntity, struckOf(hits, targetEntity), targetCombatComp, headerComp, isComposite, attack, payload.OwnerEntity) {
+		resolved = true
 	}
 
 	// Follow-ups go to every hit entity as direct attacks; a charged hit adds its own
@@ -769,38 +765,61 @@ func (s *CombatSystem) chainArea(payload *event.CombatAttackAreaRequestPayload, 
 	s.recordChain(depth, len(hits))
 }
 
-// applyOverTime leaves the profile's status on the combatant the hit named: the
-// member of an ablative composite, the target otherwise. The last refresher is
-// credited, and only a sealed window refuses it: nothing spends the burn family.
-func (s *CombatSystem) applyOverTime(payload *event.CombatAttackDirectRequestPayload, attack *profile.AttackProfile, target *component.CombatComponent, header *component.HeaderComponent, composite bool) {
-	victim := target
-	if composite && header.Type == component.CompositeTypeAblative && payload.HitEntity != payload.TargetEntity {
-		member, ok := s.world.Components.Combat.GetPtr(payload.HitEntity)
+// applyStatus leaves a profile's status on what its hit names: the member struck,
+// for a status that lands on one of an ablative composite, the target otherwise. A
+// running status that no hit refreshes stands, a body shielded from being moved
+// refuses one that moves it, and a closed window one that deals damage; the last
+// to land is credited. Reports whether it landed.
+func (s *CombatSystem) applyStatus(target, hit core.Entity, victim *component.CombatComponent, header *component.HeaderComponent, composite bool, attack *profile.AttackProfile, owner core.Entity) bool {
+	kind := attack.Status
+	spec := &component.StatusSpecs[kind]
+	if spec.Member && composite && header.Type == component.CompositeTypeAblative && hit != target {
+		member, ok := s.world.Components.Combat.GetPtr(hit)
 		if !ok {
 			s.statTarget.Add(1)
-			return
+			return false
 		}
 		victim = member
 	}
-	source := s.world.ResolveCursor(payload.OwnerEntity)
-	if victim.HitPoints <= 0 || damageImmuneTo(victim, s.attackerBit(source), attack.AttackType) {
-		s.statImmune.Add(1)
-		return
+	source := s.world.ResolveCursor(owner)
+	slot := &victim.Status[kind]
+	if victim.HitPoints <= 0 || slot.Remaining > 0 && !spec.Refresh || spec.Moves && s.unmovable(target) ||
+		spec.Tick == component.StatusTickDamage && damageImmuneTo(victim, s.attackerBit(source), attack.AttackType) {
+		s.statRefused[kind].Add(1)
+		return false
 	}
-	slot := &victim.Status[attack.Status]
-	slot.Remaining = max(slot.Remaining, attack.Duration)
-	slot.Magnitude = max(slot.Magnitude, attack.DamageValue)
+	d, period := cmp.Or(attack.Duration, spec.Duration), cmp.Or(attack.Period, spec.Period)
+	slot.Remaining = max(slot.Remaining, d)
+	if spec.Tick == component.StatusTickDamage {
+		slot.Magnitude = max(slot.Magnitude, attack.DamageValue)
+	}
 	if slot.Period <= 0 {
-		slot.Period, slot.Timer = attack.Period, attack.Period
+		slot.Period, slot.Timer = period, period
 	}
 	slot.Source, slot.Attack = source, attack.AttackType
-	s.statEffectBurn.Add(1)
-	s.statDirect.Add(1)
+	if spec.Holds {
+		victim.IsEnraged = false
+		if k, ok := s.world.Components.Kinetic.GetPtr(target); ok {
+			k.VelX, k.VelY = 0, 0
+		}
+	}
+	s.statStatus[kind].Add(1)
+	return true
 }
 
-// tickStatus lands one periodic tick of a status, credited to its source. A tick
-// spends no window, so a player's own burn never blocks their direct hits
-func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, slot *component.Status) {
+// tickStatus lands one periodic tick of a status: damage credited to its source,
+// which spends no window, so a player's own burn never blocks their direct hits, or
+// a kick
+func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, kind component.StatusKind, slot *component.Status) {
+	switch component.StatusSpecs[kind].Tick {
+	case component.StatusTickKick:
+		s.kick(e)
+		s.statTicks[kind].Add(1)
+		return
+	case component.StatusTickDamage:
+	default:
+		return
+	}
 	if c.HitPoints <= 0 || slot.Magnitude <= 0 {
 		return
 	}
@@ -819,7 +838,31 @@ func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, s
 			header.LastDamagedBy, header.LastAttack = slot.Source, slot.Attack
 		}
 	}
-	s.statBurnTicks.Add(1)
+	s.statTicks[kind].Add(1)
+}
+
+// kick throws a body ConfuseKick cells a second a way its tick and entity draw,
+// the same on every instance
+func (s *CombatSystem) kick(e core.Entity) {
+	k, ok := s.world.Components.Kinetic.GetPtr(e)
+	if !ok {
+		return
+	}
+	draw := vmath.MixChain(s.world.Resources.Game.State.GetGameTicks(), uint64(e), s.world.Resources.Rand.DomainRoot(e.Domain()))
+	angle := float64(draw>>11) / (1 << 53) * vmath.TwoPi
+	k.VelX += vmath.Cos(angle) * parameter.ConfuseKick
+	k.VelY += vmath.Sin(angle) * parameter.ConfuseKick
+}
+
+// struckOf is the member an area's hits name for a status that lands on one: the
+// first that is not the target itself, the target when none is
+func struckOf(hits []core.Entity, target core.Entity) core.Entity {
+	for _, hit := range hits {
+		if hit != target {
+			return hit
+		}
+	}
+	return target
 }
 
 // chainOrigin is where a chained attack starts: the cell its hit landed on, read
@@ -982,63 +1025,29 @@ func (s *CombatSystem) recordChain(depth uint8, count int) {
 	storeMax(s.statChainDepthMax, int64(depth))
 }
 
-// applyStunEffect stuns the target for d, parameter.PulseStunDuration when zero;
-// false when the target is immune
-func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent, d time.Duration) bool {
-	// A running stun is not refreshed. Refreshing it made every later hit — the
-	// other participant's included — extend the lockdown, so a target under
-	// continuous fire never left it.
-	if targetCombatComp.Status[component.StatusStun].Remaining > 0 {
+// unmovable reports a body its species shields from being moved: a shielded quasar,
+// a data species in a state flagged Shielded, a storm circle in its concave phase,
+// a shielded snake's head and every snake body, which its springs keep in line
+func (s *CombatSystem) unmovable(e core.Entity) bool {
+	if quasar, ok := s.world.Components.Quasar.GetPtr(e); ok && quasar.IsShielded {
+		return true
+	}
+	if b, ok := s.world.Components.Behavior.GetComponent(e); ok && b.Shielded {
+		return true
+	}
+	if circle, ok := s.world.Components.StormCircle.GetPtr(e); ok && circle.IsInvulnerable {
+		return true
+	}
+	if s.world.Components.SnakeBody.HasEntity(e) {
+		return true
+	}
+	if !s.world.Components.SnakeHead.HasEntity(e) {
 		return false
 	}
-
-	// Quasar immunity: shielded state
-	if quasarComp, ok := s.world.Components.Quasar.GetPtr(targetEntity); ok {
-		if quasarComp.IsShielded {
-			return false
-		}
-	}
-
-	// Data species immunity: a state flagged Shielded
-	if b, ok := s.world.Components.Behavior.GetComponent(targetEntity); ok && b.Shielded {
+	member, ok := s.world.Components.Member.GetPtr(e)
+	if !ok {
 		return false
 	}
-
-	// Storm circle immunity: concave (invulnerable) state
-	if circleComp, ok := s.world.Components.StormCircle.GetPtr(targetEntity); ok {
-		if circleComp.IsInvulnerable {
-			return false
-		}
-	}
-
-	// Snake immunity: head immune when shielded, body always immune to stay in sync with body
-	if s.world.Components.SnakeHead.HasEntity(targetEntity) {
-		// Head: find root and check shield state
-		if memberComp, ok := s.world.Components.Member.GetPtr(targetEntity); ok {
-			if snakeComp, ok := s.world.Components.Snake.GetPtr(memberComp.HeaderEntity); ok {
-				if snakeComp.IsShielded {
-					return false
-				}
-			}
-		}
-	} else if s.world.Components.SnakeBody.HasEntity(targetEntity) {
-		// Body: always immune (spring physics maintains connectivity)
-		return false
-	}
-
-	if d <= 0 {
-		d = parameter.PulseStunDuration
-	}
-	targetCombatComp.Status[component.StatusStun] = component.Status{Remaining: d}
-
-	// Clear enrage state
-	targetCombatComp.IsEnraged = false
-
-	// Zero velocity
-	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity); ok {
-		kineticComp.VelX = 0
-		kineticComp.VelY = 0
-	}
-
-	return true
+	snake, ok := s.world.Components.Snake.GetPtr(member.HeaderEntity)
+	return ok && snake.IsShielded
 }

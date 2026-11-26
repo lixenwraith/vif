@@ -149,7 +149,7 @@ type physicsDoc struct {
 // its combat row's, and one left out keeps it
 type attackDoc struct {
 	Damage    *int   `toml:"damage"`
-	Stun      *bool  `toml:"stun"`
+	Status    *bool  `toml:"status"`
 	Knockback *bool  `toml:"knockback"`
 	Death     string `toml:"death"` // what a kill by this family leaves of the body, in place of the species' death
 }
@@ -360,8 +360,8 @@ func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
 			continue
 		case a.Damage != nil && *a.Damage < 0:
 			errs = append(errs, fmt.Errorf("%s: damage %d is negative", family, *a.Damage))
-		case a.Stun != nil && *a.Stun && base.DamageType != component.CombatDamageArea:
-			errs = append(errs, fmt.Errorf("%s: only an area hit stuns", family))
+		case a.Status != nil && *a.Status && base.EffectMask&component.CombatEffectStatus == 0:
+			errs = append(errs, fmt.Errorf("%s: the %s row takes no status from it", family, row))
 		case a.Knockback != nil && *a.Knockback && base.Collision == nil:
 			errs = append(errs, fmt.Errorf("%s: the %s row takes no knockback from it", family, row))
 		}
@@ -378,7 +378,7 @@ func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
 		for _, k := range []struct {
 			set *bool
 			bit component.CombatEffectMask
-		}{{a.Stun, component.CombatEffectStun}, {a.Knockback, component.CombatEffectKinetic}} {
+		}{{a.Status, component.CombatEffectStatus}, {a.Knockback, component.CombatEffectKinetic}} {
 			switch {
 			case k.set == nil:
 			case *k.set:
