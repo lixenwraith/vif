@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 How vif's features, and the defects chased along the way, followed one another
-from the first commit to 2026-11-11: a section a month, a line a topic, each line
+from the first commit to 2026-11-25: a section a month, a line a topic, each line
 folding every commit on that topic within its month. The project was vi-fighter
 until its rename to vif in September 2026.
 
@@ -12,15 +12,18 @@ until its rename to vif in September 2026.
 - Normal, Insert, Search and Command modes
 - Ping grid, coordinate highlighting, heat and score
 - Decay, then a decay of falling characters
+- Decay timing: a ticker restart and mid-game recalculation fixed, then polling
 - Code blocks from files as the text to type
 - Gold, cleaners, nuggets with the `Tab` jump, drains
 - Sound effects, then an audio engine with `Ctrl-S` mute
-- Race conditions and decay ticker bugs; race tests in CI
-- Clock scheduler, monotonic time and pause
+- Races in audio, content, cleaners and decay; race tests in CI
+- Monotonic time; a clock scheduler driving gold, decay and cleaner phases
+- Pause shifting every timer, then a pausable clock; cleaners on delta time
 - Spatial transactions for atomic spawns
 - Lock-free event queue, then an event router
 - A generics ECS replaced the reflection one
-- Resources replaced the god object; score became energy
+- Resources replaced the god object, time among them; score became energy
+- Decay rebuilt on swept collision after a desync
 - Dense zero-allocation spatial grid
 - Materialize spawns, destruction flash, four-way cleaners
 - FPS, game time, APM; help and debug overlays
@@ -37,12 +40,13 @@ until its rename to vif in September 2026.
 - Splash text from a generated bitmap font; the magnifier
 - Central crash handling
 - Systems decoupled by events; tag-and-cull death
-- Timer components and a timekeeper
+- Timing in `time.Duration`; timer components and a timekeeper
 - Hierarchy Map for dependency exploration and LLM context filtering
 - Manifest registry wiring every system
 - Data-driven FSM game script; TOML configuration
 - External resources as services; a TCP/TLS network stub
-- Composite entities, gold first; a 1 ms event-loop scheduler
+- Composite entities, gold first
+- A 1 ms event-loop scheduler; decay and gold off the clock's phases
 - Blossom and negative-energy variants
 - Fixed-point vmath and sub-cell kinetic physics
 - TUI components, the overlays rebuilt on them
@@ -63,6 +67,7 @@ until its rename to vif in September 2026.
 - Visual mode and bound-aware motions
 - Diagnostics system; live system enable/disable
 - Splash timers decoupled from gold; grayout as environment
+- Frame counts gave way to timers in energy, events and dust
 - Vampire, buffs, rod and overheat
 - Combat interaction matrix, split from kinetics
 - Swarm, and soft collisions between enemies
@@ -94,7 +99,8 @@ until its rename to vif in September 2026.
 
 ## 2026-03 to 2026-06 — A quiet spell
 
-- Component masks back to maps after a concurrency review
+- Enemy parameters split by species
+- Atomic time, locked targets; component masks back to maps after a review
 - Nugget spawn delay; genetic pool race and maze panic fixed
 
 ## 2026-07 — Modules and audio tooling
@@ -126,6 +132,7 @@ until its rename to vif in September 2026.
 - Telemetry across systems, engine and events
 - Unified species creation and death events
 - Shared and player domains on entities, events and systems
+- Declared system dependencies and an init order from them
 - Framed TCP sessions in lockstep behind a playout barrier
 - `vif-log` journal indexer
 - Mesh relay, lobby and mid-run joins
@@ -135,6 +142,7 @@ until its rename to vif in September 2026.
 ## 2026-09 — Multiplayer correction and the K3s fleet
 
 - Local cursor prediction, host authority, adaptive cadence
+- Simulation time read from the tick, not the pacing clock; splash timers on it
 - Join anytime: world capture and staged install
 - Selective correction, authority terms, succession, relays
 - Dedicated hosts, headless scripts, scripted participants
@@ -173,7 +181,8 @@ until its rename to vif in September 2026.
 - Bot fitness and threat evasion; genetic archive dedup
 - Snapshot row reuse, owed busy links, bot relays
 - Timer slots, tick-closing settle, dust into particles
-- Parallax glyph drift; the input hook and recall
+- Parallax glyph drift; the input hook; recall, a four-button memory game
+- Three frames a tick; a terminal nobody reads no longer slows the world
 - Component logic moved into its systems
 - Docs swept against the code; a term index
 - Netplay stalls, lead and repairs; the session as a tree
@@ -201,8 +210,9 @@ until its rename to vif in September 2026.
 - `pkg/network`; relay doors through the router
 - Soundlab editors, mixer and keyboard
 - `vif.toml` written back with its comments kept
+- Cursor clocks as carried ages; countdowns laid out once a tick
 - Behavior machines: `pkg/machine`, data species
-- The cave scenario: a side-scroller with raiders
+- The cave scenario: a side-scroller with raiders; Target Dummy
 - Payload enums by name in scenarios
 - Load shedding; the host sets the session's rate
 - One pulse system for every pulse
@@ -212,7 +222,7 @@ until its rename to vif in September 2026.
 - Genetic completed with its examples
 - Audio stands alone; the rip begins
 
-## 2026-11 — Libraries, admission and the rip
+## 2026-11 — Libraries, admission, learning bots and new scenarios
 
 - The rip: a transformer model trained in rounds
 - Soundlab: MIDI both ways, track edits, undo
@@ -235,6 +245,25 @@ until its rename to vif in September 2026.
 - A death visual for every species
 - Cheaper cells and probes; three axes
 - Roster across new games; unheard players retired
+- Armada: a fixed shooter of data species, then stars and squadron routes
+- Games found on the local network
+- A session moves to a guest when its host leaves
+- Spectators: one feed, encoded once for every viewer
+- Vim keys in two rounds; a vim keymap by name; `Esc` opens the menu
+- A console on backtick; one camera edge for keys, mouse and touch
+- `vif.toml` and `keymap.toml` brought up to date by every run
+- No third-party game, brand or song names; three scenarios renamed
+- Netcode audit: lone authorities, first-record ticks, late holds and resets
+- Learning bots: network graphs trained in rounds; cave, default and main learned
 - Go 1.27.4
-- Magic: a magic square held against a swarm
+- The window at its manager's size, with zoom and `-size`
+- Hosts moved into the terminal module; Hack fonts on the page and Android
+- Forged artifacts refused; guests ask the authority for local transitions
+- Magic: a magic-square scenario against a swarm, tuned shields, waves and weapons
+- A binaural beat under the music
 - Devourer: the map's edges as a boss, between the Kraken and the tower
+- American spelling across code, docs and scenarios
+- A Chrome extension, a Steam Linux depot, the window build on Windows
+- The Android CLI toolchain; an install purge goal
+- The embedded campaign renamed fighter
+- Shadows: a dark maze walked by its light and sonar
