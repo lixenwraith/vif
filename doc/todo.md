@@ -1737,8 +1737,9 @@ as a typed member's end is (`CompositeSystem.destroyMember`).
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
-reached at the site; a host's door published the same way is a player's own session
-reached there, the router neither allocating nor authoring. The deployment this
+reached at the site; a host's door published the same way is a **routed game**, a
+player's own session reached there from a terminal, a page or Android, the router
+neither allocating nor authoring, the word the site's lobby uses too. The deployment this
 leads to serves as many pods as the node has resources for (`-sessions-max`, ten
 today) and routes every session beyond them. The tunnel carries a door already
 (`tool/vif-router/README.md`, Doors). Joins and creates are budgeted by account
@@ -1757,12 +1758,13 @@ What the feature itself needs, best shaped by deploying it step by step:
   scenario, whether it admits) so the router lists it without a `/health` read
   through the tunnel.
 - The session's row in `/vif/api/sessions`, with `kind` `hosted` beside the pods',
-  listed only where its player asked (a `PublishRequest` field, `-public` say), an
-  unlisted one reached by its link alone; its lifetime (the control connection's,
-  plus the resume window), and the create budget charged to the publisher's address
-  as a pod's is. `limits.host_target` names the address a host publishes at: the
-  site's lobby enables its Host choice, under a scenario's Multi, by it, and lists
-  `hosted` rows under the pods.
+  listed only where its player asked (`-listing public`, a `PublishRequest` field;
+  `private` when the flag is absent, as a menu row and `:host` take it too), a
+  private one routed all the same and reached by its link alone; its lifetime (the
+  control connection's, plus the resume window), and the create budget charged to
+  the publisher's address as a pod's is. `limits.host_target` names the address a
+  host publishes at: the site's lobby enables its Host area, under a scenario's
+  Multi, by it, and lists public `hosted` rows under the pods.
 - The publish ticket: the publish frame carries the run's key and, over TLS, its
   sign-in (`PublishRequest` is JSON, so a field is added without a protocol change);
   the router asks which account the sign-in names and refuses a publication by none
@@ -1773,8 +1775,12 @@ What the feature itself needs, best shaped by deploying it step by step:
   [§3.7](auth-session-design.md#37-budgets)). Implication: a `-relay` or hosted
   publication needs `:login` first; an anonymous run still joins through a published
   door.
-- The front door's `-tunnels` ceiling split between relay doors and hosted
-  sessions, or one budget for both, decided from how the first deployments fill.
+- A ceiling on the router's whole before routed games open: memory and the uplink
+  bound it, not its CPU, a routed game's bytes crossing the uplink twice, and its
+  spectators weigh more than its players, 2,560 streams at today's settings
+  ([Fleet §6](kubernetes-fleet.md#the-routers-own-cost)). One setting over its
+  connections and spectators together, sized from the node's uplink and memory,
+  which `-tunnels` then shares between relay doors and routed games.
 - A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
   `wss://` in a page, but the browser route wants a session id in its path before
   the first frame, so a publish needs a path of its own. A hosting page must be

@@ -1761,6 +1761,8 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 
 **route adaptation** (also: `applyEXP3`) — Online route selection per (route graph, eye subtype): multiplicative-weights (Hedge) updates over mean death fitness with a 0.5% floor, despite the `applyEXP3` name, sampled 90% by weight and 10% as uniform scouts into a shuffled pool of 100 assignments; its state is carried in the capture (D-19). [AI and physics §2](ai-physics-and-evolution.md#2-online-route-adaptation) · `internal/system` `AdaptationSystem`, `applyEXP3`; `internal/engine` `AdaptationState`
 
+**routed game** (also: -listing, a player's session at the router) — Owed: a session a player's own run hosts, from a terminal, a page or Android, reached through `vif-router` as its pods are, the host's door published over the reverse tunnel; listed on the site only with `-listing public`, private and reached by its link otherwise. [Multiplayer §5.6](multi-player.md#56-relay-doors-and-the-router) · [todo](todo.md#publish-a-players-session-at-the-router)
+
 **router** — three senses.
 - *Input*: `mode.Router` turns parsed intents into game actions and mode changes under the world lock, owns search, history, undo, macros, mouse holds and the configuration menu, and drives only the selected local cursor; nothing it reaches may take the world lock again. [Input §1](input-and-modes.md#1-input-pipeline) · [Runtime: Non-reentrant router rule](runtime.md#non-reentrant-router-rule) · `internal/mode` `Router`, `Router.Handle`
 - *Events*: `event.Router` dispatches each queued event, single-threaded, to the handlers registered for its type, in registration order. [ECS §8](ecs-and-events.md#8-event-transport) · `internal/event` `Router`, `Handler`
