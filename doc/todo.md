@@ -1072,7 +1072,7 @@ settings and the places share; Android's user root is in the app's files, out of
 its player's reach. Both need the store the downloads ask for
 ([Manage the downloads](#manage-the-downloads-from-the-menu-and-the-command-line)),
 keyed by name for an author's own; a scenario file taken in and handed out, the
-`.vifscen` of [Fetch a bundle](#fetch-a-content-addressed-bundle-over-http); and
+`.vifscen` of [Fetch a scenario by its digest](#fetch-a-scenario-by-its-digest); and
 the gestures a canvas takes of a touch screen, a drag that paints and two fingers
 that pan.
 
@@ -1131,50 +1131,26 @@ and cues a lesson cleared.
 
 ## Browser sessions
 
-### Fetch a content-addressed bundle over HTTP
+### Fetch a scenario by its digest
 
-- Priority: P1
-- Affected files: `internal/resource`, `cmd/vif/browser.go`, `web/vif.js`,
-  `Makefile` (`wasm`); on the site, `make vif`, `make compress` and
-  `_partials/apps/publish.html`
-- Prerequisite: the decisions in the last paragraph
+- Priority: P2
+- Affected files: `internal/resource`, `internal/mode` (the Scenarios page),
+  `web/vif.js`, `Makefile` (`wasm`); on the site, `make vif` and the lobby
+- Guide: [Multi-platform §7](multi-platform.md#7-external-maps-and-assets)
 
-The page plays the embedded `fighter` alone: a guest is served its coordinator's
-scenario and a native player unpacks the wad, but nothing reaches a client with no
-config root and no peer, so `wad/scenario/` is out of the site's solo Play. The
-corpus needs no route, being player domain. A URL cannot carry one: the launcher
-takes 1,024 characters an argument, `cave` deflates to about 13 KB, and a query
-is logged and kept in history
-([Multi-platform §6](multi-platform.md#6-browser-launch-arguments)).
+`-s` reads a scenario from a web link to its directory, a fetch a file (36 for
+`cave`), and checks nothing against a digest; a page's menu lists the embedded
+`fighter` alone, as a page cannot list the site's directory. What closes it:
 
-The container is decided: `resource.Scenario`'s canonical form, one file a
-scenario, its SHA-256 the digest a session names. The plan, same origin only:
-
-1. `make wasm` has `vif` write `web/scenario/<name>.vifscen`, each scenario's
-   `Marshal`, uncompressed so the file's SHA-256 is its digest (the site gzips it
-   as it does the binary), and `index.json` beside them: name, description,
-   players, fixed map, digest. The bytes are then the ones a coordinator sends.
-2. The site publishes each under its content hash, which is that digest (`make
-   vif` refuses a mismatch), and the index under its own, named to the launcher
-   as `data-scenarios`, as `data-wasm` names the binary.
-3. An HTTP provider in `internal/resource`, on the `net/http` `pkg/network`
-   already links (fetch in a page), reads the index, fetches a file, holds it to
-   `UnmarshalScenario`'s bounds and the index's digest, and hands it on as
-   `Options.Provided`. The page's `-s` (`?arg=-s=td`) resolves through it, the
-   menu's Scenarios page lists the index, and a hosting page
-   ([Publish a player's session](#publish-a-players-session-at-the-router)) offers
-   any listed scenario.
-
-Served from the binary's own origin, a scenario adds no trust root, and the page's
-CSP (`connect-src 'self'`) already admits the fetch. To decide: the extension, and
-how the site's edge caches and precompresses it (the site's `doc/nginx.md`); every
-`wad/scenario/` or only those a scenario marks for publishing; where the site
-offers them (a picker by the lobby's Play solo, links per scenario); a visitor's
-own scenario, picked or dropped on the start screen or carried in a link's
-fragment, which no server sees (about 17 KB for `cave`), and whether one from
-a stranger may run; a native `-s https://…`, which needs an index at a fixed path,
-and from another origin a publisher's signature; any cache by digest beyond
-HTTP's own, which a native run has in its downloads.
+- One file a scenario, `.vifscen`, its canonical form, which `make wasm` writes
+  beside an index (name, description, players, digest) and the site publishes
+  under its digest: one fetch, held to the digest as a transfer is. The index,
+  named to the launcher as `data-scenarios`, is the Scenarios page's list and
+  what `-s td` resolves through in a page.
+- To decide: a visitor's own scenario, picked or dropped on the start screen or
+  carried in a link's fragment, and whether a stranger's may run; a native run's
+  link to another origin, and a publisher's signature for it; the extension, whose
+  page reaches the site's files only through the site's CORS or a host permission.
 
 ### Manage the downloads from the menu and the command line
 

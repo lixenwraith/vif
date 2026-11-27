@@ -310,7 +310,7 @@ func (s *Settings) resolve(dir string) {
 	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Downloads} {
 		*v = settingsPath(dir, *v)
 	}
-	if !IsScenarioName(p.Scenario) || strings.HasPrefix(p.Scenario, "~") {
+	if !IsScenarioLink(p.Scenario) && (!IsScenarioName(p.Scenario) || strings.HasPrefix(p.Scenario, "~")) {
 		p.Scenario = settingsPath(dir, p.Scenario)
 	}
 	if !IsKeymapName(p.Keymap) {

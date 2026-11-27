@@ -261,7 +261,7 @@ last line.
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded scenario and content, over `vif.toml`'s; mutually exclusive with `-s` and `-f`. |
 | `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
-| `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, or a directory containing one. |
+| `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, a directory containing one, or a web link to either. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <name-or-path>` | Keymap override TOML, or the name of one in a root's `input/` or embedded, as `vim` ([Input §10](input-and-modes.md#10-keymap-override-files)). |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |

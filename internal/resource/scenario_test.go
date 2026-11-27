@@ -9,6 +9,8 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -315,6 +317,23 @@ func TestNoNameAHostSendsLeavesTheDownloads(t *testing.T) {
 		if err != nil || filepath.Dir(at) != dir || !safe.MatchString(filepath.Base(at)) ||
 			filepath.Base(at) != want+"-"+sc.Short() {
 			t.Errorf("%q saved as %q, %v; want %s-%s in %s", name, at, err, want, sc.Short(), dir)
+		}
+	}
+}
+
+// TestALinkedScenarioIsTheOneItsDirectoryHolds: -s reads a web link to the
+// directory, with or without its slash, or to its entry, nested files and all, as
+// the scenario its directory holds, by the directory's name.
+func TestALinkedScenarioIsTheOneItsDirectoryHolds(t *testing.T) {
+	dir := writePrograms(t, map[string]string{"wisp": wisp})
+	want := read(t, dir)
+	srv := httptest.NewServer(http.FileServer(http.Dir(filepath.Dir(dir))))
+	defer srv.Close()
+	link := srv.URL + "/" + filepath.Base(dir)
+	for _, link := range []string{link, link + "/", link + "/scenario.toml"} {
+		got, err := LoadScenario(Options{Scenario: link})
+		if err != nil || got.Digest() != want.Digest() || got.Name != want.Name {
+			t.Errorf("%s read as %q %s, %v; want %q %s", link, got.Name, got.Short(), err, want.Name, want.Short())
 		}
 	}
 }

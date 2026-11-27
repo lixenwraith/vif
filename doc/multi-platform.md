@@ -466,7 +466,10 @@ The launcher accepts at most 64 arguments of at most 1,024 characters each.
 Arguments are configuration, not a content transport. Query values appear in
 browser history, logs, and sometimes referrers, so secrets and substantial payloads
 do not belong there. A path supplied through `-s`, `-f`, or another file flag also
-does not make that file exist in the browser filesystem.
+does not make that file exist in the browser filesystem; `-s` takes a web link
+instead (`?arg=-s=https://<site>/<dir>/td/`), whose files the Worker fetches as
+the run starts, from the page's own site, which is all `connect-src 'self'` admits.
+The site's lobby opens each scenario's Solo this way.
 
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A
@@ -517,27 +520,23 @@ Content never travels on the
 tick/correction channel, where it would couple simulation latency, frame bounds and
 content size.
 
-What remains is a client with no config root and no peer, such as a page before it
-has joined anything ([todo](todo.md#fetch-a-content-addressed-bundle-over-http)).
-It should read the same container through an HTTP-backed resource provider rather
-than make systems fetch URLs:
+A client with no config root and no peer, such as a page before it has joined
+anything, reads a scenario from a web link `-s` names, to its directory or its
+entry (`readLinked`): the loader walks it as it walks one on disk, each file
+fetched once over HTTP (`webScenario`, a fetch in a page) and held to the bounds a
+transferred scenario meets, the result kept for the process, so a restart or a door
+the run opens plays the same bytes without the network, and a scenario change
+builds a new `App` from it as it would from a root. A page fetches from its own
+site alone, which is all its `connect-src 'self'` admits; the site's lobby opens
+each scenario of `wad/scenario/` this way, published under a directory named for
+its content. One file a scenario in the canonical form, fetched by its digest, was
+planned instead, and is owed ([todo](todo.md#fetch-a-scenario-by-its-digest)): it
+takes one fetch where a directory takes one a file, and holds the bytes to a
+digest, which a link holds them to nothing.
 
-1. fetch the container by its digest over HTTPS;
-2. hold it to the bounds and the digest check a transferred scenario meets;
-3. cache by digest where the platform permits it;
-4. expose it through the provider boundary, as `resource.Options.Provided`
-   exposes a transferred scenario;
-5. construct a new `App` with it.
-
-Constructing a new `App`, as a scenario change or a `:join` already does in the
-same process, is safer than mutating a running world's configuration: the FSM,
-corpus identity, map bounds, system toggles, and session fingerprint are
-established during initialization. A native HTTP provider can share the policy, so
-a fetched and a transferred scenario have one identity model on every platform.
-
-The format and its limits are decided. The provider still needs decisions about
-publisher trust, allowed origins, cache lifetime, and whether executable-like FSM
-actions from an untrusted source are acceptable. Hashing proves identity and
+Publisher trust, allowed origins beyond the page's own, and whether
+executable-like FSM actions from an untrusted source are acceptable are still to
+decide. Hashing proves identity and
 integrity; it does not establish trust.
 
 ## 8. Adding another renderer or Android host
@@ -962,5 +961,5 @@ Two policy decisions stay separate from transport: browser admission, settled wi
 the router as the credential boundary
 ([Auth and session design D4, D5](auth-session-design.md#0-decisions)), and the
 publisher trust, allowed origins and cache policy of
-[a fetched container](todo.md#fetch-a-content-addressed-bundle-over-http) (§7),
+[a scenario fetched by its digest](todo.md#fetch-a-scenario-by-its-digest) (§7),
 still open in todo.

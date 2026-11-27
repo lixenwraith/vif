@@ -77,7 +77,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		lines: []flagLine{
 			{names: []string{"d", "config-embedded"}, hint: "Use the embedded scenario and content; refuses -s and -f and ignores vif.toml's scenario and content"},
 			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/ bot/"},
-			{names: []string{"s", "config-scenario"}, arg: "<name|path>", hint: "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory"},
+			{names: []string{"s", "config-scenario"}, arg: "<name|path|link>", hint: "Installed scenario name or path below scenario/, scenario.toml, a scenario directory, or a web link to either"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
 			{names: []string{"k", "config-keymap"}, arg: "<name|path>", hint: "Keymap TOML, or the name of one in input/ or built in, as vim"},
 			{names: []string{"config-music"}, arg: "<path>", hint: "Music pattern override TOML"},
