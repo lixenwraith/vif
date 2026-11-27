@@ -49,10 +49,10 @@ func (h *windowHost) Init() error {
 		Cell:      settings.Presentation.Cell,
 		Zoom:      glyph.Zoom{Least: parameter.CellLeast, Most: parameter.CellMost, Step: parameter.CellStep},
 		Maximized: windowMaximized, Fullscreen: windowFullscreen})
-	if err != nil {
+	if err != nil && !windowOnly {
 		return fmt.Errorf("%w (-cli plays in the terminal)", err)
 	}
-	return nil
+	return err
 }
 
 func (h *windowHost) Surface() render.Surface             { return h.win }

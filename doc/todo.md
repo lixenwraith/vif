@@ -68,18 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### Drop the -cli hint where the build has no terminal
-
-- Priority: P2, to review
-- Affected files: `cmd/vif/gui.go`
-
-`windowHost.Init` (`cmd/vif/gui.go:53`) ends every window that did not open with
-`(-cli plays in the terminal)`, including in the Windows window build. That build
-sets `windowOnly` (`gui_windows.go:18`) and refuses `-cli` as
-`terminal unavailable in this build` (`main.go:179`), so its message box names a
-flag the same build refuses. Smallest fix: wrap with the hint only
-`if err != nil && !windowOnly`, else `return err`.
-
 ### Word the audio-free and headless builds' refusals as the unavailable sentence
 
 - Priority: P2, to review
