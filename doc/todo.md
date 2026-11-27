@@ -103,17 +103,6 @@ operation Add. The blend screen shows `OP: Set`, and the result switch repeats t
 name in `case 2: // Set` above `color.Add` (`blend.go:119`). Smallest fix: rename
 the label to `"Add"` and the comment to `// Add`.
 
-### Delete the sandbox's commented-out code
-
-- Priority: P2, to review
-- Affected files: `sandbox/3d/main.go`, `sandbox/rand/main.go`
-
-`sandbox/3d/main.go:709-739` holds two commented-out `blit` variants (14 and 11
-lines) under a "to be tested" header, a plan kept in code, and `asciiDensity`, which
-only the commented code reads; `sandbox/rand/main.go:28-33` is a commented-out
-`Next` after its `return`. Dead code past the 5-line comment limit: deleting both
-ranges closes it, and a tty render still wanted becomes an item in this file.
-
 ### Group `network.shed` with the authority card
 
 - Priority: P2, to review
