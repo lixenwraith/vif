@@ -68,20 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### Word the audio-free and headless builds' refusals as the unavailable sentence
-
-- Priority: P2, to review
-- Affected files: `internal/app/internal/config/audio_none.go`,
-  `internal/app/internal/config/presentation_none.go`,
-  `internal/resource/check_noaudio.go`
-
-`audio_none.go:11-17` refuses `-ab`, an audio override and `-mw` with "audio backend
-is unavailable in this build", "audio overrides are ..." and "music recording is
-..."; `check_noaudio.go:13` repeats the overrides line, and `presentation_none.go:9`
-says "presentation is unavailable in a vif_headless build". AGENTS.md (Platforms)
-has these read `<Thing> unavailable in this build`, naming no build tag. Fix: drop
-"is"/"are" from all five, and replace "a vif_headless build" with "this build".
-
 ### Restore `run` and `test` to the Makefile's `.PHONY`
 
 - Priority: P2, to review
