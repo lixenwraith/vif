@@ -68,18 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### Keep the Makefile to what FreeBSD make reads, or drop the claim
-
-- Priority: P2, to review
-- Affected files: `Makefile`, `doc/packaging.md`, `README.md`
-
-Packaging §1 says the Makefile runs under FreeBSD make, but bmake reads none of its
-`$(shell)` (`Makefile:93`, `:97`), functions (`:95`, `:364`), `$(MAKECMDGOALS)`
-(`:364`, `:383`), `$(CURDIR)` (`:85`) or `export PATH :=` (`:86`), so a FreeBSD
-`make release` drops `GUI_GCFLAGS` and stops on purego's fakecgo, and `purge` purges
-nothing. Closes with §1, §5 and the README naming `gmake` on FreeBSD, or those lines
-on `!=` and `case`. Traced, not run.
-
 ### Name the blend tester's additive row Add
 
 - Priority: P2, to review

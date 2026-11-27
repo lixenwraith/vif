@@ -27,9 +27,13 @@ These hold regardless of which repository is targeted first.
 - **Honor the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`. No
   target may write outside `DESTDIR`, and none may require network access.
 - **The Makefile runs under GNU make and FreeBSD make.** `!=` rather than
-  `$(shell)`, no conditionals, functions or order-only prerequisites, and
+  `$(shell)`, no conditionals, functions or order-only prerequisites, an
+  `export VAR=value` with no colon on its line, which FreeBSD make reads as a
+  rule, the goals as `$(MAKECMDGOALS)$(.TARGETS)` and the checkout as `!= pwd`,
+  never `$(CURDIR)`. FreeBSD make runs each recipe line under `sh -e`, and
   recipes use only options BSD tools share: `install -d` then `install -m`, never
-  `install -D`; `$(MAKE) -s`, never a GNU long option.
+  `install -D`; `$(MAKE) -s`, never a GNU long option. Debian's `bmake` reads the
+  file as FreeBSD's does: `bmake -n <goal>` beside `make -n <goal>`.
 - **The build is reproducible and offline.** `-trimpath`, no `go generate` at
   package time (generated files are committed), no CGO. Vendoring or a module
   cache is the packager's choice, not the Makefile's. The manual `doc/vif.6` and
