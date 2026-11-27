@@ -68,18 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### List Ctrl-S's audio states in the order it cycles them
-
-- Priority: P2, to review
-- Affected files: `internal/help/topics.go`, `web/index.html`
-
-The help (`topics.go:15`) and its browser copy (`index.html:82`) list "music and
-effects, music only, effects only, silent", but Ctrl-S steps
-`parameter.AudioMaskCycle` (`internal/parameter/audio.go:72`) the other way: from
-the default, silent, effects only, music only. Fix both to "Cycle audio: music and
-effects, silent, effects only, music only", press order from the default as the
-auto-fire entry (`topics.go:101`) lists its own.
-
 ### Drop the -cli hint where the build has no terminal
 
 - Priority: P2, to review

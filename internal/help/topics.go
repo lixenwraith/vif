@@ -12,7 +12,7 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Keys: "[count]", Desc: "Repeat the next motion or operator, e.g. 3w or d2j"},
 			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, open the menu"},
-			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, music only, effects only, silent"},
+			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, silent, effects only, music only"},
 			{Actions: []string{"help"}, Desc: "Open or close this help, from any mode"},
 			{Actions: []string{"config_menu"}, Desc: "Open or close the menu, from any mode"},
 			{Actions: []string{"console"}, Desc: "Open or close the console: the messages of this run and the commands typed in it, newest last, each with its time"},
