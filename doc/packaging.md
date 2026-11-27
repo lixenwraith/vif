@@ -13,7 +13,7 @@ These hold regardless of which repository is targeted first.
 
 - **One external payload.** Everything a config root receives installs from
   `wad/`, laid out exactly as it installs, or from the embedded copy it overrides
-  (the keymap, `vif.toml` and the bot graphs in `internal/asset`). Files installed
+  (the keymaps, `vif.toml` and the bot graphs in `internal/asset`). Files installed
   outside a config root live in `deploy/package/`, and the manual is `doc/vif.6`.
   A new data file goes in one of those, never beside the code that reads it.
 - **No working-directory discovery.** A packaged binary must behave the same
@@ -74,15 +74,16 @@ These hold regardless of which repository is targeted first.
 ## 2. Release surface
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 and arm64
-clients and the amd64 headless server, FreeBSD amd64 client, an experimental
-Windows amd64 zip, the browser bundle, the Chrome extension's zip, the wad, the
-Android APK, and `SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
-publishes nothing. Each binary and browser archive unpacks into one directory
-named for it, and every tarball's entries are root's, so extracting one as root
-neither scatters files nor hands them to the builder's uid; each carries `LICENSE`
-and its build's `NOTICES` (§1), a client archive `LICENSE.font` as well, and the
-browser bundle and the extension's zip `LICENSE.font` and `fonts/LICENSE`. The
-extension's zip is the store's upload, its files at the zip's root (§8). Each archive's `README.md` is
+clients and the amd64 headless server, FreeBSD amd64 client, a Windows amd64 zip
+of the window build (`make windows-package`, §9), the browser bundle, the Chrome
+extension's zip, the wad, the Android APKs, and `SHA256SUMS` over all of them. A
+build that fails `go vet ./...` or `go test ./...` publishes nothing. Each binary
+and browser archive unpacks into one directory named for it, and every tarball's
+entries are root's, so extracting one as root neither scatters files nor hands
+them to the builder's uid; each carries `LICENSE` and its build's `NOTICES` (§1),
+a client archive `LICENSE.font` as well, and the browser bundle and the
+extension's zip `LICENSE.font` and `fonts/LICENSE`. The extension's zip is the
+store's upload, its files at the zip's root (§8). Each archive's `README.md` is
 written for its platform: `make release-readme` renders
 `deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 

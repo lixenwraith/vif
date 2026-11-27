@@ -214,9 +214,9 @@ terminal module's `atlas` embed:
   (MIT and Bitstream Vera licenses) as bitmaps at 6x12, 8x16 and 12x24, which the
   window and Android draw cells with (`atlas.Hack()`), and as a web font for a
   browser (`atlas.HackWeb()`); linked only by the builds with a graphical host, so
-  by no `vif_headless` build, no Linux or FreeBSD `vif_nogui` one and no Windows
-  one. `internal/asset`'s test holds every rune the code and the shipped
-  scenarios draw to it.
+  by no `vif_headless` build and no Linux, FreeBSD or Windows `vif_nogui` one.
+  `internal/asset`'s test holds every rune the code and the shipped scenarios
+  draw to it.
 
 The embedded filesystems are narrowed with `fs.Sub`, so their runtime root is
 the category directory rather than `internal/asset/...`. Missing embedded

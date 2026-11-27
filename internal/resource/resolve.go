@@ -26,7 +26,7 @@ import (
 // corpus and rejects Scenario and Content.
 type Options struct {
 	// Dir is an optional root searched before the user and system roots, in the
-	// categorized scenario/, input/, audio/, content/, image/ layout. Empty
+	// categorized scenario/, input/, audio/, content/, image/, bot/ layout. Empty
 	// selects platform discovery.
 	Dir string
 

@@ -29,7 +29,8 @@ The modules it requires:
 - `github.com/lixenwraith/auth`: Argon2id-SCRAM for a passphrase door and an
   account sign-in: the credential a player derives, the exchange both ends run. Its
   JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)).
-- `golang.org/x/sys`: `pkg/network`'s Windows error codes.
+- `golang.org/x/sys`: Windows' system calls: `pkg/network`'s error codes, and the
+  window build's console, message box and WASAPI stream (`cmd/vif`).
 - `github.com/ebitengine/purego`: the build's own stream loads the sound server's
   client library through it with cgo off (`cmd/vif/pulse.go`), as the window
   (`terminal/window`) loads Xlib, EGL and GLES 2 or desktop OpenGL.
@@ -79,8 +80,16 @@ make dev       # generated code + race-enabled debug build
 - `page`: write the page's two scripts, which no commit holds, into `PAGE_DIR`
   (`web/`): `terminal.js`, the terminal module's `web/page.js` followed by
   `web/vif.js`, and the module's `worker.js`, of the version the build links.
-- `windows`: experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0`
-  cross-build.
+- `extension`: build `wasm`, then pack the page as a Chrome extension:
+  `bin/vif-chrome/` to load unpacked and `bin/vif-chrome.zip` for the store
+  (`EXT_VERSION`, `EXT_KEY`; [Packaging §8](packaging.md#8-chrome-web-store)).
+- `windows`: the experimental terminal build for `windows/amd64`, cross-built with
+  cgo off and no window, audio or log (`novlog vif_noaudio vif_nogui`).
+- `windows-gui`: the window build for `windows/amd64` as `bin/vif-gui.exe`
+  (`vif_gui novlog`), linked with no console, so no terminal; sound through WASAPI.
+- `windows-package`: that build as a release's zip holds it, in
+  `bin/vif-windows-amd64/` (`WINDOWS_DIR`): `bin/vif.exe`, the wad beside its
+  `bin/`, the licenses and a README.
 - `run`: build the dev binary and execute it.
 - `test`: generate and run `go test -race ./...`.
 - `verify`: generate, test, vet, and compile the full (also with cgo off), `novlog`,
@@ -102,6 +111,9 @@ make dev       # generated code + race-enabled debug build
 - `wad-archive`: pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`),
   unpacking as `vif/` into the directory that holds a config root; the release
   publishes it.
+- `steam-linux`, `steam-windows`: assemble a Steam depot in `bin/steam/linux/` or
+  `bin/steam/windows/` (`STEAM_DIR`), laid out as `windows-package`'s;
+  `steam-upload` sends them through `steamcmd` ([Packaging §9](packaging.md#9-steam)).
 - `release-readme`: print the README of one release archive (`RELEASE_TARGET`,
   `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`.
 - `notices`: write `bin/NOTICES` (`NOTICES`): the licenses of Go and of every module
@@ -127,12 +139,13 @@ make dev       # generated code + race-enabled debug build
 
 `TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
 server port. `SIMD` (default `auto`) builds the presentation targets (`dev`,
-`release`, `gui`, `cli`, `nolog`, `wasm`, `windows`, `android`) with
-`GOEXPERIMENT=simd` where the toolchain takes it, so lixenwraith/terminal's cell
-diff runs on AVX2, NEON or WebAssembly SIMD128; `SIMD=1` insists and `SIMD=0`
-leaves it out. The experiment is Go's, outside the Go 1 promise, and on amd64 also
-moves the runtime's map hashing onto `simd/archsimd`; a SIMD browser build needs
-WebAssembly SIMD, which every current browser has. `GO` names the toolchain command (on FreeBSD, the versioned package
+`release`, `gui`, `cli`, `nolog`, `wasm`, `windows`, `windows-gui`, `android` and
+the packages built from them) with `GOEXPERIMENT=simd` where the toolchain takes
+it, so lixenwraith/terminal's cell diff runs on AVX2, NEON or WebAssembly SIMD128;
+`SIMD=1` insists and `SIMD=0` leaves it out. The experiment is Go's, outside the
+Go 1 promise, and on amd64 also moves the runtime's map hashing onto
+`simd/archsimd`; a SIMD browser build needs WebAssembly SIMD, which every current
+browser has. `GO` names the toolchain command (on FreeBSD, the versioned package
 `go.mod` asks for).
 `GO_BUILDFLAGS` (default `-trimpath`) and `GO_LDFLAGS` (default `-s -w`) are the
 release-style flags; they are not `GOFLAGS` and `LDFLAGS`, which the go command
@@ -217,10 +230,12 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-serve <doors>` | Bind a headless session with no local cursor, a dedicated host, at one or more doors, as `-host` takes them. |
 | `-cert <file>`, `-key <file>`, `-selfsign` | The certificate chain a `wss://` door serves and its key, PEM, the key defaulting to the `-cert` file; or a certificate made for this run, encrypted and taken as it is by a terminal that joins. For `-host`, `-serve` or `:host`. |
 | `-join <addr>` | Join `[tcp://\|vif://\|vifs://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
-| `-ca <file\|sha256:hex>` | With `-join`, what a `wss://` host's certificate is trusted by beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint. |
+| `-ca <file\|sha256:hex>` | With `-join` or `-spectate`, what a `wss://` host's certificate is trusted by beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint. |
+| `-spectate <addr>` | Watch a session at an address `-join` takes, from one of its players and taking no place in it; a slot after the address names the player looked from first. It only watches, so it takes no `-host`, `-join`, `-serve`, `-bot`, `-listen`, `-relay` or `-j` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
+| `-spectators <n>` | How many spectators a session this run hosts feeds at once, `0`..`parameter.FeedAudienceMax`; `0` takes none, unset `parameter.FeedAudience`. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`, beside the scenario's `max_players`, the lower holding; with a `-join` site, the size requested. Unset holds the whole roster; under the scenario's `min_players` it is refused. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
-| `-bot [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; no count is one and no graph the scenario's own bot, `default` where it carries none, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
+| `-bot [N[:graph]\|graph\|verb ...]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; no count is one and no graph the scenario's own bot, `default` where it carries none, and a count of 0 adds none. With `-serve`, bots keep the session occupied. A verb of `:bot` that keeps bot files (`list`, `create`, `import`, `export`, `clear`) acts and exits ([Bots](bots.md#a-players-bot-files)). |
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host`, the default, keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` walks the succession chain, each surviving member that declared a port taking a term of its own in its turn, never a bot. |
 | `-no-cheats` | Refuse the grants, `:god`, `:demon`, `:energy`, `:heat`, `:boost` and `:w`, in this run and to every participant of a session it hosts, which a successor keeps; a fleet pod's Job sets it ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)). |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second of game time over the window, on a link carrying at least this many bytes per second of it. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
@@ -239,7 +254,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 
 | Flag | Purpose |
 |---|---|
-| `-d`, `-config-embedded` | Use the embedded scenario and content; mutually exclusive with `-s` and `-f`. |
+| `-d`, `-config-embedded` | Use the embedded scenario and content, over `vif.toml`'s; mutually exclusive with `-s` and `-f`. |
 | `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
 | `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, or a directory containing one. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
@@ -335,9 +350,10 @@ that ends a process must not silently do nothing.
 
 `-serve` is a host of its own and does not combine with `-host` or `-join`. `-host`
 and `-join` are mutually exclusive and available on interactive play and on driven
-`-script` and bot runs. They, `-serve`, `-probe`, `-players`, `-bot`, `-authority`,
-`-listen`, `-name` and the lifetime bounds are an error beside
-`-check`, `-schema` or `-replay`. An interactive `-host` plays at once and opens its
+`-script` and bot runs. They, `-serve`, `-spectate`, `-probe`, `-players`,
+`-spectators`, `-bot`, `-authority`, `-listen`, `-relay`, `-name`, `-cert`, `-key`,
+`-selfsign`, `-ca` and the lifetime bounds are an error beside `-check`, `-schema`
+or `-replay`. An interactive `-host` plays at once and opens its
 port once the clock runs; `:host <addr> [host|migrate]` does the same on a run that
 is **already playing**, at whatever tick it has reached — same acceptor, same
 identity allocation, same capture. The joiner dials before constructing its `App`,
@@ -556,7 +572,8 @@ Commands, compositions and examples are in [Bots](bots.md).
 `script/test.sh` holds the checks no Go test makes, because they need a built
 binary on a real terminal, `make` or the deploy scripts: the release wad archive
 (`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
-it (`scenario`, `follow`), the session template against the router (`fleet`) and
+it (`scenario`, `follow`), runs behind relays keeping their session past its host's
+loss (`tree`), the session template against the router (`fleet`) and
 what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
 or FAIL; `botscore` and `load` measure and stay out of it.
 
@@ -582,13 +599,16 @@ the project owner runs, not per-change steps. `make verify` regenerates, runs
 `vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
 under both, vets and tests the `android` module, tests the window module
 (`github.com/lixenwraith/terminal/window`) with cgo off,
-cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), builds `./...`
+cross-builds `js/wasm` and both `windows/amd64` builds, the terminal's
+(`novlog vif_noaudio vif_nogui`) and the window's (`vif_gui novlog`), builds `./...`
 natively and for `js/wasm` under `GOEXPERIMENT=simd`, fails if the headless
-command imports the renderer or audio implementation, and runs
-`go vet ./...` and the `vif_gui` vet of that module and `cmd/vif`. It does not
-execute a Windows artifact or a real terminal/audio backend; Windows is played by
-hand, not a supported release target, and its known issues are in [Build profiles
-§4](multi-platform.md#4-platform-matrix).
+command imports the renderer or audio implementation or a build links what its
+profile leaves out (purego or the window under `vif_nogui`, purego in the Windows
+window build, Windows' system calls in a Linux one, another build's speakers), and
+runs `go vet ./...` and the `vif_gui` vet of that module and `cmd/vif`, natively
+and for Windows. It does not execute a Windows artifact or a real terminal/audio
+backend; Windows is played by hand, so far under Wine alone, and what it owes is
+in [Build profiles §4](multi-platform.md#4-platform-matrix).
 
 Tests cover `cmd/vif`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
@@ -679,12 +699,15 @@ race. The test steps print failures alone, a race's report beside its package.
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets
 and tests, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
-`linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`)
-and `web`, the wad archive through `make wad-archive`, a source archive on a tag,
-the Android APK through `android/toolchain.sh gradlew` on a second runner, and
-`SHA256SUMS` over everything. Off a tag it also pushes the headless image to GHCR
-and moves the `nightly` prerelease; a tag drafts a release. [Packaging](packaging.md)
-§2 lists what each publishes.
+`linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (the window build, through
+`make windows-package`) and `web`, the wad archive through `make wad-archive`, the
+Chrome extension through `make extension`, which `script/extension-check.mjs`
+loads in Chromium first, a source archive on a tag, the Android APKs through
+`android/toolchain.sh gradlew` on a second runner, and `SHA256SUMS` over
+everything. Off a tag it also pushes the headless image to GHCR and moves the
+`nightly` prerelease; a tag drafts a release and, once the repository variable
+`STEAM_UPLOAD` is `true`, uploads the Steam depots. [Packaging](packaging.md) §2
+lists what each publishes.
 
 The test workflow also builds the `novlog`, `vif_noaudio`, `vif_headless` and
 `vif_nogui` profiles and the FreeBSD, browser and Windows targets. Neither workflow
@@ -693,15 +716,18 @@ terminal/audio smoke tests.
 
 ## 7. Platform matrix
 
-- **Linux**, the primary native target: Unix signals/crash reset; process audio
-  backends; optional stderr fd capture.
+- **Linux**, the primary native target: Unix signals/crash reset; the build's own
+  speakers (the sound server's stream, the card) ahead of process audio backends;
+  optional stderr fd capture.
 - **FreeBSD**, a native target: Unix handling plus optional `/dev/dsp` OSS backend.
 - **`js/wasm`**, a supported constrained build: the `terminal.Page` host, a WebGL
   canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded
   scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport.
-- **Windows amd64**, experimental: `CGO_ENABLED=0`, `novlog`, `vif_noaudio`;
-  published as a zip that plays in a terminal, with the known issues in [Build
-  profiles §4](multi-platform.md#4-platform-matrix).
+- **Windows amd64**, `CGO_ENABLED=0` and no purego: the window build
+  (`vif_gui novlog`, no console, sound through WASAPI) is the release's zip and
+  Steam depot, so far run under Wine; the terminal build (`novlog vif_noaudio
+  vif_nogui`) is experimental, with the known issues in [Build profiles
+  §4](multi-platform.md#4-platform-matrix).
 - **Android**, a native target, a debug-signed APK: `android/`, its own module:
   `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer over
   `terminal/android`'s view and `AudioTrack`; the wad as its system root
@@ -891,12 +917,13 @@ across instances is the invariant the domain model rests on.
 
 | Concern | Primary source |
 |---|---|
-| Build targets | `Makefile`, `go.mod` |
+| Build targets | `Makefile`, `go.mod`, `script/toolchain.sh` |
 | CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/app/internal/config`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
-| End-to-end checks | `script/test.sh`, `script/*.toml` |
+| End-to-end checks | `script/test.sh`, `script/*.toml`, `script/extension-check.mjs` |
 | Browser host | `cmd/vif/browser.go`, `web/index.html`, `web/vif.js`, `web/terminal.css`, `web/fonts/`; the terminal module's `page_js.go`, `web/page.js`, `web/worker.js` |
+| Desktop window and the build's own speakers | `cmd/vif/gui.go`, `gui_windows.go`, `speakers.go`, `pulse.go`, `alsa.go`, `wasapi.go`; the terminal module's `window` |
 | Android host | `android/game`, `android/app/src/main/java/com/lixen/vif`, `android/toolchain.sh` |
 | Session admission: keys, passes, tickets, passphrase doors and accounts | `internal/network/admission.go`, `account.go`, `session.go`, `internal/app/internal/membership/place.go`, `signin.go`, `host.go`, `session.go`; [Auth and session design](auth-session-design.md) |
 | Doors, the `vifs://` TLS front door and its trust | `pkg/network/endpoint.go`, `pkg/websocket`, `internal/app/internal/config/membership.go` |
