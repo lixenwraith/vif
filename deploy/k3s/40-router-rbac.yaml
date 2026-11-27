@@ -23,14 +23,14 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs/finalizers"]
     verbs: ["update"]
-  # The endpoint players are given. Create and delete only — a Service that is
-  # updated in place is a session whose address changed under its players.
+  # The Service whose EndpointSlice says the pod is ready; nothing dials it. No
+  # update: the router creates one beside its Job and deletes it, never changing it.
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["create", "list", "delete"]
-  # Read-only, by list: the router needs the pod's phase and readiness to answer
-  # "is this session live", and needs nothing else about it. Notably absent:
-  # pods/exec, pods/portforward, pods/attach, and any write verb.
+  # Read-only, by list: the router needs the pod's phase, readiness and address to
+  # answer "is this session live" and place a player on it, and nothing else about
+  # it. Notably absent: pods/exec, pods/portforward, pods/attach, and any write verb.
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["list"]

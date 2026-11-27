@@ -18,13 +18,13 @@ in [`script/`](../script/README.md).
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
+| Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`, and the screen size; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `fighter` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
-| Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Admitted by the router's ticket (§4). |
+| Transport | Framed TCP, not HTTP, for every participant, the front door's under TLS to the site's edge (`vifs://`). A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Admitted by the router's ticket (§4). |
 | Reached by | Its name, through the router alone, on two routes (§9): `vif://<site>:7777/<session>` at the front door, `vifs://` where the edge ends TLS for it, and `wss://<site>/vif/ws/<session>` through the site's edge; both reach the pod from the node, the only source its game port admits. |
 | Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the router reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
-| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs`, `/vif/api/keys` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the front door's stay unreachable from outside. |
+| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs`, `/vif/api/keys`, `/vif/api/auth/*` (the identity service's, forwarded) and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the front door's stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
@@ -32,8 +32,8 @@ flowchart LR
     Site -->|"API + WSS"| Alloc["Router"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve -name id"]
-    Site -->|"vif:// and wss:// links"| Player
-    Player -->|"vif -join, TCP 7777"| Alloc
+    Site -->|"vifs:// and wss:// links"| Player
+    Player -->|"vif -join, 7777 under the edge's TLS"| Alloc
     Alloc -->|"route frame, then bytes"| Pod
     Alloc -->|"WSS payload, TCP 7777"| Pod
     Pod -->|"JSONL through PVC"| Logs["capped node tmpfs"]
@@ -134,14 +134,14 @@ What bounds a stranger:
 - the network policy: the game port reachable from the node alone, where the router
   places every player, the probe port from the node and the `monitoring` namespace,
   everything else denied, no egress;
-- the router's published surface: exactly the create/list, log-stream and
-  session-socket routes and the front door, bounded by the ten-session quota, the
-  90-second first-join expiry, `-client-creates` sessions per address (an IPv6
-  one's /64) in that window, one reading of the fleet per 2 s however many lobby
-  pages list it, the advertised `limits` on what a caller may select, and the edge's rate
-  limits on the browser route; without `-client-address-header` the API and the
-  browser route charge no per-address budget. Its probe endpoints and every other
-  path stay behind the node's own filter
+- the router's published surface: exactly the create/list, log-stream, key,
+  account and session-socket routes and the front door, bounded by the ten-session
+  quota, the 90-second first-join expiry, `-client-creates` sessions per address
+  (an IPv6 one's /64) in that window, one reading of the fleet per 2 s however many
+  lobby pages list it, the advertised `limits` on what a caller may select, and the
+  edge's rate limits on the browser route; without `-client-address-header` the API
+  and the browser route charge no per-address budget. Its probe endpoints and every
+  other path stay behind the node's own filter
   ([Deployment §6](kube-docker-deploy.md#6-the-nodes-own-filter));
 - on both proxied routes: a 16-hex identifier looked up in Kubernetes state rather
   than supplied, a refusal for a session that is not live and ready, and
@@ -149,8 +149,8 @@ What bounds a stranger:
   its splice ends: a write stalled ten seconds ends a direction, and the other then
   has ten seconds. The browser route adds the `Origin`s it lists and the edge's rate limits,
   refused before the upgrade. The front door, the router's one Internet-facing
-  socket, places at most 32 connections at once, reads one name-sized frame from
-  each within five seconds, and refuses before it dials a pod (§9);
+  socket, places at most 32 connections at once, reads one frame of at most 512
+  payload bytes from each within five seconds, and refuses before it dials a pod (§9);
 - a spectator being nobody in the session: the router answers a dial that only
   watches itself, from its copy of the session's feed, charged to the dialer's
   join budget and bounded by `-spectators` a session and `-spectators-per-address`
@@ -237,9 +237,10 @@ figures from here; [Measure a full roster](todo.md#measure-a-full-roster)
 measures a four-player world, which is the shape the manifest's values are for. The
 quota totals in `10-quota.yaml` are ten times the game container without bots; the
 config-check init container counts only against its own peak. A session with bots
-takes more than a tenth, three of three bots filling the CPU, so the router reads
-what the quota counts used and refuses the create it has no room for as `fleet_full`
-(`allocator.fits`), where the API server would take the Job and never run its pod.
+takes more than a tenth, three sessions of three bots filling the CPU requests, so
+the router reads what the quota counts used and refuses the create it has no room
+for as `fleet_full` (`allocator.fits`), where the API server would take the Job and
+never run its pod.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
@@ -418,15 +419,17 @@ a dial builds is the one its feed begins from.
 
 **The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
-one `MsgSessionRoute` frame, under a five-second deadline and the 64-byte name
-bound; resolves the pod with the lookup the browser route uses; dials `podIP:7777`,
-re-encodes the name to it and splices the two sockets with half-close, Go setting
-`TCP_NODELAY` on both. A direction ends when its peer closes or a write stalls ten
-seconds, and the other then has ten seconds. A stream that does not open with a
-route frame is closed unanswered; every other refusal is a `MsgJoinReply` whose
-reason `vif -join` prints. The cost is the browser route's: native play depends on
-the router process, and the pod sees every player at the node's address, so its
-`admit` record names the node and the per-address budget is the router's (§4).
+one `MsgSessionRoute` frame, under a five-second deadline and `MaxTunnelFrame`'s
+512 bytes, since a door's publication opens on the same port, and refuses a name
+that is not 16 hex; resolves the pod with the lookup the browser route uses; dials
+`podIP:7777`, re-encodes the name to it and splices the two sockets with
+half-close, Go setting `TCP_NODELAY` on both. A direction ends when its peer closes
+or a write stalls ten seconds, and the other then has ten seconds. A stream that
+does not open with a route frame is closed unanswered; every other refusal is a
+`MsgJoinReply` whose reason `vif -join` prints. The cost is the browser route's:
+native play depends on the router process, and the pod sees every player at the
+node's address, so its `admit` record names the node and the per-address budget is
+the router's (§4).
 
 **Where the browser route's layers stop.** Nginx terminates TLS and forwards the
 `Upgrade`; it never looks at a frame. `vif-router` checks method, identifier

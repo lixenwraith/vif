@@ -188,12 +188,10 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 	}
 }
 
-// TestSessionCreationIsBudgetedPerAddress: one address holds at most its budget of
-// the fleet's unclaimed sessions, another is unaffected, and a request the edge did
-// not attribute is bounded by the edge alone.
 // TestSessionCreationIsBudgetedPerAddress: a create spends its address's budget,
-// one that started nothing (a full fleet) gives it back, and a refusal names the
-// seconds left in the window.
+// one that started nothing (a full fleet) gives it back, another address is
+// unaffected, a request the edge did not attribute is bounded by the edge alone,
+// and a refusal names the seconds left in the window.
 func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc"}}
 	api := newAPIServer(backend, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
