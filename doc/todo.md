@@ -383,6 +383,18 @@ bind. Drop it, sign `signable("proof", []byte(nonce))` and bump `ProtocolVersion
 drop the two bound test cases, and the binding from §3.1 and the term index's
 *Admission* entry.
 
+### Hold the generated snapshot code's comments to five lines
+
+- Priority: P3, to review
+- Affected files: `internal/gen-manifest/main.go`, `internal/engine/snapshot_world_gen.go`,
+  `internal/engine/snapshot_pages_gen.go`
+
+The generator's templates write comment blocks of six to 23 lines into the snapshot
+code (`ReconcileSharedWorld`, `gen-manifest/main.go:1272`; `SharedWorldDelta`, :1201;
+`CaptureSharedWorld`, :1066; `DiffSharedWorld`, :1220; `clearSharedEntities`, :1348;
+`applyStoreRows`, :1470), past AGENTS.md's five. Condense each template comment to
+five lines and run `go generate ./internal/manifest`.
+
 ## Cave
 
 The side-scroller's refinements after its first play test (2026-10-27) lead,
@@ -2336,6 +2348,26 @@ Probed runs of
 would close it: manifests sent before a link's participant installed its gate world
 count toward no silence, and a peer fed deltas alone is owed the keyframe a fallback
 took.
+
+### Re-measure the largest world's capture under the columnar codec
+
+- Priority: P2
+- Affected files: `pkg/network/snapshot.go`, `doc/services-and-networking.md`
+
+`MaxSnapshotBytes`, `MaxSnapshotPlainBytes` and services §8 rest on a walled
+500x250 world measured at 24.3 MiB plain and 1.1 MiB on the wire, figures from the
+JSON-row codec the column keyframes replaced. Owed: that world's capture read again,
+plain and on the wire, and the two ceilings and their comments grounded on it.
+
+### Lay services-and-networking's tables out for a terminal
+
+- Priority: P3
+- Affected files: `doc/services-and-networking.md`
+
+Twelve Markdown tables remain (§1, §3 twice, §6, §7, §7.2, §8 three times, §8's
+succession messages, §12, §14), several with paragraph-long cells, which a terminal
+shows as their source. Owed: nested lists where a table does not fit, per AGENTS.md's
+Docs rules.
 
 ## Session membership
 
