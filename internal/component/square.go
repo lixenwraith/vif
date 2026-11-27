@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SquareKind is what a block of a magic square is; three of one kind along an edge
-// fire the kind's effect
+// SquareKind is what a block of a magic square is; three of one kind along a line
+// fire the kind's effect, only along an edge for a kind that strikes
 type SquareKind uint8
 
 const (

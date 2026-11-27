@@ -71,7 +71,7 @@ var MissileHoming = physics.HomingProfile{
 	DeadZone:         parameter.MissileDeadZone,
 }
 
-// EyeHomingProfiles mirrors EyeHomingProfiles from the same source table
+// EyeHomingProfiles is each eye type's homing, built from its parameter.EyeTypeTable row
 var EyeHomingProfiles [parameter.EyeTypeCount]physics.HomingProfile
 
 func init() {

@@ -3,9 +3,9 @@ package navigation
 import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Source is the read side of a flow field: the direction to step from a cell and
-// how far that cell is from the goal. Both FlowField and FlowFieldCache satisfy
-// it, so a caller steering by a cached group field and one steering by a private
-// route field share this file rather than each other's copy.
+// how far that cell is from the goal. FlowField, FlowFieldCache and CorridorField
+// satisfy it, so a caller steering by a cached group field and one steering by a
+// route's corridor share this file rather than each other's copy.
 type Source interface {
 	GetDirection(x, y int) int8
 	GetDistance(x, y int) int

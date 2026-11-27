@@ -107,14 +107,11 @@ func SharedKey(key string) bool {
 	return true
 }
 
-// deniedSimKey lists status keys a replay must not compare.
-//
-// Pause, rate and step are recorded and injected like any other event, but a
-// replay does not honor them: a manual clock stores a rate without applying it
-// and no replay runs schedulerLoop. fps and frame belong to the render loop,
-// event.backoffs counts update-mutex contention in the live event loop, and rec
-// and stat are telemetry about telemetry. Keys rather than prefixes: the engine
-// group mixes these with simulation counters.
+// deniedSimKey lists status keys a replay must not compare. A replay honors no pause,
+// rate or step: a manual clock stores a rate without applying it and no replay runs
+// schedulerLoop. fps and frame are the render loop's, event.backoffs the live event
+// loop's lock contention, rec and stat telemetry about telemetry. Keys, not prefixes:
+// the engine group mixes these with simulation counters.
 var deniedSimKey = map[string]bool{
 	"engine.paused":     true,
 	"context.mode":      true,

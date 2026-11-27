@@ -22,17 +22,16 @@ type SystemDef struct {
 	Snapshot string
 }
 
-// RendererDef defines a renderer for registration
-// Order in slice determines ActiveRenderers() order
+// RendererDef defines a renderer for registration; Renderers says how they order
 type RendererDef struct {
 	Name        string // Registry key (e.g., "drain")
 	Constructor string // Constructor name without package (e.g., "NewDrainRenderer")
 	Priority    string // Priority constant without package (e.g., "PriorityDrain")
 }
 
-// Components is the authoritative component list
-// Generator produces: ComponentStore, GetComponentStore(), RegisterComponents(),
-// and the componentDomains audit table
+// Components is the authoritative component list. The generator derives from it the
+// engine's Component stores (initComponents), entity removal, the componentDomains
+// audit table and the snapshot code.
 var Components = []ComponentDef{
 	// --- Core Gameplay ---
 	// Glyph is player except gold sequence members, which are shared composite members
@@ -113,7 +112,7 @@ var Components = []ComponentDef{
 
 // Systems is the authoritative system list: order, construction, domain profile, and dependencies.
 // Capability may vary only local systems; it is deliberately outside the simulation fingerprint.
-// Generator produces BuildSystems, ActiveSystems, and systemProfiles.
+// Generator produces BuildSystems, ActiveSystems, systemProfiles and systemSnapshots.
 var Systems = []SystemDef{
 	// --- Transport ---
 	{Name: "network", Constructor: "NewNetworkSystem", Domain: "dual",
@@ -233,9 +232,8 @@ var ContextSystems = []SystemDef{
 		Optional: []string{"navigation", "combat", "lightning", "materialize", "splash", "swarm", "quasar"}}, // takes the scenario's compiled programs; shared composite species with a D-12 footprint sweep, all state in its stores, an entrance's in its Shared materialize
 }
 
-// Renderers is the authoritative renderer list
-// Order determined by render priority
-// Generator produces: RegisterRenderers(), ActiveRenderers()
+// Renderers is the authoritative renderer list, drawn in render priority order with
+// slice order breaking ties. The generator produces BuildRenderers.
 var Renderers = []RendererDef{
 	// --- Background / Grid ---
 	{"ping", "NewPingRenderer", "PriorityPing"},

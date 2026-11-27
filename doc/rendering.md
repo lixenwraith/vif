@@ -53,9 +53,10 @@ for `TerminalBlockedAfter` (100 ms) the frame loop stops drawing, logs `terminal
 stopped taking output; drawing paused`, and resumes with a matching record when the
 write returns; the tick handshake runs throughout.
 
-The frame leaves through `render.Surface`: color mode, `Flush` of the cell grid and
-`Sync`. The terminal, the desktop window, the browser page and the Android view
-satisfy it, and it is all a host has to provide to draw the same cells
+The frame leaves through `render.Surface`, the terminal module's `Surface`: color
+mode, `Flush` of the cell grid and `Sync`. The terminal, the desktop window, the
+browser page and the Android view satisfy it, and it is all a host has to provide
+to draw the same cells
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
 Before the lock the orchestrator derives the frame's playfield rectangle and
@@ -83,6 +84,14 @@ renderers:
 | View | viewport width/height and camera top-left |
 | Map | logical map width/height and centering offsets |
 | Host | complete terminal screen width/height |
+
+The frame's `GameTime` is the pacing clock, which a live run starts at its launch and
+a new game does not rewind; a driven run's manual clock starts at `SimEpoch`, as the
+simulation does. A phase a renderer takes off it therefore agrees with the simulation
+in every test and headless run and parts from it only live, where the square's orb
+was drawn 142° from where it struck: simulated motion is drawn from
+`TimeResource.GameElapsed` plus the time since the tick (`sinceTick`,
+`TestAnOrbIsDrawnWhereItStrikes`).
 
 There are three coordinate spaces:
 
@@ -153,10 +162,10 @@ modes are different:
   accumulation buffer — and it holds for effects nobody has written yet.
 
 `ClipsToPlayfield` is the single classification of layers into simulation and
-screen space. Post-processing, the heat bar, indicators, status bar, and debug
-layers address the whole screen and stay unclipped; the two cursors mark map
-cells and clip. `TestEveryLayerDeclaresItsClip` fails when a priority is added
-without a declared side.
+screen space. Grayout, strobe and dim, the heat bar, indicators, status bar, start
+screen and debug layers address the whole screen and stay unclipped; sight and the
+two cursors mark map cells and clip. `TestEveryLayerDeclaresItsClip` fails when a
+priority is added without a declared side.
 
 Where a renderer's own geometry depends on the bound rather than merely being
 trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
@@ -259,6 +268,13 @@ Blend mode is encoded as an operation plus foreground/background flags.
 | Soft light | Subtle shield glow. |
 | Screen | Light-emitting fields, lightning, pulses. |
 | Overlay | Ember ring/color shaping. |
+
+Add and Screen have no such base: written through `Set` over a cell nothing
+painted they blend onto black, a band darker than the theme's background. A glow
+there blends with `SetBgScreen` on `visual.RgbBackground`, as the shield's glow
+and the square's boost glow, wind streaks and strike flash do, and a field mixes
+over `BackgroundAt`'s color and writes with `SetBgOnly`, as the explosion field
+does.
 
 Predefined modes include both-channel variants plus foreground-only screen,
 replace, and add, and background-only max and alpha. A renderer should choose
@@ -431,8 +447,8 @@ for 450.
 The square renderer draws all a magic square shows, over the shield and every
 field so no blend reaches its blocks: a boost's glow on the rim, a turning wind's
 streaks on the outer orbit, a strike's flash over the part it landed in and its
-orb, then the blocks, lit near white as their edge fires, the selection and the
-legend.
+orb, then the blocks, lit near white as their line fires, a lit spell's places
+framed or its cast's glow over what it reaches, the selection and the legend.
 
 The tracer renderer is intentionally background-only: every sampled trail
 cell writes no rune/foreground, so typeable text remains readable as a tracer
@@ -688,7 +704,7 @@ their notches derive from the same division, so a level of 10k ends exactly on
 the k-th notch at any width. The status bar
 is two rows (`StatusRows`) on every host. The upper one holds the status items in
 a fixed priority: session badge, time control, FSM phase, energy, damage
-multiplier, boost, grid state, and the metrics, dropped first when space is tight.
+multiplier, boost, and the metrics, dropped first when space is tight.
 Those that fit span the row edge to edge, each in a slot at least its width and
 the slots as equal as those widths allow, so an item's edges move when the items
 shown change, not when a value grows a digit. The bottom row holds the audio
@@ -731,7 +747,9 @@ The overlay renderer adapts help/about/telemetry/console content into buffer cel
 and telemetry draw with the game live and allocate nothing a frame: `tui` draws a
 box's edges as runs of cells, not a string per edge, which took fourteen telemetry
 cards in a 160×50 window from 30 allocations (3.9 KB) a frame to none and from
-149 to 122 µs; a card's title, under 32 bytes and not escaping, never allocated. The
+149 to 122 µs; a card's title, under 32 bytes and not escaping, never allocated.
+`tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
+a one-row text field, as the menu's, passes `tui.LineNone` or draws nothing. The
 about window draws the lixen mark from its shape (`logoCells`): in truecolor as
 quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), as an
 emulator in 256 colors does too, on a text console as whole blocks in the entry
@@ -781,6 +799,11 @@ game-specific asset interpretation and layering.
    pause, grayout/dim/strobe, and overlapping fields.
 7. Check that the surface flush remains outside the world lock and that no
    renderer retains store pointers across frames.
+
+A bench that reuses one `RenderBuffer` calls its `Clear` each iteration, as a frame
+does, or `KeepExact`'s rects pile up as bytes with no allocation behind them. A bare
+`engine.NewWorld` draws in 256 colors, as an emulator, `ColorMode`'s zero value.
+Measuring a renderer is [Development §14](development.md#14-measuring).
 
 ## 12. Source map
 

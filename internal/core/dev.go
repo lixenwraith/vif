@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// Dev-mode runtime capture. Race reports, fatal errors and traces from
-// goroutines outside Go() reach fd 2 whatever the logger is doing; inside the
-// alternate screen that output is unreadable. Capture redirects fd 2 to a file
-// and DrainStderr reports new blocks as pointers into it.
-
 const (
 	stderrPrefix  = "vif-stderr-"
 	raceDelimiter = "=================="
@@ -42,8 +37,11 @@ var (
 	capSeen  int
 )
 
-// CaptureStderr redirects fd 2 into dir and returns the capture path
-// Call before the terminal enters the alternate screen
+// CaptureStderr starts dev mode's runtime capture, redirecting fd 2 into dir, and
+// returns the capture path: race reports, fatal errors and traces from goroutines
+// outside Go() reach fd 2 whatever the logger does, unreadable inside the alternate
+// screen, and DrainStderr reports their blocks as pointers into the file. Call before
+// the terminal enters that screen.
 func CaptureStderr(dir string) (string, error) {
 	capMu.Lock()
 	defer capMu.Unlock()

@@ -37,12 +37,13 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 │   ├── fighter/               # optional override: a copy of internal/asset/scenario/
 │   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
 │   └── base/                  # the shipped scenarios
-│       ├── blank/scenario.toml
+│       ├── armada/            # scenario.toml and stars.toml, its corpus
+│       ├── blank/, dummy/, magic/, recall/, shadows/  # scenario.toml alone
 │       ├── cave/
 │       │   ├── scenario.toml
 │       │   ├── macros.toml
-│       │   └── behavior/strata/scarab.toml  # a behavior program, one per raider type
-│       ├── recall/scenario.toml
+│       │   ├── behavior/strata/scarab.toml  # a behavior program, one per raider type
+│       │   └── bot/cave.toml  # a bot made for its map
 │       ├── td/
 │       │   ├── scenario.toml
 │       │   ├── td_macros.toml # macro library
@@ -55,13 +56,14 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 ```
 
 `vif -check [-s <name-or-path>]` validates the resolved settings, scenario (FSM, the
-system names it toggles, the required dependencies a disable strands and its
-behavior programs), keymap, audio overrides, content and every bot graph, then
-exits; all state-level FSM errors are reported in one pass. `vif -schema` prints
-the machine schema (events with payload fields and the names an enum field takes;
-the guards and actions of a scenario, a bot graph and a behavior program with
-their arguments; a bot network's inputs and outputs; operators and config fields)
-as JSON.
+system names it toggles, the required dependencies a disable strands, a local
+event's transition beside a `max_players` above 1, and its behavior programs, loot
+and maps), keymap, audio overrides, content and every bot graph, then exits; all
+state-level FSM errors are reported in one pass. `vif -schema` prints the machine
+schema (events with payload fields and the names an enum field takes; the guards
+and actions of a scenario, a bot graph and a behavior program with their
+arguments; a bot network's inputs and outputs; operators and config fields) as
+JSON.
 
 ---
 
@@ -69,6 +71,8 @@ as JSON.
 
 ```toml
 description = "A short description for scenario selection."
+min_players = 1                     # Players it runs with, bots counted (optional; 1)
+max_players = 4                     # A ceiling, the lower of it and -players holding (optional; a full roster)
 macro_files = ["macros.toml"]       # Macro libraries, relative to this file
 bots = ["bot/pilot.toml"]           # The bots made for this map, relative to this file; a seat naming no graph plays the first
 
@@ -178,7 +182,8 @@ refuses it a `max_players` above 1, naming the transition
 (`resource.CheckLocalTriggers`). That player's instance judges the transition's
 guard, which reads that instance's state, and where it is a guest asks the
 authority to take it (D-20): the transition then lands a lead after the ask
-applies, as one the authority judged does.
+applies, as one the authority judged does, and an ask that lands nothing is given
+up after twice the apply horizon.
 
 ### Variable Capture from Payloads
 
@@ -334,17 +339,24 @@ program's own, and a loot field a code kind or one of the scenario's own
 the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
+A field with no `toml` tag decodes by its Go name: a wall batch's cells take
+`OffsetX`, `OffsetY` and `WallVisualConfig = { ... }`, and a rune field such as
+`char` takes the character's code, `43` for `+` (`wad/scenario/base/dummy`'s pads).
+A `time.Duration` field (`duration`, `transition_time`, `max_lifetime`) is
+nanoseconds (`3000000000` for three seconds), where a `duration_ms` field is
+milliseconds; `vif -schema` prints each field's type.
+
 `pick` sets one payload field to an entry of `from`: the one its `var`'s value
 names, modulo the list's length, a negative value counting back from the last entry.
 The draw behind it need not know the list: `cave`'s rock wears the stone art its
-seed picks, and the raid draws `raid_type` from 20 bits, takes it modulo eight and
-adds eight times the art's index, so it spawns one of that cave's eight raider
-programs from a list of all thirty-two. `field` is a dot path, as a `payload_vars`
-key is, and each entry is checked at load as that field's value in its payload,
-names included: a pick of `species` from `["eye", "snake"]` beside
-`sub_type = "flame"` fails on the snake, which takes no sub-types. An entry is any
-value the field takes, a table or a list among them. `payload_vars` sets the other
-fields after the pick, never the picked one.
+seed picks, and the raid draws `raid_type` from 20 bits, takes it modulo two and
+adds eight times the art's index and twice the rank it has climbed to, so it spawns
+one of that rank's two raider programs in that cave from a list of all thirty-two.
+`field` is a dot path, as a `payload_vars` key is, and each entry is checked at
+load as that field's value in its payload, names included: a pick of `species`
+from `["eye", "snake"]` beside `sub_type = "flame"` fails on the snake, which takes
+no sub-types. An entry is any value the field takes, a table or a list among them.
+`payload_vars` sets the other fields after the pick, never the picked one.
 
 `origin` names the point of the map the payload's cell counts from, so a layout
 follows the map with no arithmetic on `map_width` and `map_height`: a corner
@@ -450,6 +462,13 @@ every participant (D-14).
 Available fields (same set as `ConfigIntCompare`):
 `map_width`, `map_height`, `viewport_width`, `viewport_height`, `camera_x`, `camera_y`, `color_mode`
 
+A region sizes the map with `EventMapSetup { width, height, clear_entities,
+preserve_loot, crop_on_resize }`, often to the viewport a `ConfigToVar` read, never
+below the `[map]` floor and alike on every instance (D-14): `clear_entities` removes
+what is not protected, `preserve_loot` keeps the drops not yet collected, and
+`crop_on_resize` lets a resize crop the map to the terminal in a run played alone
+([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)).
+
 ### Nested payload_vars (Dot-Path Injection)
 
 `payload_vars` supports dot-separated paths for injecting FSM variables into
@@ -492,6 +511,11 @@ goes to it; any other keeps what `EnableSystem`, `DisableSystem` or `:system` le
 it at. The runtime runs it after init, reset, an installed capture and each
 `:region` command, and the region actions run it, so a scenario has no need to.
 
+A system the manifest drops leaves every `only_systems` that names it, which
+`-check` and `internal/resource`'s systems test refuse as unknown, so its removal
+searches `wad/scenario/` for its name (`tutorial` lists its systems one by one). A
+list that narrows turns `behavior` off too: a scenario of data species names it.
+
 ### Status Registry Actions
 
 ```toml
@@ -515,7 +539,8 @@ minus that mark, so a scenario counts kills since its own escalation while
 { action = "EmitEvent", event = "EventDrainPause", reconcile = true } # Persistent local lifecycle only
 ```
 
-An action guard sees no event payload, so a payload guard there is always false.
+An action guard sees no event payload: a payload guard there fails the load, and
+`PayloadExists` reads false.
 
 ## Cursor Lifecycle
 
@@ -613,9 +638,10 @@ The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.burst`,
 `heat.at_max`, `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`,
 `weapon.rod`, `weapon.launcher`, `weapon.disruptor`, `weapon.turret`,
 `weapon.emitter`, `weapon.gun`, `weapon.orbs`, `typing.max_streak`, `player.x`,
-`player.y` mirror **the slot this instance drives**. That is what "the player" means
-on a status bar or in an operator command. The mirror follows the roster rather than
-slot 0 because slot 0 is the coordinator's cursor, which no guest authors.
+`player.y`, `player.entity`, `player.peer` mirror **the slot this instance
+drives**. That is what "the player" means on a status bar or in an operator
+command. The mirror follows the roster rather than slot 0 because slot 0 is the
+coordinator's cursor, which no guest authors.
 
 They are therefore **instance-local by construction and must not be a guard key
 in a shared region** — a shared region has to take the same transition on every
@@ -746,6 +772,11 @@ miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
 
 `value` defaults to `true`.
 
+A transition on `EventFireSpecialRequest` meaning a press guards
+`{ field = "repeat", value = false }`, as `shadows` does: the shipped
+`[play] auto_fire = "on"` repeats special fire every cooldown, each repeat marked
+`repeat`.
+
 ### PayloadCovers
 
 ```toml
@@ -846,6 +877,15 @@ true` it blows about `x`, `y`, straight out at direction 0 and round the cell
 clockwise at a quarter turn, beside the map's wind and any radial one turned
 another way, and with a `reach` fades to nothing that many columns out.
 
+`EventSightRequest { dark, trail }` sets how this instance shows the map: `dark`
+hides every cell the light of the cursor it drives has not just fallen on, a hold a
+state takes with `reconcile`, and `trail` draws the cells that cursor walked. A maze
+request is answered by `EventMazeSpawned { cell_width, cell_height, room_x, room_y,
+far_x, far_y }`: its block, and the middle of its first room and of an open block
+among the farthest from it by the maze's way, which a state captures to stand a
+goal and a cursor apart. `wad/scenario/base/shadows` is the worked example
+([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)).
+
 ### Splash text and glyph lines
 
 ```toml
@@ -865,9 +905,10 @@ countdown's face the same way; a large countdown that finds no clear slot takes
 the small face as it spawns. `EventGlyphLineRequest` lays a line of typeable
 glyphs from a cell, left to right, as the corpus's lines are laid: cropped at the
 map's right edge, dropped whole where it meets a wall, rock or glyph, laid under a
-cursor or an effect, in `type` and `level` (dark green when unset), and
-`scenery = true` makes it part of the map that nothing types or deletes.
-`accent` names a mark the text brackets the runes it calls out with, as
+cursor or an effect, in `type` and `level` (dark green when unset; a line laid in
+type `gold` shows nothing, since a gold glyph is drawn only as a gold composite's
+member), and `scenery = true` makes it part of the map that nothing types or
+deletes. `accent` names a mark the text brackets the runes it calls out with, as
 `"|dw| a word"` with `accent = "|"`: they are laid bright white and the mark takes
 no cell. A laid line is text to read, which the magnifier keeps off where it has
 room.
@@ -882,9 +923,11 @@ status message is. `wad/scenario/base/tutorial` is the worked example.
 A player's edits are requests a state can wait on, each made on the pressing
 instance alone: `EventDeleteRequest { range_type, start_x, start_y, end_x, end_y }`,
 its start the range's first cell whichever way the motion went and `range_type`
-0 a span, 1 whole rows, 2 Visual's block; `EventGlyphReplaceRequest { x, y, text }`
-for `r`, `~` and a retype undone; `EventGlyphPutRequest { cells }` for a put and
-a delete undone, each cell an `x`, `y`, `rune`, `type` and `level`;
+0 a span, 1 whole rows, 2 Visual's block (a line delete carries rows alone,
+`start_x` staying 0, so a guard on `dd` compares `range_type` and `start_y`, and
+`x` fills every field); `EventGlyphReplaceRequest { x, y, text }` for `r`, `~` and
+a retype undone; `EventGlyphPutRequest { cells }` for a put and a delete undone,
+each cell an `x`, `y`, `rune`, `type` and `level`;
 `EventCharacterTyped { char, x, y }` for a key typed in Insert, a miss included;
 and `EventModeChanged { mode }`, 0 Normal, 1 Visual, 2 Insert, 3 Search. A state
 that moves on one runs its entry before the system that handles the request, so
@@ -921,12 +964,10 @@ roster instead.
 { trigger = "EventGoldCompleted", target = "HasData", guard = "PayloadExists" }
 ```
 
-`PayloadIntCompare` reads integer and float fields, truncating a float. Payload
-guards return `false` if:
-
-- No payload present (Tick transitions, nil payload)
-- Field does not exist
-- Field type mismatch
+`PayloadIntCompare` reads integer and float fields, truncating a float. A payload
+guard's `field` resolves at load against its trigger's payload, so a field the
+event lacks or holds of another kind, or any field on `Tick`, fails the load; an
+event that arrives with no payload fails the guard.
 
 Combine with compound guards:
 
@@ -1016,22 +1057,23 @@ between instances; the first read of one in a shared session logs a D-14 warning
   by every region; put one-shot setup in a dedicated region's initial state
 - Event payloads are shared compiled templates: handlers must treat them as
   immutable; `payload_vars` produces an isolated copy
-- Region-control actions (`TerminateRegion` on self) are supported in
-  `on_enter`/`on_exit`/transition actions; unsupported in `on_update`. From
-  `on_exit` the terminate takes effect once the exit phase that is running ends:
-  the region's exit actions run once, and a transition under way skips its
-  `actions` and `on_enter`
+- `TerminateRegion` of its own region holds in `on_exit`, where it takes effect
+  once the exit phase that is running ends: the region's exit actions run once,
+  and a transition under way skips its `actions` and `on_enter`; and as the last
+  entry action of the leaf a region enters, as the campaign's `QuasarExit` issues
+  it. Anywhere else what follows it still runs on the removed region: the rest of
+  the entry, a transition's `on_enter` after its `actions`, or the rest of the
+  update an `on_update` or a delayed one ran in
 - A state whose parent chain never reaches `Root` is refused at load, as is a
   region whose initial state the document does not define
 - A key the loader does not read fails the load naming where it sits: at the top
   level of the entry, a region file or a macro file, in `[systems]`, `[map]`, a
   region, a state, a transition, an action (`action 'TerminateRegion' takes no
   payload`), a payload or `guard_args`, and in macro definitions and invocations;
-  so does a value of the wrong type. A payload field a payload guard,
-  `capture_vars` or `payload_vars` names is not checked: one the event lacks fails
-  the guard or is skipped. `-check` catches unknown event, action, guard, state and
-  config field names, undeclared regions in region actions, and unknown systems in
-  `[systems]` and region lists
+  so does a value of the wrong type, and a payload field a payload guard,
+  `capture_vars` or `payload_vars` names that the event lacks. `-check` catches
+  unknown event, action, guard, state and config field names, undeclared regions in
+  region actions, and unknown systems in `[systems]` and region lists
 
 ---
 
@@ -1042,11 +1084,11 @@ A behavior program defines a species the scenario brings: its body in
 `[behaviors]` table lists at most 32, each in its own file, which is read,
 expanded against the entry's macros and carried, digested and sent to a joiner as
 the entry's other files are, or inline as the table itself. Programs take species
-IDs 10 to 41 in sorted-name order, so a guard on `EventSpeciesCreated` or
+IDs 11 to 42 in sorted-name order, so a guard on `EventSpeciesCreated` or
 `EventSpeciesKilled` names its program (`PayloadSpeciesIn`). A name is
-`[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
-`uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
-([Telemetry](telemetry-reference.md)).
+`[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' nor a materialize
+style's name nor `total` or `uncredited`, because it keys `kills.<name>` and
+`behavior.<name>.*` and names its style ([Telemetry](telemetry-reference.md)).
 
 A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`,
 its header at that cell or the nearest place its footprint fits, searched over the
@@ -1172,7 +1214,7 @@ target = "Roam"
   ([Combat §3](combat.md#3-drivers)), so a program copied into another scenario
   comes armed, and with `spread_ms` no two instances fire in step. An empty table
   mounts nothing, which is how a macro's default leaves a body unarmed. A program
-  that flags a state `Armed` fires it only while such a state runs, unstunned.
+  that flags a state `Armed` fires it only while such a state runs, unsuspended.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.
@@ -1181,7 +1223,9 @@ target = "Roam"
   first raider rank gives the snake's values and each later rank its own, slower.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
-  `HitWall` reads this step's move). A global edge has none.
+  `HitWall` reads this step's move). A global edge has none. Instances spawned on
+  one tick time out together: a roll on a `Timeout` sends a salvo, a `Chance` on a
+  `Tick` edge one at a time.
 - `target`: a state, or candidates tried in order, each a name or
   `{ state, guard, guard_args, duration_ms }`, the duration overriding the state's.
 - `actions`: effects run between the exit and the entry.
@@ -1293,6 +1337,9 @@ kind's look and, collected, grants its kind's reward. `-check` prints
 `loot ok: <n> (<names>)` and `drops ok: <n> (<names>)`; each fault names its kind
 or table and place (`drops 'raider': tiers[1]: entries[0]: loot "upgrde" names no
 kind`).
+
+A drop belongs to a cursor ([Gameplay: Species loot](gameplay.md#species-loot)), so
+one a scenario lays before `EventCursorSpawned` goes to nobody: lay it on that event.
 
 ```toml
 [loot.beacon]

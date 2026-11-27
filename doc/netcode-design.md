@@ -57,7 +57,7 @@ exchange's place. A hub copies each record to every viewer, the host's own or th
 router's for a fleet session, so it is encoded once whatever the audience: §3.8.
 
 The port packs what a link is sent of epochs and syncs into one `MsgBundle`
-(`MessageType.Bundles`) and releases each link's when a drain ends and when the tick
+(`Traits.Bundles`) and releases each link's when a drain ends and when the tick
 closes, so a link reads one or two frames a tick whatever the roster; a frame of any
 other kind releases the link's bundle before it, so a link reads its frames in the
 order they were sent, which the session layer relies on when a handoff record
@@ -521,6 +521,17 @@ is deterministic run to run, so a change is read against the same fight; the fig
 is chaotic, so pages repaired move with any change of timing and the late counts
 are the robust measure. Pacing's dynamics were also modeled apart, by integrating
 `paceDecision` against periodic spikes.
+
+A change is read against main's binary: `git worktree add` main, build
+`go test -c ./internal/app` in each tree, run the four shapes on both from their
+package directories, a second or so each, and diff the two outputs whole, the link's
+B/s aside: the transitions logged with their ticks show a simulation that moved
+while every count stood, as a storm going active two ticks later did. The counts read
+the compared surface, which leaves out every D-13 cell, so an owner sync a receiver
+drops moves none of them: a change to what a sync may write is checked on a copy
+whose drop prints the sync instead (`NetworkSystem.stateInRange`), over the four
+shapes and the `internal/app` suite under `-test.v -test.parallel=1`, which puts each
+print under the test that sent it.
 
 Its first day found and fixed, in phase 1: the lead reading the newest epoch's age
 rather than the worst since its last reading, so a spike never taught it (field-like

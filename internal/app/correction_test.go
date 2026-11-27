@@ -551,12 +551,11 @@ func TestAParticipantActsOnlyAsItsOwnCursor(t *testing.T) {
 	}
 }
 
-// TestSessionLagIsMeasuredEveryTick. Measuring the gap only at admission leaves a
-// guest whose machine falls behind mid-session producing artifacts that reach the
-// host after the ticks they name, with no way to know. The lag is the gap to the
-// newest peer tick, read every tick; stale is pacing's own verdict, a window of the
-// authority's epochs outside its band by more than a trim answers, so the margin
-// pacing holds on purpose never reads as a fault.
+// TestSessionLagIsMeasuredEveryTick: read only at admission, a guest that falls
+// behind mid-session sends artifacts that reach the host after the ticks they name,
+// unseen. The lag is the gap to the newest peer tick, read every tick; stale is
+// pacing's verdict, a window of the authority's epochs outside its band by more than
+// a trim answers, so the margin pacing holds on purpose never reads as a fault.
 func TestSessionLagIsMeasuredEveryTick(t *testing.T) {
 	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)

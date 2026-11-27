@@ -122,8 +122,8 @@ type Scheduler struct {
 }
 
 // regionStat caches the status pointers for one declared FSM region.
-// Keys are "fsm.<region>.<field>", so status.splitKey folds every region into the
-// single "fsm" stat record and the viewer drills down without new machinery.
+// Keys are "fsm.<region>.<field>", so status.splitKey gives each region a stat
+// record and a card of its own, "fsm.<region>".
 type regionStat struct {
 	name    string
 	state   *status.AtomicString

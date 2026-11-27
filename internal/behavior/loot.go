@@ -22,8 +22,8 @@ type lootDoc struct {
 	Drops map[string]*tableDoc `toml:"drops"`
 }
 
-// kindDoc is one kind: its look, and its reward, a weapon's charge or delta heat
-// or energy
+// kindDoc is one kind: its look and sound, and its reward, none, a weapon's charge
+// or delta heat or energy
 type kindDoc struct {
 	Rune   string     `toml:"rune"`
 	Color  *color.RGB `toml:"color"`

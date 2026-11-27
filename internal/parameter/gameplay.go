@@ -49,7 +49,7 @@ const (
 	// BoostBaseDuration is the initial duration when boost is activated
 	BoostBaseDuration = 500 * time.Millisecond
 
-	// BoostExtensionDuration is how long each matching color character extends the boost
+	// BoostExtensionDuration is how long each correct character or credited kill extends an active boost
 	BoostExtensionDuration = 500 * time.Millisecond
 )
 

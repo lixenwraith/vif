@@ -419,8 +419,8 @@ func (sc *routeScratch) dilate(path []int, radius int, fn func(idx int)) {
 	sc.frontA, sc.frontB = cur[:0], next[:0]
 }
 
-// penalizedShortestPath is Dijkstra from start to goal over dirCost plus the penalty
-// of the cell entered, returning the path and its unpenalized cost
+// penalizedShortestPath is Dijkstra from start to goal over the step costs plus the
+// penalty of the cell entered, returning the path and its unpenalized cost
 func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []int32, c *Costs) ([]int, int) {
 	dist, prev := sc.dist, sc.prev
 	var most int32

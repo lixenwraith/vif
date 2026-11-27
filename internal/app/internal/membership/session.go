@@ -575,10 +575,9 @@ func (m *Membership) preparedFor(o network.SessionOffer) bool {
 
 // bindSeat makes this run the participant offer assigns: its port takes the join's
 // stream and identity, its world the identity, and it holds p, the place given back
-// or a new one under the key the dial proved for it, from here. Then it reports what
-// it turned out to be, after construction rather than at the dial because only now
-// does this instance know the terminal it got, which a host with no geometry of its
-// own sizes the session by.
+// or a new one under the key the dial proved. It reports what it turned out to be here
+// rather than at the dial, since only now does it know its terminal, which a host
+// with no geometry of its own sizes the session by.
 func (m *Membership) bindSeat(pending *network.PendingJoin, offer network.SessionOffer, p *place) error {
 	port, err := m.socketPort()
 	if err == nil {

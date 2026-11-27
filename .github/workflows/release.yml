@@ -1,7 +1,8 @@
 name: Release
 
-# The schedule moves the nightly prerelease; a v* tag drafts a stable release that
-# a person publishes. Both build the same archives and the Android APK.
+# The schedule moves the nightly prerelease; a v* tag drafts a release, a
+# pre-release where it has a suffix, that a person publishes. Both build the same
+# archives and the Android APKs.
 on:
   schedule:
     - cron: '17 3 * * *'
@@ -289,7 +290,7 @@ jobs:
           merge-multiple: true
           path: dist
 
-      # Over every asset, the APK included, so one file vouches for the release.
+      # Over every asset, the APKs included, so one file vouches for the release.
       - name: Sum the assets
         run: cd dist && sha256sum vif-* > SHA256SUMS
 

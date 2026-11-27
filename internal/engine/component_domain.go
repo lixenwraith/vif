@@ -1,8 +1,5 @@
 package engine
 
-// The audit table is generated from manifest.Components into component_domain_gen.go;
-// this file holds the runtime audit that reads it.
-
 import (
 	"slices"
 	"strconv"

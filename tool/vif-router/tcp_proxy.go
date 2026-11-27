@@ -162,11 +162,10 @@ func (r *tcpRouter) carry(client, upstream net.Conn, at placement, from net.Addr
 }
 
 // exchange runs the door's exchange through the router: the question goes to the
-// dialer, its answer comes back, its proofs are checked over the door's nonce, and a
-// dial showing no pass is given a ticket under the router's key naming the first key
-// it proved and its subject: the account a sign-in names, asked of the identity
-// service, else the address it came from. The sign-in never reaches the door;
-// everything after is spliced. A door that asked nothing has its frame passed on.
+// dialer, its answer comes back, its proofs are checked over the door's nonce, and
+// a dial showing no pass is given a ticket under the router's key naming the first
+// key it proved and the account its sign-in names, else its address. The sign-in
+// never reaches the door, and a door that asked nothing has its frame passed on.
 func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.Addr, signIn string) error {
 	deadline := time.Now().Add(routeTimeout)
 	_ = client.SetDeadline(deadline)
@@ -272,8 +271,8 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 		return refuse(errSessionUnknown)
 	}
 	// Keyed on the dialer, whose address the host forwards unchanged or the edge
-	// names, and charged before the lookup: that costs the API server a list and the
-	// pod a probe.
+	// names, and charged before the lookup: that costs the API server two lists and
+	// the pod a probe.
 	if err := r.admit.Admit(from); err != nil {
 		return refuse(err)
 	}

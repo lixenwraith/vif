@@ -13,7 +13,7 @@ These hold regardless of which repository is targeted first.
 
 - **One external payload.** Everything a config root receives installs from
   `wad/`, laid out exactly as it installs, or from the embedded copy it overrides
-  (the keymap, `vif.toml` and the bot graphs in `internal/asset`). Files installed
+  (the keymaps, `vif.toml` and the bot graphs in `internal/asset`). Files installed
   outside a config root live in `deploy/package/`, and the manual is `doc/vif.6`.
   A new data file goes in one of those, never beside the code that reads it.
 - **No working-directory discovery.** A packaged binary must behave the same
@@ -74,15 +74,16 @@ These hold regardless of which repository is targeted first.
 ## 2. Release surface
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 and arm64
-clients and the amd64 headless server, FreeBSD amd64 client, an experimental
-Windows amd64 zip, the browser bundle, the Chrome extension's zip, the wad, the
-Android APK, and `SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
-publishes nothing. Each binary and browser archive unpacks into one directory
-named for it, and every tarball's entries are root's, so extracting one as root
-neither scatters files nor hands them to the builder's uid; each carries `LICENSE`
-and its build's `NOTICES` (§1), a client archive `LICENSE.font` as well, and the
-browser bundle and the extension's zip `LICENSE.font` and `fonts/LICENSE`. The
-extension's zip is the store's upload, its files at the zip's root (§8). Each archive's `README.md` is
+clients and the amd64 headless server, FreeBSD amd64 client, a Windows amd64 zip
+of the window build (`make windows-package`, §9), the browser bundle, the Chrome
+extension's zip, the wad, the Android APKs, and `SHA256SUMS` over all of them. A
+build that fails `go vet ./...` or `go test ./...` publishes nothing. Each binary
+and browser archive unpacks into one directory named for it, and every tarball's
+entries are root's, so extracting one as root neither scatters files nor hands
+them to the builder's uid; each carries `LICENSE` and its build's `NOTICES` (§1),
+a client archive `LICENSE.font` as well, and the browser bundle and the
+extension's zip `LICENSE.font` and `fonts/LICENSE`. The extension's zip is the
+store's upload, its files at the zip's root (§8). Each archive's `README.md` is
 written for its platform: `make release-readme` renders
 `deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 
@@ -224,7 +225,13 @@ replacements that stop the build unless each happens exactly once. `node
 script/extension-check.mjs bin/vif-chrome` loads the build headless in
 Playwright's Chromium and holds it to the start screen, a frame, the share link
 and a silent network; the release workflow runs it before the zip joins a
-release ([Platforms §5](multi-platform.md#the-chrome-extension)).
+release ([Platforms §5](multi-platform.md#the-chrome-extension)). Chrome's
+permission prompt is the browser's window, not the page's, so a headless run
+leaves `chrome.permissions.request` pending for good: under `Xvfb` with
+`headless: false` it shows, `import -window root` captures it and
+`xdotool mousemove <x> <y> click 1` answers it. A stubbed `chrome.permissions`
+covers the page's logic, and a scratch manifest holding the host as
+`host_permissions` the fetches a grant would allow.
 
 - **Version.** Chrome's is one to four integers up to 65535, not all zero, and an
   upload must be larger than the last. `EXT_VERSION` is `X.Y.Z.N`: the tag's
@@ -321,6 +328,18 @@ tar -xJf SteamLinuxRuntime_4.tar.xz
 SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -check -s td
 SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -fullscreen
 ```
+
+`run` is pressure-vessel, which needs no Docker and works as root in a cloud
+container, under `Xvfb` with `LIBGL_ALWAYS_SOFTWARE=1`. It takes the machine's
+graphics libraries (`/usr/lib/pressure-vessel/overrides`), so what the runtime
+itself lacks shows only in its platform image
+(`com.valvesoftware.SteamRuntime.Platform-amd64,i386-steamrt4-sysroot.tar.gz`,
+beside the archive; `repo.steampowered.com` serves both with a `SHA256SUMS`),
+unpacked and entered with `chroot`. Mount `/proc` in it, since `os.Executable`
+reads `/proc/self/exe` and the wad beside `bin/` is found by it; an `Xvfb` of the
+machine is reached by its display number, an abstract socket no chroot hides, and
+a sound server outside by its socket file hard-linked under the root, whose own
+path is too long to bind a socket in.
 
 The check's lines must name files under the depot's `wad/`, as §7's name the
 staged root. Steam Linux Runtime 4.0 (4.0.20261021, Debian 13) holds

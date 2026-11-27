@@ -41,17 +41,17 @@ flowchart TD
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health, and each socket's payload"| Pod
-    Term["Player's vif -join"] -->|"raw TCP, no nginx"| Fwd["host forward"]
-    Fwd -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
+    Term["Player's vif -join"] -->|"vifs://, TLS"| Site
+    Site -->|"7777, a PROXY header, then the stream"| Alloc -->|"route frame, then bytes"| Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
 ```
 
-The native game transport is raw framed TCP, not HTTP, so it never enters nginx. A
-session is a thing that ends, so it is a Job, not a Deployment. The router hands a
-player two opaque strings, each naming the session, and every dial on either
-reaches the pod from the node:
+The native game transport is framed TCP, not HTTP: the site's edge ends its TLS and
+hands the stream on under a PROXY header (§12). A session is a thing that ends, so
+it is a Job, not a Deployment. The router hands a player two opaque strings, each
+naming the session, and every dial on either reaches the pod from the node:
 
 | String | What it is | Who reads it |
 |---|---|---|
@@ -65,9 +65,9 @@ link that names another session is refused rather than seated in it
 ## 2. The public edge
 
 Site configuration, kept outside this repository. A player reaches a session by
-the two URLs the router hands out, `vif://<site-host>:7777/<id>` and
-`wss://<site-host>/vif/ws/<id>`, and by nothing else: no port of a session's own
-exists at the edge. What it must provide:
+the two URLs the router hands out, `vifs://<site-host>:7777/<id>` (`vif://` where
+7777 reaches the node raw) and `wss://<site-host>/vif/ws/<id>`, and by nothing
+else: no port of a session's own exists at the edge. What it must provide:
 
 | Requirement | Why |
 |---|---|
@@ -322,6 +322,8 @@ sudo install -o root -g vif-router -m 0640 \
 { cat deploy/guest/vif-router.env
   echo "VIF_ROUTER_IMAGE=docker.io/library/vif:$(git rev-parse --short=8 HEAD)"; } |
   sudo install -o root -g vif-router -m 0640 /dev/stdin /etc/vif-router/router.env
+bin/vif-router keygen |
+  sudo install -o root -g vif-router -m 0640 /dev/stdin /etc/vif-router/ticket.key
 sudo install -D -o root -g root -m 0755 deploy/guest/vif-router-refresh-token.sh \
   /usr/local/libexec/vif-router-refresh-token
 sudo install -o root -g root -m 0644 -t /etc/systemd/system \
@@ -332,9 +334,10 @@ sudo systemctl enable --now vif-router-token.timer vif-router.service
 curl -fsS http://127.0.0.1:9080/readyz      # ok
 ```
 
-The image line names the tag §8 imported. From then on, `./deploy/update.sh
-router` rebuilds, installs the env file and unit, restarts behind an empty-fleet
-gate, and keeps one `.previous` set to roll back to.
+The image line names the tag §8 imported, and the key is the ticket seed
+`VIF_ROUTER_TICKET_KEY` names, without which the router does not start. From then
+on, `./deploy/update.sh router` rebuilds, installs the env file and unit, restarts
+behind an empty-fleet gate, and keeps one `.previous` set to roll back to.
 
 The credential is a short-lived ServiceAccount token in a file, re-read on every
 request and rotated by the root timer; never give the router the node's root
@@ -350,8 +353,10 @@ endpoint: an anonymous caller must not end somebody else's match.
 Site configuration, kept outside this repository. What the router needs from
 the edge in front of 9080:
 
-- **Publish only `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`.**
-  `/healthz`, `/readyz` and any later router path stay on the node.
+- **Publish only `/vif/api/sessions`, `/vif/api/logs`, `/vif/api/keys`,
+  `/vif/api/auth/*` and `/vif/ws/<session>`.** `/healthz`, `/readyz` and any later
+  router path stay on the node. `GET /vif/api/keys` is the public key the router's
+  tickets verify under, for a host that admits the site's players by them.
 - **Forward `Upgrade` and `Connection` on `/vif/ws/<session>`.** The router answers
   the WebSocket handshake itself and splices the socket to the pod.
 - **Leave `Origin` untouched.** The router compares it with the origins
@@ -382,13 +387,10 @@ the edge in front of 9080:
   router reads the edge's PROXY header (version 1, the one nginx writes) ahead of
   the route frame and budgets the player's address; without it the edge's address
   would be every player's. The links it hands out then read `vifs://`.
-- **Publish `GET /vif/api/keys`.** The public key the router's tickets verify under,
-  for a host that admits the site's players by them.
-- **Publish `/vif/api/auth/*` to 9080, `Cookie` and `Authorization` passed through
-  untouched, nothing cached.** The identity service's routes, forwarded by the
-  router byte for byte: registration, the two-step sign-in, logout, the account's
-  view. The sign-in a page gets is a cookie on this origin, which the browser
-  route's upgrade carries.
+- **`/vif/api/auth/*` with `Cookie` and `Authorization` passed through untouched,
+  nothing cached.** The identity service's routes, forwarded by the router byte for
+  byte: registration, the two-step sign-in, logout, the account's view. The sign-in
+  a page gets is a cookie on this origin, which the browser route's upgrade carries.
 
 The page that opens the socket must permit it; `connect-src 'self'` does.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a
@@ -419,7 +421,7 @@ refuses what it must before dialing a pod:
 
 ```sh
 bin/vif -join '<join target>'                             # guests>=2
-bin/vif -join 'vif://<site-host>:7777/0000000000000000'     # no such session
+bin/vif -join 'vifs://<site-host>:7777/0000000000000000'    # no such session
 ```
 
 Where the browser route is published, check it in the same window, from off the

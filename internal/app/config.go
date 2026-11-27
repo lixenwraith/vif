@@ -88,8 +88,8 @@ type wiring struct {
 	// one device.
 	borrow *presentationState
 
-	// scriptedSession admits headless network I/O only through RunScript, which
-	// performs the startup gate and owns wall pacing.
+	// scriptedSession admits headless network I/O only to a driven run, a script's,
+	// a bot's or a seat's (drive), which performs the startup gate and owns wall pacing.
 	scriptedSession bool
 
 	// geometryDefaulted records that Normalize supplied Width or Height, which is

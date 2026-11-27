@@ -331,7 +331,7 @@ const (
 
 	// --- Composite ---
 
-	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) [bus] signals a composite member was successfully typed
+	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) [bus] asks CompositeSystem to destroy one member: typed away, or an ablative one killed
 	EventCompositeMemberDestroyed
 	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) [shared] signals unexpected member loss (OOB, species hit, etc.)
 	EventCompositeIntegrityBreach
@@ -492,9 +492,9 @@ const (
 
 	// --- Combat ---
 
-	// EventCombatAttackDirectRequest (CombatAttackDirectRequestPayload) [stamped] signals applying knockback
+	// EventCombatAttackDirectRequest (CombatAttackDirectRequestPayload) [stamped] resolves one hit on a target as its profile says: damage, a chain, energy drain and knockback, or an over-time status alone
 	EventCombatAttackDirectRequest
-	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) [local] signals applying knockback
+	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) [local] resolves an area attack on one target: damage, knockback and statuses
 	EventCombatAttackAreaRequest
 	// EventCombatAttackAreaCrossingRequest (CombatAttackAreaRequestPayload) [bus] carries an owner-resolved area hit on shared targets
 	EventCombatAttackAreaCrossingRequest

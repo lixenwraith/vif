@@ -1226,7 +1226,7 @@ func (f *logFlags) enabled() bool {
 		f.session.set || f.console
 }
 
-// parseOutputDirFlag keeps -l and -j boolean while accepting -l=DIR/-j=DIR.
+// parseOutputDirFlag keeps -l, -j and -mw boolean while accepting =DIR.
 func parseOutputDirFlag(s, current string) (string, bool, error) {
 	switch s {
 	case "false":

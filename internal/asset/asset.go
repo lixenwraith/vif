@@ -1,5 +1,5 @@
 // Package asset holds every shipped file the binary must be able to play without a
-// host filesystem: the fallback scenario and typing corpus, the default keymap and
+// host filesystem: the fallback scenario and typing corpus, the keymaps and default
 // settings, the shipped bot graphs, the version a source archive carries, and the
 // splash font. The directories served as fs.FS are narrowed with fs.Sub, so each
 // runtime root is its category; the audio banks are the audio module's bank package.

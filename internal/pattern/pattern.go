@@ -1,5 +1,6 @@
-// Package pattern turns an authored .aimg into wall cells. It is the one
-// path from image asset to ECS entity; nothing here draws to the terminal.
+// Package pattern turns an authored .aimg into wall cells, the one path from
+// image asset to ECS entity, and holds the stone art presets rock draws in
+// (Art). Nothing here draws to the terminal.
 package pattern
 
 import (

@@ -24,9 +24,9 @@ import (
 )
 
 // Admission is what a door asks of a dial after the route frame and the address
-// budget, in place of the claims step: proof of a participant key, and with it a
-// session pass, an admission ticket or a passphrase exchange. The frames, the tokens
-// and the proofs are defined here; doc/auth-session-design.md §7 is the design.
+// budget: proof of a participant key, and with it a session pass, an admission
+// ticket or a passphrase exchange. The frames, the tokens and the proofs are defined
+// here; doc/auth-session-design.md §3 is the design.
 
 // MaxAuthFrame bounds either admission frame's payload: the keys a run proves at
 // their most (PlacesKept), a pass or a ticket of a few hundred bytes, a SCRAM step
@@ -108,7 +108,7 @@ type AuthRequest struct {
 }
 
 // Proof is one key a dial proves: the public half and its signature over the door's
-// nonce and the door's channel binding (SignProof).
+// nonce (SignProof).
 type Proof struct {
 	Key []byte `json:"key"`
 	Sig []byte `json:"sig"`
@@ -234,9 +234,9 @@ func (k *Key) UnmarshalJSON(data []byte) error {
 // ValidPublicKey reports a byte string of a public key's length.
 func ValidPublicKey(key []byte) bool { return len(key) == ed25519.PublicKeySize }
 
-// SignProof is a dialer's proof for one dial: the key's signature over the door's
-// nonce and, on a wss door, the SHA-256 of the leaf certificate (binding), nil
-// elsewhere. A proof is good at one door for one nonce; the session's name is not
+// SignProof is a dialer's proof for one dial: the key's signature over the door's nonce
+// and binding, which every dial leaves empty, a passphrase exchange being what binds
+// to the channel. A proof is good at one door for one nonce; the session's name is not
 // signed, since a front door rewrites it on the way to the door that chose the nonce.
 func (k Key) SignProof(nonce string, binding []byte) []byte {
 	return ed25519.Sign(k.private, signable("proof", []byte(nonce), binding))

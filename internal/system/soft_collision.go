@@ -62,7 +62,7 @@ type FlockingRule struct {
 	WeightMult float64 // Multiplier (e.g. for lower quasar influence)
 }
 
-// FlockingMatrix maps → Rule
+// FlockingMatrix maps [Source][Target] → Rule
 // Source repels Target. nil entry = no flocking interaction
 type FlockingMatrix [component.SpeciesMax][component.SpeciesMax]*FlockingRule
 

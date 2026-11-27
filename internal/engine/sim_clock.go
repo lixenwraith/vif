@@ -11,11 +11,8 @@ var SimEpoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // SimTime is the simulation instant of one tick: a pure function of the tick
 // number and the fixed tick interval, identical on every instance and every
-// reproduction. It is the only value a system may treat as "now".
-//
-// This is also what makes DeltaTime honest. A tick has always advanced the
-// simulation by exactly tickInterval; only the instant stamped beside it drifted
-// with the wall clock. Deriving both from the tick puts them back in agreement.
+// reproduction, and the only value a system may treat as "now". A tick advances
+// the simulation by exactly tickInterval, so this instant agrees with DeltaTime.
 func SimTime(tick uint64, tickInterval time.Duration) time.Time {
 	return SimEpoch.Add(time.Duration(tick) * tickInterval)
 }

@@ -82,9 +82,6 @@ func TestASecondWaitingCorrectionTakesTheStep(t *testing.T) {
 	}
 }
 
-// TestATamperedKeyframeInstallsNothing: an install stages what the protocol has
-// proved without hashing it again, so a whole body is proved as it is resolved, and
-// one whose integrity does not match is refused before it becomes the baseline.
 // TestTheNextRunsKeyframeWaitsForTheReset: a whole world of the run after this one
 // reaches a guest whose own reset has not applied yet; it waits in the inbox
 // rather than being refused, and installs once the reset enters that run.
@@ -113,6 +110,9 @@ func TestTheNextRunsKeyframeWaitsForTheReset(t *testing.T) {
 	}
 }
 
+// TestATamperedKeyframeInstallsNothing: an install stages what the protocol has
+// proved without hashing it again, so a whole body is proved as it is resolved, and
+// one whose integrity does not match is refused before it becomes the baseline.
 func TestATamperedKeyframeInstallsNothing(t *testing.T) {
 	t.Parallel()
 	guest := receiver(t)

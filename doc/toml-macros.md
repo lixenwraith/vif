@@ -2,8 +2,8 @@
 
 Decision record and authoring reference for macros in vif's TOML documents.
 `lixenwraith/toml/macro` is the one expander; scenarios with their behavior
-programs, bot graphs and the audio banks (`sounds.toml`, `music.toml`) use it
-today, and the map editor is meant to.
+programs and maps, bot graphs, and the audio banks with a player's `sounds.toml`
+and `music.toml` use it today, and the map editor is meant to.
 
 ## 1. Decision
 
@@ -186,8 +186,8 @@ a long array took 6.1 s with no macro in it, and takes 1.5 ms.
 - Scenario entry: defines its own `[macros]`, plus every file named by
   `macro_files = ["x.toml"]`, and invokes.
 - Macro file: only `[macros]`.
-- Region file, behavior program file: define nothing, `[macros]` there being an
-  error, and invoke.
+- Region file, behavior program file, map file: define nothing, `[macros]` there
+  being an error, and invoke.
 - One-document scenario (`Machine.LoadScenario`), bot graph: define their own
   `[macros]` and invoke.
 
@@ -212,9 +212,20 @@ and the quasar and storm regions' left-the-map exit.
 (`RaiderStates`) and the stun edge (`RaiderStun`), `Raider`, which makes a whole
 program of a look, stats and timings, the four ranks written over it, each fixing
 its stats and timings, and each cave's palette and console color, which `Raider`
-invokes by name (`{ macro = "${theme}Fg" }`). A raider type's program file is one
-invocation at its root: its rank's macro with its cave and its look, frames given
-as `[[frames]]`. `wad/scenario/base/recall` is one document that defines its own.
+invokes by name (`{ macro = "${theme}Fg" }`); its scenario's states invoke three
+more, `RaidRank` for each rank of the raid's climb, `Cave` to lay a stage's cave
+and `Rush` for the boss stage's. A raider type's program file is one invocation at
+its root: its rank's macro with its cave and its look, frames given as
+`[[frames]]`. `dummy`, `magic` and `recall` are each one document that defines
+its own; `armada` and `tutorial` define theirs in the entry, beside a corpus file.
+
+A rewrite of scenario files that must leave what a scenario does alone is proven on
+the resolved tree: a program under `tmp/` writes `fsm.ResolveScenario`'s result for
+every folder holding a `scenario.toml`, keys sorted, each value with its kind and a
+float by its bits, and the runs before and after compare by bytes. What a set spends
+(§4) is `macro.Set`'s unexported `spent` and `open`: a scratch test in `internal/fsm`
+reads them by reflection off the set `readExpanded` returns, the entry's behaviors
+and regions loaded through it as `loadAndResolve` loads them.
 
 ## 7. Rejected alternatives
 

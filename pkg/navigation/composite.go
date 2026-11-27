@@ -211,7 +211,6 @@ func (p *CompositePassability) Moved(walls position.Bits, closed, opened []vmath
 }
 
 // IsBlocked returns true if composite cannot occupy header position (x,y)
-// Used as WallChecker for composite flow field computation
 func (p *CompositePassability) IsBlocked(x, y int) bool {
 	if x < 0 || y < 0 || x >= p.Width || y >= p.Height {
 		return true

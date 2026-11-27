@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Linked reports that this build carries the logger
+// Linked reports whether this build carries the logger; this one does not
 const Linked = false
 
 // Level constants mirrored from log for call-site brevity

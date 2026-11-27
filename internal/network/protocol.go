@@ -90,12 +90,12 @@ const (
 	MsgPeerList link.MessageType = 0x20 // Live: the succession chain and its addresses
 
 	// MsgRelayJoin and MsgRelayAdmit admit a participant on the link of the one it
-	// dialed rather than on the coordinator's: a guest's bot joins through its
-	// holder. The holder runs the handshake and serves the world; the coordinator
-	// still decides, asked on the holder's own link at the two steps that change the
-	// roster — allocating the identity and crossing the arrival.
+	// dialed rather than on the coordinator's: a guest's bot, or a dial at its -relay
+	// door. The relay runs the handshake and serves the world; the coordinator still
+	// decides, asked up the relay's links for the dial's challenge and at the two
+	// steps that change the roster — allocating the identity and crossing the arrival.
 	MsgRelayJoin  link.MessageType = 0x21 // Live: a relay asking the coordinator to decide one step
-	MsgRelayAdmit link.MessageType = 0x2F // Live: the coordinator's answer, on the same link
+	MsgRelayAdmit link.MessageType = 0x2F // Live: the coordinator's answer, back down the links it came up
 
 	// MsgConnect and MsgAck are the peer link: two participants that already hold
 	// identities the coordinator assigned opening a stream between themselves.

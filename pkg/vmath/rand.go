@@ -66,14 +66,10 @@ func (r *FastRand) Next() uint64 {
 // nothing from a stream. Never zero: NewFastRand rejects a zero seed.
 func (r *FastRand) State() uint64 { return r.state }
 
-// SetState resumes the generator at a position State reported, which is what lets
-// a stream continue across a transfer rather than restart. A seed reproduces a
-// sequence from its beginning; only the position reproduces it from where a run
-// had reached, and a snapshot has to do the second.
-//
-// Zero is rejected the same way NewFastRand rejects a zero seed: xorshift64 has a
-// fixed point there and would return zero forever. A caller handing over an
-// uninitialized field gets a live generator rather than a dead one.
+// SetState resumes the generator at a position State reported, so a stream goes on
+// across a transfer from where a run had reached, which a seed alone cannot. Zero
+// is rejected as NewFastRand rejects a zero seed: xorshift64 has a fixed point
+// there, and an uninitialized field handed over gets a live generator.
 func (r *FastRand) SetState(state uint64) {
 	if state == 0 {
 		state = 1

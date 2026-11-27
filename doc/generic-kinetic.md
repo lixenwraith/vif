@@ -45,7 +45,7 @@ Euler: update velocity from acceleration, then position from the new velocity.
 The bounce variant applies acceleration once before choosing swept substeps; its
 result therefore does not depend on how many anti-tunneling steps were needed.
 `physics.IntegratePosition` deliberately ignores acceleration and is used by
-ballistic, orbital, spring-follow, and other controller-owned paths.
+ballistic, spring-follow, and other controller-owned paths.
 
 The integer `PositionComponent` and spatial grid are the collision/rendering
 projection of precise state. `Point.Center` converts a cell to precise space and
@@ -222,6 +222,27 @@ that rule a modest steady field would be reset every tick at the target. A final
 partial-duration tick scales the force to the active fraction. Cancellation,
 replacement, disable, and the tick after natural expiry clear the previously
 written acceleration.
+
+What a wind does to a homing body, read on `magic`'s bodies:
+
+- A wind long and strong enough to move a homing body holds it off for good: one
+  second in two of a uniform radial wind at force 16 held `magic`'s lightest body six
+  columns out, where it had touched every 4.5 s, which is why the square's gust is
+  short and fades with distance. A wind is measured by a body's distance a tick.
+- A wind turned round a cell holds off as one blown out of it does: at force 500 for
+  0.7 s of each 2 s, fading over 30 columns, 7 in 100 of `magic`'s lightest bodies
+  reached the shield. A tempest is read by the degrees a body is carried from its
+  gateway to the shield, summed tick by tick since one carried past half a turn reads
+  backward: the share carried 45 to 135, the share that arrives, and when fixed lines
+  fall (a scratch test writes `SquareComponent.Lines` each tick, which only a turn
+  recomputes, and `App.Position().Run` moving marks the fall).
+- The pull is the force over a body's mass, so ranks carried alike need masses that
+  stand close (`magic`'s run 1.6 to 2.6).
+- A gust's throw does not scale with its force: drag above the cruise speed eats the
+  rest, so ten times the force threw `magic`'s bodies three to four times as far, and
+  a body thrown onto the map's edge bounces back in at speed unless its prototype's
+  `restitution` is 0. A gust that throws well needs a cooldown near the time its
+  lightest body takes to walk back, or it is a wall.
 
 ### Multiplayer behavior
 

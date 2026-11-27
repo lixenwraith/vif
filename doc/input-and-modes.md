@@ -47,9 +47,9 @@ releases the capture.
 
 A held key repeats. Where the keyboard reports releases (the Release item below),
 a repeat redoes a motion, text, fire or scroll but no toggle: the mute cycle,
-auto-fire, pause, the menu, help, the console, `q`, `v` and an overlay's activate
-act once a press (`Machine.processKey`). Elsewhere a repeat is a press, so a toggle held past
-the keyboard's repeat delay flips again at its rate.
+auto-fire, pause, the menu, help, the console, Escape, `q`, `v` and an overlay's
+activate and close act once a press (`Machine.processKey`). Elsewhere a repeat is
+a press, so a toggle held past the keyboard's repeat delay flips again at its rate.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
@@ -153,6 +153,10 @@ them, nor what an overlay shows. Leaving one returns to Normal, recorded when th
 changes the play mode, but for the command line the console opens, which returns
 to the console.
 
+A live run's mode changes only through the router (`transitionMode`), which keeps the
+input machine in step: a path that sets the play mode elsewhere leaves every key but
+Ctrl+Q dead.
+
 A scenario asks for Normal, Visual or Insert with `EventModeRequest { mode }`:
 `MetaSystem` leaves the ask on the context (`GameContext.AskMode`), and the router
 enters it as the mode's key would, before its next intent or on its input tick,
@@ -244,7 +248,8 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   of it, yanked rows on the rows below and above, a count that many copies on. A
   cell a glyph, a wall or rock holds is passed over, and the cursor goes to the
   far end of what was put, where a repeat continues. `p` pauses, so no default key
-  binds a put, nor then a yank, which nothing there would put.
+  binds a put, nor then a yank, which nothing there would put: a router test binds
+  `y` with `vimKeys`, an input test on its machine's own table.
 - **Change undo.** `undo_change` takes back the last delete, retype or put and
   `redo_change` makes it again, one a press, from the last `changeHistorySize`
   (64); a new change ends what could be redone. A change whose cells changed
@@ -263,7 +268,10 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   it, or after `i`, `I`, `A`, `a`, `o` or `O`, up to `insertTextMax` (64)
   characters, is part of the change: `.` types it again over whatever glyphs stand
   there, so a repeat scores as typing does, then returns to Normal
-  (`Machine.Next`). A yank is no change.
+  (`Machine.Next`). `Next` types nothing until the router has entered Insert, so
+  whatever routes `Process`'s intent drains `Next` after it, settling each, as
+  `App.takeEventWith` and the test helpers `press` and `tutorialKeys` do. A yank
+  is no change.
 - **Visual.** The ping bounds are the selection, the cursor's cell with no shield
   up: `d`, `c` and `y` take every glyph the bounds cover at once, with no motion,
   as one block range, `r` and `~` retype each, and `*` and `#` search for the run
@@ -370,9 +378,9 @@ not persisted editor files; a new game ends the change history alone.
 
 Macros record semantic intents after parsing, so they replay the same actions
 even when they contain multi-key motions. Command and Overlay mode stay out of a
-recording, the `:`, menu or help key that enters them included (Escape in Normal
-among them), and so does an overlay's pointer, which Search mode hands the
-overlay too: playback waits in both, so a macro replays Normal, Insert, Visual
+recording, the `:`, menu, help or console key that enters them included (Escape
+in Normal among them), and so does an overlay's pointer, which Search mode hands
+the overlay too: playback waits in both, so a macro replays Normal, Insert, Visual
 and Search actions only.
 
 | Sequence | Behavior |
@@ -487,13 +495,14 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. A hold takes the place of a step's pause; `:step` ends a solo hold, `:new` any. |
+| `:pause [on\|off]`, `:p`; `:pause menu\|command [on\|off]` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. A hold takes the place of a step's pause; `:step` ends a solo hold, `:new` any. `menu` and `command` set whether an overlay or the command line pauses a game that can pause (§2), kept as `[play] pause_menu` and `pause_command`. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
 | `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values; a live session keeps its host's speed. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
+| `:wait [on\|off]` | Toggle or set whether a new game, and a join, waits for its player's press (§2): on by default, `-nw` off for a run. Saved in `[play]`. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:console [clear]` | Open the console; `clear` empties it. |
-| `:g`, `:config` | Open the [configuration menu](config-menu.md). |
+| `:menu`, `:g`, `:config` | Open the [configuration menu](config-menu.md). |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:f` | Toggle or set free mouse. |
 | `:auto [on\|off\|main]`, `:a` | Cycle or set automatic fire. |
@@ -588,12 +597,12 @@ for handshakes that take the world lock.
 Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinned
 overlay cards, breakpoints, and the mode with its open command line, search or
 overlay are operator-owned and survive plain `:new`. Both reset forms clear the
-issuing instance's macros, and every instance's captured keys and status text. `:new!` additionally clears the issuing
-instance's HUD, pins and breakpoints and returns its two preferences and the time
-scale to their startup values (free mouse on, auto-fire on both weapons, the
-`-speed` rate); peers retain their own operator state when the shared reset
-arrives. Logging state is process diagnostic configuration and survives both
-forms.
+issuing instance's macros, and every instance's captured keys and status text.
+`:new!` additionally clears the issuing instance's HUD, pins and breakpoints and
+returns its two preferences and the time scale to their startup values (`[play]`'s
+free mouse and auto-fire, on and both weapons by default, and the `-speed` rate);
+peers retain their own operator state when the shared reset arrives. Logging state
+is process diagnostic configuration and survives both forms.
 
 Telemetry cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before
@@ -624,8 +633,9 @@ Viewer keys are not entries in this command table or the keymap. A replay, and a
 watched script or bot, reserve `p . , + - h j k l 0 q` for viewer pause, step,
 step back, speed, pan/reset, and quit; those keys never reach the game as play. In
 a live session only pan and quit are left, and a watched bot's `p`, which asks as
-`:pause` does: its run hosting, every participant stops. `:`, the menu keys and the
-help key open the command line, the menu and help over it.
+`:pause` does: its run hosting, every participant stops. `:`, the menu keys, the
+help key and the backtick open the command line, the menu, help and the console
+over it.
 [Runtime and concurrency](runtime.md) describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
@@ -646,9 +656,10 @@ the first of:
 
 `make install-config` installs the built-in table as `input/keymap.toml`, or brings
 one already there up to date, and the embedded keymaps beside it. The retired
-action name `append` is an alias of `toggle_auto_fire`; vim's append is
-`mode_append`, which no default key binds, `a` cycling auto-fire.
-See [External filesystem layout](filesystem-layout.md) for the shared root policy.
+action name `append` is an alias of `toggle_auto_fire` (`resolveAction`), the one
+way a renamed action keeps a player's bindings; vim's append is `mode_append`,
+which no default key binds, `a` cycling auto-fire. See [External filesystem
+layout](filesystem-layout.md) for the shared root policy.
 
 A file is merged over the built-in table, and a run fills the player's own with
 each built-in binding it lacks unless it says `fill = false` (below), so every
@@ -735,6 +746,13 @@ table and says `fill = false`:
 A keymap `-k` names is read in place of a root's `input/keymap.toml`, never over
 it, so a player's own changes to the vim keymap go in a copy under another name.
 
+The built-in table is what a fill draws from, so another embedded keymap says
+`fill = false`, without which a copy's first upgrade gains the whole table, and needs
+its `put` line in the Makefile, as `vim.toml` has (`$(VIM_KEYMAP_SRC)`). Whether a
+name is a keymap's or a file's is `paths.IsKeymapName`'s test, in the resolver and
+in `Settings.resolve` alike, since a `[paths]` keymap name joined to the file's
+directory is lost.
+
 A scenario binds play keys for its run in its entry's `[keymap.normal]`,
 `[keymap.operator]`, `[keymap.prefix_g]` and `[keymap.normal_keys]`, merged over
 the default and the player's keymap, after the player's: an installed keymap is a
@@ -746,6 +764,8 @@ and open the menu and help stay the player's; a scenario breaking a rule fails t
 load. The tutorial, with no gun to cycle, no clock to stop and no fight to find a
 column in, binds the keys of §4's last item to vim's actions, but for the
 backtick, each as the vim keymap binds it.
+`TestTheVimKeymapPlaysTheKeysTheTutorialTaught` holds the two alike; a scenario
+cannot bind `pause`, which the vim keymap moves to `Ctrl-Z`.
 
 ## 11. Change checklist
 
@@ -763,6 +783,13 @@ When adding interaction behavior:
 6. Decide explicitly whether the action counts toward APM, can be recorded, can
    run from playback, and is allowed while paused.
 
+A router test that chains keys, a motion then what acts from its cell, applies each
+move and edit from the queue itself, a key at a time (`lineWorld` in
+`internal/mode/router_test.go`, read back with `screen`): in a bare world whose cursor
+entity carries no `CursorComponent`, `PushCursorMove` predicts nothing and only
+crosses `EventCursorMoveRequest`, which no `CursorSystem` applies, so `LocalCursor`
+stays put.
+
 ## 12. Source map
 
 | Concern | Primary source |
@@ -772,7 +799,7 @@ When adding interaction behavior:
 | Mode routing | `internal/mode/router.go`, `motions*.go`, `operators.go` |
 | Search | `internal/mode/search.go` |
 | Commands | `internal/mode/commands.go` |
-| Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go` |
+| Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go`, `config_snapshot.go` |
 | Help content | `internal/help` |
 | Macros | `internal/mode/macro.go` |
 | APM | `internal/parameter/apm.go`, `internal/engine/game_state.go`, admission in `internal/engine/scheduler.go` |

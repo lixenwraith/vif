@@ -62,8 +62,10 @@ payload is an open key-value map.
 | `trace` | Present only on `Trace` records: a `->` joined call chain |
 
 `fields.instance` names the runtime when a process runs more than one: `seat N`
-for a bot seat, `staging` for the world a received capture is resolved in. The
-process's own runtime carries none.
+for a bot seat, `game N` for each game a headless learning bot plays beside its
+first, `staging` for the world a received capture is resolved in, `journal` for
+the muted twin a journal opened mid-run boots. The process's own runtime carries
+none.
 
 `-log-session-id=<id>` adds `fields.session_id` to every record emitted through
 the vif logging facade. The key is absent when the flag is absent. IDs
@@ -210,6 +212,7 @@ greps for rather than enumerating every refusal.
 | `init started` / `init completed` | INFO | `mode` / `width`, `height`, `systems` | `app.init` |
 | `seed resolved` / `scenario loaded` | INFO | `seed` / `name`, `digest`, `files` | `app.init` |
 | `rng session advanced` | INFO | `session` | `Scheduler.executeReset`, once per game reset |
+| `systems not re-initialized` | ERROR | `error` | `Scheduler.executeReset`, a reset's `World.InitSystems` refusing the dependency graph: a defect |
 | `session purged` | INFO | — | `MetaSystem`, a game reset whose payload sets `purge` |
 | `run restarting` | INFO | `scenario`, `host`, `join`, `rejoin` | the play loop, building the run that replaces this one |
 | `scenario change requested` / `scenario served` / `scenario received` | INFO | `scenario`, `digest`, plus `host` / `bytes` / `files`, `bytes` | `:new <scenario>`; a host sending its scenario to a joiner, and the joiner |
@@ -225,13 +228,17 @@ greps for rather than enumerating every refusal.
 | `breakpoint hit` | INFO | `on`, `cause`, `pause`, plus `scale` for a run-until | `Scheduler` |
 | `breakpoint set` / `breakpoints cleared` | INFO | `on` / `count` | `:d break` |
 | `profiler toggled` | INFO | `on` | `:d prof` |
-| `cursor spawned` / `cursor despawned` / `local cursor bound` | INFO | `entity`, `slot`, plus `x`, `y` on a spawn | `CursorSystem` |
+| `cursor spawned` / `cursor respawned` / `cursor despawned` / `local cursor bound` | INFO | `entity`, `slot`, plus `x`, `y` on a spawn or respawn | `CursorSystem`; a respawn equips again a bot's cursor that went down beside a person |
+| `cursor record left out` | INFO | `slot`, `run`, `playing` | `CursorSystem`: a returning player's record of another game, out of range or empty, which its cursor comes back without |
 | `cursor spawn failed` | WARN | `reason` | `CursorSystem`, a refused spawn the FSM retries |
 | `map size locked` | INFO | `map_w`, `map_h`, `viewport_w`, `viewport_h` | a resize under crop-on-resize while the map is not this instance's to crop |
 | `bot seated` / `bot left` / `bot stopped` / `script completed` | INFO | the graph or script and its counters | a bot seat; an autonomous `-bot` run; a `-script` run; see [Bots](bots.md) |
 | `bot not seated` / `bots not seated` | WARN | `graph`, `error` / `error` | one seat that could not join; the seating as a whole, which costs the bots, not the run |
+| `bot population kept` / `bot population cleared` / `bot population not kept` / `bot population not read` | INFO / INFO / WARN / WARN | `name`, plus `network` and the save's counters, or `error` | a learning bot's population saved, cleared, not saved, or unreadable; see [Bots](bots.md) |
 | `presented run failed` | ERROR | `error`, plus `step` on a journal replay | a presented replay, script or bot stream failing a step; the stream ends there |
 | `music recording started` / `music not recorded` | INFO / WARN | `path`, plus `error` | `-mw`, once the mixer runs |
+| `speakers open` / `no speakers of the build's own` / `speakers lost` / `speakers back` | INFO / INFO / WARN / INFO | `speakers`, plus `error` on a loss / `why` | the build's own speakers: the one opened, why none did, a write that lost them, and a reopen at most once a second |
+| `audio silent` / `audio silent: its backend ended and no other played` | WARN | `error` / `backend` | the audio engine latched silent: no backend at start, or its backend ending with no other to fail over to |
 | `probe listening` | INFO | `address` | a `-serve` run's `-probe` |
 
 ### `sub="net"`
@@ -266,6 +273,9 @@ greps for rather than enumerating every refusal.
 | `join installed the session world` | INFO | `tick`, `run`, `stage_us`, `commit_us` | `App.JoinSessionAt` |
 | `opened session not taken as written` | ERROR | `error` | a run taking the world its session's opening wrote as an install takes it, which refused it: a defect |
 | `mid-run participant admitted` / `join caught up` | INFO | `peer`, `slot`, `snapshot_tick`, `bytes` / `held_frames`, `caught_up_ticks`, `tick`, `lag_ticks` | the authority's mid-run gate; the joiner once its catch-up closes |
+| `session not entered; playing solo` | WARN | `join`, `watch`, `error` | a run whose join or spectate failed, playing on as the solo run it was |
+| `viewer watching` / `feed ended` | INFO | `viewers` / `reason`, `again` | the authority's feed to its spectators: one more subscribed; the feed closed, `again` where the host serves the session anew (Multiplayer §5.8) |
+| `watching the session` / `viewer caught up` / `viewer's feed ended` / `viewer left` | INFO | `tick`, `run`, `bytes`, `epochs`, `states` / `caught_up_ticks`, `tick`, `backlog` / `error`, `over`, `tick` / `tick` | a spectator: the starting point it began from, its run up to the feed, the feed's end, and its leaving for a game of its own |
 | `session parked` / `session ended` | INFO | `tick`, plus `expires_in` or `restart_in` / `phase`, `reason`, `guests`, `address` | the `-serve` loop |
 | `parked session resumed` / `parked session restarted` | INFO | `tick`, plus `vacant` on the restart | the `-serve` loop: a guest arrived, or an unbounded host reset the abandoned world |
 
@@ -349,6 +359,7 @@ order, for every region.
 | `internal` | DEBUG | `region`, `state`, `via` |
 | `region` | INFO | `region`, `op`, `state` |
 | `region requested` / `region request failed` | INFO / ERROR | `op`, `region`, `state`, plus `error` on a failure |
+| `committed transition refused` / `asked transition refused` | WARN / DEBUG | `region`, `owner`, `index`, `error`; a transition the authority's machine took that this one could not apply, and one a guest asked for that the authority declined |
 | `session reset` | INFO | — |
 | `import reconciled local lifecycle` | DEBUG | `actions`; a live capture install replaying the `reconcile=true` lifecycle actions its position crossed |
 | `system config not applied` | ERROR | `error`; the reset re-applying the scenario's system configuration |
@@ -565,19 +576,21 @@ instance-local, so no shared FSM guard reads it (D-20); a guard names its slot.
 ### Integer units
 
 Integer metrics carry their unit in the key suffix; no metadata is stored and
-the log emits raw values. `status.IntUnit` and `status.FormatInt` are the sole
-owners of the convention:
+the log emits raw values. `status.IntUnit` and `status.FormatInt` own the
+convention for a key:
 
 | Suffix | Scale |
 |---|---|
-| `.timer`, `.duration`, `.max_duration`, `.elapsed`, `.remaining` | nanoseconds |
+| `.timer`, `.duration`, `_duration`, `.elapsed`, `.remaining` | nanoseconds |
 | `_ns` | nanoseconds |
 | `_us` | microseconds |
 | `_ms` | milliseconds |
 | anything else | plain count |
 
-Display consumers — the telemetry overlay, the status bar, log viewers — resolve
-through `FormatInt`. The log stores the raw integer. Where a value has to fit a
+The telemetry overlay and its cards resolve through `FormatInt`; vif-log reads
+the unit off a record's projected field name by its last segment
+(`logfile.DurationUnit`).
+The log stores the raw integer. Where a value has to fit a
 column rather than a line, `FormatCount` gives it a thousandfold suffix and
 `FormatLatency` picks the time unit; both are display only.
 
@@ -651,7 +664,7 @@ registry mirror, emitted by `GameContext.SnapshotContext`:
 
 | `msg` | Contents |
 |---|---|
-| `context` | map size and the crop-on-resize flag |
+| `context` | map size, the crop-on-resize flag and the cell aspect |
 | `view` | mode, screen size, game offsets, viewport, camera, color mode; the local cursor's entity, slot, outstanding prediction depth, position and ping bounds |
 | `player` | roster count |
 | `world` | shared and local entity created/destroyed counts, and system count |
@@ -828,7 +841,7 @@ user-state or cache location falls back to `./vif/journal/`. See
 |---|---|
 | `system` | Simulation-internal event; journaled only as an own crossing the barrier applied (it then carries `crossing`). |
 | `input` | Physical key/mouse input through the mode router, including resize. |
-| `macro` | Macro playback and auto-fire. |
+| `macro` | Macro playback and auto-fire, and the router entering a play mode a scenario asked for (`EventModeRequest`). |
 | `command` | Ex command line, including a typed `:region`, and the configuration menu's forms. |
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
@@ -1115,7 +1128,8 @@ that shape diagnostics.
 | `-j=DIR`, `-journal=DIR` | Capture replay input in `DIR`; the space form is not supported |
 | `-r`, `-replay <file>` | Play a journal back; with `-headless`, verify it against its digests (§9) |
 | `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
-| `-bot [N[:graph]\|graph]` | Add bots beside the human; `-watch` or `-headless` selects autonomous play. `-j` records the viewed instance and its final tick, so replay needs no graph. See [Bots](bots.md) |
+| `-bot [N[:graph]\|graph\|verb ...]` | Add bots beside the human, or with a verb act on bot files and exit; `-watch` or `-headless` selects autonomous play. `-j` records the viewed instance and its final tick, so replay needs no graph. See [Bots](bots.md) |
+| `-mw`, `-music-wav[=DIR]` | Record the music alone, as it plays, to a WAV file in the user-state music directory, `paths.music` or `DIR` ([Audio](audio.md)) |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-probe <bind-address>` | Serve `/health` (liveness; readiness in its body) and the status registry as Prometheus text at `/metrics`, for a `-serve` run |
 
@@ -1279,16 +1293,17 @@ in the registry. A value that describes a *transition* belongs in the log.
 `internal/vlog` is build-tagged. On `wasm` or with the `novlog` tag, `vlog.Linked`
 is false, emission entry points are no-ops, a session or journal start and a
 standalone file report `vlog.ErrDisabled` (`logging unavailable in this build`, or
-`in a browser`), and `lixenwraith/log` is not linked. Scope constants remain,
-and `ParseScopes` accepts any spec without checking it. `status` still functions:
+`in a browser`), and `lixenwraith/log` is not linked. The scope names and
+`ParseScopes` are shared, so a bad spec fails as it does in a logging build and a
+good one selects nothing. `status` still functions:
 metrics are registered and updated, while snapshot/recorder writes resolve to
 no-ops. Asking such a build to log exits with `73` at startup and `-j` fails the
 run's construction; `:log on`, `:t save` and `:journal start` check `vlog.Linked`
 and refuse with their menu rows' reason, so a recording requires a
 logging-enabled native build.
 
-`make nolog` produces a release build with the tag; the experimental
-`make windows` build carries it too.
+`make nolog` produces a release build with the tag; the Windows builds,
+`make windows` (experimental) and `make windows-gui`, carry it too.
 
 A `vif_headless` build keeps logging, journals and `-replay -headless`
 verification; only presentation goes, so a bare `-replay` there fails with

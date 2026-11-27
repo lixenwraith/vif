@@ -1,9 +1,5 @@
 package engine
 
-// Entity is defined in core package to avoid cyclic dependency
-
-// Components are handled in Store
-
 // SystemDomain classifies which domains a system reads and writes.
 // It is declared, not inferred; internal/system/domain_test.go checks each
 // declaration against the RNG streams, entity domains and component stores the
@@ -46,8 +42,8 @@ const (
 )
 
 // SystemDependency names a system another system needs, and how badly.
-// Dependencies gate the enable and disable commands; startup refuses an unknown
-// name or a cycle. Tick order is Priority()'s business and is not derived from them.
+// Dependencies order Init and gate the enable and disable commands; startup refuses
+// an unknown name or a cycle. Tick order is Priority()'s and is not derived from them.
 type SystemDependency struct {
 	Name     string
 	Strength DependencyStrength

@@ -209,8 +209,9 @@ type Kept struct {
 }
 
 // Kept reads the population store keeps for g's network name as every run reads
-// it, false where it keeps none of the network's layout and this build's version
-// (readPopulation). It is what a run that does not learn plays (Driver.Field).
+// it, false where it keeps none of the network's layout, g's score and this
+// build's version (readPopulation). It is what a run that does not learn plays
+// (Driver.Field).
 func (g *Graph) Kept(name string, store Store) (Kept, bool, error) {
 	n := g.net(name)
 	if n == nil {

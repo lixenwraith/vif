@@ -117,8 +117,8 @@ func (v *Vocabulary[C]) Emit(name string, build func(names *dialect.Names, event
 }
 
 // Names sets the names a set's payloads take, given what its scenario declares: its
-// programs, which name data species beside the code's, and its loot kinds; unset, a
-// payload takes none
+// programs, which name data species beside the code's, with their signals, its loot
+// kinds and its maps; unset, a payload takes none
 func (v *Vocabulary[C]) Names(f func(component.Declared) *dialect.Names) { v.names = f }
 
 func (v *Vocabulary[C]) Flag(name string, bit uint64) {
@@ -140,7 +140,8 @@ func (v *Vocabulary[C]) Entered(f func(C)) { v.entered = f }
 // candidates having committed, so a host counts the entries that keep failing
 func (v *Vocabulary[C]) Stalled(f func(C)) { v.stalled = f }
 
-// Entries lists the vocabulary for -schema: And, Or and Not, every verb, every flag
+// Entries lists the vocabulary for -schema: And, Or and Not, every verb and flag,
+// and Signaled where an instance keeps signals
 func (v *Vocabulary[C]) Entries() []dialect.Entry {
 	out := dialect.TreeEntries()
 	for name, vb := range v.verbs {

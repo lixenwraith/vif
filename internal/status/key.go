@@ -124,11 +124,11 @@ func splitKey(key string) (group, name, playerSlot string) {
 		}
 
 	case "snapshot":
-		// Six cards, six questions: correction, how far the prediction was from the
-		// authority and how much of it arrived; cadence, the link's operating point; index,
-		// what proving equality cost and how often it held outright; repair, what a
-		// selective correction asked for, carried and refused; replay, what this
-		// participant's own actions cost to preserve across one; the rest, what one capture cost.
+		// A card a question: correction, how far the prediction was from the authority and
+		// how much arrived; cadence, the link's operating point; index, what proving
+		// equality cost and how often it held; repair, what a selective correction asked,
+		// carried and refused; relay, the repairs served a neighbor from retention; replay,
+		// what this participant's own actions cost to keep across one; the rest, a capture's cost.
 		if metric, ok := strings.CutPrefix(name, "cadence_"); ok {
 			return "snapshot.cadence", metric, ""
 		}

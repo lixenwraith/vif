@@ -94,7 +94,7 @@ type Router struct {
 	mouseLeftHeld  bool
 	mouseRightHeld bool
 
-	// The last left press that fired main, for the second on its cell that fires special
+	// The last left press that fired main, for the second near it that fires special
 	leftPressAt   time.Time // [wall]
 	leftPressCell [2]int
 
@@ -210,8 +210,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 // Handle processes an Intent and returns false if game should exit.
 // SYNC: caller MUST hold World.updateMutex (App.handleIntent wraps this in
 // World.RunSafe); the mutex is non-reentrant, so nothing reachable from here may
-// call RunSafe, World.Lock or Positions.Lock. CI guard:
-// rg 'RunSafe|World\.Lock|Positions\.Lock' mode/ must return zero hits.
+// call RunSafe or World.Lock.
 func (r *Router) Handle(intent *input.Intent) bool {
 	if intent == nil {
 		return true
@@ -1746,7 +1745,8 @@ func (r *Router) TakeStart(intent *input.Intent) bool {
 	return true
 }
 
-// SetMouseModeApplier installs the terminal reporting sink. Optional: a nil
+// SetMouseModeApplier installs the terminal reporting sink. Optional: without
+// one, no reporting state is applied.
 func (r *Router) SetMouseModeApplier(fn MouseModeApplier) {
 	r.applyMouseMode = fn
 }

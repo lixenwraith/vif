@@ -9,7 +9,7 @@ import (
 )
 
 // Direction constants for flow field
-// Index into NavSenseDirections: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7
+// Index into DirVectors: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7
 const (
 	DirNone   int8 = -1 // Blocked or unreachable
 	DirTarget int8 = -2 // At target cell
@@ -308,11 +308,10 @@ func (f *FlowField) canonical(g *SearchGrid, idx int32) int8 {
 }
 
 // SearchGrid is what every Dijkstra over one passability runs on: the wall test
-// asked once per cell into a grid with a blocked border, the directions open from
-// each cell as one mask with the corner rule folded in, and a ring of buckets
-// indexed by distance, which pops in constant time while no queued distance runs
-// a whole ring ahead of the one settling. One grid serves every field, route and
-// reach on its tier until the passability moves.
+// asked once per cell into a grid walled at its border, the directions open from
+// each cell as one mask with the corner rule folded in, and a ring of distance
+// buckets, popping in constant time while no queued distance runs a ring ahead of
+// the one settling. A tier's fields and reaches share one, a route graph its own.
 type SearchGrid struct {
 	w, h    int
 	free    []uint8         // bordered, (w+2)×(h+2): 1 where passable

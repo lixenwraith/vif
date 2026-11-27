@@ -87,13 +87,13 @@ adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while every other mode
 constructs it only for a host or join address, which only a script or bot run and
 `-serve` may be given. A browser registers the same adapter
-for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, or a
+for a `-join` naming its site's route `wss://<site>/vif/ws/<session>`, or a
 session's `vif://` link, which it joins by the route its site lists, and is refused
 `-host`, `-serve` and a bare `host:port`, none of which it could bind or dial. The
 router terminates the route and splices it to the session's game port; a native
-client may dial it too, and otherwise keeps raw TCP. Replay input controls playback
-rather than the mode router, and its terminal resize affects presentation rather
-than recorded geometry.
+client may dial it too, and otherwise keeps TCP, under TLS at a `vifs://` front
+door. Replay input controls playback rather than the mode router, and its terminal
+resize affects presentation rather than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and
@@ -160,7 +160,7 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
 | `:leave` | Takes a host or a guest out of its session into one of its own, as the same participant under the next term, the world as it stands ([Multiplayer §5.5](multi-player.md#55-leaving-a-session)). The command only asks: the run's loop serves it outside the world lock, since closing the port it leaves waits for handshakes that take that lock, and refuses a dial at the old door meanwhile. Its bots leave first, their places kept as Wraiths in the session left, and are seated again once that door is shut. A solo run, one whose session holds only its own bots, and a server refuse it by its session role. |
 | `:lan [on\|off]` | Sets whether the run announces the session it hosts to its local network, and alone reports the sessions found there: a beacon and a probe on one UDP socket, open only while the run announces or looks ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)). |
-| `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
+| `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick, map latch, authority policy and spectators fed; then the authority summary, the reachable chain, every relay door the chain names and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. A spectator's names the session watched, its tick, its player count and the slot followed. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 `[tcp://|vif://|vifs://]host:port[/name]`, the name routing to one of several
@@ -237,13 +237,13 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialing address against a per-host budget, asks the dialer to prove its keys and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a key takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serializes. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialing address against a per-host budget, asks the dialer to prove its keys and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a key takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serializes. A dial that only watches runs `WatchAcceptor` (`Config.AcceptWatch`) at the same doors and never becomes a peer. |
 | `RolePeer` | The dialed (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
 ```mermaid
 flowchart TD
-    Transport["Transport"] --> Listener["accept loop: HostAcceptor, AcceptPeer or both"]
+    Transport["Transport"] --> Listener["accept loop: HostAcceptor, WatchAcceptor, AcceptPeer"]
     Transport --> Dial["coordinator dial, preconnected stream or DialPeer"]
     Listener --> Manager["PeerManager"]
     Dial --> Manager
@@ -276,7 +276,7 @@ network, no answer, a certificate this machine does not trust; a dial that conne
 to something that offers no session says so, and a host's refusal is prefixed as
 one. Anything else keeps the system's words.
 
-`dial` is where a WebSocket route diverges and stops diverging: a `ws://` or
+`network.Dial` is where a WebSocket route diverges and stops diverging: a `ws://` or
 `wss://` target is opened as the page's own WebSocket in a browser, or with
 `pkg/websocket` natively, wrapped in a `net.Conn`, and every layer above it —
 handshake, admission, fences, snapshot assembly — is the code a TCP client runs. A
@@ -306,10 +306,11 @@ peer the roster ceiling already bounds.
 
 The acceptance a joiner sends back (`network.JoinerReport`) carries its own
 terminal-equivalent geometry, the address it listens on for the succession chain,
-and a bot's holder. It travels with the reply rather than the dial because only
-after construction does a joiner know the terminal it got. The geometry is
-advisory: only a dedicated host given no `-size` reads it, sizing a cropping map
-from the first person that reports one, never a bot seat (see
+a bot's holder, whether a bot plays it, and what a participant taking its place
+back brings of the game it left (`Record`). It travels with the reply rather than
+the dial because only after construction does a joiner know the terminal it got.
+The geometry is advisory: only a dedicated host given no `-size` reads it, sizing a
+cropping map from the first person that reports one, never a bot seat (see
 [Runtime](runtime.md) §1.2).
 
 ### 7.2 Join identity, and who decides it
@@ -513,9 +514,14 @@ by closing the stream. The dialer acts on
 the kind, never the wording: one table gives each kind's retry (`RetryOf`: a seat
 and a first join retry only a `RetrySoon` kind, a rejoin anything but
 `RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
-76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
-link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing
-epoch and `MsgStateSync` for one owner-authored cursor snapshot. Authority travels as
+76 (`EX_PROTOCOL`) on any refusal. A `RetrySoon` refusal is redialed every
+`parameter.SessionRejoinInterval` (250 ms), a first dial's as a rejoin's, so six
+dials spend an address's budget for a minute: a state that can last, as a lobby
+does for a dial that only watches, takes a refusal a person retries instead
+(`ErrUnstarted`, [Multiplayer §5.8](multi-player.md#58-watching-a-session)). A
+relayed join's answer (`RelayAdmit`) and a peer link's `MsgAck` carry the same two
+fields. Gameplay uses `MsgEvent` for a closed crossing epoch and `MsgStateSync`
+for one owner-authored cursor snapshot. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
@@ -530,16 +536,18 @@ a peer link ([Multiplayer](multi-player.md) §5.3): a hello with the dialer's no
 a welcome with the acceptor's proof over it and a nonce of its own, the dialer's
 proof over that, and the acceptor's verdict, each end proving the roster's key for
 itself. The port packs the epochs and syncs a link
-is sent (`MessageType.Bundles`) into one `MsgBundle` (0x19) while they fit a frame
+is sent (`Traits.Bundles`) into one `MsgBundle` (0x19) while they fit a frame
 and releases each link's when a drain ends and when the tick closes: raw epochs go
 up and committed copies down with the sender's own, a frame or two a link a tick
 whatever the roster. A frame of any other kind releases the link's bundle before
 it, so a link reads its frames in the order they were sent; a correction chunk
-travels alone. A guest admitting its own bot asks the coordinator
-with `MsgRelayJoin` (0x21), on its own link or up the relays it is behind, to
-allocate it, cross its arrival or retire a failed join, and, once its `-relay` door
-is open, to name that door in the chain (`RelayDoor`); the first two are answered
-with `MsgRelayAdmit` (0x2F), back down the links the question's `Path` names. A run publishes its door through the router with
+travels alone. A guest admitting a participant, its own bot or a dial at its
+`-relay` door, asks the coordinator with `MsgRelayJoin` (0x21), on its own link or up
+the relays it is behind, for the challenge that dial proves its keys over
+(`RelayNonce`), to allocate it, cross its arrival or retire a failed join, and, once
+its door is open, to name that door in the chain (`RelayDoor`); all but the
+retirement and the door are answered with `MsgRelayAdmit` (0x2F), back down the
+links the question's `Path` names. A run publishes its door through the router with
 `MsgSessionPublish` (0x32) on the front door, answered with `MsgSessionPublished`
 (0x33) on the stream it then holds as its control connection; the router asks it to
 open a connection back for a dial with `MsgTunnelOpen` (0x34), which the run opens
@@ -634,8 +642,8 @@ correction is one part, its JSON behind a length and its world delta in the same
 columns; the manifest's rows and the shards that repair them stay JSON. The
 reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
-ratio is large and world-dependent: the storm high water compresses from about
-299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which
+ratio is large and world-dependent: the storm high water's 352 KiB as JSON travels
+in 4.1 KiB, and the largest map the grid holds — 500x250 walled, which
 `wad/scenario/base/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
 refuse at the encoder a world whose bytes fit on the wire four times over.
 
@@ -781,11 +789,11 @@ close, `Flush` sends the closed production epoch. `Cross` stamps a crossing
 with this instance's playout lead and schedules every copy, the producer's
 included, for that one apply tick; there is no producer copy published sooner. The
 artifacts that decide what the world *is* — roster, run, shared species, the
-progression a region gates its spawns on, the defeat that rebuilds the map — are
-`barrierBound` and also close the capture fence at production. Each participant's
-lead follows its own path to the authority: the worst recent age at which the
-authority committed its epochs, stamped on the committed copies, plus a relay
-tick, held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`,
+progression a region gates its spawns on, the defeat that rebuilds the map, the
+hold and the rate every clock runs at — are `barrierBound` and also close the
+capture fence at production. Each participant's lead follows its own path to the
+authority: the worst recent age at which the authority committed its epochs,
+stamped on the committed copies, plus a relay tick, held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`,
 with the default `NetworkBarrierDelayTicks` (three 50 ms ticks) until a copy comes
 back; the authority's own is one tick. A change is a
 journaled `EventPlayoutLead`. The authority commits: it applies a guest's raw
@@ -794,7 +802,7 @@ void past `NetworkCommitLateTicks`, and every other instance applies another's
 crossings only from the authority's committed copy ([Multiplayer](multi-player.md)
 §3.1, §3.5). An arriving epoch is admitted only inside a forward window. The schedule keeps what
 is not yet due, so an apply tick beyond anything this run reaches is not a schedule
-but a reservation nothing retires — and `epochWindow.admit` takes any tick above a
+but a reservation nothing retires — and `window.admit` takes any tick above a
 source's high-water mark, so one frame naming a large one would carry that mark
 there and make every ordinary epoch that followed look late, on this instance and
 on everything it relays to. The window is therefore checked before the epoch window
@@ -842,15 +850,17 @@ presentation, is written at the tick the authority committed it to, and only whe
 the payload's entity and roster slot agree, its sequence is newer than that slot's
 last and each value lies in the range its owner's systems produce (D-13).
 Disconnect drains through the same poll boundary and raises a local alert on the
-status bar. While the coordinator remains
-reachable, its roster crossing despawns only cursors owned by that participant
-and the bots it held, releases those slots' sync sequences, and leaves both the
-barrier and the map latch
-in place: the barrier and the bounds are properties of the run, so a stretch with
-no peer attached still stamps its crossings by the lead it last adopted, which the
-authority goes on reading, and still keeps the bounds every participant adopted. A
-departure is itself a crossing and lands at that lead rather than where the lost link was observed, and only then is its identity free: a
-dial in between is assigned another, not one the departure would disconnect.
+status bar. While the coordinator remains reachable, its roster crossing turns only
+the cursors of that participant and the bots it held into Wraiths, or despawns them
+for a dismissal ([Multiplayer §5.4](multi-player.md#54-wraiths)), releases those
+slots' sync sequences, and leaves both the barrier and the map latch in place: the
+barrier and the bounds are properties of the run, so a stretch with no peer attached
+still stamps its crossings by the lead it last adopted, which the authority goes on
+reading, and still keeps the bounds every participant adopted. A departure is itself
+a crossing and lands at that lead rather than where the lost link was observed, and
+only then is its identity settled, kept for its Wraith or returned to the pool for
+good, so a dial in between is assigned another, not one the departure would
+disconnect.
 
 Parity is proved by the correction exchange alone: every manifest compares the
 whole Shared surface section by section, and a repair names the sections it moved
@@ -869,9 +879,9 @@ participant the host is not linked to directly. A guest queues what arrives and 
 that resolves between two ticks, into a staging world built once and re-used; the
 `snapshot.correction` group carries what it cost and how far its prediction had
 drifted. Measured at the storm high water (`TestCostAtTheStormHighWater`), the
-schema's 25 KiB delta and 299 KiB keyframe compress to about 6.8 KiB and 16.1 KiB.
-With one keyframe in ten that is about 38.6 KiB/s at the 5 Hz nominal cadence;
-full compressed keyframes would be about 80.5 KiB/s.
+schema's 25 KiB delta and 352 KiB keyframe compress to about 3.0 KiB and 4.1 KiB.
+With one keyframe in ten that is about 15.6 KiB/s at the 5 Hz nominal cadence;
+full compressed keyframes would be about 20.4 KiB/s.
 
 **The cadence is chosen, not fixed.** `SnapshotCorrectionTicks` and
 `SnapshotKeyframeCorrections` are the *nominal* operating point; what a peer
@@ -963,7 +973,9 @@ each `NetworkProbeInterval` (200 ms) probe on receipt, off its tick, so a live l
 paused or stalled, never comes near it; a stream that silent (a dropped network, an
 expired NAT mapping, a sleeping machine, a frozen tab) closes through the normal
 disconnect path, which starts its departure or a succession. Clean EOF is observed
-immediately.
+immediately. A person behind a relay that left, whose link nobody sees go, departs
+once the authority has had no news of it for `NetworkSilenceWindow` (15 s, [Multiplayer
+§5.4](multi-player.md#54-wraiths)).
 
 The one wait in a handshake a person paces is a join's ready period,
 `parameter.NetworkJoinPressWindow` (5 s, the gate's own `NetworkJoinReadyTimeout`):
@@ -1003,8 +1015,10 @@ What the operator surface does not cover:
   higher term refuses it and reports it;
 - the succession's reports and handoff records are signed and a peer link is
   proved both ways (§8), so a stranger takes no term, but a participant
-  admitted to the session is trusted within it: nothing bounds a hostile member
-  who lies about what it saw;
+  admitted to the session is trusted within it: a peer's artifact applies only as
+  a type its producer sends, tagged as sent, from one who may author it
+  (`crossingRules`, `event.Crosses`), and nothing bounds a hostile member who lies
+  about what it saw within that;
 - no cross-version compatibility negotiation: the coordinator refuses a joiner
   whose build or session identity (§7.2) is not an exact match;
 - sequence/ack fields detect ordering but do not retransmit, and a frame refused

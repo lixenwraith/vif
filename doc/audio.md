@@ -87,8 +87,8 @@ What vif sets of the engine:
   or on PipeWire's pulse server, on Linux the sound card through the kernel, and
   on Windows a shared WASAPI stream on the default output device ([platforms
   §8](multi-platform.md#8-adding-another-renderer-or-android-host)). A sink
-  stands in for detection, so each opens its output again by itself when it is
-  lost.
+  stands in for detection, so a native build's speakers open their output again
+  by themselves when it is lost.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {
@@ -225,11 +225,9 @@ own. [Its design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md)
 README](https://github.com/lixenwraith/stapes) its commands and keys, and [Rip
 design](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md) where the rip is going.
 
-Two things the rip gained in November reach the game through the library: a
-step may glide (`bend`, the semitones its pitch reaches by its end), which the
-sequencer plays and the MIDI files carry, and a rip may follow a recording as it
-plays (`RipStream`), bars frozen two behind the sound, which the Android app is
-to host over the microphone ([todo](todo.md#rip-live-on-android)).
+What the rip gained in November reaches the game through the library: a step
+may glide (`bend`, the semitones its pitch reaches by its end), which the
+sequencer plays and the MIDI files carry.
 
 ## 5. Extension checklist
 

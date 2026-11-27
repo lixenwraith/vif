@@ -189,7 +189,8 @@ refused value starts at its default. Each key the shipped file sets that it lack
 then comes with its own comments after the key the shipped file puts before it, a
 table it lacks where the shipped file heads it (toml `Document.Fill`). Every other
 line, comment and value stays, one equal to its default included, so a default a
-later build changes reaches only a file that lacks the key. A table written inline
+later build changes reaches only a file that lacks the key: a default every player
+must get takes a new key name, dropping the old. A table written inline
 (`play = { mouse = false }`) is edited where it stands: a key dropped goes from
 it, the rest of its line as written, and a key it lacks joins it, without the
 shipped file's comments, which a line has no room for.
@@ -203,6 +204,15 @@ standard error beside its error. `-check` names them, writes
 nothing, and says of the file it read whether a run writes it back, or reads it up
 to date as another's or as one a write refuses (below). The keymap is brought up to
 date the same way ([Input §10](input-and-modes.md#10-keymap-override-files)).
+
+So a key added to the shipped `vif.toml` or keymap reaches a player's copy only with
+the comment lines directly above it: a new key takes a comment of its own, since a
+mention in the block above its table never reaches a copy that has the table. A
+renamed key or section is a drop and an add, and the player's value starts at the
+default. An upgrade is compared by what it reads or binds, never by the embedded
+file's text: `Document.Fill` puts a key it adds above the comments that close its
+table, and copies the comments above a table's header but not those that open the
+file.
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
 holds the value every run starts from, and the menu writes back what the player
@@ -228,6 +238,14 @@ then changes it. No flag saves the others: a flag is what an alias, a script or 
 link repeats, and writing it back would let the last command line decide every
 later run. A browser keeps them in the site's storage
 ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
+
+Which file is the player's own is one answer on every host (`paths.OwnRoot`,
+`paths.Shared`, `paths.Special`), and every host builds its `resource.Options` from
+`vif.toml` with `Options.ApplySettings`, which marks a root or keymap another's
+`vif.toml` names foreign: a host never decides it alone. Only a settings file goes
+through `Play.check`, so a test's `paths.Play` built by hand leaves a word key empty,
+and the run reads an unknown word as its first (`initAudioService`'s bed,
+`applyPlay`'s auto-fire) rather than refusing it.
 
 ## 4. Installation
 
@@ -286,6 +304,7 @@ separate:
 | Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR`, `paths.journal` |
 | Music recordings | `$XDG_STATE_HOME/vif/music/` | `-mw=DIR`, `paths.music` |
 | The places a run comes back to its sessions with, the key each is held under, for the user alone (mode 0600) | `$XDG_STATE_HOME/vif/places.json` | `[session] resume_after_restart = false` keeps none |
+| The sign-ins a run holds, one a site, for the user alone (mode 0600) | `$XDG_STATE_HOME/vif/signins.json` | `:logout <site>` forgets one |
 
 On macOS and Windows the platform user-cache directory is the base. Only when no
 user location can be resolved does a stream fall back to `./vif/<stream>/` in the

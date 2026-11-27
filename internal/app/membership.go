@@ -25,8 +25,8 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// The authority policies a host names and the graph a bot seat plays when none is
-// named, the membership's, for the callers that build a Config.
+// The authority policies a host names and the graph a bot seat plays where neither
+// it nor its scenario names one, the membership's, for the callers that build a Config.
 const (
 	AuthorityHost    = membership.AuthorityHost
 	AuthorityMigrate = membership.AuthorityMigrate

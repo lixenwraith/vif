@@ -1,7 +1,7 @@
 // Code generation targets:
 //   - engine component/domain/snapshot stores
 //   - manifest system, audio, and renderer builders
-//   - event registry
+//   - event registry and payload codecs
 //   - input enum strings
 package main
 

@@ -47,8 +47,9 @@ func ApplyHoming(k *Kinetic, targetX, targetY float64, profile *HomingProfile, d
 	return ApplyHomingScaled(k, targetX, targetY, profile, 1.0, dt, true)
 }
 
-// ApplyHomingScaled applies homing with speed multiplier (for progressive difficulty)
-// applyDrag: if false, skip drag application (for immunity-gated drag)
+// ApplyHomingScaled applies homing with speed multiplier (for progressive difficulty).
+// applyDrag false skips the overspeed drag, leaving the cruise to the caller's own
+// brake, as a body off its direct path does with its cornering drag
 func ApplyHomingScaled(
 	k *Kinetic,
 	targetX, targetY float64,

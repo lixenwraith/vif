@@ -57,7 +57,7 @@ type allocatorConfig struct {
 	// WebOrigin is the site's origin: publishing it turns the browser route on,
 	// ws_url is built from it and its page's sign-in cookie alone is read. The
 	// route answers ListedOrigins too, as it answers a dial with no sign-in; see
-	// doc/kubernetes-fleet.md §9.
+	// doc/auth-session-design.md §3.6.
 	WebOrigin     string
 	ListedOrigins []string
 	Tunnels       int // doors runs may publish through the router at once; 0 publishes none
@@ -106,11 +106,10 @@ type sessionRequest struct {
 }
 
 // fleetLimits is what the deployment will accept and what an omitted choice gets,
-// so a caller can offer only the choices this router would allow, and name its
-// defaults, rather than discovering either by refusal. Descriptions, FixedMaps,
-// MinPlayers and MaxPlayers hold what each scenario's entry states, keyed by name;
-// one that states nothing is absent. They sit beside Scenarios so a caller that
-// reads the names alone is unaffected.
+// so a caller offers only choices this router would allow, and names its defaults,
+// rather than discovering either by refusal. Descriptions, FixedMaps, MinPlayers
+// and MaxPlayers hold what each scenario's entry states, keyed by name and absent
+// where it states nothing, beside Scenarios, which a caller may read alone.
 type fleetLimits struct {
 	PlayersMax      int               `json:"players_max"`
 	PlayersDefault  int               `json:"players_default"`
@@ -190,12 +189,10 @@ func (a *allocator) limits() fleetLimits {
 }
 
 // scenarios is what the node's volume holds, by name with each one's directory,
-// read per request rather than kept from start-up: the tree is replaced by rename
-// while this runs, so a list taken at boot would advertise what was installed
-// before the last swap. A name is the first directory of it the game's walk
-// reaches, as a session's -s finds it. The default is always offered, so a volume
-// that cannot be read still yields a session — and a name that is there but broken
-// is the init container's to refuse, not this.
+// read per request: the tree is replaced by rename while this runs. A name is the
+// first directory of it the game's walk reaches, as a session's -s finds it. The
+// default is always offered, so an unreadable volume still yields a session, and a
+// name there but broken is the init container's to refuse.
 func (a *allocator) scenarios() ([]string, map[string]string) {
 	out, dirs := []string{a.cfg.Workload.Scenario}, map[string]string{}
 	paths.WalkScenarios(a.cfg.WadDir, func(rel, dir string) bool {

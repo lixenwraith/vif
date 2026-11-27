@@ -26,8 +26,8 @@ type flagSection struct {
 }
 
 // helpSections is the whole of the help and the manual, one line per flag with every
-// form on it, in the order somebody looking for a flag would look. The log and
-// journal defaults are parameters: the help prints resolved paths, the manual XDG.
+// form on it, in the order somebody looking for a flag would look. The log, journal
+// and music defaults are parameters: the help prints resolved paths, the manual XDG.
 func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	return []flagSection{{
 		title: "Session",
@@ -416,15 +416,16 @@ carries none. A graph that learns keeps a population for each of its networks
 beside the player's graphs in the user root, as
 <graph>.<scenario>.<network>.json. The words after \-bot are those after :bot:
 a count or a graph, with add or without, seats bots, and \-bot with a verb that
-keeps these files acts and exits. list names every graph a seat can play with
-what each has learned in the scenario; create <name> writes a graph of the
-player's, the scenario's own with no weight, or after import <graph> that
+keeps these files acts and exits. list [<scenario>] names every graph a seat can
+play with what each has learned in the scenario; create <name> writes a graph of
+the player's, the scenario's own with no weight, or after import <graph> that
 graph whole, or after import <graph>.<network> with that network's weights
 alone; import <graph>[.<network>] <name> gives a graph of the player's those
-weights; export <graph>[.<network>] <file> writes a graph with what its
-populations field; clear <graph>[.<network>] removes populations, which then
-start over. A graph is named as \-bot names one, or by a scenario's name for
-that scenario's own bot, and the scenario is the run's.
+weights; export <graph>[@<scenario>][.<network>] <file> writes a graph with what
+its populations field; clear <graph>[@<scenario>][.<network>] removes
+populations, which then start over. A graph is named as \-bot names one, or by a
+scenario's name for that scenario's own bot, a <network> may be several joined
+by commas, and the scenario is the run's unless one is named.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif
 System configuration roots, in that order;
@@ -432,8 +433,8 @@ System configuration roots, in that order;
 names others in their place, separated by colons.
 .TP
 .I $XDG_STATE_HOME/vif
-Logs, journals, music recordings and the places a run comes back to its sessions
-with, normally
+Logs, journals, music recordings, the places a run comes back to its sessions
+with and the sign-ins it holds, normally
 .IR ~/.local/state/vif .
 .SH SEE ALSO
 https://lixen.com/vif/, https://github.com/lixenwraith/vif

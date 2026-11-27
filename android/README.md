@@ -10,7 +10,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back, and for nearby games the device's networks and the Wi-Fi multicast lock), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon; `assets/fonts/` holds the site's font, which the start screen and the menu draw their text in, Hack Nerd Font Regular as TrueType, with its license. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `../LICENSE`, `NOTICES` | Packaged as assets beside it, with the license of Hack, the font cells are drawn in (MIT and Bitstream Vera), as `LICENSE.font`, the terminal module's `atlas/LICENSE`: Gradle copies it, and has `make notices NOTICES_OF=android` write `NOTICES`, the licenses of Go and of the modules the library links, on every build, so `./gradlew` alone needs `make` on `PATH`. |
-| `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
+| `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value as it changes, and the zoom a pinch leaves in `[presentation] cell`, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
 ## Build
@@ -122,23 +122,23 @@ status bar still opens the menu; Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
 delete what it covered; while it is up the left half of the status bar's bottom
 row, its mode and input, is drawn again just above the keyboard at twice its size,
-the input kept to that half so what is typed can be read; a rotation still resizes. Back is Escape, which
-opens the menu from Normal mode; Home sends the app to the background, the game paused.
+the input kept to that half so what is typed can be read; a rotation still
+resizes. Back is Escape, which opens the menu from Normal mode; Home sends the app
+to the background, a solo game paused.
 
 ## Test
 
 `go test ./...` here covers the menu crossing the binding, the texture a run's
-drawer is first handed, and that `MenuDialog.java` names the node kinds, ops and
-field inputs the run's snapshot uses; the tap and key mapping and the swap of a
-strike's texture on a zoom are `terminal/android`'s tests, the frame hand-off
-`terminal`'s, and that a cell frame painted from a strike's texture is the
-raster's pixels `terminal/glyph`'s. On a device or emulator,
-`./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas` against
-`glyph.Raster` pixel for pixel on Android's own Canvas, at each of the font's
-cell sizes. It runs on every
-device adb sees and uninstalls the app from each afterwards, its files with it:
-name one, as `ANDROID_SERIAL=emulator-5554`, when a phone you play on is plugged
-in.
+drawer is first handed, and that `MenuDialog.java` and the page's `web/vif.js`
+name the node kinds, ops and field inputs the run's snapshot uses; the tap and
+key mapping and the swap of a strike's texture on a zoom are `terminal/android`'s
+tests, the frame hand-off `terminal`'s, and that a cell frame painted from a
+strike's texture is the raster's pixels `terminal/glyph`'s. On a device or
+emulator, `./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas`
+against `glyph.Raster` pixel for pixel on Android's own Canvas, at each of the
+font's cell sizes. It runs on every device adb sees and uninstalls the app from
+each afterwards, its files with it: name one, as `ANDROID_SERIAL=emulator-5554`,
+when a phone you play on is plugged in.
 
 A headless emulator with `-gpu host` has crashed when an install killed the
 running app; `-gpu swiftshader_indirect` does not, at a slower GPU.

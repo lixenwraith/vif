@@ -70,6 +70,12 @@ so the next frame can display it.
 The same rule admits owner-authored cursor writes: grants and per-tick aging do
 not update a cursor this instance does not simulate.
 
+A Player-domain mechanic that reads the whole roster (`ClosestCursor`,
+`CheckCursorOverlaps`, navigation's group 0) meets other participants' cursors, which
+never see it: `strikeCursor`'s owner gate stops the damage but not a knockback, a
+death or the crossing either pays. A drain locks on its own cursor and meets no other
+(`DrainSystem.handleDrainInteractions`).
+
 ### D-3 — Cross the smallest shared outcome
 
 When a player mechanic affects Shared state, it emits the smallest artifact that
@@ -132,9 +138,10 @@ correction repairs a difference.
 
 `barrierBound` names the set: arrival, departure and full reset, which create or
 destroy shared identity; the swarm, quasar and behavior spawn requests and the
-species land request, which allocate it; and a drain's defeat and a cursor's
-defeat state, which advance the progression a region gates its spawns on or
-rebuild the map.
+species land request, which allocate it; a drain's defeat and a cursor's defeat
+state, which advance the progression a region gates its spawns on or rebuild the
+map; and the hold, the rate and the restart of every Wraith's wait, which take
+effect from one tick on every participant (multi-player.md §3.6, §5.4).
 
 ### D-4 — Wire payloads name Shared entities only
 
@@ -197,6 +204,12 @@ producer or target domain, and generic systems resolve the request or target dom
 at runtime. The declared profile names the producer: a player-profile system's
 Update and handlers push as this participant's own (`GameEvent.Own`), a Bus request
 there taking the player tag `PushCrossing` gives; a shared or dual profile adds none.
+
+That producer scope opens only around a player-profile system's code, in the world's
+update loop and the scheduler: a test calling that system's `Update` or `HandleEvent`
+directly pushes nothing as its own, so a crossing it expects needs
+`EventQueue.SetOwn(true)` around the call, or the real loop
+(`TestAPushCrossesByItsProducersDomain`).
 
 ### D-8 — RNG streams are domain-separated and restorable
 
@@ -270,6 +283,12 @@ does. A Bus request a session layer tags player crosses as its producer said, a
 shared or dual system's copy is re-derived, and a payload that reports itself
 `Derived`, a combat chain follow-up, never crosses (D-5).
 
+`World.PushLocal` stamps player in any scope, and the FSM bridge pushes every class
+but local in the ambient domain, Shared during a region's actions. So a request a
+region raises on every instance that changes Shared state is `[stamped]`, as
+`EventFuseRequest` is: Shared from the region, player from a participant's own
+producer's `PushLocal`; a `[local]` one may not reach Shared state.
+
 `EventWindStart` and `EventWindCancel` are Shared events: a Shared FSM can
 re-derive them on every instance, so sending them would apply the same wind
 twice. Each instance applies the sampled wind to its own Player drains as well as
@@ -331,6 +350,11 @@ cursors. During an in-session correction, the receiver preserves the values for
 cursors it authors and rebuilds control/roster binding from participant identity.
 No shared-profile system computes a remote owner's values.
 
+A correction leaves those cells alone four ways: `applyShard`'s owner check, the
+encoder's exclusion, the owner-authored cursor sets (`ownerAuthoredCursors`,
+`liveOwnerAuthoredCursors`) and `RebindCursorRoster`'s restore. Each masks a mutation
+of the others, so a test proving the rule turns them all off.
+
 The sync runs every `NetworkSyncTicks`, so the authority's mirror of a guest's
 cursor is that stale at worst and a correction can carry the stale copy to a third
 participant. What bounds it is that an install leaves the sync sequence and its
@@ -363,7 +387,8 @@ because it can choose a different FSM branch on different terminals.
 A person's run that fixes its map with `-size` closes the same paths, the crop, the
 reset and the map setup to the viewport, through a latch of its own
 (`World.FixMap`), since the session's also engages the barrier:
-`World.MapSizeLocal` answers for both ([Runtime §1](runtime.md#1-process-modes)).
+`World.MapSizeLocal` answers for both ([Runtime §1](runtime.md#1-process-modes)),
+so a new path that sizes a map from a screen asks it.
 
 ### D-15 — Classification is declared once
 
@@ -382,6 +407,11 @@ cursor's owner may emit the crossing.
 
 Personal causes remain distinct. Separate participant-owned drain collisions may
 each produce their own swarm request.
+
+What a Shared request does to Shared state may turn only on what every instance
+holds alike: an election or a guard that one instance alone sees decides nothing
+there, so a fusion that consumes composites on every instance lands its target by a
+Shared carrier on each, not by the elected instance's own (`FuseSystem.fuse`).
 
 ### D-17 — Throttle phase is state
 
@@ -444,7 +474,7 @@ Declared system carriers are:
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity; a blue attack's pending swarm is its materialize, in the stores |
-| `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
+| `meta` | kill tallies, defeat latches and the tick each was set, reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration, scenery flag and per-level sub-cell phases |
 
 A carrier is also where a status cell the compared surface excludes has to live.
@@ -517,6 +547,9 @@ changes nothing:
 - the state owning it is one its region stands in, the region running with no
   transition in flight;
 - it sets no variable but those the transition captures (`Machine.Grant`).
+The grant is judged where the handler runs (`Scheduler.grantTransition`): a Bus
+request applies on every instance, its sender's included, so what only the authority
+does with one is gated there, never by who receives it.
 
 A granted ask is the authority's own transition crossing, with what follows from
 one. The asking region waits as the authority's does on a crossing of its own: it
@@ -745,11 +778,12 @@ identity returns to the pool once its participant is dismissed, and a crossing
 sequence starts at one, so a fence kept from the previous holder would claim a
 capture already contains crossings the next holder has yet to produce.
 
-Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
+Step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
 instance-local operator actions and are refused while peers are live; so is an own
 pause, unless every linked participant is a bot seat this instance holds
-(`SeatsOnly`). Only the coordinator may hold or reset a live session, and both
-cross: a hold stops every participant after the same tick. The programmatic surface
+(`SeatsOnly`). Only the coordinator may hold, set the rate of or reset a live
+session, and each crosses: a hold stops every participant after the same tick, a
+rate changes on every one from the same tick. The programmatic surface
 takes the same rule through one guard: `App.SetupMap`, `App.Region` and
 `App.Reset` read the event's declared class, so the coordinator crosses a `Bus`
 request, a guest's is refused, and any other class is refused outright. Inspection
@@ -774,10 +808,11 @@ state.
 
 At 20 ticks/s the event stream is small relative to authoritative state: with the
 message header, an empty epoch is 19 bytes, four cursor moves are 55 bytes, and
-one owner-state sync of the cells that are set about 82 bytes. At the storm
-high-water fixture (`TestCostAtTheStormHighWater` logs these), a plain capture is
-about 299 KiB, a compressed keyframe about 16.1 KiB, a compressed delta about
-6.8 KiB, and a converged manifest exchange 546 bytes.
+one owner-state sync of the cells that are set about 58 bytes
+(`TestWireEncodingBudget`). At the storm high-water fixture
+(`TestCostAtTheStormHighWater` logs these), a plain capture is about 352 KiB, a
+compressed keyframe about 4.1 KiB, a compressed delta about 3.0 KiB, and a
+converged manifest exchange 634 bytes.
 
 ## 5. Telemetry and snapshot views
 
@@ -832,6 +867,11 @@ relay role, the term gate, the succession rule — against a stub world that ans
 with the capture it was handed. That split is why the protocol exports no knob for
 fabricating its own state: a criterion that needs one is in the package that holds
 it.
+
+A choice every instance must make alike is tested over two worlds holding one roster,
+each latched as its own participant (`World.AdoptSession`), driving its own slot and
+fed the same events (`TestASweepNamingNoCursorTakesTheFirstParticipantsDrains`); a
+mesh session adds only the order crossings reach them in.
 
 Regenerating the tables and the repository gates are in
 [Development](development.md) §3 and §5.

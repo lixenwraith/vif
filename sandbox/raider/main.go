@@ -1,9 +1,8 @@
 // Command raider shows the cave scenario's raider types as it declares them: a
 // band for each stone art, its types weakest rank first between a ceiling and a
-// floor of that art's rock, in the colors their programs give them or one hue a
-// slider picks, on the game's truecolor tier or its console tier as a VGA or
-// FreeBSD console shows it. Run it from the repository root, or name the scenario
-// directory with -s.
+// floor of that art's rock, in their programs' colors or one hue a slider picks,
+// on the game's truecolor tier or its console tier as a VGA or FreeBSD console
+// shows it. Run it from the repository root, or give -s the scenario's directory.
 package main
 
 import (

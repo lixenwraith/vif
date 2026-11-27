@@ -20,15 +20,11 @@ type Cell struct {
 	Valid bool
 }
 
-// Sample is one completed round trip, plus what the far end reported inside it
-// and what this end knows of its own sending.
-//
-// Delivered and Elapsed are a pair: how many bytes the far end confirmed having
-// received, and the wall interval that confirmation covers. Backlog is what this
-// sender has put on the link and not yet seen confirmed, which is the difference
-// between "the link is fast" and "the link is idle". Held says the sender's
-// frames have waited on the link longer than its echoes are stale: a sender pacing
-// to the link never shows a backlog past the bound it paces to.
+// Sample is one completed round trip, what the far end reported in it and what this
+// end knows of its sending: the bytes the far end confirmed over the wall interval
+// that confirmation covers, the backlog sent and not yet confirmed, which tells a
+// fast link from an idle one, and Held, frames waiting longer than its echoes are
+// stale, since a sender pacing to the link never shows a backlog past its bound.
 type Sample struct {
 	RTT time.Duration
 
@@ -170,12 +166,9 @@ func NewLink(cfg LinkConfig) *Link {
 	return &Link{cfg: cfg}
 }
 
-// Observe folds one completed round trip into the estimate.
-//
-// A sample with a non-positive round trip is refused rather than smoothed: a
-// clock that ran backwards between the probe and its echo would otherwise drag
-// minRTT below anything the link can do and make every later sample look
-// inflated.
+// Observe folds one completed round trip into the estimate. A non-positive round
+// trip is refused rather than smoothed: a clock that ran backwards between probe and
+// echo would drag minRTT below anything the link can do and inflate every later one.
 func (l *Link) Observe(s Sample) {
 	if s.RTT <= 0 {
 		return
@@ -256,13 +249,10 @@ func (l *Link) Reset() {
 	*l = Link{cfg: cfg}
 }
 
-// ObserveTransfer folds a bulk transfer into the estimate — a join's capture,
-// which is a throughput measurement nothing else on the link can make so early.
-//
-// It is a delivery rate by construction: the bytes went out, the far end
-// answered when it had them all, and the sender was pushing the whole time. So
-// unlike a probe sample it is unconditionally saturated, and it is the one
-// measurement available before any probe has completed a round trip.
+// ObserveTransfer folds a bulk transfer into the estimate: a join's capture, a
+// delivery rate by construction, since the sender pushed the whole time and the far
+// end answered once it had every byte. Unlike a probe sample it is saturated, and it
+// is the one measurement available before any probe has completed a round trip.
 func (l *Link) ObserveTransfer(bytes int64, elapsed time.Duration) {
 	if bytes <= 0 || elapsed <= 0 {
 		return

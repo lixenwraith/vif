@@ -61,8 +61,8 @@ const (
 	secureLinkScheme = "vifs://"
 )
 
-// ParseEndpoint reads [tcp://|vif://]host:port[/name] or a ws(s):// URL, whose last
-// path segment is the name as a vif:// path is; one ending in '/' names none. An
+// ParseEndpoint reads [tcp://|vif://|vifs://]host:port[/name] or a ws(s):// URL, whose
+// last path segment is the name as a vif:// path is; one ending in '/' names none. An
 // http(s):// URL is its site, whatever page it names. A bare host:port is TCP, and
 // any other scheme is refused rather than read as a host.
 func ParseEndpoint(target string) (Endpoint, error) {

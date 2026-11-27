@@ -38,23 +38,15 @@ type Bounds struct {
 	FloorKeyframeTicks uint64
 
 	// Utilization is the share of measured capacity the cadence is allowed to
-	// spend. The rest is headroom for the crossing stream, the state syncs and
-	// the digests, which travel on the same link and are not in this model.
+	// spend. The rest is headroom for the crossing stream and the state syncs,
+	// which travel on the same link and are not in this model.
 	Utilization float64
 
-	// UrgentDrift and UrgentRelevance are where a participant stops being
-	// ordinary, and both are stated as percentages for the same reason: an
-	// absolute threshold is a threshold about the world rather than about the
-	// participant. A correction that moves five hundred entities is enormous in a
-	// quiet world and unremarkable in a storm, so a fixed magnitude would pin
-	// every storm at the fastest cadence the link allows and spend the whole link
-	// on a condition that is simply what a storm looks like.
-	//
-	// UrgentDrift is therefore a *rise*: how far the far end's prediction error
-	// stands above its own recent level. UrgentRelevance is a *comparison*: how
-	// far one participant's share of what the correction moves stands above the
-	// session's mean. QuietCadence is where a participant with neither settles,
-	// which is what pays for the other two.
+	// UrgentDrift and UrgentRelevance, in percent, are where a participant stops
+	// being ordinary: a rise of the far end's prediction error above its own recent
+	// level, and its share of what the correction moves above the session's mean. A
+	// threshold on the world instead would pin every storm at the fastest cadence.
+	// QuietCadence is where a participant with neither settles, which pays for both.
 	UrgentDrift     int
 	UrgentRelevance int
 	QuietCadence    uint64
@@ -95,19 +87,16 @@ func (b Bounds) Validate() error {
 
 // Sizes is what one correction currently costs on the wire, measured rather than
 // assumed. Both are needed: a schedule's cost is one keyframe plus the deltas
-// between them, and at this world's storm high water the two differ six-fold.
+// between them, and the two differ by how much of the world moves.
 type Sizes struct {
 	Keyframe int64
 	Delta    int64
 }
 
-// Demand is what a participant wants, as opposed to what its link can carry.
-//
-// Magnitude is how far that participant's prediction had drifted when the last
-// correction reached it, and Relevance how many of the entities the next
-// correction moves are near enough to matter to it. Neither can buy a cadence
-// the link cannot sustain; what they decide is where inside the feasible range
-// the plan sits.
+// Demand is what a participant wants, as opposed to what its link can carry: how
+// far its prediction error stands above its own recent level, and how far its share
+// of what the correction moves stands above the session's mean. Neither buys a
+// cadence the link cannot sustain; they place the plan inside the feasible range.
 type Demand struct {
 	// Known distinguishes "this participant reported nothing near it" from "this
 	// participant has not reported yet". Without it a peer whose first echo has
@@ -170,13 +159,10 @@ type Plan struct {
 // is the value the floor bounds.
 func (p Plan) KeyframePeriodTicks() uint64 { return p.CadenceTicks * uint64(p.KeyframeInterval) }
 
-// Controller holds one peer's operating point across decisions.
-//
-// It is stateful for one reason: a plan is only allowed to *improve* one step at
-// a time. Degradation is immediate, because a link that has narrowed has already
-// narrowed and publishing into it for another second helps nobody; recovery is
-// stepped, because a single sample taken during a quiet moment is not evidence
-// that the link came back.
+// Controller holds one peer's operating point across decisions, so a plan improves
+// one step at a time: degradation is immediate, since a link that has narrowed has
+// narrowed, and recovery is stepped, since one sample taken in a quiet moment is no
+// evidence the link came back.
 type Controller struct {
 	b    Bounds
 	plan Plan
@@ -200,13 +186,10 @@ func (c *Controller) Bounds() Bounds { return c.b }
 // Plan returns the current operating point without taking a decision.
 func (c *Controller) Plan() Plan { return c.plan }
 
-// Update takes one decision and returns the new operating point.
-//
-// The order is deliberate and is the whole safety argument. The floor bounds the
-// search space first, so no candidate the search can return violates it. Demand
-// then says where inside that space this participant would like to sit. Capacity
-// then says which of those candidates the link can actually carry. If none can,
-// the plan clamps to the floor and says so — it never continues down.
+// Update takes one decision and returns the new operating point. The order is the
+// safety argument: the floor bounds the search first, demand places the plan inside
+// it, and capacity picks what the link carries; when nothing fits, the plan clamps
+// to the floor and says so, never going below.
 func (c *Controller) Update(m Metrics, s Sizes, d Demand) Plan {
 	next := c.decide(m, s, d)
 	c.plan = c.step(next, c.desired(d))
@@ -307,22 +290,11 @@ func (c *Controller) desired(d Demand) uint64 {
 	}
 }
 
-// search walks the feasible space in preference order and returns the first
-// candidate the budget can carry.
-//
-// The order is the degradation order, and it is a design statement rather than
-// an implementation detail. For a given cadence the keyframe interval is
-// stretched first, because a keyframe costs several times a delta on this world
-// and stretching it costs only recovery time — which the floor already bounds.
-// Only when no legal interval fits does the cadence itself slow, because that is
-// what a player actually sees.
-//
-// Both loops are bounded by the floor rather than by the declared maxima: at a
-// slow cadence the floor allows fewer corrections between whole worlds than the
-// nominal interval names, so the interval a cadence *starts* from is the nominal
-// one pulled inside the floor. Starting from the nominal unconditionally would
-// skip every cadence past FloorKeyframeTicks/NominalKeyframe entirely, which is
-// most of the range this controller exists to reach.
+// search returns the first candidate the budget carries, in degradation order: at a
+// cadence the keyframe interval stretches first, which costs only recovery time the
+// floor bounds, and only then does the cadence slow, which a player sees. A cadence
+// starts from the nominal interval pulled inside the floor: from the nominal itself,
+// every cadence past FloorKeyframeTicks/NominalKeyframe would be skipped.
 func search(b Bounds, from uint64, s Sizes, budget float64) (Plan, bool) {
 	for c := max(from, b.MinCadenceTicks); c <= b.MaxCadenceTicks; c++ {
 		kMax := int(b.FloorKeyframeTicks / c)
@@ -340,13 +312,10 @@ func search(b Bounds, from uint64, s Sizes, budget float64) (Plan, bool) {
 	return Plan{}, false
 }
 
-// cheapestFloorPlan is the least expensive schedule that still honors the
-// floor, and it is both the fallback and the price the floor is quoted at.
-//
-// The cheapest schedule is the slowest cadence the bounds allow with the fewest
-// keyframes that still fills the floor window: the whole world has to be sent
-// once per window whatever else happens, so what is left to minimize is the
-// deltas in between, and the slowest cadence sends the fewest of them.
+// cheapestFloorPlan is the least expensive schedule that still honors the floor,
+// the fallback and the price the floor is quoted at: the slowest cadence the bounds
+// allow with the fewest keyframes that fill the floor window. The world goes once a
+// window whatever happens, and the slowest cadence sends the fewest deltas between.
 func cheapestFloorPlan(b Bounds) Plan {
 	c := max(min(b.FloorKeyframeTicks, b.MaxCadenceTicks), b.MinCadenceTicks)
 	k := max(min(int(b.FloorKeyframeTicks/c), b.MaxKeyframe), b.MinKeyframe)

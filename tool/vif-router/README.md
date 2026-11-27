@@ -43,13 +43,13 @@ atomically without restarting the router. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td","size":"160x48"}` | `201` and one created session. Those five fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has created `-client-creates` sessions in one `-first-join` window, its `Retry-After` the seconds left; a refused request or a full fleet spends none. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td","size":"160x48"}` | `201` and one created session. Those five fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has created `-client-creates` sessions in one `-first-join` window, or its signed-in account `-account-creates` (Admission, below), its `Retry-After` the seconds left; a refused request or a full fleet spends none. |
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. One reading of the fleet answers every request for 2 s, its `expires_in` counted down to each, and a create discards it. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
 | `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
-| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this router terminates and splices to the resolved pod's game port, or one spectator, which it feeds itself (Spectators, below). Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
+| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this router terminates and splices to the resolved pod's game port or a published door (Doors, below), or one spectator, which it feeds itself (Spectators, below). Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
 
 An error is `{"error":{"code":"…","message":"…"}}`. A create can also answer
 `413 request_too_large` for a body over 1 KiB, `415 content_type` for one not sent
@@ -153,11 +153,11 @@ never clamped. `size` is `first`, or a `WxH` screen whose game area (the screen 
 the game's gutters and status rows) is a map the grid can hold.
 
 `bots` seats that many of the session's own bots, each a roster guest playing the
-embedded `default` graph. A new session is ready only while a seat is free, since
-nobody is away from it yet, so a request is also refused bots that leave no seat for
-a person: at most `players - 1`. The bots occupy the session as people do, so one
-nobody else joins plays on until a drain or the Job's one-hour
-`activeDeadlineSeconds` ends it.
+scenario's own bot, or the embedded `default` graph where it carries none. A new
+session is ready only while a seat is free, since nobody is away from it yet, so a
+request is also refused bots that leave no seat for a person: at most
+`players - 1`. The bots occupy the session as people do, so one nobody else joins
+plays on until a drain or the Job's one-hour `activeDeadlineSeconds` ends it.
 `-bots-max` is at most 6, the most whose pod envelope fits the namespace's
 `LimitRange`. Each bot is a world of its own, measured on a 120x40 screen, so bots
 are refused on a larger map: a scenario's fixed one, or a `size` past 4,800 cells.
@@ -226,12 +226,12 @@ answer shows no pass, adds a ticket under its key naming the dialer's address an
 the first key it proved; every frame after is spliced. Each session's Job carries
 the router's public key (`-admit ticket:<key>`), so its doors take that ticket and no
 bare key, and `GET /vif/api/keys` lists the key for a host that admits the site's
-players by it. Behind an edge that ends TLS for 7777, `-route-proxy-protocol` reads
-the edge's PROXY header first and `-route-secure` has the links read `vifs://`; a
-deployment with no such edge gives `-route-cert`, or `-route-selfsign` for a
-certificate made at each start, and the router ends TLS itself; with `-route-selfsign`
-each session's `door_fingerprint` is what a dial pins, so a machine with no root
-certificates still joins privately.
+players by it. Behind an edge that ends TLS for 7777, as this deployment's front
+door is, `-route-proxy-protocol` reads the edge's PROXY header first and
+`-route-secure` has the links read `vifs://`; a deployment with no such edge gives
+`-route-cert`, or `-route-selfsign` for a certificate made at each start, and the
+router ends TLS itself; with `-route-selfsign` each session's `door_fingerprint` is
+what a dial pins, so a machine with no root certificates still joins privately.
 
 With `-identity-url` and `-introspect-url` the router publishes the identity
 service's routes (`/vif/api/auth/*`, byte for byte, the player's address in
@@ -253,22 +253,23 @@ behind a shared address is held to its own budget, not its neighbors'.
 A run that joined a session and relays for people who cannot reach the host can
 publish its `-relay` door through the router instead of binding one (`vif -join …
 -relay vif://<site>:7777`, `vifs://` under the edge's TLS): it sends
-`MsgSessionPublish` on the front door and
-holds the stream as its control connection, and the router names the door from the
-pods' identifier space and answers with the link (`vif://<site>:7777/<id>`) and a
-token the run resumes the same name with after a lost connection. A dial on that
-name is placed as a dial on a pod is — the route frame, the join budget, the
-session's ceiling — and then the router asks the run on the control connection to
-open a connection back (`MsgTunnelOpen`), which the run does naming its ticket
-(`MsgTunnelAccept`); the two are spliced, the name the run's door answers to
-re-encoded to it as a pod is sent its own. A run that opens nothing within the open
-timeout refuses the dial for a retry, as a pod out of reach does. Both ends keep the
-control connection alive (`MsgTunnelKeep`); a silent run is dropped. A publication
-costs the publisher's address a join; `-tunnels` bounds the doors carried at once
-and `-doors-per-address` those one address holds; a name is resumed only by the run
-it was issued to, live or within ten minutes of losing its control connection, so
-no run takes a pod's name or another's. Doors are not listed and are not sessions,
-though the listing's `limits` count them (`doors`, `doors_max`). The design is
+`MsgSessionPublish` on the front door and holds the stream as its control
+connection, and the router names the door from the pods' identifier space and
+answers with the link (`vif://<site>:7777/<id>`, or `vifs://` as `join_target`
+reads) and a token the run resumes the same name with after a lost connection. A
+dial on that name is placed as a dial on a pod is — the route frame, the join
+budget, the session's ceiling — and then the router asks the run on the control
+connection to open a connection back (`MsgTunnelOpen`), which the run does naming
+its ticket (`MsgTunnelAccept`); the two are spliced, the name the run's door
+answers to re-encoded to it as a pod is sent its own. A run that opens nothing
+within the open timeout refuses the dial for a retry, as a pod out of reach does.
+Both ends keep the control connection alive (`MsgTunnelKeep`); a silent run is
+dropped. A publication costs the publisher's address a join; `-tunnels` bounds the
+doors carried at once and `-doors-per-address` those one address holds; a name is
+resumed only by the run it was issued to, live or within ten minutes of losing its
+control connection, so no run takes a pod's name or another's. Doors are not listed
+and are not sessions, though the listing's `limits` count them (`doors`,
+`doors_max`). The design is
 [Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
 
 ## Spectators
@@ -303,7 +304,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-listen`, `-route-listen` | `:9080`, `:7777` | the HTTP API and probes; the front door |
 | `-route-proxy-protocol` | off | the front door is reached through an edge that writes a PROXY header, version 1 or 2, before each dial, whose address then keys the budgets and the tickets; a dial without one is closed |
 | `-route-cert`, `-route-key` | empty | end TLS on the front door here, for a deployment with no edge to; the key defaults to the certificate's file |
-| `-route-secure` | off, on with `-route-cert` | the front door is reached over TLS, so `join_target` and door links read `vifs://` |
+| `-route-secure` | off, on with `-route-cert` or `-route-selfsign` | the front door is reached over TLS, so `join_target` and door links read `vifs://` |
 | `-ticket-key` | empty | the file holding the Ed25519 seed admission tickets are signed with, which `vif-router keygen` writes; empty mints none and sessions run open |
 | `-route-selfsign` | off | end TLS on the front door with a certificate made for this run, in place of `-route-cert`; the sessions API carries its fingerprint (`door_fingerprint`), which a dial pins |
 | `-identity-url`, `-introspect-url` | empty | the identity service's two loopback listeners: `/vif/api/auth/` is forwarded to the first byte for byte, the second is asked which account a sign-in names; empty publishes no accounts |

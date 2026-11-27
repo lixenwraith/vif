@@ -28,10 +28,10 @@ func RunServer(cfg Config) error {
 	return a.Serve()
 }
 
-// Serve holds the session open until a signal stops it. It is App.Loop with the
-// presentation removed and the frame handshake kept: the scheduler applies render
-// backpressure at real time and slower, so a run that never released it would tick
-// at the timeout rather than at the interval.
+// Serve holds the session open until a signal or its lifetime policy ends it. It is
+// App.Loop with the presentation removed and the frame handshake kept: the scheduler
+// applies render backpressure at real time and slower, so a run that never released
+// it would tick at the timeout rather than at the interval.
 func (a *App) Serve() error {
 	if a.cfg.Mode != ModeServer {
 		return fmt.Errorf("%s mode is not a dedicated host", a.cfg.Mode)

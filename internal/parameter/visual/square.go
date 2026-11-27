@@ -23,7 +23,7 @@ var SquareKinds = [component.SquareKindCount]SquareKindColors{
 }
 
 // SquareDust, SquareSpell and SquareBurst are the legend entries over the square,
-// its dust meter, its spell's and its cursor's overheat, each drawn as a kind's; the
+// its dust meter, its spell's and its viewer's burst meter, each drawn as a kind's; the
 // spell's places are framed in its colors, turning between them each SquareSpellPulse
 var (
 	SquareDust  = SquareKindColors{Block: color.White, Glow: color.White, Track: color.Gray, Console: ConBrightWhite}
@@ -77,8 +77,8 @@ const (
 	SquareSurgeAlpha = 0.95
 	SquareSurgeTurn  = 700 * time.Millisecond
 
-	// A strike that landed tints the part of the map its line faces in the kind's
-	// glow, at most SquareStrikeAlpha, fading over SquareStrikeFlash
+	// A strike that landed tints where it struck (SquareComponent.Strikes) in the
+	// kind's glow, at most SquareStrikeAlpha, fading over SquareStrikeFlash
 	SquareStrikeFlash = 250 * time.Millisecond
 	SquareStrikeAlpha = 0.15
 

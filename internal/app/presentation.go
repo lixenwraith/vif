@@ -16,8 +16,8 @@ import (
 
 // Presentation is a host's screen and the player's device: a service the hub runs,
 // the surface frames are flushed to, its size, how long it has held a frame, and the
-// events it reports in the terminal's vocabulary. The terminal is one; a window or
-// an Android view is another, posting the keys and pointer cells it maps.
+// events it reports in the terminal's vocabulary. The terminal is one; a window, a
+// page or an Android view is another, posting the keys and pointer cells it maps.
 type Presentation interface {
 	service.Service
 	Surface() render.Surface

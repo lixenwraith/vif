@@ -122,7 +122,8 @@ timeline under one authority. The words of signing in are kept apart from it:
   can revoke. chess calls it a session.
 - A **participant key** is the Ed25519 key pair a participant makes for its place
   (`network.Key`), whose public half the roster carries; a **proof** is its
-  signature over a door's nonce, the session's name and the door's channel binding.
+  signature over a door's nonce, good for that one dial; it signs no session name,
+  which a front door rewrites on the way, and no channel binding.
 - An **admission ticket** is a short-lived capability for one session, signed by
   the router: the session, the kind of admission (play, watch, create, publish), the
   subject it admits, an account or an address, and the key it admits.
@@ -155,8 +156,8 @@ What each surface checks, and what it trusts:
   `vif_sign_in` cookie on the upgrade naming its account.
 - **The front door**, TCP 7777: plaintext `vif://`, `vifs://` where TLS fronts it,
   ended at the site's edge (`-route-secure`), which writes a PROXY header the router
-  reads first (`-route-proxy-protocol`), or by the router itself (`-route-cert`,
-  `-route-selfsign`); `vif-router.env` sets none of them. The first frame,
+  reads first (`-route-proxy-protocol`), as `vif-router.env` has it, or by the
+  router itself (`-route-cert`, `-route-selfsign`). The first frame,
   `MsgSessionRoute`, places the connection by the session name; `-client-joins` a
   minute per address at the route frame, moved to the account the exchange names;
   `-route-max` connections a session. A pod admits its game port from the node
@@ -167,7 +168,8 @@ What each surface checks, and what it trusts:
   `sha256:<hex>` pinning the leaf, which the host prints and `:session` reads
   (`network.TrustTLS`). A ws door checks no `Origin`. A passphrase door (§3.5)
   authenticates both ends over TLS and the handshake alone on tcp and ws.
-- **A relay door published through the router** (`-relay vif://<site>:7777`):
+- **A relay door published through the router** (`-relay vif://<site>:7777`,
+  `vifs://` where TLS fronts the door, its tunnel then under that TLS):
   `PublishRequest` names the session, and its `Resume` token, a bearer secret, keeps
   the door's name for `NetworkTunnelResumeWindow` (10 min) after a lost control
   connection; `-doors-per-address`, and the join budget per publication. The token
@@ -191,10 +193,10 @@ What each surface checks, and what it trusts:
   ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
   challenge both ways, each end proving the roster's key for itself over the
-  other's nonce and the session, so a name alone opens nothing; the acceptor admits
-  any roster member but itself. A session that does not migrate, a fleet pod's
-  and the default, has one port; a migrate session one more for each guest that
-  takes over.
+  other's nonce and both identities, so a name alone opens nothing; the acceptor
+  admits any roster member but itself. A session that does not migrate, a fleet
+  pod's and the default, has one port; a migrate session one more for each guest
+  that takes over.
 - **Succession messages** (`MsgAuthorityReport`, `MsgAuthorityHandoff`) carry
   their author's signature, which a receiver checks against the roster's key for
   the participant they name before it acts; `MsgPeerList` is unsigned, and a forged
@@ -202,21 +204,23 @@ What each surface checks, and what it trusts:
 - `MsgAuthRequest` (0x30) and `MsgAuthResponse` (0x31) carry the exchange: the
   methods `key`, `pass`, `ticket` and `scram`.
 
-Confidentiality exists on TLS: the browser route as far as the site's edge, a
-player's wss doors, and the front door where TLS fronts it. On `vif://` and ws
-doors, the deployment's front door among them, and on the router's tunnels to
-published doors, a frame can be read and replayed by anyone on the path: a pass
-read there is useless alone (§3.4), a passphrase exchange authenticates the
-handshake and not the channel (§3.5), and a sign-in never crosses there (D5).
+Confidentiality exists on TLS: the browser route as far as the site's edge, the
+front door and the tunnels a door is published over as far as the TLS that fronts
+them, the deployment's at the site's edge, and a player's wss doors. On `vif://`
+and ws doors, and on a front door or a tunnel no TLS fronts, a frame can be read
+and replayed by anyone on the path: a pass read there is useless alone (§3.4), a
+passphrase exchange authenticates the handshake and not the channel (§3.5), and a
+sign-in never crosses there (D5).
 
 ## 3. The mechanisms
 
 ### 3.1 Primitives
 
 `internal/network/admission.go` holds them: `Key`, an Ed25519 key pair kept as its
-32-byte seed in JSON, with `Prove`/`VerifyProof` over a door's nonce, the session's
-name and a channel binding (`ChannelBinding`, the SHA-256 of a leaf certificate),
-`VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`, the roster form;
+32-byte seed in JSON, with `Prove`/`VerifyProof` over a door's nonce and a binding
+every dial leaves empty, `VerifyProofs` over a dial's list and
+`EncodeKey`/`DecodeKey`, the roster form; `ChannelBinding`, the SHA-256 of a leaf
+certificate, which a passphrase exchange binds to (§3.5);
 `Signed`, the body as signed and the signature under a domain tag (`signable`:
 `vif <domain>\0`, then each field behind its length), so a proof, a pass, a ticket,
 a peer link and a succession message under one key never stand in for each other;
@@ -230,6 +234,18 @@ bodies, `MaxAuthFrame` their bound; the refusal kinds `RefusalSignIn` (retry aft
 signing in), `RefusalCredential` and `RefusalDropped` (no retry). Tests, one a rule,
 and fuzz targets over the token forms, the join handshake and the peer link.
 
+A public key travels as its base64 string (`network.EncodeKey`), not `[]byte`:
+`RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is TOML
+a scenario could name, and the generated capture codec has string and slice kinds and
+no bytes kind; it is decoded at the boundary that verifies it. `encoding/json`
+compacts a `json.RawMessage` it marshals, so a `Signed` body survives a round trip
+only as the compact JSON `json.Marshal` emits: a token another writer re-encoded with
+whitespace fails its signature, the refusal intended. A challenge-response handshake
+cannot be fuzzed from a static script past its challenge, a proof over a random nonce
+never being in the corpus: the join target pins the nonce through `Coordinator.Nonce`
+and seeds proofs over it, and the peer link target asserts instead that no script
+ever opens a link.
+
 ### 3.2 Participant keys
 
 [Multiplayer §5.4](multi-player.md#54-wraiths) states it where it is used. A run
@@ -237,23 +253,24 @@ makes a `Key` for each place as it takes it (`PlaceKeeper`, `place.go`) and its 
 proves a fresh one first, then every kept place of its kind no run holds; the
 coordinator records the key on the roster entry (`RosterEntry.Key`), the arrival
 crosses it, so every instance, cursor and capture holds it. A peer link is a
-challenge both ways, signed over the nonce, both identities and the session; a
-report and a handoff record carry their author's signature (`Sign`, `Verify`),
-checked against the roster's key for the participant they name. A returning dial
-proves its key and is seated in the place that key holds, whatever gate the door
-keeps; a relay asks the authority for the challenge its door asks (`RelayNonce`) and
-carries the proofs on, so it can take nobody's place. The keeper's store is every
-host's: a page's `localStorage`, held by the first tab on the site, a tab beside it
-keeping its own in `sessionStorage`, a terminal's or a desktop window's
-`places.json` under the user's state directory (`paths.PlacesFile`, a file for the
-user alone), Android's in the app's files, each behind
-`[session] resume_after_restart`, on by default.
+challenge both ways, signed over the nonce and both identities, its keys read from
+the session's roster; a report and a handoff record carry their author's signature
+(`Sign`, `Verify`), checked against the roster's key for the participant they name.
+A returning dial proves its key and is seated in the place that key holds, whatever
+gate the door keeps; a relay asks the authority for the challenge its door asks
+(`RelayNonce`) and carries the proofs on, so it can take nobody's place. The
+keeper's store is every host's: a page's `localStorage`, held by the first tab on
+the site, a tab beside it keeping its own in `sessionStorage`, a terminal's or a
+desktop window's `places.json` under the user's state directory
+(`paths.PlacesFile`, a file for the user alone), Android's in the app's files, each
+behind `[session] resume_after_restart`, on by default.
 
 Cost: 32 bytes a roster entry, two round trips a peer link, and a signature of tens
 of microseconds a link, a dial and a succession message, nothing a tick. No new
 dependency. A merge or a split would carry a signed redirect under the same key
-(§9), and a page's wss dial proves its key unbound, since a page cannot read the
-leaf it connected to; its browser verified the door's certificate instead.
+(§9). Every dial proves its keys unbound, a page's among them, which cannot read the
+leaf it connected to; its browser verified the door's certificate instead. The
+door's fresh nonce keeps a proof to one dial.
 
 ### 3.3 The admission exchange
 
@@ -285,7 +302,9 @@ bounded (`MaxAuthFrame`) and the join handshake's fuzz target scripts them.
 Through the router (D5) the same frames run end to end, the router placing itself
 between the question and the answer for one frame each way (`tcpRouter.exchange`):
 it reads the dialer's answer, forwards a pass whole, and turns a sign-in or nothing
-into a ticket (§3.6); a passphrase door's later steps it splices.
+into a ticket (§3.6); a passphrase door's later steps it splices. A stand-in pod
+in a test hands its connection to `HostAcceptor` whole, which reads the route
+frame itself.
 
 ### 3.4 Session passes
 
@@ -365,7 +384,10 @@ exchange on every redial.
 On a TLS door both ends bind the exchange to the leaf certificate the door serves
 (`LeafBinding` on the door, the handshake's peer certificate on the dial, under a
 websocket too), so a self-signed door is authenticated both ways; on tcp and ws it
-authenticates the handshake alone. The offer carries the credential's verifier
+authenticates the handshake alone. `auth` reads an empty binding as an error, not
+as unbound, so the binding is passed only over TLS (`bindingOption`), and the leaf
+is read from under a websocket (`tlsOf`), stopping at the `*tls.Conn`, which has a
+`NetConn` of its own. The offer carries the credential's verifier
 (`SessionOffer.Door`, `DoorVerifier`: the salt, the cost and the two keys, never
 the phrase), which every participant proved, so a relay's door and a successor's
 serve the exchange from it (`OpenDoor`) and a newcomer joins there as at the host's;
@@ -378,17 +400,18 @@ What a participant is trusted with, the verifier among it, is
 A machine in the middle that answers for the door receives a proof it can test
 passphrases against offline, at Argon2's cost a guess: a generated code is past
 guessing, a chosen phrase must be long. A door published through the router is
-reached over the front door, under TLS to the site's edge only where TLS fronts it
-(`vifs://`), and plaintext on the tunnel, so its exchange runs unbound there (§4).
-The KDF's cost on a page and a phone is a reading still to take (§9).
+reached over the front door, and holds its tunnel open over it, under TLS to the
+site's edge where TLS fronts it (`vifs://`) and plaintext where none does; the door
+serves no certificate of its own there, so it runs its exchange unbound (§4). The
+KDF's cost on a page and a phone is a reading still to take (§9).
 
 ### 3.6 Admission tickets and accounts
 
 The router mints tickets in band (D5), signed by a key it alone holds, with
 `SignTicket`: the session, the kind, the subject, the dialer's key and a minute. A
-pod verifies it with the public key its Job's arguments carry (`-admit ticket
-<key>`), holds its session to the pod's own name, spends its id once
-(`SpentTickets`) and checks the dialer's proof over the key the ticket names. A
+pod verifies it with the public key its Job's arguments carry
+(`-admit ticket:<key>`), holds its session to the pod's own name, spends its id
+once (`SpentTickets`) and checks the dialer's proof over the key the ticket names. A
 player's host may verify the site's tickets too, from `GET /vif/api/keys`, for a
 session open to the site's players alone. A ticket admits once; the pass it is
 exchanged for admits every redial after. A dial that only watches is given none:
@@ -406,8 +429,11 @@ passphrase door's steps among them. The front door reads the edge's PROXY header
 version 1 or 2, when `-route-proxy-protocol` says an edge fronts it, and ends TLS
 itself under `-route-cert` or `-route-selfsign`; `-route-secure`, implied by either,
 has every link read `vifs://`, which the game dials with the system's roots, `-ca`
-or the fingerprint the sessions API carries (`door_fingerprint`). `vif-router keygen`
-writes the seed `-ticket-key` names; `GET /vif/api/keys` lists the public key.
+or the fingerprint the sessions API carries (`door_fingerprint`). A join address
+keeps that scheme wherever it is kept (`Endpoint.Dialable`): a bare host:port kept
+for a `:join` (`membership.Joining`) or in the flags dials a TLS door in the
+clear. `vif-router keygen` writes the seed `-ticket-key` names;
+`GET /vif/api/keys` lists the public key.
 
 Accounts are the identity service's (D8), whose routes and introspection are:
 
@@ -457,8 +483,9 @@ grants it the site ([Platforms §5](multi-platform.md#the-chrome-extension)).
 ### 3.7 Budgets
 
 Every budget is a fixed window per key (`AdmissionLimiter`), the key an address's
-host (an IPv6 host's /64) or an account, tables bounded at `NetworkAdmitTracked`
-and failing closed past it:
+host (an IPv6 host's /64, since a key of the whole host would let one prefix's
+addresses take a share each) or an account, tables bounded at
+`NetworkAdmitTracked` and failing closed past it:
 
 - **Joins at the router**: the route frame charges the dialer's address
   (`-client-joins` a minute), the front door's from the PROXY header or the socket
@@ -471,8 +498,11 @@ and failing closed past it:
 - **At a pod**: every dial arrives from the node's address, so a pod run with
   `-admit ticket` spends no address budget and charges the ticket's subject, the
   player the router named; a pass, a participant's own redial, spends none.
-- **Doors**: `-doors-per-address` publications an address holds and the join budget
-  per publication; by account once the publish ticket lands (§9).
+- **Doors**: `-doors-per-address` publications an address holds, the address
+  counted by its whole host and not its /64
+  ([todo](todo.md#count--doors-per-address-by-the-admission-key-not-the-whole-host)),
+  and the join budget per publication; by account once the publish ticket lands
+  (§9).
 - **The identity service's**: 5 registrations, 10 sign-ins and 5 deletions a minute
   per address, believed from the router's forward alone.
 
@@ -490,19 +520,22 @@ to wait.
   game's `vifs://` dials TLS with the system's roots, as a wss door is dialed, or
   pins the fingerprint the sessions API carries.
 - The ticket key is a file in `/etc/vif-router`, `root:vif-router` 0640 as
-  `router.env` is, made once on the node by `update-vif-router.sh` when absent
-  (`vif-router keygen`) and named by `-ticket-key` in `vif-router.env`, so the
-  repository holds the path and never the key. It needs no backup: a lost key is a
-  new one, and only the tickets open at the time die with it. Rotation rides a
-  router update, which waits for an empty fleet, so no pod holds the old public key.
+  `router.env` is, made once on the node (`vif-router keygen`) by the first install
+  ([Deploying §11](kube-docker-deploy.md#11-the-router)) and by
+  `update-vif-router.sh` when absent, and named by `-ticket-key` in
+  `vif-router.env`, so the repository holds the path and never the key. It needs no
+  backup: a lost key is a new one, and only the tickets open at the time die with
+  it. Rotation rides a router update, which waits for an empty fleet, so no pod
+  holds the old public key.
 - The verifier: the router writes its public key into each Job's arguments
   (`manifest.go`, with `30-session.yaml` and `render-session.sh` in step) beside
   `-admit ticket`. A public key is no secret: no Secret, ConfigMap or mount, no
   change to the Role, no egress. A session made by hand runs open unless given the
   key.
 - The front door's placement is one frame each way (§3.3), bounded by
-  `MaxAuthFrame` and `routeTimeout`, and the browser route shares it; the
-  `routePlacing` ceiling of 32 bounds the exchanges in flight as it bounds lookups.
+  `MaxAuthFrame` and `routeTimeout`, and the browser route shares it. The exchange
+  runs once the dial is placed, under the session's `-route-max` hold, so the
+  `routePlacing` ceiling of 32 bounds the lookups and not the exchanges in flight.
   A ticket costs the router one signature a join and the pod one check.
 - The identity service runs on the node as a system user of its own with its own
   unit and state directory (the decoy key, 0600), bound to loopback twice: the
@@ -531,8 +564,8 @@ to wait.
   node; `/vif/api/auth/` and `GET /vif/api/keys` published to 9080, with `Cookie`
   and `Authorization` passed through untouched and kept out of its access log,
   nothing cached under `/vif/api/auth/`; the router's variables
-  `VIF_ROUTER_ROUTE_PROXY_PROTOCOL` and `VIF_ROUTER_ROUTE_SECURE` on once the
-  stream block fronts 7777.
+  `VIF_ROUTER_ROUTE_PROXY_PROTOCOL` and `VIF_ROUTER_ROUTE_SECURE` on while the
+  stream block fronts 7777, as `vif-router.env` has them.
 
 The posture this leaves, stated in [Deploying §0](kube-docker-deploy.md#0-decisions)
 D6 and [The session fleet §4](kubernetes-fleet.md#4-security-posture): a fleet
@@ -819,7 +852,7 @@ Parameters, paths, settings and commands:
   `-cert`, `-key`, `-selfsign`, `-ca`, `-relay`, `-authority`, `-passphrase` and
   `-admit` flags and the help table the manual is made from; `requestSiteSession`,
   which pins a door's fingerprint and sends the sign-in; `cmd/vif/browser.go`: a
-  page's `PlaceStore`.
+  page's `PlaceStore` (`tabPlaces`).
 
 Hosts:
 
@@ -837,6 +870,8 @@ The router, `tool/vif-router`:
 - `tcp_proxy.go`: the front door's `accept` (the PROXY header, TLS), `place`,
   `exchange`, `placeDoor`, `splice`, `stallBounded`, the publication of a door.
 - `proxy_protocol.go`: the v1 and v2 headers.
+- `audience.go`: a session's one feed subscription, under the router's own `watch`
+  ticket (`feedSubject`, `tcpRouter.open`).
 - `identity.go`: `identityClient`, the forward and `whose`, `signInOf`,
   `signInOfRequest`.
 - `log_proxy.go`: the loopback forward the identity service's routes copy.

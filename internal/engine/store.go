@@ -7,15 +7,10 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// Store is a sparse-set container for component type T.
-//
-// SYNC INVARIANT: all access occurs under World.updateMutex. The tick
-// scheduler, event loop, render pass, and input path each acquire it;
-// there is no internal locking.
-//
-// Layout: dense[i] pairs with entities[i]; index maps entity -> dense slot.
-// Removal swap-removes and rewrites the moved entity's index, so indices
-// are valid by construction — no tombstones, no stale slots.
+// Store is a sparse-set container for component type T. Every access is under
+// World.updateMutex, which the tick, event loop, render pass and input path each
+// take, so it locks nothing itself. dense[i] pairs with entities[i]; a removal
+// swap-removes and rewrites the moved entity's index, so no slot goes stale.
 type Store[T any] struct {
 	world    *World
 	index    sparseIndex

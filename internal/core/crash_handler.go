@@ -7,13 +7,11 @@ var (
 	crashHook     func(r any, stack []byte)
 )
 
-// StdoutIsTerminal reports whether standard output is a terminal device.
-//
-// It is what separates a run that has a terminal to restore from one whose output
-// is a pipe, a file or a container's log: an escape sequence written to the latter
-// is not a reset, it is the only thing that run ever emitted. Stat rather than an
-// ioctl, because the question is about the file rather than about its modes and
-// the answer must hold on every unix this builds for.
+// StdoutIsTerminal reports whether standard output is a terminal device, which
+// separates a run with a terminal to restore from one whose output is a pipe, a file
+// or a container's log, where an escape sequence would be all the run ever wrote.
+// Stat rather than an ioctl: the question is about the file, not its modes, and the
+// answer must hold on every unix this builds for.
 func StdoutIsTerminal() bool {
 	fi, err := os.Stdout.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0

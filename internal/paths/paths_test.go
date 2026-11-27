@@ -612,12 +612,11 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	}
 }
 
-// TestSettingsForWritesThePlayersOwnFile: the file read is written when it is in
-// the override or the user root; one read further down, or none, makes the user
-// root's, which the next run reads, starting as the file read with its relative
-// paths made absolute. An override naming a system root is not the player's, a
-// special file in their root or a link from it into a shared one is never written,
-// and without a user root nothing is.
+// TestSettingsForWritesThePlayersOwnFile: the file read is written in the override
+// or the user root; one read further down, or none, makes the user root's, read by
+// the next run, starting as the file read with its relative paths made absolute.
+// An override naming a system root is not the player's; a special file, a link into
+// a shared root, and anything without a user root are never written.
 func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
 		t.Skip("system roots are Unix-specific")

@@ -1,7 +1,8 @@
 // Package bot drives one participant from an internal/fsm graph instead of a
 // terminal. The graph reads its own instance's world and queues intents, which a
 // Driver sends through that instance's mode router at the graph's rate, so a bot
-// is bound by everything that binds a person. See doc/bots.md.
+// is bound by everything that binds a person; a Learner evolves the weights of one
+// of the graph's networks, a round an evaluation. See doc/bots.md.
 package bot
 
 import (

@@ -301,9 +301,9 @@ func (s *NetworkSystem) textStat(reg *status.Registry, key string) *status.Atomi
 	return c
 }
 
-// epochWindow admits each source epoch once within NetworkEpochWindow.
-// A bitmap preserves out-of-order arrivals over unequal mesh paths; a single
-// high-water mark would silently discard them as duplicates.
+// window admits each of a source's epochs or crossing sequences once, within the
+// width its caller names. A bitmap preserves out-of-order arrivals over unequal mesh
+// paths; a single high-water mark would silently discard them as duplicates.
 type window struct {
 	high uint64                                       // newest admitted; zero means nothing yet
 	seen [parameter.NetworkSequenceWindow / 64]uint64 // bit i set: high-1-i was admitted
@@ -1135,7 +1135,7 @@ func (s *NetworkSystem) schedule(ev event.GameEvent) {
 	s.lastApplyTick = applyTick
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
 	// Counted, never capped. The cap is on what a peer can make this instance hold;
-	// this artifact is this instance's own and has already been broadcast, so
+	// this artifact is this instance's own and is in the epoch its peers are sent, so
 	// refusing it here would be a divergence rather than a defense.
 	s.scheduled = append(s.scheduled, barrierArtifact{
 		frame: frame, applyTick: applyTick, produced: s.productionEpoch, source: s.localSource, origin: ev.Origin,

@@ -11,14 +11,11 @@ func init() {
 	Register(Desc{Kind: "dom", Help: "journal domain: both | shared | player", New: newDomain})
 }
 
-// Domain restricts the view to one journal replication scope. It is three-state
-// rather than a per-domain mask: a record belongs to exactly one domain, and
-// the question a capture answers is "whose state is this", not "which subset".
-// DomNone is the unconstrained state, so a diagnostic log — where no record
-// carries a domain at all — is unaffected until the user asks for one.
-//
-// Index-only: the domain is resolved during the scan, so selecting one costs a
-// byte comparison per record and never reads a line.
+// Domain restricts the view to one journal replication scope: three states rather
+// than a mask, since a record belongs to exactly one domain. DomNone admits every
+// record, so a diagnostic log, where none carries a domain, is unaffected until one
+// is asked for. Index-only: the scan resolved the domain, so a match is a byte
+// comparison and never reads a line.
 type Domain struct{ State logfile.Domain }
 
 // NewDomain returns an unconstrained domain filter.

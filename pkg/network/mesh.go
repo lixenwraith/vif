@@ -8,26 +8,17 @@ import (
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
-// meshEpoch is the origin of the mesh's virtual clock. A mesh has no wall time
-// of its own — its links are function calls — so a round trip measured on one
-// would come back as a few microseconds whatever the harness had shaped. The
-// clock advances one game tick per Drain instead, which makes an in-process link
-// measurable and, more to the point, makes a shaped one *reproducible*: the same
-// ticks produce the same round trip on every run and on every machine.
+// meshEpoch is the origin of the mesh's virtual clock. A mesh's links are function
+// calls, so a wall-clock round trip would read microseconds whatever the shape; the
+// clock advances one tick per Drain instead, so a shaped link's round trip is the
+// same on every run and machine.
 var meshEpoch = time.Unix(1<<30, 0)
 
-// LinkShape is a deterministic bottleneck between two mesh nodes: a one-way
-// delay in ticks, a periodic drop, and a release budget in bytes per tick.
-//
-// It is not a network simulator and does not try to be. What it reproduces is
-// the three things `tc netem` shapes and the correction path actually depends
-// on — when a frame becomes visible, whether it arrives at all, and how many
-// bytes per tick the link will pass — with no clock and no scheduler, so a
-// constrained-link test is as reproducible as any other. The staged netem gate
-// is what says the same code behaves the same way over a real socket.
-//
-// The shape applies to what a node *receives*, which mirrors shaping a
-// participant's own ingress. A symmetric link is both ends shaped alike.
+// LinkShape is a deterministic bottleneck between two mesh nodes: a one-way delay in
+// ticks, a periodic drop, a periodic spike and a release budget in bytes per tick:
+// what `tc netem` shapes and corrections depend on, with no clock, so a constrained
+// link is as reproducible as any; the staged netem gate covers a real socket. It
+// shapes what a node receives, so a symmetric link is both ends shaped alike.
 type LinkShape struct {
 	// LatencyTicks delays a frame by this many drains before it becomes visible.
 	LatencyTicks uint64
@@ -42,12 +33,10 @@ type LinkShape struct {
 	JitterTicks uint64
 	JitterEvery uint64
 
-	// BytesPerTick is the release budget, spent as a token bucket rather than
-	// reset each tick. That distinction is the whole of whether the shape is a
-	// bottleneck at all: a budget that resets lets one frame of any size through
-	// every tick, so a link declared at 900 bytes a tick would happily pass a
-	// 64 KiB chunk twenty times a second. Accumulating instead makes a frame wait
-	// until the link has actually earned it, and the ones behind it wait with it.
+	// BytesPerTick is the release budget, a token bucket rather than reset each tick:
+	// a budget that resets lets one frame of any size through every tick, so a link
+	// of 900 bytes a tick would pass a 64 KiB chunk twenty times a second. Spent as it
+	// accrues, a frame waits until the link has earned it, and those behind it too.
 	BytesPerTick int
 }
 
@@ -66,12 +55,11 @@ type meshFrame struct {
 	bytes     int
 }
 
-// Mesh is an in-process link graph: what a node sends, its directly connected
-// neighbors drain on their next tick. It is the multi-participant harness — a real
-// socket adds framing and latency, neither of which the domain rules depend on, and
-// unlike a single stream it can express a topology that is not a star. A chain
-// A—B—C is what proves an artifact reaches a participant its producer never
-// connected to.
+// Mesh is an in-process link graph: what a node sends, its direct neighbors drain
+// on their next tick. It is the multi-participant harness: a socket adds framing and
+// latency, which no domain rule depends on, and a mesh can express a topology that is
+// not a star, such as the chain A—B—C that proves an artifact reaches a participant
+// its producer never connected to.
 type Mesh struct {
 	mu    sync.Mutex
 	nodes map[PeerID]*MeshPort
@@ -404,14 +392,11 @@ func (p *MeshPort) IsRunning() bool {
 	return p.up
 }
 
-// Drain moves this node's pending notifications into dst, and is the mesh's
-// tick: it advances the virtual clock, emits the interval's probes, and releases
-// whatever the shape now allows through.
-//
-// A round trip and an echo never reach dst. They are answered and folded in
-// here, which is the same place a socket port answers them — before a frame
-// could reach a tick — so the measurement is a property of the link on both
-// transports rather than of how the harness happens to drive one.
+// Drain moves this node's pending notifications into dst, and is the mesh's tick: it
+// advances the virtual clock, emits the interval's probes, and releases what the shape
+// now lets through. A probe and an echo never reach dst: they are answered and
+// folded in here, as a socket port does before a frame could reach a tick, so the
+// measurement is the link's on both transports, not the harness's.
 func (p *MeshPort) Drain(dst []Inbound) int {
 	p.mu.Lock()
 	p.drains++
@@ -446,15 +431,10 @@ func (p *MeshPort) Drain(dst []Inbound) int {
 	return n
 }
 
-// DrainOffTick releases what the shape has already let through, without counting
-// as one of this node's ticks.
-//
-// The three things Drain does beside releasing frames are all denominated in
-// ticks — the virtual clock advances, the shaping credit refills, and the probe
-// interval is measured — so a second poll inside one tick would double this link's
-// apparent bandwidth and halve every round trip it reports. This is the same
-// release with none of that: what has arrived is handed over, and the link's
-// measurement of itself is untouched.
+// DrainOffTick releases what the shape has already let through, without counting as
+// one of this node's ticks. All else Drain does is denominated in ticks (the clock,
+// the shaping credit, the probe interval), so a second Drain inside one tick would
+// double the link's bandwidth and halve its round trips; this leaves them untouched.
 func (p *MeshPort) DrainOffTick(dst []Inbound) int {
 	n := 0
 	for n < len(dst) {
@@ -487,12 +467,10 @@ func (p *MeshPort) probesDueLocked() []PeerID {
 	return out
 }
 
-// release pops the next frame the shape allows through, counting its bytes
-// against this link's received total at the moment it actually arrives.
-//
-// The budget is head-of-line: a frame the remaining credit cannot carry holds up
-// the ones behind it rather than being skipped. That is what a bottleneck does,
-// and it is what makes the backlog the far end measures a real one.
+// release pops the next frame the shape allows through, counting its bytes against
+// this link's received total as it arrives. The budget is head-of-line: a frame the
+// credit cannot carry holds up the ones behind it, as a bottleneck does, so the
+// backlog the far end measures is a real one.
 func (p *MeshPort) release() (meshFrame, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

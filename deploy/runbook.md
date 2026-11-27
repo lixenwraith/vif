@@ -154,7 +154,7 @@ The accepted socket's address is recorded on the node and dropped from the
 published stream. Every player reaches a pod through the router, which dials it
 from the node, so the record names the node's address, and the router's own log
 names the session and never the dialer: a player's address is the site's edge's
-to know, in its access log for the browser route, and nobody's for the front door.
+to know, which ends TLS for the front door as for the browser route.
 
 ```sh
 sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'

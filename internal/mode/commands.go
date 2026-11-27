@@ -750,7 +750,8 @@ func toggleWord(v bool) string {
 	return "off"
 }
 
-// handleSystemCommand sets the energy to a specified value
+// handleSystemCommand enables or disables a system by its runtime name, refusing a
+// disable that another system requires
 func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 2 {
 		setCommandError(ctx, "Usage: :system <name> enable|disable")

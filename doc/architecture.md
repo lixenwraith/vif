@@ -424,11 +424,12 @@ These boundaries belong to separately maintained modules:
   sound server's client library for the build's own stream (`cmd/vif/pulse.go`)
   and, in `terminal/window`, Xlib, EGL and GLES 2 or desktop OpenGL.
 
-`golang.org/x/sys` serves `pkg/network`'s Windows error codes; `golang.org/x/term`,
+`golang.org/x/sys` serves Windows: `pkg/network`'s error codes, and in `cmd/vif`
+the WASAPI stream and the window build's console; `golang.org/x/term`,
 `golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through
-`auth`, are indirect dependencies. vif has no application CGO requirement, although external
-audio executables or an OSS device are runtime dependencies when sound is
-enabled.
+`auth`, are indirect dependencies. vif has no application CGO requirement; the
+sound server's client library it loads, an installed player or an OSS device is a
+runtime dependency only where sound plays through it (§9).
 
 ## 12. Deployment shapes and current limitations
 
@@ -459,37 +460,40 @@ else. The page keeps its participant keys and passes in the site's storage, one
 tab holding them, so a closed tab is come back to, and its sign-in as the identity
 service's cookie. The page can supply ordinary arguments through `Go.argv`, but
 external `wad/` content needs an HTTP-backed resource provider rather than a file
-argument. The Makefile also contains an explicitly experimental Windows
-cross-build. The exact profile and browser extension strategy are in [Build
-profiles and platform boundaries](multi-platform.md).
+argument. The Makefile also cross-builds Windows: the window build with its own
+speakers (`make windows-gui`, packaged by `make windows-package`) and an
+experimental terminal build (`make windows`). The exact profile and browser
+extension strategy are in [Build profiles and platform boundaries](multi-platform.md).
 
 A trusted-peer game of up to `parameter.MaxPlayers` cursors, over framed TCP or
 WebSocket, is exposed through `-host`, `-join`, `-serve` and `-players`, and in a
-running game through `:host` and `:join`. The join handshake resolves the host
-anchor before the joining world is constructed, the roster every instance builds
-from arrives with the start gate, a server's scheduler stays at tick zero until
-its lobby's first guest while an interactive host plays from its first tick, and
-the manifest-registered `NetworkSystem` drains framed input only at the
-simulation's poll boundary. Every participant holds an Ed25519 key for its place,
-proven over the door's nonce at every dial and carried on the roster, so a redial,
-a peer link and a succession message are the participant's own; a session pass
-brings it back after a crash or a reboot without its gate; a door is open to any
-key, gated by a passphrase (Argon2-SCRAM, bound to the door's certificate over
+running game through `:host` and `:join`; a viewer watches one with `-spectate` or
+`:spectate`, holding no place in it, from a feed its host encodes once for every
+viewer ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). The join
+handshake resolves the host anchor before the joining world is constructed, the
+roster every instance builds from arrives with the start gate, a server's scheduler
+stays at tick zero until its lobby's first guest while an interactive host plays
+from its first tick, and the manifest-registered `NetworkSystem` drains framed input
+only at the simulation's poll boundary. Every participant holds an Ed25519 key for
+its place, proven over the door's nonce at every dial and carried on the roster, so
+a redial, a peer link and a succession message are the participant's own; a session
+pass brings it back after a crash or a reboot without its gate; a door is open to
+any key, gated by a passphrase (Argon2-SCRAM, bound to the door's certificate over
 TLS) or, on the fleet, by the router's ticket, and a drop keeps a key and its
 account out. A dial is budgeted per address, or per account where a sign-in names
-one, the handshake is bounded and off the accept path, and every buffer an
-arriving frame can reach is capped. Trusted-peer now means what admission grants:
-a participant once admitted is trusted with the session, which
-[the todo](todo.md#tighten-what-a-relay-and-a-successor-are-trusted-with) is to
-audit. The artifact barrier exchanges crossings without
-a synchronous per-tick round trip, and because every artifact names the absolute
-tick it applies at, the authority commits each one and relays it, so a participant
-reaches instances its producer never linked to. A participant stamps its own
-crossings with the lead its own link asks for and applies each at that tick; every
-other instance applies it at the tick the authority committed it to, which for one
-that missed its lead is later, or never when it is too late to commit, and the
-next correction repairs the producer's early copy. The D-18 prediction is what
-makes local input feel local. See [Multiplayer](multi-player.md) §3.5 and §8.
+one, the handshake is bounded and off the accept path, and every buffer an arriving
+frame can reach is capped. Trusted-peer now means what admission grants: a
+participant once admitted is trusted with the session, which [the
+todo](todo.md#tighten-what-a-relay-and-a-successor-are-trusted-with) is to audit.
+The artifact barrier exchanges crossings without a synchronous per-tick round trip,
+and because every artifact names the absolute tick it applies at, the authority
+commits each one and relays it, so a participant reaches instances its producer
+never linked to. A participant stamps its own crossings with the lead its own link
+asks for and applies each at that tick; every other instance applies it at the tick
+the authority committed it to, which for one that missed its lead is later, or never
+when it is too late to commit, and the next correction repairs the producer's early
+copy. The D-18 prediction is what makes local input feel local. See
+[Multiplayer](multi-player.md) §3.5 and §8.
 
 A participant may also arrive at any tick. `:host <addr>` opens a run that is
 already playing; the joiner receives the shared world as a chunked capture (D-19),

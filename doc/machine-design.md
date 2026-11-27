@@ -151,10 +151,11 @@ reports each try. In a phase, the first edge whose
 source holds the state and whose guard passes owns the phase: when its chain
 fails, its fallback applies and later edges wait for the next step.
 
-The state a transition enters ticks in the same step. A global edge acts at the
-start of the step, so the state it enters also advances by dt; the later phases
-act after the advance, so a state they enter ticks at `Elapsed == 0`, which a tick
-that must skip its entry step tests.
+A state a transition enters before the tick ticks in the same step: a global edge
+acts at the start of the step, so the state it enters also advances by dt, while a
+timeout or a pre-tick edge acts after the advance, so the state it enters ticks at
+`Elapsed == 0`, which a tick that must skip its entry step tests. A state a
+post-tick edge enters first ticks in the next step.
 
 `Start` enters a state for d, or its default when d is not positive, with no exit
 and no probe; it panics on a state the graph does not define, which `Build`
@@ -219,8 +220,8 @@ A host is the species system that steps a graph. Its contract:
   host writes the component fields derived from them on every step, suspended or
   not: an output never lags its state by a tick or goes stale while held. Combat
   reads them as fields (`QuasarComponent.IsShielded`,
-  `StormCircleComponent.IsInvulnerable`, `BehaviorComponent.Shielded` in
-  `applyStunEffect`), so the components keep them.
+  `StormCircleComponent.IsInvulnerable` and `BehaviorComponent.Shielded`, which
+  `CombatSystem.unmovable` holds against a stun), so the components keep them.
 - **Suspension.** A suspended step strikes nothing: contacts and gold breaking run
   only after a step that did not suspend. A held instance still counts in its
   species' count.
@@ -493,11 +494,15 @@ at load; only `Op.Holds` runs per evaluation.
   depth, before `toml.Decode` reads it, so a reordered enum retargets nothing a
   document reads; a name the type lacks fails by its path with the names it takes
   (`rooms[1].kind: "attic" is not one of hall, vault`), and so does a number.
-  `Decode` is the names that hold only `Op`. `event.PayloadNames(programs)` holds
-  every enum a payload holds, a scenario's programs among the species;
+  `Decode` is the names that hold only `Op`. `event.PayloadNames(declared)` holds
+  every enum a payload holds, and what a scenario declares among them: its programs
+  as species and styles, each program's signals, its loot kinds and its maps;
   `event.AuthoredPayload` decodes through it for a scenario's and a program's
   `EmitEvent`, `:emit` and a script's event, and `List` is what `-schema` prints
-  under `names`.
+  under `names`. A map's or a signal's enum takes `""` as its zero, naming none,
+  and the decode is the whole check: no `EmitEvent`, `:emit` or script checks a
+  name of its own. `:emit` builds its `component.Declared` from `Resources`
+  (`parseEventPayload`), so what it should name has to be readable there.
 
 `fsm.Machine` registers a name with the struct its arguments decode into, through
 generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
@@ -537,7 +542,7 @@ scarab's timings:
 ```toml
 [states.Lock]
 duration_ms = 1200
-flags = ["Enraged"]
+flags = ["Enraged", "ChargeLine", "Landing"]
 probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
@@ -572,14 +577,16 @@ The registry is generic, `behavior.Vocabulary[C]`, and its generic methods
 register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
-`Sustained[A]`, `Emit` (an effect reading `event` and `origin` beside `payload`),
-`Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of the host's
-own, built once into what each spawn applies before its machine starts, as the
-game's `mount` pushes its `EventMountRequest`), with the host's `Integrate`,
-`Entered` and `Stalled` hooks. `Entries`
-lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
-`BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
-per instance:
+`Named[A]` (an effect whose payload names a species or a style, which the
+scenario's programs extend: the vocabulary is built before any program compiles,
+so `Named`'s build gets the set's payload names, where `Effect` decodes without
+them), `Sustained[A]`, `Emit` (an effect reading `event` and `origin` beside
+`payload`), `Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of
+the host's own, built once into what each spawn applies before its machine starts,
+as the game's `mount` pushes its `EventMountRequest`), with the host's
+`Integrate`, `Entered` and `Stalled` hooks. `Entries` lists them for `-schema`'s
+`vocabularies.behavior`. The game's verbs bind in `BehaviorVocabulary`
+(`internal/system/behavior.go`) to `behaviorCtx`, refilled per instance:
 
 - Predicates read the instance and the world: `TargetDistance`, `LineOfSight`,
   `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `AtEdge`, `Chance`, `Param` (the
@@ -711,23 +718,27 @@ smaller part of it.
   instance silently, and the composite system destroys a head left with no members
   unless its hit points are spent (`CompositeSystem.destroyHead`), as for any
   composite.
-- **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge, inset}` (bus,
-  and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
-  cancel; an empty program cancels every data species) and
-  `EventBehaviorSignalRequest{program, signal, count}` (shared: it raises the
-  signal on `count` of the instances whose state takes it, ranked by a draw from
-  the tick and each entity, so the choice is the same in any store order, D-8; a
-  payload's `signal` resolves at load among its `program`'s, `event.PayloadNames`). A program no entry
-  defines fails the authored payload's load (`event.Programmed`); one arriving
-  otherwise is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
-  immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
-  names a cell blind to the walls; an edge is resolved to its cell on each instance from the grid
-  (`BehaviorSpawnRequestPayload.Cell`). A scenario registers a data species with genetics through
+- **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge,
+  inset}` (bus, and barrier-bound, since a crossed one allocates shared identity),
+  `EventBehaviorCancelRequest{program}` (shared, as every species' cancel; an empty
+  program cancels every data species), `EventBehaviorSignalRequest{program, signal,
+  count}` (shared: it raises the signal on `count` of the instances whose state
+  takes it, ranked by a draw from the tick and each entity, so the choice is the
+  same in any store order, D-8; a payload's `signal` resolves at load among its
+  `program`'s, `event.PayloadNames`) and `EventMapLayRequest{map, x, y}` (shared:
+  each instance the map's legend names stands as its own spawn request would stand
+  it, in row order). A program or a map no entry defines fails the authored
+  payload's load (`event.Programmed`, `event.PayloadNames`); one arriving otherwise
+  is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is immediate
+  unless the prototype names an entrance (§4.4), its footprint searched over the
+  whole map, since a scenario names a cell blind to the walls; an edge is resolved
+  to its cell on each instance from the grid (`BehaviorSpawnRequestPayload.Cell`).
+  A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count`, a
-  `behavior.<program>.state.<State>` for each of its states,
-  `behavior.<program>.transition_stalls` and the lifecycle rows
+  `behavior.<program>.state.<State>` for each of its states, `.left` (its own
+  `Leave`s), `.transition_stalls` and the lifecycle rows
   (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`, `kills.<program>` in
   `NewMetaSystem`, all before `Freeze` ([telemetry](telemetry-reference.md)). A
   spawn or an entrance counts at once rather than at the next step, since an
@@ -746,8 +757,8 @@ smaller part of it.
 - **Generic species system.** `BehaviorSystem` runs every data species: hit
   points, lifetime, the pattern cycle (held by a stun), `Step`, the flags written
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
-  `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
-  quasar's shield; `TeleportLine` to `BehaviorComponent.TeleportLine`, which
+  `BehaviorComponent.Shielded`, which `CombatSystem.unmovable` reads as it reads
+  the quasar's shield; `TeleportLine` to `BehaviorComponent.TeleportLine`, which
   `TeleportLineRenderer` reads to draw the teleport line to the stored cell;
   `ChargeLine` to `BehaviorComponent.ChargeLine`, which `ChargeLineRenderer` reads
   to pulse the charge line toward it; and `Landing` to
@@ -757,8 +768,9 @@ smaller part of it.
   mount the spawn asked for fires in those states alone), then, unless suspended,
   gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, post, raised signals, `Shielded`, `TeleportLine`,
-  `ChargeLine`, `Landing`}.
+  instance, pattern frame and accumulator, stored target, post, raised signals, the
+  gateway that sent it and its wave mark, `Shielded`, `TeleportLine`, `ChargeLine`,
+  `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
   bit.
@@ -861,7 +873,11 @@ Each rule above has a test named for it, beside its code:
 - `internal/system`: `quasar_test.go`, `swarm_stall_test.go`,
   `storm_attack_test.go`, `fuse_test.go` and `behavior_test.go` hold §4's and
   §6.4's rules. `aboutToExpire`, generic over the state type, starts an entry one
-  nanosecond before it expires.
+  nanosecond before it expires. A test there stepping `BehaviorSystem.Update` by
+  hand has no composite system and no scheduler: an instance a step ended stands
+  until the test delivers its `EventCompositeDestroyRequest`, so further steps end
+  it again, and `Chance` repeats one roll unless the test advances the tick
+  (`GameState.IncrementGameTicks`).
 - `internal/behavior`: IDs by sorted name, a compiled program stepping as its
   states say, a compile error naming program, place and key, the name rules, the
   vocabulary's entries. `internal/resource`: a program as a scenario file, and

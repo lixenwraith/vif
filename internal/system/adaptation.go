@@ -31,8 +31,8 @@ type trackedRoute struct {
 	SubType uint8
 }
 
-// AdaptationSystem handles multi-armed bandit (EXP3) adaptation for alternative routes
-// Decouples topological fitness evaluation and probability distribution from genetics and navigation
+// AdaptationSystem learns route choice as a multi-armed bandit, Hedge over mean
+// fitness rather than canonical EXP3, apart from genetics and navigation
 type AdaptationSystem struct {
 	world         *engine.World
 	outcomes      map[uint32]map[uint8][]routeOutcome // Buffer: graphID -> subType -> outcomes

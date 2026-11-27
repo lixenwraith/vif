@@ -32,7 +32,8 @@ func (a *App) initAudioService() error {
 	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, bed, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.host.Audio))
 }
 
-// audioPlay reads the channels and the sfx volume as the player left them
+// audioPlay reads the channels, the sfx volume and the binaural bed as the player
+// left them
 func (a *App) audioPlay(p *paths.Play) {
 	r := a.world.Resources.Audio
 	if r == nil || r.Engine == nil {

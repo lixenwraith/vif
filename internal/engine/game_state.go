@@ -140,14 +140,10 @@ func (gs *GameState) GetGameTicks() uint64 {
 	return gs.GameTicks.Load()
 }
 
-// SetGameTicks adopts a tick count from installed shared state (D-19).
-//
-// The tick is shared identity, not a local counter: it names the instant every
-// participant's simulation is at, and since SimTime derives the simulation clock
-// from it, adopting the tick adopts the clock. A world installed without it would
-// hold the sender's entities while reading a different instant, so every duration
-// measured against a stored one — a quasar's speed step, a gold deadline — would
-// resolve on a different tick than the run it claims to reproduce.
+// SetGameTicks adopts a tick count from installed shared state (D-19). The tick is
+// shared identity and SimTime derives the clock from it, so a world installed without
+// it would hold the sender's entities at another instant, and every stored duration
+// (a quasar's speed step, a gold deadline) would resolve on another tick.
 func (gs *GameState) SetGameTicks(ticks uint64) {
 	gs.GameTicks.Store(ticks)
 }

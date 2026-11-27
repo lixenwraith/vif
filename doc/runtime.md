@@ -68,10 +68,10 @@ that sets up its own map keeps it, the run that replaces one that fitted, for
 another scenario or a session left, keeps the size fitted (`restartRequest.Fitted`),
 and a spectator and a replay, which play no map of their own, refuse `-size`.
 
-Those predicates describe a full native build. Compile-time capabilities refine
-them: `vif_headless` makes presenting modes unavailable and omits renderers;
-`vif_noaudio` and `wasm` make `Audio` false and replace full audio systems with
-event-only sinks. Runtime mode
+Those predicates describe a full build, the browser's included. Compile-time
+capabilities refine them: `vif_headless` makes presenting modes unavailable and
+omits renderers, and it and `vif_noaudio` make `Audio` false and replace full audio
+systems with event-only sinks. Runtime mode
 and build profile remain separate so the same `ModeServer` behavior can run from
 a full development binary or the smaller deployment artifact. See
 [Build profiles and platform boundaries](multi-platform.md).
@@ -87,10 +87,10 @@ process (§4, Bot seats). See [Bots](bots.md).
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
 | Validate | `resource.Check` | No | Resolve `vif.toml`, the scenario (loaded into a throwaway HFSM and checked against this build's systems), keymap, audio overrides, corpus and every bot graph; print what each resolved to. |
-| Export schema | `manifest.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
+| Export schema | `manifest.Schema` | No | Emit the JSON schema, versioned by `manifest.SchemaVersion`: events and their fields, the names a payload field takes, the scenario's, bot graphs' and behavior programs' guards and actions, the bot catalog, operators and config fields. |
 | Verify replay | `app.VerifyJournal` | No | `-r <file> -headless`: replay a journal flat out and fail at the first world digest it does not reproduce; a `jseq` gap fails before it plays. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the session's start gate. |
-| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. Headless it paces as a script does (§1.1), and alone, where its graph learns, plays `-games` further headless runs of its own beside it, each on its own goroutine ([Bots](bots.md#learning)); watched it defaults to real time. Ordinary `-bot` uses `app.Run` with a human. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. Headless it paces as a script does (§1.1), and alone and flat out, where its graph learns, plays `-games` games at once: its own, and the rest each a headless run beside it on its own goroutine ([Bots](bots.md#learning)); watched it defaults to real time. Ordinary `-bot` uses `app.Run` with a human. |
 
 ### 1.0 The four session flags
 
@@ -132,9 +132,11 @@ three times: `-headless` requires bots to drive its local cursor, and `-serve`, 
 no local cursor, is the deployment shape.
 
 `:host` is an operator command rather than a flag, and its session opens at
-whatever tick the run has reached. `-probe`, `-first-join`, `-empty` and `-drain`
-are refused outside `-serve`, because each of them answers to a supervisor and an
-interactive run has a person instead.
+whatever tick the run has reached. `-spectate` is none of the four: a viewer
+watches a session without being in it
+([Multiplayer §5.8](multi-player.md#58-watching-a-session)). `-probe`,
+`-first-join`, `-empty` and `-drain` are refused outside `-serve`, because each of
+them answers to a supervisor and an interactive run has a person instead.
 
 ### 1.1 Script pacing and presentation
 
@@ -162,6 +164,10 @@ same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
 session: step is instance-local, the rate is the host's, and a session stops only by
 its host's hold (§8), which a watched bot's `p` asks for as `:pause` does.
+
+A watched run's viewer's input never passes the interactive loop's `inputTick`:
+`player.route` hands it to the router, so what a player's input does besides, as
+saving a changed `[play]`, is done there for a watched run.
 
 ### 1.2 The dedicated host
 
@@ -346,24 +352,24 @@ sequenceDiagram
     participant World as ECS world
     participant Runtime as Scheduler, router, presentation
 
-    Main->>App: New(config)
+    Main->>App: newApp(config), from Run or another entry point
     App->>App: Validate config, resolve seed, read scenario
     App->>Hub: Register mode-selected services, InitAll()
     App->>World: NewWorld(), BindResources
-    App->>World: GameContext, map floor and latch, systems
+    App->>World: GameContext, map floor and latch, systems, check dependencies
     App->>App: Open journal, latch session state
     App->>Runtime: Renderers, input and router
     App->>Runtime: Scheduler, load and initialize HFSM
-    App->>Runtime: Add MetaSystem, check dependencies, register handlers
+    App->>Runtime: Register event handlers
 ```
 
 `-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
 preview of its offer and `JournalAnchor`, adopts its seed, configuration identity
 and map latch, takes the scenario's bytes from the coordinator when no root here
-holds them, and only then calls `New`. The preview holds no place: the seat that
+holds them, and only then calls `newApp`. The preview holds no place: the seat that
 names the run's participant follows the built and checked world, at once or at its
 player's press (`Membership.TakeSeat`), and binds that identity into the port and world
-`New` made without it. Until the start gate installs the session's world, a
+`newApp` made without it. Until the start gate installs the session's world, a
 presenting joiner draws its status line alone: the world it composed stands in on
 the map its dial was offered, which a server sizing its session from its first
 guest changes at the gate. A dedicated host or a scripted or bot-driven `-host`
@@ -402,21 +408,24 @@ The detailed construction order is significant:
    build the authority protocol (`converge.New`).
 9. Apply the initial `-speed` rate, and freeze the clock of a run that waits on a
    start gate.
-10. Construct systems from the generated manifest. `World.AddSystem` sorts them
-    by priority and preserves manifest order for equal priorities.
+10. Construct systems from the generated manifest, then `MetaSystem` and
+    `BehaviorSystem`, which take the context and the scenario's compiled programs.
+    `World.AddSystem` sorts them by priority and preserves manifest order for equal
+    priorities; `World.InitSystems` initializes them in dependency order and
+    refuses an unknown dependency or a cycle.
 11. Open the journal when requested, then latch the session state the run starts
     in.
 12. For a presenting mode, construct and priority-sort renderers.
-13. Create the input parser, merge the keymap and build the mode router for
-    semantic injection in every mode; bind pointer control only when the
-    presentation owns simulation input.
+13. Create the input parser, merge the player's keymap and the scenario's keys
+    over the default, and build the mode router for semantic injection in every
+    mode; bind pointer control only when the presentation owns simulation input.
 14. Create frame synchronization channels and the scheduler, then load the
     scenario into the HFSM, initialize its regions, enqueue their entry actions
     (including the shipped cursor spawn request), and apply global/region system
     toggles.
 15. Register every system that implements `event.Handler`.
 
-If any step fails, `App.New` calls `Close` on the partially built application.
+If any step fails, `newApp` calls `Close` on the partially built application.
 Services therefore must make `Stop` idempotent and able to release resources
 acquired by `Init` even when `Start` was never reached.
 
@@ -494,9 +503,9 @@ consumes the peer's ordered stream; its driver paces ticks at the run's rate
 (§1.1), trimmed by the guest pace the last tick read, so one process cannot race
 thousands of ticks ahead of the other.
 
-A process may hold several Apps: a holder and its bot seats, a replay's copies, an
-install's staging world. What a holder and its seats share and what they do not;
-none of it enters a simulation snapshot:
+A process may hold several Apps: a holder and its bot seats, a learning bot's games
+beside its own, a replay's copies, an install's staging world. What a holder and its
+seats share and what they do not; none of it enters a simulation snapshot:
 
 | State | Scope | With seats |
 |---|---|---|
@@ -547,7 +556,8 @@ For a render frame, the application:
 1. increments the frame counter;
 2. under the world lock, refreshes an open config menu and copies continuous game
    and real time, local-cursor position, map, viewport, and camera data into a
-   value `RenderContext` (a hidden wasm page skips this step and the next);
+   value `RenderContext` (a hidden page, or a terminal that stopped taking
+   output, skips this step and the next);
 3. invokes the orchestrator, which separately locks the world while concrete
    renderers read components, then flushes the cells to the presentation's
    surface outside the lock;
@@ -567,7 +577,8 @@ rebuild a world that began elsewhere. The record format is
 [Logging and diagnostics](logging-and-diagnostics.md) §9.
 
 The playback keys are fixed; any other key is parsed by the keymap in NORMAL,
-which keeps only quit, the audio toggle, `:` and the config menu.
+which keeps only quit, the audio toggle, `:`, the config menu (`Esc` included),
+help and the console.
 
 | Control | Playback action |
 |---|---|
@@ -580,7 +591,7 @@ which keeps only quit, the audio toggle, `:` and the config menu.
 | `:r tick <n>` | Go to the first step at or past tick `n` of the run shown, the status bar's `GT`. |
 | `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
 | `:r restart` | Play again from the recording's start; also Simulation → Restart replay. |
-| `:` | Command line: `replay`, `config`, `help`, `about`, `telemetry`, `hud`, `fps`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
+| `:` | Command line: `replay` and the commands that read the run or set its view (`inspects` in `internal/mode/commands.go`): `menu`, `config`, `help`, `about`, `console`, `telemetry`, `hud`, `fps`, `edge`, `binaural`, `debug`, `content`, `flow`, `graph`, `machine`, `log`, `q`. |
 | `q` | Quit. |
 
 The status bar adds `diverged by tick <n>` once the replay fails to reproduce a
@@ -616,7 +627,7 @@ without a flight recorder until it is presented. One fresh copy waits idle, and
 one job at a time builds it or moves it into place on its own goroutine.
 
 After each step the presented copy plays, the player keeps the whole state of the
-run (`app.checkpoint`) and its world digest: the last `parameter.ReplayRing` (8)
+run (`scribe.Checkpoint`) and its world digest: the last `parameter.ReplayRing` (8)
 steps in a ring, and every `parameter.ReplayCheckpointSteps` (100) on a ladder that
 drops every other and doubles its spacing past `parameter.ReplayCheckpoints` (32).
 A checkpoint holds every store and occupied grid cell's entities in their own order
@@ -725,8 +736,9 @@ flowchart LR
   round is scored or told (`Driver.Round`).
 - Draws come from `vmath.NewSeededRand(seed, "bot.<participant>")`. Graph state is
   in no capture, journal or fingerprint. `app.RunBot` starts its run on the
-  embedded `[play]`'s pointer and the auto-fire its graph names, that `[play]`'s
-  when it names none, as a seat's run starts.
+  embedded `[play]`'s pointer and camera edge, which bounds where it points, and
+  the auto-fire its graph names, that `[play]`'s when it names none, as a seat's
+  run starts (`botPlay`).
 
 A seat (`internal/app/internal/membership/seat.go`) is that driver on another
 headless instance in the holder's process, on its own goroutine and paced against
@@ -764,8 +776,9 @@ flowchart TD
 1. latch the session state, then settle what was pushed since the last tick, a
    pending pointer placement (§4) pushed first, as one between-tick group: an
    `"input"` group when a placement was pending, a `"pre"` group otherwise, where
-   the event loop would have settled them and where a replay does; read the
-   guest pace trim;
+   the event loop would have settled them and where a replay does; a viewer's tick
+   stops there until its feed has closed that tick (`World.TickGranted`); read
+   the guest pace trim;
 2. open the next journal tick stamp, the body's settle group 0, then set
    `GameTime` to `SimTime(tick)` — derived from the tick, never from the pacing
    clock, so every participant reads the same instant — with wall `RealTime` and
@@ -793,6 +806,12 @@ A reset dispatched by step 1 or 7 — a crossed `:new`, or the scenario's own �
 ends the tick there, as one between ticks does: the rest of the body, the epoch
 flush and the tail are skipped on every participant alike, and the scheduler
 resets the FSM before the new run's tick 1.
+
+So a tick can run no system: one whose opening settle dispatches a new game asked
+for between ticks ends there, and `App.InputTick` settles one ahead of the tick
+when a bot's step injected input. What a system leaves for a tick, as
+`Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens, and a
+bot's driver closes its round before it counts such a tick.
 
 Every relative clock (a timer slot, a carried age, a species countdown, a
 machine's elapsed time) advances in its owner's `Update`: step 6, or step 5 for the
@@ -896,7 +915,10 @@ state loss and is logged when observed.
 `mode.Router.Handle`. Nothing reachable from the router may call
 `World.RunSafe`, `World.Lock`, or another lock wrapper for the same mutex. The
 router can directly access stores because its caller already provides the
-critical section.
+critical section. `Router.ProcessMacroTick` is the exception: `inputTick`
+(`loop.go`) and `InputTick` (`headless.go`) call it before `handleIntent` takes
+the lock, so a component read there races; it reads status cells or takes
+`RunSafe`.
 
 ### Operator commands hold the lock
 
@@ -926,11 +948,13 @@ instance's own pause (`SetPaused`, `OwnPause`) — the command line or an overla
 a solo run, unless `[play] pause_command` or `pause_menu` is off
 (`GameContext.PauseForCommand`, `PauseForMenu`), its player away, a breakpoint hit,
 `:step` — and a hold (`SetHeld`, `Held`), which `:pause`, `p` or Game → Pause
-starts and only another ends, so closing a menu leaves it standing; the status bar
-shows `PAUSED` while it stands. The own pauses share one flag, so a menu's close
-taken after an away would end the pause the away found standing: the loop takes
-an away after the menu ops its host queued ahead of it (`App.takeAway`), and a page
-that closes its menu on the way to its start screen leaves its solo run paused.
+starts in place of an own pause standing, a step's included, and only another
+ends, so closing a menu leaves it standing and its end leaves the game running; the
+status bar shows `PAUSED` while it stands. The own pauses share one flag, so a
+menu's close taken after an away would end the pause the away found standing: the
+loop takes an away after the menu ops its host queued ahead of it (`App.takeAway`),
+and a page that closes its menu on the way to its start screen leaves its solo run
+paused.
 Pause freezes simulation ticks through `PausableClock` and the scheduler's pause
 gate. It does not freeze the whole process:
 
@@ -969,6 +993,11 @@ as state and steps through it, since the run it follows took no tick while held;
 an end no command made here, and the start of a freeze, go through the request a
 command makes, settled at once, and a journal's opening records a hold standing,
 so a replay holds and ends its hold in the pass the run did.
+
+So a test of a pause reads `TimeCtl.OwnPause` and `Held`, never the tick count. A
+scratch test's random walk of keys (`takeEvent`), menu ops (`menuOp`) and aways
+(`setAway`) on `newApp` over a `framePresentation` reads them after each step; `q`
+waits for a register, so a command typed after it is Normal keys.
 
 ## 9. Time control
 
@@ -1024,19 +1053,25 @@ the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
 run, so another scenario needs another run: `Run` owns a loop that builds one App
 per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
-the run for a `:join`, a session restart and a removal by the host, and the first
-of these asked for is the one served: a run already being replaced refuses another.
+the run for a `:join` or `:spectate`, a session restart and a removal by the host,
+and the first of these asked for is the one served: a run already being replaced
+refuses another.
 One builder, `runConfig.restarted`, makes each next run from the command line `Run`
-was given and what the restart names. A scenario change, a restart and a `:join` seat
-the run's bots again, read when the restart is asked for, since a session closing
-ends them before the switch; a bot told to leave is not among them, and a removal
-by the host seats none.
-Everything operator-owned restarts with it but the console's lines, which the next
-run takes (`restartRequest.Console`). The screen does not: every run presents
-on the platform `Host`'s `Presentation`, handed to `Run` beside its `Config`, or on
-the one terminal `Run` opens for the process where that `Host` names none, so a
-replacement redraws the screen rather than leaving and re-entering it. See
-[HFSM and configuration](fsm-and-configuration.md) §2.
+was given and what the restart names. Each run is built on the one before, so what
+an earlier restart named stands until a later one names another, and never on the
+live `m.cfg`: what a command wrote there, a phrase, a policy, a door, is gone at
+the next restart unless the ask carries it (`RestartAsk`, `restartRequest`, which
+`replaceWith` alone latches). A scenario change, a restart and a `:join` seat the
+run's bots again, read when the restart is asked for, since a session closing ends
+them before the switch; a bot told to leave is not among them, and a removal by
+the host seats none. Everything operator-owned restarts with it but what the next
+run takes: the `[play]` this one was left at, whether it journaled (a viewer's run
+keeps no journal) and the console's lines (`restartRequest.Play`, `Journal`,
+`Console`). The screen does not: every run presents on the platform `Host`'s
+`Presentation`, handed to `Run` beside its `Config`, or on the one terminal `Run`
+opens for the process where that `Host` names none, so a replacement redraws the
+screen rather than leaving and re-entering it. See [HFSM and
+configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;
 it broadcasts `MsgSessionRestart` before its transport goes and rebuilds solo,
@@ -1135,11 +1170,11 @@ the scheduler before stopping services so no tick can use an I/O resource after 
 is released. The hub stops every initialized service in reverse dependency order.
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
-so startup failures and runtime reports remain recoverable. It exits 1 on any
-returned error, 76 (`EX_PROTOCOL`) on a refused join, whose reason says whether a
-retry helps, and 73 (`EX_CANTCREAT`) when logging was requested and
-cannot start: a run that cannot write the log it was asked for ends before it plays
-rather than playing unlogged.
+so startup failures and runtime reports remain recoverable. It exits 2 on a flag
+the parser refuses, as the flag package does, 1 on any returned error, 76
+(`EX_PROTOCOL`) on a refused join, whose reason says whether a retry helps, and 73
+(`EX_CANTCREAT`) when logging was requested and cannot start: a run that cannot
+write the log it was asked for ends before it plays rather than playing unlogged.
 
 Crash handling is designed around terminal restoration:
 
@@ -1165,7 +1200,7 @@ not indefinitely leave the terminal in raw mode.
 | Runtime modes and composition | `internal/app/internal/config`, `internal/app/config.go`, `app.go`, `headless.go` |
 | Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
-| Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/internal/membership/session.go`, `host.go`, `seat.go`; `internal/app/serve.go`, `probe.go`, `membership.go` |
+| Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats, a viewer's run | `internal/app/internal/membership/session.go`, `host.go`, `seat.go`, `watch.go`; `internal/app/serve.go`, `probe.go`, `membership.go` |
 | Allocated-session lifetime policy | `internal/lifecycle` |
 | Replay copies and checkpoints | `internal/app/clone.go`, `internal/app/internal/scribe/checkpoint.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |

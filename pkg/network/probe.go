@@ -32,16 +32,11 @@ const linkReportSize = 25
 // which would place its interest in the map's corner.
 const linkReportCursorValid uint8 = 1 << 0
 
-// LinkReport is what one instance tells the peer probing it about its own
-// picture: which tick it stands on, how far behind the session it believes it
-// is, how much the last correction had to move, and where its cursor is.
-//
-// All four are scheduling inputs and nothing else. The tick and the lag say
-// whether this participant is keeping up; the magnitude says whether the cadence
-// is repairing its prediction as fast as the prediction drifts; the cursor cell
-// says which part of the world is its business. A host may publish sooner
-// because of any of them and may never decide anything about the simulation from
-// them — a stale or wrong report costs a correction sent early.
+// LinkReport is what one instance tells the peer probing it of its own picture: the
+// tick it stands on, how far behind the session it believes it is, how much the last
+// correction moved and where its cursor is. All four are scheduling inputs and
+// nothing else: a host may publish sooner for one and decides nothing about the
+// simulation from them, so a stale or wrong report costs a correction sent early.
 type LinkReport struct {
 	Tick      uint64
 	LagTicks  uint32
@@ -201,13 +196,11 @@ func (m *linkMeter) nextProbe() uint32 {
 	return m.seq
 }
 
-// observe folds one answered probe into the estimate.
-//
-// sentBytes is what this instance has queued for that peer, and delivered is
-// what the peer says it has received; the difference is the backlog, which is
-// what separates "the link is fast" from "the sender was idle". The rate is timed
-// on the peer's answers, since echoes a stalled return path releases together
-// arrive microseconds apart; a peer that sends no answer time is timed on arrival.
+// observe folds one answered probe into the estimate. sentBytes is what this
+// instance queued for that peer and delivered what the peer says it received: their
+// difference, the backlog, tells a fast link from an idle sender. The rate is timed
+// on the peer's answers, since echoes a stalled return path releases together arrive
+// microseconds apart, and on arrival for a peer that sends no answer time.
 func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered, sentBytes uint64, answered time.Duration, report LinkReport) {
 	sample := linkpace.Sample{
 		RTT:       now.Sub(sent),

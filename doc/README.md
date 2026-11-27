@@ -4,7 +4,9 @@ This directory describes the architecture and design of the current vif
 codebase. It was last audited on 2026-10-14, when every document but the
 future designs, every README and the package doc comments were checked claim by
 claim against the code; on 2026-11-11 every identifier, path and link in them was
-checked again. The implementation, generated manifest and shipped
+checked again; on 2026-11-27 every document, the term index entry by entry, and
+the comments of the code changed since were swept against the code, each change
+confirmed by a second reader. The implementation, generated manifest and shipped
 configuration are authoritative where prose disagrees with them.
 
 vif is a terminal action game that combines vi-style text navigation,
@@ -25,7 +27,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, the flight recorder, and the profiler work? |
 | [Telemetry reference](telemetry-reference.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
-| [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
+| [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, how a session test is written, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
 | [Netcode design](netcode-design.md) | Medium/detail | What the wire carries and how, how a correction is indexed, repaired and installed, what a session costs on the mesh and on sockets, and which approaches could cost less, in what order. |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, which statuses a hit leaves, and what crosses? |
@@ -45,7 +47,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
 | [Packaging](packaging.md) | Operational detail | What do nightly releases publish, what must hold for a distribution package, and what is still missing per repository? |
 | [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and how do the desktop window and the Android view host the game beside the terminal? |
-| [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
+| [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? How is a build made in a container, the game looked at without a device, and a change measured? |
 | [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the router installed, in order? **Start here to deploy a node.** |
 | [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
@@ -61,8 +63,8 @@ Focused references:
   its networks read and ask for, rendered from the code's tables.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the prioritized running work list for every area.
-- [Agent notes](agent-notes.md) holds what agents learned working on the
-  repository that no rule or design document states.
+- [Agent notes](agent-notes.md) holds the traps every task meets that no rule or
+  design document states, and where each kind of work's techniques live.
 - [Keymap example](../internal/input/README.md) shows key overrides.
 - [Genetic library](https://github.com/lixenwraith/genetic) documents the
   reusable optimization library, a module of its own.

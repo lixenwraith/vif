@@ -282,11 +282,11 @@
     });
 
     // === Sound ===
-    /* The Worker posts the mixer's PCM once a sound plays; a muted game posts
-       nothing. The first buffer opens an AudioContext at the mixer's
-       rate and loads the worklet (AUDIO_PATH) that plays what follows through a ring.
-       A context opened outside a gesture stays suspended, so each key or pointer
-       resumes it; a buffer that arrives before it runs is dropped. */
+    /* The start's press opens an AudioContext at the mixer's rate and loads the
+       worklet (AUDIO_PATH) that plays through a ring the PCM the Worker posts once a
+       sound plays; a muted game posts nothing. A context opened outside a gesture
+       stays suspended, so each key or pointer resumes it; a buffer that arrives
+       before it runs is dropped. */
     let audio = null;   // { ctx, node }, node once the worklet loaded
 
     function onAudio(data) {

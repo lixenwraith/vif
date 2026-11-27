@@ -2,7 +2,7 @@ package input
 
 // InputMode mirrors game modes for parser context
 // Kept in sync by mode.Router via SetMode()
-// Values match engine.GameMode for easy conversion
+// Values match core.GameMode, which KeyCapture.Takes converts them to
 type InputMode uint8
 
 const (
@@ -23,7 +23,7 @@ const (
 	StateCharWait                             // After f/F/t/T, awaiting target character
 	StateOperatorWait                         // After an operator (d, c, y), awaiting its motion or its own key again
 	StateOperatorCharWait                     // After operator + f/F/t/T, awaiting target character
-	StatePrefixG                              // After 'g' prefix, awaiting second key (g/G/l/h/k/j)
+	StatePrefixG                              // After 'g' prefix, awaiting its second key
 	StateOperatorPrefixG                      // After operator + 'g', awaiting motion (e.g., dgg)
 	StateMarkerAwaitColor                     // After g+direction, awaiting color (r/g/b) or repeat direction
 	StateMacroRecordAwait                     // After 'q', awaiting label [a-z] or '@' (stop-all)

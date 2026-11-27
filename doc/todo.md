@@ -8,20 +8,404 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
+## Code issues to review
+
+The documentation sweep met these in the code and left the code as it is, its
+docs describing what the code does. A second agent confirmed each against the
+code and reproduced all but two in a scratch run. Review an item, then fix it,
+refile it at its real priority under its area, or delete it.
+
+### Let -relay take vifs:// on the command line
+
+- Priority: P1, to review
+- Affected files: `cmd/vif/main.go`, `cmd/vif/main_test.go`, `doc/development.md`,
+  `doc/runtime.md`, `doc/services-and-networking.md`
+
+`validateInvocation` (`cmd/vif/main.go:875`) takes only `vif://` as a router, so
+`-join … -relay vifs://<router>` exits 1 ("vifs:// is dialed, never bound"), and
+`relayTarget` (`:962`) would cut it to host:port; `config.RelayRouter` takes it, and
+the `-relay` hint, `vif-router.env`, the router README, multi-player §5.6,
+auth-session §2 and §3.5 and term-index's tunnel name it. Fix: test either scheme at
+both sites, a `cmd/vif` case, `vifs://` in the three docs above.
+
+### Look up and dial a vifs:// link's listed routes
+
+- Priority: P1, to review
+- Affected files: `pkg/network/endpoint.go` (`linkSites`),
+  `internal/network/session.go` (`dialListed`)
+
+`linkSites` (`endpoint.go:550`) splits the join address with `net.SplitHostPort`,
+which refuses `vifs://host:port`, so the router's `vifs://` links are never looked
+up: no WebSocket fallback, no browser join. `dialListed` (`session.go:1608-1613`)
+dials and stores a listed `vifs://` door's bare `e.Addr`, in the clear. Fix: split
+and compare the failed `ParseEndpoint(addr).Addr`; dial and store `e.Dialable()`.
+
+### Bind a passphrase exchange the same way at both ends
+
+- Priority: P1, to review
+- Affected files: `internal/network/session.go`, `internal/network/admission.go`,
+  `internal/network/session_test.go`, `internal/app/door_test.go`,
+  `doc/auth-session-design.md`
+
+A door binds SCRAM to its leaf over TLS (`session.go:946-949`), a dial to the leaf
+it sees or none (`session.go:1026`); bound never verifies unbound, so a `vifs://`
+dial at a relay door the router publishes (`relayAcceptor`, no `Binding`) and a page
+at a gated `wss://` door (`wsConn`, no TLS) have the right phrase refused. Fix:
+`AuthRequest` says whether the dial bound; the door binds likewise, a tunnel's to
+`bindingOf(conn)`.
+
+### Present a replay on the platform's host, as -watch does
+
+- Priority: P2, to review
+- Affected files: `cmd/vif/main.go`, `internal/app/play.go`,
+  `internal/app/presentation_headless.go`
+
+`-replay` calls `app.PlayJournal` with no host and no `presenting()`
+(`cmd/vif/main.go:258`), and its lender is `runConfig{Config: cfg}`
+(`internal/app/play.go:49`), so it presents on `newTerminal`: `-g` or a `vif_gui`
+build replays in the terminal, the Windows window build has none, and the build's
+own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` take a
+`Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
+presentation), and `-replay` passes `presenting()`.
+
+### List Ctrl-S's audio states in the order it cycles them
+
+- Priority: P2, to review
+- Affected files: `internal/help/topics.go`, `web/index.html`
+
+The help (`topics.go:15`) and its browser copy (`index.html:82`) list "music and
+effects, music only, effects only, silent", but Ctrl-S steps
+`parameter.AudioMaskCycle` (`internal/parameter/audio.go:72`) the other way: from
+the default, silent, effects only, music only. Fix both to "Cycle audio: music and
+effects, silent, effects only, music only", press order from the default as the
+auto-fire entry (`topics.go:101`) lists its own.
+
+### Drop the -cli hint where the build has no terminal
+
+- Priority: P2, to review
+- Affected files: `cmd/vif/gui.go`
+
+`windowHost.Init` (`cmd/vif/gui.go:53`) ends every window that did not open with
+`(-cli plays in the terminal)`, including in the Windows window build. That build
+sets `windowOnly` (`gui_windows.go:18`) and refuses `-cli` as
+`terminal unavailable in this build` (`main.go:179`), so its message box names a
+flag the same build refuses. Smallest fix: wrap with the hint only
+`if err != nil && !windowOnly`, else `return err`.
+
+### Word the audio-free and headless builds' refusals as the unavailable sentence
+
+- Priority: P2, to review
+- Affected files: `internal/app/internal/config/audio_none.go`,
+  `internal/app/internal/config/presentation_none.go`,
+  `internal/resource/check_noaudio.go`
+
+`audio_none.go:11-17` refuses `-ab`, an audio override and `-mw` with "audio backend
+is unavailable in this build", "audio overrides are ..." and "music recording is
+..."; `check_noaudio.go:13` repeats the overrides line, and `presentation_none.go:9`
+says "presentation is unavailable in a vif_headless build". AGENTS.md (Platforms)
+has these read `<Thing> unavailable in this build`, naming no build tag. Fix: drop
+"is"/"are" from all five, and replace "a vif_headless build" with "this build".
+
+### Restore `run` and `test` to the Makefile's `.PHONY`
+
+- Priority: P2, to review
+- Affected files: `Makefile`
+
+`.PHONY` (`Makefile:114`) names `runtest`, which no rule defines, in place of
+`run test`: the `run` (`Makefile:347`) and `test` (`Makefile:300`) goals are not
+phony. A plain `make run` or `make test` still runs, as `dev` and `generate` are
+phony, but `make -t run test` writes files named `run` and `test`, and
+`make runtest` succeeds with nothing to do. Smallest fix: `runtest` -> `run test` in
+that list.
+
+### Keep the Makefile to what FreeBSD make reads, or drop the claim
+
+- Priority: P2, to review
+- Affected files: `Makefile`, `doc/packaging.md`, `README.md`
+
+Packaging §1 says the Makefile runs under FreeBSD make, but bmake reads none of its
+`$(shell)` (`Makefile:93`, `:97`), functions (`:95`, `:364`), `$(MAKECMDGOALS)`
+(`:364`, `:383`), `$(CURDIR)` (`:85`) or `export PATH :=` (`:86`), so a FreeBSD
+`make release` drops `GUI_GCFLAGS` and stops on purego's fakecgo, and `purge` purges
+nothing. Closes with §1, §5 and the README naming `gmake` on FreeBSD, or those lines
+on `!=` and `case`. Traced, not run.
+
+### Name the blend tester's additive row Add
+
+- Priority: P2, to review
+- Affected files: `tool/blend-tester/main.go`, `tool/blend-tester/blend.go`
+
+`blendOps` (`main.go:117`) labels `render.BlendAdd` (formula `min(Dst + Src, 255)`)
+as "Set". Every other row is named for its mode, and Rendering §4 calls this
+operation Add. The blend screen shows `OP: Set`, and the result switch repeats the
+name in `case 2: // Set` above `color.Add` (`blend.go:119`). Smallest fix: rename
+the label to `"Add"` and the comment to `// Add`.
+
+### Delete the sandbox's commented-out code
+
+- Priority: P2, to review
+- Affected files: `sandbox/3d/main.go`, `sandbox/rand/main.go`
+
+`sandbox/3d/main.go:709-739` holds two commented-out `blit` variants (14 and 11
+lines) under a "to be tested" header, a plan kept in code, and `asciiDensity`, which
+only the commented code reads; `sandbox/rand/main.go:28-33` is a commented-out
+`Next` after its `return`. Dead code past the 5-line comment limit: deleting both
+ranges closes it, and a tty render still wanted becomes an item in this file.
+
+### Group `network.shed` with the authority card
+
+- Priority: P2, to review
+- Affected files: `internal/status/key.go`, `doc/services-and-networking.md`
+
+`splitKey` (`internal/status/key.go:109-112`) puts `network.evicted` in the
+`network.authority` card but leaves its sibling `network.shed`
+(`Authority.driveShedding`) in the catch-all `network` card, though the reset test's
+"whole authority card" (`internal/app/telemetry_test.go:82-90`) counts it there. Add
+`name == "shed"` to that case, and name shedding beside eviction in
+`doc/services-and-networking.md`'s card list.
+
+### Group `snapshot.repair_sections` with the repair card
+
+- Priority: P2, to review
+- Affected files: `internal/status/key.go`, `doc/telemetry-reference.md`
+
+`snapshotSelectiveGroup` (`internal/status/key.go:158`) routes the repair card's
+keys but not `repair_sections` (`internal/snapshot/telemetry.go:133`), so the
+sections a repair moved land on the plain `snapshot` card among the capture costs,
+against the card comment at `key.go:127`. Fix: add `"repair_sections"` to the case
+at `key.go:163` and drop "`repair_sections` in `snapshot`" from
+`doc/telemetry-reference.md:136`.
+
+### Count the quota read in a create's HTTP deadline
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/main.go`
+
+`main.go:120-122` sets `WriteTimeout` to `ReadyTimeout + 3*RequestTimeout + 10s` for
+the "three Kubernetes requests" a create makes before readiness, but
+`createTransaction` (`allocator.go:446`) makes four: `listJobs`, `listQuotas`
+(`fits`), `createJob`, `createService`. The 10 s slack covers the fourth only up to
+the default `-kube-timeout`; past it a ready session's 201 is lost (at 16 s: EOF at
+66 s, deadline 63 s). Fix: `4*cfg.RequestTimeout` and "four" in the comment.
+
+### Word the -join-host help for a TLS front door
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/config.go`
+
+`config.go:137` helps `-join-host` as "public raw-TCP host returned to players", but
+under `-route-secure` (this deployment), `-route-cert` or `-route-selfsign` every
+`join_target` and door link it names reads `vifs://` (`allocator.go:88`,
+`main.go:107`). Fix: "public host every join_target and door link names (required)",
+the README's wording with doors added.
+
+### Hold magic's rounds past the fifth at the fifth to eighth ranks
+
+- Priority: P2, to review
+- Affected files: `wad/scenario/base/magic/scenario.toml` (`LevelUp`),
+  `doc/gameplay.md`
+
+`LevelUp` (`scenario.toml:513-515`) sets the stray to
+`min(level % 4 + level / 4, 7)`: the sixth round runs ranks 6, 7, 8, 8, the seventh
+7, 8, 8, 8 and each round from the eighth rank 8 alone, but its comment and Gameplay
+§10 say the fifth round and every one after it run the fifth rank to the eighth. Add
+`max = 4` to the round's `DivideVar` and drop the stray's `max = 7`, which no longer
+takes effect; or, if the climb is meant, say so in both.
+
+### Stop a phase once its region terminates itself
+
+- Priority: P2, to review
+- Affected files: `internal/fsm/machine.go`, `doc/fsm-reference.md`
+
+`TerminateRegion` (`machine.go:987`) defers only from `on_exit`; elsewhere the phase
+runs on over the removed region (reproduced): a transition's target or a parent's
+children exit, then enter (`:781-789`, `:171-175`), and an update's Tick exits again
+(`:207-237`). Fix: mark `terminated` while any phase runs; after the issuing list,
+the phase exits what it entered (`:741-744` too, which skips the LCA's path) and
+removes the region.
+
+### Report a bad region initial state in name order
+
+- Priority: P2, to review
+- Affected files: `internal/fsm/loader.go`, `internal/system/maprange_test.go`
+
+`LoadScenarioFromMap` step 8 (`loader.go:187`) ranges over the `config.Regions` map
+and returns at the first region whose `initial` names no state, so with two such
+regions the error names either, run to run, where the region check at `loader.go:50`
+goes in name order. Range over `slices.Sorted(maps.Keys(config.Regions))` as it
+does, and drop `regionInitials` from the loop's reason at `maprange_test.go:55`.
+
+### Delete the route weight floor that never binds
+
+- Priority: P2, to review
+- Affected files: `pkg/navigation/routegraph.go`
+
+`computeRouteWeights` (`pkg/navigation/routegraph.go:338`) floors each raw weight
+`maxDist / d` at `RouteGraphMinWeightFloor` (0.05). No `d` exceeds `maxDist`, so
+`w >= 1` never reaches the floor. After normalizing, up to 8 routes within the 50%
+tolerance still keep at least 2/23 (0.087) each. Delete the constant and its `if`,
+and the floor named in the comments of `computeRouteWeights` and `Route.Weight`.
+
+### Drop the intent no parser produces
+
+- Priority: P2, to review
+- Affected files: `internal/input/intent.go`, `internal/mode/router.go`,
+  `internal/input/strings_gen.go`
+
+`IntentInsertDeleteBack` (`intent.go:55`) is made by nothing: no action name maps to
+it, and Insert's Backspace (`text_backspace`) arrives as `IntentTextBackspace`,
+whose handler already calls `handleInsertDeleteBack` (`router.go:1230`), so its case
+(`router.go:376`) never runs. Delete the constant and the case, and
+`go generate ./internal/manifest` for its `String` case; nothing records an intent's
+number, so the shift needs no version bump.
+
+### Keep a bot's `help` and Normal-mode `escape` out of the overlays
+
+- Priority: P2, to review
+- Affected files: `internal/bot/mind.go`, `internal/mode/router.go`, `doc/bots.md`
+
+`intentFor` (`mind.go:584`) admits `help` and `escape`, which in Normal opens the
+menu (`router.go:498`), against `doc/bots.md#actions`. Either one leaves the bot in
+an overlay that pauses a solo run and drops all its pointer play (`router.go:247`).
+Refuse `IntentHelp` there and add it to the doc's list. Spare a bot's Escape in
+Normal the way macro playback's is spared (`router.go:302`, keyed on
+`World.Session().Bot`): refusing `escape` would strand a bot in Insert.
+
+### List every command a replay's viewer has in its help entry
+
+- Priority: P2, to review
+- Affected files: `internal/help/topics.go`
+
+The replay topic's `:` entry (`internal/help/topics.go:278`) lists replay, help,
+about, telemetry, hud, binaural, debug, content, flow, graph, log and quit, but
+`inspects` (`internal/mode/commands.go:186`) also gives a replay's viewer `:menu`,
+`:console`, `:fps`, `:edge` and `:machine`, as `doc/runtime.md:590` says; only a
+watched bot's is refused `:edge` (`commands.go:227`). Add the five to the list and
+name edge in its watched-bot clause.
+
+### Color a refusal on the native menus' status line
+
+- Priority: P2, to review
+- Affected files: `android/app/src/main/java/com/lixen/vif/MenuDialog.java`,
+  `web/terminal.css`
+
+The snapshot sends every refusal (`setCommandError`, or an op on a disabled row)
+with `status.kind` `error`. `MenuDialog.java:184` and `terminal.css:409-410` color
+only `alert` (danger) and `progress` (accent), so a refusal shows white like a
+notice. The console draws it salmon, and the same sentence refusing a form's submit
+shows in danger under the form. Smallest fix: give `error` the danger color `alert`
+already has, on both hosts. Traced, not run.
+
+### Name vifs:// in the menu's join row
+
+- Priority: P2, to review
+- Affected files: `internal/mode/config_form.go`
+
+The Join a session row's description (`config_form.go:84`) lists `host:port[/name]`,
+`vif://`, `tcp://` or `ws(s)://` but not `vifs://`. Yet `-join`, `:join` and
+`network.ParseEndpoint` take `vifs://`, a TLS front door's links use it, and
+`doc/config-menu.md` names it for this box. A menu search for `vifs` finds no row.
+Add `vifs://` after `vif://` in that string; the Spectate row says "as Join takes
+one" and follows.
+
+### Count -doors-per-address by the admission key, not the whole host
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/tcp_proxy.go`
+
+`tcpRouter.tunnel` passes `TunnelHub.Publish` the dialer's whole host
+(`addressHost(from)`, `tool/vif-router/tcp_proxy.go:382`). The join budget charged
+for the same publication, and the router's spectator and create counts, use the /64
+(`network.AdmissionKey`). So one IPv6 /64 that rotates hosts holds
+`-doors-per-address` doors per host, up to `-tunnels`. Fix: pass
+`network.AdmissionKey(from)` and delete `addressHost`.
+
+### Lift the top diagonal exclusion slots `padding` rows clear of the exclusion
+
+- Priority: P2, to review
+- Affected files: `pkg/position/search.go`
+
+`exclusionSlots` (`pkg/position/search.go:399-400`) stands the top-right and
+top-left slots at `-exclusion.Top - objectH + padding`, where the top slot (:394)
+takes `- padding` and the bottom diagonals (:397-398) stand `padding` rows below the
+exclusion. So a top diagonal's lower `padding` rows lie beside the exclusion's top
+rows, and a countdown there inks level with a one-row header, not a row above it.
+The fix is `- padding` on both lines.
+
+### Name RunBot beside RunScript in the network-session refusal
+
+- Priority: P3, to review
+- Affected files: `internal/app/config.go`, `internal/app/internal/config/config.go`
+
+`runConfig.validateWiring` (`internal/app/config.go:291`) refuses a headless run
+given a host or join address outside `drive` as "network sessions require
+app.RunScript", yet `drive` admits `RunBot`'s run as it does a script's
+(`internal/app/script.go:426`); only an embedder's `NewHeadless` reaches it.
+Smallest fix: "...require app.RunScript or app.RunBot", naming a bot's run beside
+the script in `ModeHeadless`'s comment too
+(`internal/app/internal/config/config.go:35`).
+
+### Drop the flag usage strings the help never prints
+
+- Priority: P3, to review
+- Affected files: `cmd/vif/main.go`
+
+`flag.Usage` prints `helpSections` (`main.go:118`), so no registration's usage
+string is ever shown, yet the comment at `main.go:51` has them agree with it, and
+two do not: `-join` (`main.go:746`) lacks `vifs://` and `-relay` (`main.go:778`)
+`vif://<router>`, forms the table and the parser take. Pass `""` for each, drop the
+hint locals and fields, and reword the comment to match.
+
+### Count a self-declared bot as no person when a dedicated host sizes its map
+
+- Priority: P3, to review
+- Affected files: `internal/app/internal/membership/session.go`
+
+`noteJoinerReport` (`session.go:293-299`) counts every joiner with no holder a
+person, one reporting `Bot` among them, so a bot's own run
+(`-join <addr> -bot N -headless`) sizes a `-serve` lobby waiting for two at its
+120x40 over the person after it, and one alone at its `-size`. Fix: test
+`!m.sessionRoster[i].Bot` there in place of `report.Holder == 0`; it closes the
+`firstPerson` bullet of [Settle what a bot's defeat leaves
+standing](#settle-what-a-bots-defeat-leaves-standing).
+
+### Drop the proof binding no dial passes
+
+- Priority: P3, to review
+- Affected files: `internal/network/admission.go`, `internal/network/session.go`,
+  `internal/app/internal/membership/relay.go`, `tool/vif-router/tcp_proxy.go`,
+  `internal/network/admission_test.go`
+
+`Key.Prove`, `SignProof`, `VerifyProof` and `VerifyProofs` (`admission.go:118-248`)
+take a `binding` every caller leaves nil (`session.go:921`, `:982`, `relay.go:687`,
+`tcp_proxy.go:199`), as every dial proves unbound (auth design §3.2); only tests
+bind. Drop it, sign `signable("proof", []byte(nonce))` and bump `ProtocolVersion`;
+drop the two bound test cases, and the binding from §3.1 and the term index's
+*Admission* entry.
+
+### Hold the generated snapshot code's comments to five lines
+
+- Priority: P3, to review
+- Affected files: `internal/gen-manifest/main.go`, `internal/engine/snapshot_world_gen.go`,
+  `internal/engine/snapshot_pages_gen.go`
+
+The generator's templates write comment blocks of six to 23 lines into the snapshot
+code (`ReconcileSharedWorld`, `gen-manifest/main.go:1272`; `SharedWorldDelta`, :1201;
+`CaptureSharedWorld`, :1066; `DiffSharedWorld`, :1220; `clearSharedEntities`, :1348;
+`applyStoreRows`, :1470), past AGENTS.md's five. Condense each template comment to
+five lines and run `go generate ./internal/manifest`.
+
 ## Cave
 
-The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
-by area so an agent can take a group. The faster scroll, the jagged cave, the stone
-art, the raider types by cave, the scenery text, the boss stage, the machine's
-certain faults, navigation's cost over the cave and the position package
-([Position](position-package.md)) have landed. What is left is the machine
-follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
+The side-scroller's refinements after its first play test (2026-10-27) lead,
+grouped by area so an agent can take a group. What is left is the machine
+follow-ups and what the position package ([Position](position-package.md)) leaves
+open. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 `Positions.Rock()` and the wall system and renderers that read it.
 
 ### Machine follow-ups
 
-What `cave` met in the machine and is still open, its certain faults having
-landed.
+What `cave` met in the machine and is still open.
 
 #### Give a program's entrance an entering state
 
@@ -49,8 +433,7 @@ on every instance and a capture mid-materialize must restore them
 
 ### Position, blocking and navigation
 
-The move into `pkg/position` is done ([Position](position-package.md)); what
-remains stands on its own.
+What remains stands on its own.
 
 #### Play a volume: the third axis's remaining foundation
 
@@ -61,11 +444,7 @@ remains stands on its own.
 - Guide: [Position §3](position-package.md#3-the-volume),
   [Rendering §2](rendering.md#2-render-context-and-coordinates)
 
-The index, the math and the physics are laid for a volume: `pkg/position` holds
-`Depth` layers and answers a `Point3`, a `Box` and a `Footprint3` on any of them,
-its surfaces on the layer they name, and `pkg/vmath` and its physics have a form
-through a volume beside each flat one. What a game in depth still needs is not
-laid:
+What a game in depth still needs:
 
 - The binding and the records: a depth in the config the binding resizes to
   (`Position.Resize` passes one layer), and a row that carries its layer, which
@@ -169,13 +548,13 @@ past the ship, its ranks stand overhead and its squadrons fly routes into circle
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). A terrain under
 that scroll is what is left, likely the first scenario built on a painted map
 ([Authoring](#authoring)); its items follow the editor's foundation. The bots'
-armada figures ([Bots](bots.md#examples)) want reading again on it.
+armada figures ([Bots](bots.md#the-shipped-bots)) want reading again on it.
 
 ### Scroll a terrain past armada
 
 - Priority: P2
 - Affected files: `wad/scenario/base/armada/`, `internal/system/wall.go` (the cave
-  step), `pkg/position/surface.go`, `internal/engine/position.go` (`RockField`),
+  step), `pkg/position/surface.go`, `internal/engine/rock.go` (`RockField`),
   `internal/system/particle.go`, `internal/render/renderer/rock.go`,
   `internal/event/payload.go` (`CaveStartPayload`)
 - Prerequisite: [Lay a painted map a scenario carries](#lay-a-painted-map-a-scenario-carries),
@@ -478,8 +857,8 @@ second of game time later. What that leaves:
 - Guide: [Behavior machines §5](machine-design.md#5-dialect-kernel)
 
 The editor's forms and pickers come from one description, the one `-schema`
-prints, and it holds too little for them: 209 events with their fields, the names
-of 38 enums, three vocabularies with their arguments and what a bot's network
+prints, and it holds too little for them: every event with its fields, the names
+each enum takes, three vocabularies with their arguments and what a bot's network
 reads and asks for. Missing:
 
 - **An event's class and line.** Nothing says an event is local, shared or a
@@ -534,14 +913,11 @@ expanding each written element alone, which asks nothing of the macro library.
 - Guide: [FSM reference: Maps](fsm-reference.md#maps),
   [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline)
 
-A scenario carries maps: `[maps]` in its entry, each inline or a file of its own,
-read, bounded, digested and sent as a program is and compiled once a run; `rows`
-of one width over a `legend`; and `EventMapLayRequest { map, x, y }`, which a
-request naming no map of the scenario fails the load on. A legend lays a
-program's spawn and nothing else, so a formation is drawn and terrain is not. A
-wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg`
-from the `image/` category, which the digest leaves out and a joiner is not sent.
-What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
+A scenario's map lays a program's spawn from its legend and nothing else
+(`EventMapLayRequest`), so a formation is drawn and terrain is not. A wall event
+still takes its cells one by one, or lays a maze, a cave or an `.aimg` from the
+`image/` category, which the digest leaves out and a joiner is not sent. What
+remains, tiles first and [images after](#carry-an-image-in-the-scenario):
 
 - **A tile.** A legend entry that is a wall: its glyph, colors, box style and
   block mask named once. `MapLayout` gains its cells beside `Spawns`, and the wall
@@ -721,11 +1097,8 @@ its request's, one for every cell.
 - Guide: [Input and modes §3](input-and-modes.md#3-normal-mode-grammar),
   [§10](input-and-modes.md#10-keymap-override-files)
 
-The second round is in: a register for `y` and the puts, a change undo and redo,
-marks, `o O`, `s S X ~`, counted searches, `.` with its Insert text, and Visual's
-`d c y r ~ *` over the ping bounds. A vim key whose letter vif reads its own way
-has an action no default key binds, which the vim keymap (`-k vim`) and the
-tutorial attach. What is left:
+A vim key whose letter vif reads its own way has an action no default key binds,
+which the vim keymap (`-k vim`) and the tutorial attach. What is left:
 
 - **What the vim keymap cannot give back.** `H` and `L` go to the map's top and
   bottom rows where vim's go to the window's, and `J`, `K`, Ctrl-F, Ctrl-B, Ctrl-E
@@ -975,10 +1348,10 @@ since it spells them. What it costs, and what it does not reach:
 - Affected files: `Makefile` (`page`), `.gitignore`
 
 `make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which, of
-the page's copies, only the release workflow's web archive carries, so a
-deployment of `web/` serves Hack's web font, inside `vif.wasm`, without its
-license beside it: only the font's own name table holds the text. Closes with
-`page` installing the terminal module's `atlas/LICENSE` as
+the page's copies, only the release workflow's web archive and the extension
+carry, so a deployment of `web/` serves Hack's web font, inside `vif.wasm`,
+without its license beside it: only the font's own name table holds the text.
+Closes with `page` installing the terminal module's `atlas/LICENSE` as
 `$(PAGE_DIR)/LICENSE.font`, which `.gitignore` takes as it takes the page's
 scripts.
 
@@ -1152,8 +1525,9 @@ of 20.5 a second). Worth it only if Neovim's terminal becomes the limit.
 
 Neovim's terminal (0.11.7, 0.12.6) answers the key protocol's query with every
 flag pushed (`CSI ? 31 u`) and implements `disambiguate` alone, so the module
-reports releases where every key taps: no hold sticks, but `EventInputReport`
-says `releases` and the notice a `releases = true` capture owes never shows.
+reports releases where a text key taps and Escape, an arrow or an F-key stays held
+until its next press (`KeyHolds.Report`), but `EventInputReport` says `releases`
+and the notice a `releases = true` capture owes never shows.
 Closes with Neovim's query naming only the flags its terminal acts on, reported
 upstream; failing that, the module declining the protocol where `$NVIM` is set,
 which goes by the environment where it now goes by answers.
@@ -1249,12 +1623,9 @@ A session's own bots are read here before a request may ask for them
 - Priority: P1
 - Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kube-docker-deploy.md`
 
-Decided: the cleanup's stale age is 75 minutes, just past the session Job's
-`activeDeadlineSeconds`, so the tmpfs holds live sessions and the ones that just
-ended instead of five hours of finished ones; a byte budget or a larger tmpfs
-were the alternatives. Apply on the node: reinstall the cleanup script as
-[Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a full
-hour of play.
+Apply the cleanup's 75-minute stale age on the node: reinstall the cleanup script
+as [Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a
+full hour of play.
 
 ### Promote verified images to the node
 
@@ -1295,7 +1666,7 @@ the volume already carries whatever the installer puts there.
 
 ### Keep a standing session for the lobby
 
-- Priority: P2, with [learning in a session](#close-what-learning-leaves-open-outside-a-solo-run)
+- Priority: P2
 - Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
   `tool/vif-router` (`allocator.go`, `config.go`, `manifest.go`), `internal/bot`,
   `internal/lifecycle`, `deploy/guest/vif-router.env`, the Hugo site's
@@ -1316,9 +1687,6 @@ plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
 closed at its graph's limit by the host, at the host's one rate, 1x
 ([Bots](bots.md#learning)). What it needs:
 
-- **Its graph in the pod.** The pod's `-bot` names a count, which plays `default`:
-  the learner's is named there (`N:graph`), embedded or served from the node's
-  volume, which carries `scenario` and `image` alone (`wadCategories`).
 - **A store outside the pod.** The population is saved where a setting is, and a
   session pod has a read-only root and two claims, its log and the wad: a third,
   writable, at the root the learner saves under. One writer at a time, since two
@@ -1490,10 +1858,9 @@ fusion its sender was elected for.
 
 A crossing's target is an entity number too, its producer's: an instance that
 applied an arrival late allocates the cursor after what the others allocated
-first, and holds both under other numbers until a correction. A typed member's
-end checks what it names (`CompositeSystem.destroyMember`), after a host destroyed
-a Wraith's cursor under a gold member's number; a hit's `TargetEntity` and
-`HitEntity` are not checked against what their producer meant.
+first, and holds both under other numbers until a correction. A hit's
+`TargetEntity` and `HitEntity` are not checked against what their producer meant,
+as a typed member's end is (`CompositeSystem.destroyMember`).
 
 ### Publish a player's session at the router
 
@@ -1506,16 +1873,11 @@ A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
 reached there, the router neither allocating nor authoring. The deployment this
 leads to serves as many pods as the node has resources for (`-sessions-max`, ten
-today) and routes every session beyond them. The tunnel carries a door already, and
-the foundation stands: a name is resumed only by the run it was issued to, within
-`NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
-holds at most `-doors-per-address` doors; every connection placed is accounted for
-as it closes (`session route closed`: session, door or pod, bytes each way,
-seconds); and the listing's `limits` carry `sessions_max`, `doors` and `doors_max`,
-so the site can say when the fleet is full and offer a hosted session instead.
-Joins and creates are budgeted by account where a sign-in names one; a publication
-is budgeted by address alone, and its `Resume` token is the last bearer secret on
-the wire ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
+today) and routes every session beyond them. The tunnel carries a door already
+(`tool/vif-router/README.md`, Doors). Joins and creates are budgeted by account
+where a sign-in names one; a publication is budgeted by address alone, and its
+`Resume` token is the last bearer secret on the wire
+([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
 
 Steam Networking Sockets and its datagram relay would hide a player-hosted
 session's addresses too, and tie hosting to Steam: an option beside this one, not
@@ -1560,12 +1922,9 @@ What the feature itself needs, best shaped by deploying it step by step:
 - Affected files: `internal/app/internal/corrector/snapshot_stage.go`, `internal/system/network.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
-An install compares the staging world's stores against the live ones in place and
-writes the cells that differ, with no capture of either (`ReconcileSharedFrom`); the
-deepest td install of netcode design §3.7 holds the live lock 8 ms, 7.7 of them the
-write, down from 48. What the lock still holds is the projection: each projected
-tick adds a simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it
-past 45 ms. Moving it out: project to the live tick off the lock, then under it feed
+The live lock still holds an install's projection: each projected tick adds a
+simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it past 45 ms.
+Moving it out: project to the live tick off the lock, then under it feed
 what the barrier retained since the first feed, project the ticks the live world
 advanced meanwhile, and write. Any out-of-lock or incremental design must keep
 [Multi-player](multi-player.md) §3.3: fence membership, pending barrier crossings
@@ -1591,13 +1950,13 @@ redesign rather than a domain-boundary fix.
 - Affected files: `android/app/src/main/java/com/lixen/vif/StartScreen.java`,
   `android/app/src/main/java/com/lixen/vif/MainActivity.java`, `android/game/game.go`
 
-Build it once the join refactor lands and its join matrix passes. Android opens on
-a start screen with one choice, "Tap to start", a solo run; the site is reached only
-from inside the run, through the menu's Multiplayer page (join a link, or request a
-session from `https://lixen.com`, its default; `:register` and `:login` keep a
-sign-in in the app's files, which a request to the site sends). Put a second choice beside the tap:
-host a game at the site, as that request does, and/or join one of the running games
-the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. The
+Android opens on a start screen with one choice, "Tap to start", a solo run; the
+site is reached only from inside the run, through the menu's Multiplayer page
+(join a link, or request a session from `https://lixen.com`, its default;
+`:register` and `:login` keep a sign-in in the app's files, which a request to the
+site sends). Put a second choice beside the tap: host a game at the site, as that
+request does, and/or join one of the running games the site lists
+(`GET /vif/api/sessions`), so `game.Start` takes a join target. The
 page needs nothing: the site's lobby (`/vif/lobby/`) is its choice, and its Play
 link opens the page with `-join`, which joins at its start screen's tap. A run that
 ends in an error, such as a refused join, shows it on the start screen, as the page
@@ -1833,13 +2192,11 @@ or only on WARN and above.
 at, so a client reading two to seven times another's on the same link, as the
 Android client did against a terminal at the pod, is sending that much more unless
 `network.link_saturated` says the link was the limit. The candidate is input shape:
-a drag moves the cursor to every cell the finger crosses (`Router.moveMouseCursor`,
-`PushPointerMove`), a crossing each, where a key moves one cell a press, and god
-mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`,
-`network.sent_sync_bytes` and `network.crossings_sent` over one window, and
-`network.pace_late_ticks` for a client the OS throttles; if the epochs carry it,
-decide whether a drag's intermediate cells are a move each or one move to the cell
-the tick ends on.
+a drag crosses a placement every tick the finger moves, to the newest cell it
+reached (`Router.moveMouseCursor`, `PushPointerMove`), where a key moves one cell a
+press, and god mode multiplies the actions. Compare the two clients'
+`network.sent_epoch_bytes`, `network.sent_sync_bytes` and `network.crossings_sent`
+over one window, and `network.pace_late_ticks` for a client the OS throttles.
 
 ### Land a joining seat inside its pace band
 
@@ -1902,7 +2259,7 @@ test then fails with the guards off.
 - Affected files: `internal/system/network.go`, `pkg/network`, `internal/event`
   (the wire batch), `internal/system/domain_test.go`
 
-`NetworkSystem` is one file of about 3,600 lines: the roster and departures,
+`NetworkSystem` is one file of about 3,900 lines: the roster and departures,
 crossings and the barrier, the relay tree, the lead and pacing, owner syncs, the
 replay suffix and the snapshot's adoption, and telemetry. The netcode is meant to
 plug into other projects, so the first step moves every part that is not this
@@ -1993,6 +2350,26 @@ would close it: manifests sent before a link's participant installed its gate wo
 count toward no silence, and a peer fed deltas alone is owed the keyframe a fallback
 took.
 
+### Re-measure the largest world's capture under the columnar codec
+
+- Priority: P2
+- Affected files: `pkg/network/snapshot.go`, `doc/services-and-networking.md`
+
+`MaxSnapshotBytes`, `MaxSnapshotPlainBytes` and services §8 rest on a walled
+500x250 world measured at 24.3 MiB plain and 1.1 MiB on the wire, figures from the
+JSON-row codec the column keyframes replaced. Owed: that world's capture read again,
+plain and on the wire, and the two ceilings and their comments grounded on it.
+
+### Lay services-and-networking's tables out for a terminal
+
+- Priority: P3
+- Affected files: `doc/services-and-networking.md`
+
+Twelve Markdown tables remain (§1, §3 twice, §6, §7, §7.2, §8 three times, §8's
+succession messages, §12, §14), several with paragraph-long cells, which a terminal
+shows as their source. Owed: nested lists where a table does not fit, per AGENTS.md's
+Docs rules.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -2076,19 +2453,9 @@ takes whom back and what a session advertises, where today the roles (`sessionRo
 host, successor, kept, seats, left), `relaySeatingLocked`, `relayedLocked` and
 `leaveSessionLocked`'s `keepAll` each answer part of it.
 
-What the fork does: it keeps the places of everyone behind it as it forks, the people
-linked to it at its door and those behind a door of theirs, with their bots', and
-nobody else's (`relayedLocked`, `NetworkSystem.Relays`); its `-relay` door, at the
-address they joined at, goes on into the session it opens and takes back a key that
-holds a person's place there, under the left session's name and with no passphrase,
-refusing any other (`returnAcceptor`); nobody new is seated through those people
-either, by a bot of theirs or a door of their own, and no spectator is shown the
-session, until its player runs `:host` (`relaySeatingLocked`, `watchParticipant`);
-each person waits on its relay up to `NetworkFollowWindow`, frozen, then dials the
-door it joined at for one succession window, again while the run behind that door is
-itself on its way back, before it forks alone; and while it holds their places the
-session's role refuses `:join` and takes `:leave` and `:host`. `./script/test.sh tree`
-runs it over three terminals.
+What the fork does, keeping the places of those behind it and its `-relay` door for
+them alone, is Multi-player §5.5 and §5.6; `./script/test.sh tree` runs it over three
+terminals.
 
 What to look at:
 - Whether a relay hosts its people only once it is asked to, by a switch of its own as
@@ -2253,7 +2620,7 @@ session.
 - Priority: P2
 - Affected files: `tool/vif-router/tcp_proxy.go` (`splice`, `stallBounded`),
   `script/`, `doc/auth-session-design.md` §8
-- Guide: [Auth and session design §4](auth-session-design.md#8-ten-thousand-routed-players-on-one-machine),
+- Guide: [Auth and session design §8](auth-session-design.md#8-ten-thousand-routed-players-on-one-machine),
   [D10](auth-session-design.md#0-decisions)
 
 What the design projects and has not measured: the router holding 10,000
@@ -2598,9 +2965,10 @@ delete remove exactly what is shown.
 - Priority: P2
 - Affected files: `internal/system/motion_marker.go`
 
-Markers are recomputed on cursor movement and mode changes, so under a drift they
-sit on cells the glyphs have left. Recomputing after a drift step, which the
-environment could announce as a local event, would keep them on the text.
+The colored markers `g` and a direction show before a color jump are placed once
+(`showColoredMarkers`), so under a drift they sit on cells the glyphs have left.
+Checking them every tick, as `validateBaseMarkers` checks the base markers, would
+keep them on the text.
 
 ### Widen what drifts
 
@@ -2830,7 +3198,10 @@ The audio library's own items are in [its todo](https://github.com/lixenwraith/a
 and those of stapes (formerly soundlab), the rip's among them, in [its
 own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
-linked from it.
+linked from it. Stapes on Android, its live rip with it, is first an app of
+stapes' own, its items in [stapes'
+todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android); vif's
+app bundles it long after ([below](#bundle-stapes-in-the-android-app)).
 
 ### Measure the Windows sound on Windows
 
@@ -2917,62 +3288,16 @@ checked in a chroot); FreeBSD without `/dev/dsp`; the card on a machine with no
 sound server, at 44.1 and at 48 kHz, a USB card unplugged and plugged back, and a
 sleep mid-run.
 
-### Bring stapes to Android (stapes mobile)
-
-- Priority: P1
-- Affected files: `android/game`, `android/app`, `android/go.mod`,
-  `doc/multi-platform.md`
-
-Stapes runs on Android in-process, as the game does, over the same engine and
-the user root's `audio/` documents, so a pattern written on the phone plays in the
-phone's game. The foundation is in place: the `stapes` package holds the session,
-documents, verbs and TUI, `NewSession` takes the host's speakers as its sink
-(`Options.Sink`), and `RunTUI` runs over any `terminal.Terminal`, the host posting
-`EventClosed` to end it; `terminal.NewWithHost` makes one of the Android view
-(`terminal/android`'s `View`). The TUI's side, taps and a layout a phone held
-portrait fits, is
-[stapes' todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#play-the-screen-by-touch).
-What remains here:
-
-1. A second bound entry beside `game.Start` runs it over that `Terminal` and
-   hands `NewSession` the `Speaker` as its sink; the start screen offers stapes
-   beside the game.
-2. The system keyboard serves `:` and the prompts, as in the game, and the pinch
-   zoom gives the views their 60×16 cells on a phone held portrait.
-3. Files: the verbs name paths, which reach stapes' root and the user root's
-   `audio/` in the app's storage; a `.mid` or a `.wav` another app holds comes
-   through the system's picker, copied into the user root's `audio/` first, and
-   a written file goes back out through it ([Multi-platform
-   §8](multi-platform.md#stapes-files)).
-
-### Rip live on Android
-
-- Priority: P2
-- Affected files: `android/game`, `android/app`
-- Prerequisite: [Bring stapes to Android](#bring-stapes-to-android-stapes-mobile)
-
-The library rips a recording as it plays (`RipStream`: blocks of samples in,
-each bar frozen once two follow it from the sixth bar on, `Final` the whole rip
-once the recording ends), and stapes is to show the rip being made and save the
-song ([its todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#show-a-live-rip-as-it-is-made)).
-What remains here is the microphone: read in the app (`AudioRecord`, behind the
-`RECORD_AUDIO` permission asked at first use) and handed to stapes' session as
-its source, as the `Speaker` is its sink.
-
 ### Render a conductor timeline offline
 
 - Priority: P3
 - Affected files: `tool/vif-log`, `internal/system/music.go`
 
-`RenderTimeline` plays a timeline of slot patterns offline and stapes' `song`
-writes a `SongDef` through it; the conductor's own timeline, patterns by tier from an APM
-trace, is what still lacks a path to it. The offline conductor render that
-compared bass voicings for the music-smoothing review, an APM timeline through
-the sequencer with no device, is a test-only
-harness in a scratch repository. `AudioEngine.RenderMusic` now renders placed
-patterns offline; a verb of vif's, since stapes imports nothing of the game,
-would drive an APM timeline through the conductor's tier and tempo policy over
-it and write the WAV.
+The conductor's timeline, patterns by tier from an APM trace, lacks a path to
+the engine's offline render, `AudioEngine.RenderBars`, which takes a tempo a
+bar or a beat as the conductor's slew needs. A verb of vif's, since stapes
+imports nothing of the game, would drive an APM timeline through the
+conductor's tier and tempo policy over it and write the WAV.
 
 ### Play a song in the game
 
@@ -2982,6 +3307,20 @@ it and write the WAV.
 The conductor plays tiers, not bars. A scenario that wants a fixed piece would play
 a `SongDef` through the sequencer as stapes conducts one, each bar's patterns
 scheduled while the bar before plays.
+
+### Bundle stapes in the Android app
+
+- Priority: P3
+- Affected files: `android/game`, `android/app`, `android/go.mod`,
+  `doc/audio.md`, `doc/package-map.md`
+- Prerequisite: stapes mobile fully working on its own ([stapes'
+  todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android))
+
+A later version of the app carries stapes beside the game, its live rip with
+it, over one storage, so a pattern written or ripped on the phone plays in the
+phone's game from the user root's `audio/`. `android/go.mod` then requires
+stapes, and the root module still imports none of it. What closes it: the
+start screen offers stapes beside the game, as stapes mobile runs it.
 
 ### Tune the binaural beat by ear
 

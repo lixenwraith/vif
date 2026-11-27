@@ -8,13 +8,9 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// EventQueue is a lock-free MPSC ring buffer for game events
-// Thread-Safety:
-//   - Push: Lock-free CAS, multiple producers OK
-//   - Consume: Single consumer (game loop)
-//   - Published flags prevent reading partial writes
-//
-// Overflow: Oldest events overwritten when full
+// EventQueue is a lock-free MPSC ring of game events: producers claim a slot by
+// CAS, and a per-slot published flag keeps the one consumer, the game loop, from
+// reading a partial write. When full, the oldest unread events are overwritten.
 type EventQueue struct {
 	events    [parameter.EventQueueSize]GameEvent
 	published [parameter.EventQueueSize]atomic.Bool // True = slot fully written
@@ -358,14 +354,11 @@ func (eq *EventQueue) BeginTick(tick uint64) {
 	eq.stamp.Store(&Stamp{Run: eq.stamp.Load().Run, Tick: tick})
 }
 
-// RebaseStamp moves the record position onto an installed world's run and tick.
-//
-// It is the counterpart of NextRun for a capture rather than a reset: the tick is
-// shared identity, and an instance that adopted a world without adopting the
-// position it was taken at would stamp its records — and schedule every crossing's
-// apply tick — against a tick number the session left behind. Settle group 1,
-// because an install lands between two ticks, after the tick's body. Caller MUST
-// hold the world lock.
+// RebaseStamp moves the record position onto an installed world's run and tick, as
+// NextRun does for a reset: the tick is shared identity, and an instance keeping its
+// own would stamp its records, and schedule every crossing's apply tick, against a
+// tick the session left. Settle group 1, since an install lands between two ticks.
+// Caller MUST hold the world lock.
 func (eq *EventQueue) RebaseStamp(run, tick uint64) {
 	eq.stamp.Store(&Stamp{Run: run, Tick: tick, Boundary: 1})
 }

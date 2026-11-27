@@ -1,8 +1,9 @@
 package component
 
 // Declared names what a scenario declares beside the code's own: its behavior
-// programs, the species from SpeciesDataFirst, and its loot kinds, the kinds from
-// LootCount, each in sorted-name order
+// programs, the species from SpeciesDataFirst, its loot kinds, the kinds from
+// LootCount, and its maps, MapID 1 onward, each in sorted-name order, and its
+// programs' signals
 type Declared struct {
 	Programs []string
 	Loot     []string

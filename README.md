@@ -15,6 +15,11 @@ vif is a real-time roguelike typing shooter played with vi-style motions,
 offline solo or online multi-player: in a terminal, a desktop window,
 on Android or in the browser.
 
+Live at [lixen.com/vif](https://lixen.com/vif/): play it in the browser or start a
+game in the multiplayer lobby, and read how its [engine](https://lixen.com/vif/#engine),
+[netcode](https://lixen.com/vif/#netcode) and [deployment](https://lixen.com/vif/#deploy)
+work.
+
 It is pure Go with few dependencies. The terminal, TOML, color and
 logging primitives are modules of their own
 ([terminal](https://github.com/lixenwraith/terminal),
@@ -93,8 +98,6 @@ Uninstalled, `./bin/vif` plays the checkout's `wad/`. The
 [packaging](doc/packaging.md) the distribution checklists.
 
 ## Playing
-
-See it live at: [Lixen](https://lixen.com/vif)
 
 Each new game waits for a key or click to start it, and a join for one to take
 your place in the session (`-nw` skips both). `F1` (or `:help`) lists the keys,

@@ -6,21 +6,11 @@ import (
 	"sync"
 )
 
-// Fingerprint identifies the simulation this build assembles.
-//
-// Two participants in one session run the same code over the same seed and expect
-// the same world. What decides that world is not the binary — a debug build and a
-// stripped one simulate identically — but the manifest: which components exist,
-// which systems are constructed, in which order, in which domain, and which of them
-// carry state a capture has to move. Change any of those and the two runs are
-// different games that will agree for a while and then not.
-//
-// So this hashes exactly that set, and deliberately not renderers or a system's
-// local-only implementation capability: presentation and audio availability decide
-// nothing about the simulation, and including either would refuse a compatible session.
-//
-// It is an identity, not a version. It says two builds differ; it cannot say which
-// is newer, and nothing should try to order two of them.
+// Fingerprint identifies the simulation this build assembles, which the manifest
+// decides and not the binary: the components, and the systems in order with their
+// domains, dependencies and snapshot obligations. Renderers and a local-only
+// capability decide nothing, so including them would refuse a compatible session.
+// An identity, not a version: it says two builds differ, never which is newer.
 var Fingerprint = sync.OnceValue(computeFingerprint)
 
 // computeFingerprint is Fingerprint without the memoization, so a test can watch

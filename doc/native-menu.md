@@ -75,10 +75,14 @@ node's id. The terminal and the desktop window keep the `tui` menu.
 Built by `Router.MenuSnapshot` only while the menu is open on a host that draws its
 own, nil otherwise; the app pushes it when its bytes differ from the last pushed.
 
+The rows are built again each frame the menu shows them, and such a host takes the
+whole tree each frame, as a `tui` search does, so a row builder with a side effect,
+as Nearby games' `Look` has, runs on every page there.
+
 ```json
 {
   "title": "Menu · game paused",
-  "status": {"text": "Only the host can restart the game in a session", "kind": "notice"},
+  "status": {"text": "Only the host can restart the game in a session", "kind": "error"},
   "form": {"id": "multiplayer/#Session/host", "error": "Address in use"},
   "query": "pause",
   "found": [{"id": "game/pause", "label": "Game / Resume"}],
@@ -117,8 +121,9 @@ own, nil otherwise; the app pushes it when its bytes differ from the last pushed
 - `disabled` is the reason, the sentence the command refuses with
   ([unavailable](term-index.md)). A disabled node is drawn dimmed, its reason first,
   and sends no hook; an info row carries none.
-- `status` is the status bar's line and its kind (`notice`, `progress`, `alert`):
-  the native menu covers the bar, so a refusal shows here instead.
+- `status` is the status bar's line and its kind, as `parameter.StatusKindNames`
+  names it (`notice`, `progress`, `error` for a refusal, `alert`...): the native
+  menu covers the bar, so a refusal shows here instead.
 - `form` is the error of the last submit that failed, by id, until the next op. The
   host shows it on that form.
 - `query` and `found`: a search is Go's, as in the `tui` menu. `found` lists the
@@ -243,14 +248,27 @@ stay one mechanism. The `vif_headless` profile builds without it.
   the menu, and a host is handed it only then, the first frame included; the overlay
   leaves the menu undrawn under a host's; the Java and page contracts match Go's;
   the binding and the bridge carry snapshots out and ops in.
+- A method the menu comes to call on `engine.SessionController` panics in
+  `internal/mode`'s tests, whose double (`menuSession`) embeds the interface as nil,
+  and one added to `game.Listener` stops `android/game`'s tests building
+  (`menuListener`), which no root `go test ./...` compiles: give both doubles the
+  method; the gates above run the Android module's tests.
+- A row added to a Settings section moves two tests that hold the page by its rows:
+  `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound section's,
+  and `TestAPressDrivesTheMenu` presses rows by number down to Controls' auto-fire.
+  A row whose command asks by an event, as the mute and the binaural beat do, reads
+  its new value only once the event settles: `internal/mode`'s tests are tag-free
+  on a world with no audio resource, so they read what was pushed off the queue
+  (`TestTheBinauralBeatIsAskedAsTheMuteIs`), and what the setting then does is held
+  in `internal/system`'s audio-tagged tests, on a real engine.
 - Java: type-check with `javac` against Robolectric's `android-all`
-  ([agent notes](agent-notes.md#toolchain)), build the APK with `make android`,
+  ([Development §12](development.md#android)), build the APK with `make android`,
   and on a device or emulator: open the menu by each summon; try every kind, a
   search and a one-field form; fill the request form with the keyboard up; rotate
   the device with the menu open; press Back at each layer; join a session as a
   guest, where the host-only rows are disabled; use it with TalkBack.
 - Browser: `make wasm` into a copy of `web/`, served and driven with Playwright
-  ([agent notes](agent-notes.md#looking-at-the-game-without-a-device)): Ctrl-G
+  ([Development §13](development.md#the-browser-under-playwright)): Ctrl-G
   and a finger held on the status bar open it, a switch turns through the run, a
   select and a stepper apply, a confirm sheet opens and Escape closes it alone,
   a search finds the rows `/` finds, and × closes.
@@ -268,4 +286,4 @@ stay one mechanism. The `vif_headless` profile builds without it.
   place. The ops, the Back order and the keys of §7 keep everything else alike;
   `multi-platform.md` records the difference as one the host forces.
 - **Form errors** belong to the form, not to a field, so a message names its field
-  ("Bot count must be 1..8").
+  ("Bot count must be 1..16").
