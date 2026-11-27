@@ -38,7 +38,7 @@ const (
 	// the caller ticks and geometry taken from the journal rather than the terminal
 	ModeReplay
 	// ModeScript presents an authored script the same way ModeReplay presents a
-	// journal: terminal and renderer over a manual clock the script driver ticks.
+	// journal: presentation and renderer over a manual clock the script driver ticks.
 	// Geometry is the script's, so a presented run and a headless one simulate the
 	// same world and only the presentation differs.
 	ModeScript
@@ -60,7 +60,7 @@ func (m Mode) String() string {
 	return modeNames[m]
 }
 
-// Presents reports whether the mode builds a terminal and a render pipeline
+// Presents reports whether the mode builds a presentation and a render pipeline
 func (m Mode) Presents() bool { return m == ModePlay || m == ModeReplay || m == ModeScript }
 
 // Driven reports whether the caller advances the clock; a driven run spawns no
@@ -71,12 +71,13 @@ func (m Mode) Driven() bool { return m != ModePlay && m != ModeServer }
 // puts no cursor of its own on the map.
 func (m Mode) Serves() bool { return m == ModeServer }
 
-// OwnsGeometry reports whether the terminal is the authority on world dimensions.
-// A replay's geometry is recorded, so its terminal drives presentation only.
+// OwnsGeometry reports whether the presentation is the authority on world
+// dimensions. A replay's geometry is recorded, so its screen lays out the view only.
 func (m Mode) OwnsGeometry() bool { return m == ModePlay }
 
-// OwnsInput reports whether terminal input drives the simulation. A replay's input
-// drives playback controls instead, so the mode router never sees it.
+// OwnsInput reports whether the presentation's input drives the simulation. A
+// replay's drives playback controls instead, and reaches the mode router only as
+// the viewer's own commands.
 func (m Mode) OwnsInput() bool { return m == ModePlay }
 
 // Audio reports whether this mode and build register an audio service.
@@ -151,7 +152,7 @@ type Config struct {
 
 	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time. An
 	// authored script reads it as the wall rate its ticks are paced at, defaulting
-	// to internal/app's ScriptPaceMax solo and to real time in a session.
+	// to internal/app's ScriptPaceMax solo and to the session's rate in one.
 	TimeScaleSpec string
 
 	// TickInterval is the game time one tick advances, chosen by a session's host

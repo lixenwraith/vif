@@ -11,12 +11,11 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
-// TestTheTargetDummyTakesItsHitPointsFromThePads plays the shipped dummy scenario on
-// its smallest map: the range lies still and comes back after a pickup, each pad
-// press moves the standing dummy's hit points at once and again after its
-// countdown, a dummy shot down rises on its spot once the cursor has stood there
-// and walked back out of its shield's reach, and energy at 0 brings an energy drop
-// homing from the dummy's center.
+// TestTheTargetDummyTakesItsHitPointsFromThePads plays the shipped dummy on its
+// smallest map: the range lies still and comes back after a pickup, a pad press moves
+// the standing dummy's hit points at once and again after its countdown, a dummy shot
+// down rises on its spot once the cursor has stood there and walked out of its
+// shield's reach, and energy at 0 brings an energy drop homing from the dummy's center.
 func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "dummy"}

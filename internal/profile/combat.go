@@ -237,9 +237,9 @@ func init() {
 		register(p)
 	}
 
-	// Missile: damage only, no knockback. The explosion spawned on impact is
-	// typed ExplosionTypeMissile and routes back to this same family, so
-	// nothing downstream adds an impulse either.
+	// Missile: damage only, no knockback. The explosion its impact requests carries
+	// CombatAttackMissile and routes back to this same family, so nothing
+	// downstream adds an impulse either.
 	for _, d := range cursorDefenders {
 		missileProfiles[d] = AttackProfile{
 			AttackType:  component.CombatAttackMissile,

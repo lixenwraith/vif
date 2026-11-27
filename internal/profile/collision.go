@@ -6,7 +6,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
-// Offset blend; mirrors collision.go
+// The OffsetInfluence blends a knockback takes (physics.CollisionProfile)
 const (
 	OffsetNone float64 = 0
 	OffsetBody float64 = 1.0 / 3.0

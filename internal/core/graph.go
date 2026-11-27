@@ -25,12 +25,10 @@ func (e *CycleError) Error() string {
 	return "circular dependency between " + strings.Join(e.Unresolved, ", ")
 }
 
-// TopoSort orders names so every dependency precedes its dependents, using
-// Kahn's algorithm. Callers pass a name to the names it depends on.
-//
-// The result is deterministic: names are sorted before the graph is walked and
-// ready nodes are appended in that order, so an order that feeds RNG seeding or
-// entity creation never varies between runs.
+// TopoSort orders names so every dependency precedes its dependents (Kahn's
+// algorithm); callers pass a name to the names it depends on. Names are sorted
+// before the walk and ready nodes appended in that order, so an order that feeds RNG
+// seeding or entity creation never varies between runs.
 func TopoSort(deps map[string][]string) ([]string, error) {
 	names := make([]string, 0, len(deps))
 	for name := range deps {

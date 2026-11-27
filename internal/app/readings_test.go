@@ -30,18 +30,17 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestNetcodeReadingsOverSockets takes doc/netcode-design.md §3.3's readings on the
-// socket path, which the in-process mesh has none of: bytes by kind before each
-// link's deflate and on the wire after it, with the rounds, proofs and repairs
-// beside them, in §3.1's shape paced at the tick. It prints what it
-// measured and runs only when asked, VIF_NETCODE_READINGS=1: it is minutes of whole
-// worlds, and an approach is judged by it, not a build.
 // readingRepeats is how many times a td row is taken: its rows vary run to run with
 // what the storm does to the roster over real sockets, so the run at the median
 // keyframe rate is reported, every run's rate beside it. VIF_NETCODE_READINGS_RUNS
 // sets the count for every row.
 const readingRepeats = 3
 
+// TestNetcodeReadingsOverSockets takes doc/netcode-design.md §3.3's readings on the
+// socket path, which the in-process mesh has none of: bytes by kind before each
+// link's deflate and on the wire after it, with the rounds, proofs and repairs, in
+// §3.1's shape paced at the tick. Minutes of whole worlds that judge an approach, not
+// a build, it prints what it measured and runs only with VIF_NETCODE_READINGS=1.
 func TestNetcodeReadingsOverSockets(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_READINGS") == "" {
 		t.Skip("set VIF_NETCODE_READINGS=1 to take the readings")
@@ -258,12 +257,11 @@ func cpuSeconds() float64 {
 	return float64(ru.Utime.Sec) + float64(ru.Utime.Usec)/1e6 + float64(ru.Stime.Sec) + float64(ru.Stime.Usec)/1e6
 }
 
-// TestNetcodeReadingsForBatch3 takes the readings netcode design §4 batch 3 is
-// decided and measured on, over a td session of two on sockets: a keyframe's bytes a
-// section at a time, plain and deflated, as the JSON rows the manifest hashes and as
-// the columns the wire carries; what a guest pays to decode and install one; and the
-// heap by owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
-// VIF_NETCODE_PROFILE names a directory its heap profile is written to.
+// TestNetcodeReadingsForBatch3 takes the readings netcode design §4 batch 3 is decided
+// and measured on, over a td session of two on sockets: a keyframe's bytes a section
+// at a time, plain and deflated, as the JSON rows the manifest hashes and the columns
+// the wire carries; a guest's cost to decode and install one; the heap by owner after.
+// VIF_NETCODE_BATCH3=1 runs it; VIF_NETCODE_PROFILE names its heap profile's directory.
 func TestNetcodeReadingsForBatch3(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_BATCH3") == "" {
 		t.Skip("set VIF_NETCODE_BATCH3=1 to take the batch 3 readings")

@@ -50,8 +50,8 @@ type Membership struct {
 
 	// RelayAddress is where a joined run admits participants that cannot reach the
 	// host, carrying their artifacts on its own link: an address to bind, or, with the
-	// vif:// scheme kept, a router to publish the door through (RelayRouter). Empty
-	// relays only its bots.
+	// vif:// or vifs:// scheme kept, a router to publish the door through
+	// (RelayRouter). Empty relays only its bots.
 	RelayAddress string
 
 	// Migrate lets a session this run opens move to a guest that allowed it when
@@ -75,8 +75,8 @@ type Membership struct {
 	// Participants is a ceiling on the roster's cursors, a playing host's own
 	// included; zero means the whole roster. On a scripted or bot-driven host an
 	// explicit value is also what the startup lobby waits for. Unset, and always on
-	// a dedicated host, the lobby starts on its first guest and the rest arrive
-	// through the mid-run gate; an interactive host has no lobby.
+	// a dedicated host, it waits for the guests min_players needs, at least one, and
+	// the rest arrive through the mid-run gate; an interactive host has no lobby.
 	Participants int
 
 	// Spectators is how many viewers a session this run hosts feeds at once: zero is

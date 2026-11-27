@@ -287,7 +287,9 @@ func (p *player) event(ev terminal.Event) bool {
 	return true
 }
 
-// A live bot's command line borrows its input without stopping the session clock.
+// advance plays the wall time elapsed since the last frame at the presented pace, or
+// the steps granted while paused. An open command line holds the run, but a live
+// bot's borrows its input without stopping the session clock.
 func (p *player) advance(elapsed time.Duration) {
 	if p.rw != nil && p.rw.lent {
 		return // a batch holds the presented copy
