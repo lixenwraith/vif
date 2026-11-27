@@ -57,7 +57,7 @@ exchange's place. A hub copies each record to every viewer, the host's own or th
 router's for a fleet session, so it is encoded once whatever the audience: §3.8.
 
 The port packs what a link is sent of epochs and syncs into one `MsgBundle`
-(`MessageType.Bundles`) and releases each link's when a drain ends and when the tick
+(`Traits.Bundles`) and releases each link's when a drain ends and when the tick
 closes, so a link reads one or two frames a tick whatever the roster; a frame of any
 other kind releases the link's bundle before it, so a link reads its frames in the
 order they were sent, which the session layer relies on when a handoff record

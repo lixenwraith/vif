@@ -35,19 +35,11 @@ func (b Bounds) FloorWindow() time.Duration {
 // FloorBps is what honoring the floor costs on a world of this size.
 func (b Bounds) FloorBps(s Sizes) float64 { return floorRate(b, s) }
 
-// Admit decides whether a link may join a session at all.
-//
-// This is where the floor stops being a clamp and becomes a refusal. A
-// participant admitted onto a link that cannot carry one whole world per floor
-// window is a participant whose prediction drifts with nothing scheduled to
-// repair it — it would play, and it would be wrong, and nothing in the protocol
-// would say so. Refusing is the honest failure, and it is the same choice the
-// join already makes when the catch-up gap exceeds the playout lead.
-//
-// A rate of zero means nothing was measured. Admission is granted on no evidence
-// rather than refused on none: the alternative is a session nobody can join
-// before a probe has completed a round trip, and the mid-session report is what
-// covers a link that turns out to be worse than it looked.
+// Admit decides whether a link may join a session at all: a participant on a link
+// that cannot carry one whole world per floor window would play wrong with nothing
+// scheduled to repair it, so it is refused. A rate of zero is nothing measured,
+// admitted rather than refused on no evidence, or nobody could join before a probe's
+// round trip; the mid-session report covers a link worse than it looked.
 func Admit(b Bounds, availableBps float64, s Sizes) error {
 	if availableBps <= 0 {
 		return nil

@@ -326,7 +326,7 @@ func RefusePublish(conn net.Conn, cause error) {
 type DoorTunnel struct {
 	Router  string // the router's front door: host:port, or vifs://host:port under TLS
 	Session string // the name this run's door answers to
-	// Dial opens a connection to the router; nil dials TCP.
+	// Dial opens a connection to the router; nil dials TCP, under TLS for vifs://.
 	Dial func(addr string) (net.Conn, error)
 
 	mu               sync.Mutex

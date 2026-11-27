@@ -19,13 +19,9 @@ func chunkHeaderFor(tick uint64, index, count, total uint32, payload []byte) []b
 	return frame
 }
 
-// TestAssemblyAllocatesForBytesThatArrived is the defense, and it is a property of
-// the receiver rather than of the ceiling.
-//
-// A declared length is a claim by whoever sent the chunk. Reserving for it let one
-// twenty-byte header make a receiver hold the whole ceiling, once per source. What
-// bounds it now is that the buffer grows with the bytes that actually arrive, so a
-// peer must send what it wants a receiver to hold.
+// TestAssemblyAllocatesForBytesThatArrived: a declared length is the sender's claim,
+// so the receiver's buffer grows with the bytes that arrive rather than reserving for
+// it, or one 28-byte header would make it hold the whole ceiling, per source.
 func TestAssemblyAllocatesForBytesThatArrived(t *testing.T) {
 	t.Parallel()
 	var asm SnapshotAssembly

@@ -5,15 +5,11 @@ import (
 	"time"
 )
 
-// FuzzControllerHoldsItsEnvelope drives the controller from arbitrary
-// measurements and asserts the four properties that are not allowed to depend on
-// the input: the plan stays inside its declared bounds, it never leaves more
-// than the floor between whole worlds, a breach is reported rather than
-// silently adapted past, and a plan is never zero-valued.
-//
-// This is the guard that matters most, because the interesting inputs are the
-// ones nobody writes a case for: a link measured at a nanosecond, a keyframe
-// larger than the address space allows, jitter longer than the floor window.
+// FuzzControllerHoldsItsEnvelope drives the controller from arbitrary measurements,
+// such as a link measured at a nanosecond or jitter longer than the floor window,
+// and holds what no input may move: the plan stays inside its bounds, never leaves
+// more than the floor between whole worlds, reports a breach rather than adapting
+// past it, and is never zero-valued.
 func FuzzControllerHoldsItsEnvelope(f *testing.F) {
 	f.Add(uint64(215_000), int64(175_908), int64(29_488), int64(60), 8, 4, true, true)
 	f.Add(uint64(0), int64(0), int64(0), int64(0), 0, 0, false, false)

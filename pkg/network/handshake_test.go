@@ -8,12 +8,9 @@ import (
 	"time"
 )
 
-// TestASilentDialerDoesNotStallTheAcceptLoop is the defect this fixes.
-//
-// The handshake reads from a socket the far end controls. Run on the accept
-// goroutine, one dialer that connects and never writes held every other join for a
-// whole ConnectTimeout — the cheapest denial there is, one socket per five seconds
-// of lobby.
+// TestASilentDialerDoesNotStallTheAcceptLoop: the handshake reads a socket the far
+// end controls, so on the accept goroutine one dialer that connects and never writes
+// would hold every other join for a whole ConnectTimeout, a denial for one socket.
 func TestASilentDialerDoesNotStallTheAcceptLoop(t *testing.T) {
 	t.Parallel()
 
@@ -44,8 +41,8 @@ func TestASilentDialerDoesNotStallTheAcceptLoop(t *testing.T) {
 	}
 	defer silent.Close()
 
-	// A talker behind it. Without the fix this connect is accepted but its
-	// handshake never runs until the silent one times out.
+	// A talker behind it, whose handshake must not wait for the silent one to time
+	// out.
 	talker, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatalf("dial talker: %v", err)

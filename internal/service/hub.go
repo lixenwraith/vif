@@ -126,8 +126,8 @@ func (h *Hub) StartAll() error {
 	return nil
 }
 
-// StopAll calls Stop on all started services in reverse topological order
-// Logs errors but does not fail - ensures all services get Stop called
+// StopAll calls Stop on every initialized service in reverse topological order,
+// logging a failure and going on, so every service gets its Stop.
 func (h *Hub) StopAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

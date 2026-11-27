@@ -17,25 +17,17 @@ const SnapshotChunkHeader = 28
 // accounted for by MaxPayloadSize.
 const SnapshotChunkBody = MaxPayloadSize - SnapshotChunkHeader
 
-// MaxSnapshotBytes bounds a transfer either end will handle at all: the bytes on
-// the wire, after the codec has compressed them. The largest world the engine
-// holds — MaxMapCells walled, which is more than any scenario builds — measures
-// 1.1 MiB here, so this keeps four times that as headroom for a world that grows.
-//
-// The defense is snapshotReserve below: a receiver allocates for the bytes that
-// have arrived rather than for the bytes a sender says are coming, so the memory
-// one peer can make a receiver hold is bounded by what that peer actually sends.
+// MaxSnapshotBytes bounds a transfer either end handles at all, the bytes on the
+// wire: four times the 1.1 MiB the largest world measured, MaxMapCells walled, as
+// headroom for a world that grows. The defense is snapshotReserve: a receiver
+// allocates for the bytes that arrived rather than the ones a sender names, so what
+// one peer can make a receiver hold is bounded by what it sends.
 const MaxSnapshotBytes = 4 << 20
 
-// MaxSnapshotPlainBytes bounds the body a capture expands to, which is a separate
-// quantity from the one above: captures of a walled map compress better than 20:1,
-// so a transfer well inside the wire ceiling still expands past it. That worst case
-// measures 24.3 MiB, and this is the next power of two.
-//
-// It is the decompression bound, so it is stated as a ratio rather than a size: a
-// peer may still send only MaxSnapshotBytes, and this is how far a receiver will
-// let those bytes expand. Eight to one is what the codec achieves on a real world;
-// flate's own worst case is 1032 to one.
+// MaxSnapshotPlainBytes bounds the body a capture expands to: a walled map's capture
+// compresses past 20:1, so a transfer well inside the wire ceiling expands past it,
+// to 24.3 MiB at worst, and this is the next power of two. It is the decompression
+// bound, so it is a ratio of the wire's; flate's own worst case is 1032 to one.
 const MaxSnapshotPlainBytes = 8 * MaxSnapshotBytes
 
 // snapshotReserve is the most a receiver reserves up front for a transfer it has
@@ -78,24 +70,11 @@ func EncodeSnapshotChunksOf(run, tick uint64, body []byte, size int) ([][]byte, 
 	return out, nil
 }
 
-// SnapshotAssembly reassembles a chunked capture or correction. The zero value is
-// ready to use.
-//
-// It admits chunks in order, and what it does with the ones that are not in order
-// depends on which of two situations it is in. During a join a capture arrives on
-// one stream, before the participant sending it is admitted to anything that could
-// reorder it, so anything out of order is a confused sender: tolerating it silently
-// would let two captures interleave into one body that hashes as neither.
-//
-// A correction arrives mid-session on a mesh, where the same tick reaches a node by
-// several paths and a newer transfer can start before an older one finishes. Three
-// out-of-order cases are therefore *expected* rather than wrong: a chunk of the
-// transfer in progress that this node has already taken, any chunk naming a tick it
-// has already assembled whole — the paths carry differently shaped bodies for one
-// tick — and a chunk of a *newer* transfer, which supersedes the one in progress
-// because a correction carries no information the one after it lacks. Everything
-// else is still an error. Transfers order by run, then tick: a reset restarts the
-// tick count, and the new run's first world is the newest thing on the wire.
+// SnapshotAssembly reassembles a chunked capture or correction; the zero value is
+// ready. A join's capture comes on one stream, so a chunk out of order is a confused
+// sender (Add). A correction comes over a mesh by several paths (AddChunk): a chunk
+// taken already, one of a tick assembled whole, and a newer transfer, which supersedes,
+// are expected. Transfers order by run, then tick: a reset restarts the tick count.
 type SnapshotAssembly struct {
 	run     uint64
 	tick    uint64
@@ -116,13 +95,10 @@ func (s *SnapshotAssembly) Add(frame []byte) (done bool, err error) {
 	return done, err
 }
 
-// AddChunk admits one chunk and reports whether it was new to this assembly as well
-// as whether the transfer is complete.
-//
-// The first return is what a relay forwards on. It is the same termination argument
-// the artifact flood uses: a node forwards only what it admitted, a second copy
-// arriving by another path is recognized and neither taken nor forwarded again, so
-// each node handles each chunk exactly once whatever the topology.
+// AddChunk admits one chunk and reports whether it was new to this assembly and
+// whether the transfer is complete. The first is what a relay forwards on, as the
+// artifact flood terminates: a copy arriving by another path is neither taken nor
+// forwarded again, so each node handles each chunk once whatever the topology.
 func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err error) {
 	if len(frame) < SnapshotChunkHeader {
 		return false, false, fmt.Errorf("snapshot chunk: %d bytes, want at least %d", len(frame), SnapshotChunkHeader)

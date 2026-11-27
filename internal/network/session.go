@@ -306,12 +306,11 @@ func (o SessionOffer) ParticipantCount() int {
 	return n
 }
 
-// Coordinator is the host side of the startup handshake. Assign allocates the next
-// participant identity and returns the offer carrying it, or the place one of the
-// keys the dialer proved comes back to; Release returns that identity to the pool, or
-// that place to its Wraith, when the handshake does not complete, so a rejected or
-// abandoned connection does not consume a roster slot. Assign runs at the dialer's
-// seat, never before: a dialer prepares on a preview, which holds nothing.
+// Coordinator is the host side of the startup handshake. Assign, at the dialer's seat
+// and never before, allocates the next identity and the offer carrying it, or the
+// place a key the dialer proved comes back to; Release returns that identity to the
+// pool, or the place to its Wraith, when the handshake does not complete, so an
+// abandoned connection consumes no roster slot.
 type Coordinator struct {
 	Assign  func(a Admission) (SessionOffer, error)
 	Release func(link.PeerID)
@@ -1322,16 +1321,11 @@ func (p *PendingJoin) send(msg *link.Message) error {
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.
 const maxDeferredJoinFrames = 512
 
-// readSnapshot reads a whole capture from a raw handshake stream, holding the
-// session traffic that arrives alongside it.
-//
-// The interleaving is by design rather than by accident. A mid-run host admits a
-// participant before it reads the world for it, so the epochs it produces during
-// the transfer reach that participant instead of falling into the gap; they arrive
-// on this stream, between chunks, and hold keeps them for the barrier to receive
-// once the world they apply to exists. A probe is answered the same way. Anything
-// else is a protocol error, because the next message on this stream decides what
-// the joiner does with the world it just received.
+// readSnapshot reads a whole capture from a raw handshake stream, holding the session
+// traffic between its chunks: a mid-run host admits a participant before it reads the
+// world for it (D-22), so the epochs of the transfer arrive here and wait for the
+// world they apply to, and a probe is answered. Anything else is a protocol error,
+// since the next message decides what the joiner does with the world it received.
 func readSnapshot(p *PendingJoin) (uint64, []byte, error) {
 	return readChunked(p, MsgStateSnapshot)
 }
@@ -1456,9 +1450,9 @@ func openJoinStream(addr string, cfg *Config, kind link.MessageType) (*PendingJo
 	return openJoinOn(conn, base, kind)
 }
 
-// openJoinOn names the session and the claims the dial keeps on conn, and reads the
-// preview the coordinator answers with, unchecked: a coordinator that previews
-// nothing is still one a dial can seat at once with.
+// openJoinOn names the session on conn, proves the keys the dial keeps where the door
+// asks, and reads the preview the coordinator answers with, unchecked: a coordinator
+// that previews nothing is still one a dial can seat at once with.
 func openJoinOn(conn net.Conn, base *Config, kind link.MessageType) (*PendingJoin, error) {
 	if base.ConnectTimeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))

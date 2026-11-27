@@ -15,7 +15,7 @@ type NetworkService struct {
 	disabled atomic.Bool
 }
 
-// Pass nil config to disable or initialize with defaults
+// NewNetworkService serves cfg; nil takes the defaults, whose RoleNone disables it.
 func NewNetworkService(cfg *link.Config) *NetworkService {
 	if cfg == nil {
 		cfg = link.DefaultConfig()
