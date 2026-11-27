@@ -10,18 +10,15 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 ## Cave
 
-The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
-by area so an agent can take a group. The faster scroll, the jagged cave, the stone
-art, the raider types by cave, the scenery text, the boss stage, the machine's
-certain faults, navigation's cost over the cave and the position package
-([Position](position-package.md)) have landed. What is left is the machine
-follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
+The side-scroller's refinements after its first play test (2026-10-27) lead,
+grouped by area so an agent can take a group. What is left is the machine
+follow-ups and what the position package ([Position](position-package.md)) leaves
+open. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 `Positions.Rock()` and the wall system and renderers that read it.
 
 ### Machine follow-ups
 
-What `cave` met in the machine and is still open, its certain faults having
-landed.
+What `cave` met in the machine and is still open.
 
 #### Give a program's entrance an entering state
 
@@ -169,13 +166,13 @@ past the ship, its ranks stand overhead and its squadrons fly routes into circle
 ([Gameplay §10](gameplay.md#10-embedded-campaign-progression)). A terrain under
 that scroll is what is left, likely the first scenario built on a painted map
 ([Authoring](#authoring)); its items follow the editor's foundation. The bots'
-armada figures ([Bots](bots.md#examples)) want reading again on it.
+armada figures ([Bots](bots.md#the-shipped-bots)) want reading again on it.
 
 ### Scroll a terrain past armada
 
 - Priority: P2
 - Affected files: `wad/scenario/base/armada/`, `internal/system/wall.go` (the cave
-  step), `pkg/position/surface.go`, `internal/engine/position.go` (`RockField`),
+  step), `pkg/position/surface.go`, `internal/engine/rock.go` (`RockField`),
   `internal/system/particle.go`, `internal/render/renderer/rock.go`,
   `internal/event/payload.go` (`CaveStartPayload`)
 - Prerequisite: [Lay a painted map a scenario carries](#lay-a-painted-map-a-scenario-carries),
@@ -478,8 +475,8 @@ second of game time later. What that leaves:
 - Guide: [Behavior machines §5](machine-design.md#5-dialect-kernel)
 
 The editor's forms and pickers come from one description, the one `-schema`
-prints, and it holds too little for them: 209 events with their fields, the names
-of 38 enums, three vocabularies with their arguments and what a bot's network
+prints, and it holds too little for them: every event with its fields, the names
+each enum takes, three vocabularies with their arguments and what a bot's network
 reads and asks for. Missing:
 
 - **An event's class and line.** Nothing says an event is local, shared or a
@@ -975,10 +972,10 @@ since it spells them. What it costs, and what it does not reach:
 - Affected files: `Makefile` (`page`), `.gitignore`
 
 `make wasm` writes `NOTICES` beside `vif.wasm` but no `LICENSE.font`, which, of
-the page's copies, only the release workflow's web archive carries, so a
-deployment of `web/` serves Hack's web font, inside `vif.wasm`, without its
-license beside it: only the font's own name table holds the text. Closes with
-`page` installing the terminal module's `atlas/LICENSE` as
+the page's copies, only the release workflow's web archive and the extension
+carry, so a deployment of `web/` serves Hack's web font, inside `vif.wasm`,
+without its license beside it: only the font's own name table holds the text.
+Closes with `page` installing the terminal module's `atlas/LICENSE` as
 `$(PAGE_DIR)/LICENSE.font`, which `.gitignore` takes as it takes the page's
 scripts.
 
@@ -1316,9 +1313,6 @@ plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
 closed at its graph's limit by the host, at the host's one rate, 1x
 ([Bots](bots.md#learning)). What it needs:
 
-- **Its graph in the pod.** The pod's `-bot` names a count, which plays `default`:
-  the learner's is named there (`N:graph`), embedded or served from the node's
-  volume, which carries `scenario` and `image` alone (`wadCategories`).
 - **A store outside the pod.** The population is saved where a setting is, and a
   session pod has a read-only root and two claims, its log and the wad: a third,
   writable, at the root the learner saves under. One writer at a time, since two
@@ -1591,13 +1585,13 @@ redesign rather than a domain-boundary fix.
 - Affected files: `android/app/src/main/java/com/lixen/vif/StartScreen.java`,
   `android/app/src/main/java/com/lixen/vif/MainActivity.java`, `android/game/game.go`
 
-Build it once the join refactor lands and its join matrix passes. Android opens on
-a start screen with one choice, "Tap to start", a solo run; the site is reached only
-from inside the run, through the menu's Multiplayer page (join a link, or request a
-session from `https://lixen.com`, its default; `:register` and `:login` keep a
-sign-in in the app's files, which a request to the site sends). Put a second choice beside the tap:
-host a game at the site, as that request does, and/or join one of the running games
-the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. The
+Android opens on a start screen with one choice, "Tap to start", a solo run; the
+site is reached only from inside the run, through the menu's Multiplayer page
+(join a link, or request a session from `https://lixen.com`, its default;
+`:register` and `:login` keep a sign-in in the app's files, which a request to the
+site sends). Put a second choice beside the tap: host a game at the site, as that
+request does, and/or join one of the running games the site lists
+(`GET /vif/api/sessions`), so `game.Start` takes a join target. The
 page needs nothing: the site's lobby (`/vif/lobby/`) is its choice, and its Play
 link opens the page with `-join`, which joins at its start screen's tap. A run that
 ends in an error, such as a refused join, shows it on the start screen, as the page
@@ -1902,7 +1896,7 @@ test then fails with the guards off.
 - Affected files: `internal/system/network.go`, `pkg/network`, `internal/event`
   (the wire batch), `internal/system/domain_test.go`
 
-`NetworkSystem` is one file of about 3,600 lines: the roster and departures,
+`NetworkSystem` is one file of about 3,900 lines: the roster and departures,
 crossings and the barrier, the relay tree, the lead and pacing, owner syncs, the
 replay suffix and the snapshot's adoption, and telemetry. The netcode is meant to
 plug into other projects, so the first step moves every part that is not this
@@ -2253,7 +2247,7 @@ session.
 - Priority: P2
 - Affected files: `tool/vif-router/tcp_proxy.go` (`splice`, `stallBounded`),
   `script/`, `doc/auth-session-design.md` §8
-- Guide: [Auth and session design §4](auth-session-design.md#8-ten-thousand-routed-players-on-one-machine),
+- Guide: [Auth and session design §8](auth-session-design.md#8-ten-thousand-routed-players-on-one-machine),
   [D10](auth-session-design.md#0-decisions)
 
 What the design projects and has not measured: the router holding 10,000
