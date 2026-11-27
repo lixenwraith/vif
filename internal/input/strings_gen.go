@@ -66,8 +66,6 @@ func (i IntentType) String() string {
 		return "IntentInsertDeleteCurrent"
 	case IntentInsertDeleteForward:
 		return "IntentInsertDeleteForward"
-	case IntentInsertDeleteBack:
-		return "IntentInsertDeleteBack"
 	case IntentUndo:
 		return "IntentUndo"
 	case IntentOverlayScroll:

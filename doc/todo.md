@@ -197,19 +197,6 @@ does, and drop `regionInitials` from the loop's reason at `maprange_test.go:55`.
 tolerance still keep at least 2/23 (0.087) each. Delete the constant and its `if`,
 and the floor named in the comments of `computeRouteWeights` and `Route.Weight`.
 
-### Drop the intent no parser produces
-
-- Priority: P2, to review
-- Affected files: `internal/input/intent.go`, `internal/mode/router.go`,
-  `internal/input/strings_gen.go`
-
-`IntentInsertDeleteBack` (`intent.go:55`) is made by nothing: no action name maps to
-it, and Insert's Backspace (`text_backspace`) arrives as `IntentTextBackspace`,
-whose handler already calls `handleInsertDeleteBack` (`router.go:1230`), so its case
-(`router.go:376`) never runs. Delete the constant and the case, and
-`go generate ./internal/manifest` for its `String` case; nothing records an intent's
-number, so the shift needs no version bump.
-
 ### Keep a bot's `help` and Normal-mode `escape` out of the overlays
 
 - Priority: P2, to review

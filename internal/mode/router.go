@@ -373,8 +373,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleInsertDeleteCurrent()
 	case input.IntentInsertDeleteForward:
 		return r.handleInsertDeleteForward()
-	case input.IntentInsertDeleteBack:
-		return r.handleInsertDeleteBack()
 
 		// Undo
 	case input.IntentUndo:
@@ -1227,7 +1225,7 @@ func (r *Router) handleTextBackspace() bool {
 			r.ctx.SetCommandCursorPos(pos - 1)
 		}
 	case core.ModeInsert:
-		return r.handleInsertDeleteBack()
+		return r.handleInsertBackspace()
 	case core.ModeOverlay:
 		if q := []rune(r.ctx.OverlayFilter()); len(q) > 0 {
 			r.setOverlayFilter(string(q[:len(q)-1]))
@@ -1364,7 +1362,7 @@ func (r *Router) handleInsertDeleteForward() bool {
 	return true
 }
 
-func (r *Router) handleInsertDeleteBack() bool {
+func (r *Router) handleInsertBackspace() bool {
 	pos, ok := r.ctx.World.LocalCursor()
 	if !ok || pos.X == 0 {
 		return true
