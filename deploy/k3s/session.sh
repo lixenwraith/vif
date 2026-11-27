@@ -23,7 +23,7 @@ usage() {
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "                                          SCENARIO=, LOG_LEVEL= and BOTS= override" >&2
+	echo "                                          SCENARIO=, LOG_LEVEL=, BOTS= and WATCH_ONLY= override" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
 	echo "       $0 blockers" >&2

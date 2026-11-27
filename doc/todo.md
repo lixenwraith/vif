@@ -1531,7 +1531,7 @@ the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
 
-### Keep a standing session for the lobby
+### Keep standing sessions for the lobby
 
 - Priority: P2
 - Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
@@ -1541,39 +1541,39 @@ the volume already carries whatever the installer puts there.
 - Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
   [Multiplayer §5.8](multi-player.md#58-watching-a-session)
 
-The site's lobby is to show one game always, and the game is a bot learning `cave`
-(Lixen, 2026-11-16): one pod, made by a script, seats one bot whose learner evolves
-its genes round after round, saves them outside the pod and goes on from them in
-the next, while visitors spectate it through the router at a copy's cost each
-(fleet §9). One session then shows the learner, the game, spectating and bots.
+The site's lobby is to show two games always, both to be watched and neither
+joined (Lixen, 2026-11-27): `fighter` played on a loop by two bots, and `cave`
+by one bot whose learner evolves its genes round after round, saves them outside
+the pod and goes on from them in the next. Visitors spectate each through the
+router at a copy's cost each (fleet §9).
 
 What stands: a dedicated host's session that its own bots alone occupy starts and
-plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
-./deploy/k3s/session.sh create <id>` makes that pod beside the router, whatever
-`bots_max` offers a visitor. The one seat of such a host learns, its rounds
-closed at its graph's limit by the host, at the host's one rate, 1x
-([Bots](bots.md#learning)). What it needs:
+plays on with no guest, and `WATCH_ONLY=true BOTS=2 PLAYERS=2 SCENARIO=fighter
+./deploy/k3s/session.sh create <id>` makes one beside the router whose bots fill
+every seat, so its pod refuses every dial but a watch as full, and whose Job the
+listing reports as `watch_only`, with its scenario, which the site's lobby offers
+Watch alone for. The one seat of a host's learner learns, its rounds closed at its
+graph's limit by the host, at the host's one rate, 1x ([Bots](bots.md#learning)).
+What they need:
 
-- **A store outside the pod.** The population is saved where a setting is, and a
-  session pod has a read-only root and two claims, its log and the wad: a third,
-  writable, at the root the learner saves under. One writer at a time, since two
-  pods of one population would each lose the other's rounds.
-- **A lifetime.** The Job's hour ends it, bots or not, which costs a learner the
-  round in flight. Its keeper is a router setting naming the scenario and the
-  bots, which makes the session at start and again whenever it is gone, charged to
-  no address's budget and counted in the quota; a timer running the script until
-  then. A spectator of the one that went is told it ended and starts a local game
-  (`Membership.feedEnded`): a name the router answers for whichever stands, or a
-  feed's end that names its successor, keeps a page watching.
-- **Its cost while nobody looks**: a pod around the clock. The router knows a
+- **A loop.** `fighter` ends, by the bots' deaths or the campaign's end, and the
+  standing one starts over at once rather than drain.
+- **A store outside the pod** for `cave`'s learner. The population is saved where a
+  setting is, and a session pod has a read-only root and two claims, its log and
+  the wad: a third, writable, at the root the learner saves under. One writer at a
+  time, since two pods of one population would each lose the other's rounds.
+- **A lifetime.** The Job's hour ends either, bots or not, which costs a learner the
+  round in flight. Its keeper is a router setting naming each standing session's
+  scenario and bots, which makes it at start and again whenever it is gone, charged
+  to no address's budget and counted in the quota, `watch_only` on its Job; a timer
+  running the script until then. A spectator of the one that went is told it ended
+  and starts a local game (`Membership.feedEnded`): a name the router answers for
+  whichever stands, or a feed's end that names its successor, keeps a page watching.
+- **Its cost while nobody looks**: two pods around the clock. The router knows a
   session with no spectator past its linger (`audiences`), and a pod its idle hub
   (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
-  wants the rounds nobody watches, so decide which it is.
-- Whether a visitor may also take a seat in it, whose cursor has the learner
-  field and score nothing until its place is given up, or only watches: a roster its bots fill is still shown to a
-  spectator, and the script and the router both keep a seat free
-  (`bots` ≤ `players` − 1).
-- The lobby showing it first, with Watch as what its row offers
+  wants the rounds nobody watches, so decide which each is.
+- The lobby showing them first, with Watch as their rows offer
   ([Watch a session as a spectator](#watch-a-session-as-a-spectator)).
 
 ## Multiplayer
@@ -1737,8 +1737,9 @@ as a typed member's end is (`CompositeSystem.destroyMember`).
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
-reached at the site; a host's door published the same way is a player's own session
-reached there, the router neither allocating nor authoring. The deployment this
+reached at the site; a host's door published the same way is a **routed game**, a
+player's own session reached there from a terminal, a page or Android, the router
+neither allocating nor authoring, the word the site's lobby uses too. The deployment this
 leads to serves as many pods as the node has resources for (`-sessions-max`, ten
 today) and routes every session beyond them. The tunnel carries a door already
 (`tool/vif-router/README.md`, Doors). Joins and creates are budgeted by account
@@ -1757,12 +1758,13 @@ What the feature itself needs, best shaped by deploying it step by step:
   scenario, whether it admits) so the router lists it without a `/health` read
   through the tunnel.
 - The session's row in `/vif/api/sessions`, with `kind` `hosted` beside the pods',
-  listed only where its player asked (a `PublishRequest` field, `-public` say), an
-  unlisted one reached by its link alone; its lifetime (the control connection's,
-  plus the resume window), and the create budget charged to the publisher's address
-  as a pod's is. `limits.host_target` names the address a host publishes at: the
-  site's lobby enables its Host choice, under a scenario's Multi, by it, and lists
-  `hosted` rows under the pods.
+  listed only where its player asked (`-listing public`, a `PublishRequest` field;
+  `private` when the flag is absent, as a menu row and `:host` take it too), a
+  private one routed all the same and reached by its link alone; its lifetime (the
+  control connection's, plus the resume window), and the create budget charged to
+  the publisher's address as a pod's is. `limits.host_target` names the address a
+  host publishes at: the site's lobby enables its Host area, under a scenario's
+  Multi, by it, and lists public `hosted` rows under the pods.
 - The publish ticket: the publish frame carries the run's key and, over TLS, its
   sign-in (`PublishRequest` is JSON, so a field is added without a protocol change);
   the router asks which account the sign-in names and refuses a publication by none
@@ -1773,8 +1775,12 @@ What the feature itself needs, best shaped by deploying it step by step:
   [§3.7](auth-session-design.md#37-budgets)). Implication: a `-relay` or hosted
   publication needs `:login` first; an anonymous run still joins through a published
   door.
-- The front door's `-tunnels` ceiling split between relay doors and hosted
-  sessions, or one budget for both, decided from how the first deployments fill.
+- A ceiling on the router's whole before routed games open: memory and the uplink
+  bound it, not its CPU, a routed game's bytes crossing the uplink twice, and its
+  spectators weigh more than its players, 2,560 streams at today's settings
+  ([Fleet §6](kubernetes-fleet.md#the-routers-own-cost)). One setting over its
+  connections and spectators together, sized from the node's uplink and memory,
+  which `-tunnels` then shares between relay doors and routed games.
 - A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
   `wss://` in a page, but the browser route wants a session id in its path before
   the first frame, so a publish needs a path of its own. A hosting page must be

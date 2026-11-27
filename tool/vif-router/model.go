@@ -13,9 +13,11 @@ const (
 	labelPartOf      = "app.kubernetes.io/part-of"
 	labelSession     = "vif.lixenwraith.dev/session"
 
-	// What a session was created with, which the listing reports.
-	annotationScenario = "vif.lixenwraith.dev/scenario"
-	annotationSize     = "vif.lixenwraith.dev/size"
+	// What a session was created with, which the listing reports; watch-only is
+	// set by deploy/k3s/session.sh alone, for a session its bots fill.
+	annotationScenario  = "vif.lixenwraith.dev/scenario"
+	annotationSize      = "vif.lixenwraith.dev/size"
+	annotationWatchOnly = "vif.lixenwraith.dev/watch-only"
 )
 
 type objectMeta struct {

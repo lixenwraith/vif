@@ -71,7 +71,7 @@ the bots its players bring, which run on their machines
 stay closed on this deployment (`VIF_ROUTER_BOTS_MAX=0`) until their cost is read
 there ([Measure a full roster](todo.md#measure-a-full-roster)). The lobby has no
 standing session to show: a session is spectated through the router (§9), and
-[the bot's game the site always runs](todo.md#keep-a-standing-session-for-the-lobby)
+[the bots' games the site always runs](todo.md#keep-standing-sessions-for-the-lobby)
 is made by hand meanwhile. Each address creates one session per first-join window and
 joins or spectates six times a minute, loose for a player whose link drops and
 comes back; one NAT is one address.
@@ -249,6 +249,37 @@ staging world 95.5 MB peak; two staggered guests 63.5 MB plateau; spatial grid a
 ([Position §5](position-package.md#5-costs)). Repeated
 resets plateaued rather than growing, so the RSS lag was runtime scavenging, not a
 per-match leak.
+
+### The router's own cost
+
+What `vif-router` spends on what it carries, read on 2026-11-27 with scratch
+harnesses not kept (Go 1.27.4, loopback, four cores): N connections spliced by its
+`splice`, the browser route's WebSocket in front of one, and N subscribers on a
+`FeedHub`, each against the same traffic with no router between.
+
+```
+A player's connection   74 KiB: 66 KiB of heap (splice's two 32 KiB copy buffers)
+                        and 8.5 KiB of stack (three goroutines); the sockets 1.5 KiB
+A message through it    within the reading's noise, ±2 µs, on TCP and WebSocket
+                        alike, against 8-10 µs for the two ends that send and read it
+A spectator             12 KiB at rest; a record is shared by every queue, not copied
+```
+
+The game sets the bytes ([Netcode §3](netcode-design.md#3-readings)):
+a host sends a guest 1.8 to 2.5 kB/s on `fighter` at two to four players, a feed is
+0.9 to 1.9 kB/s, and the router sends on each byte it reads. A pod is on the node,
+so a session's players cross the uplink once; a routed game's host is not, so its
+players' bytes cross it twice, in from the host and out to each guest. At this
+deployment's settings (`vif-router.env`) the most the router carries is:
+
+```
+Players     10 sessions x 6 connections, 16 doors x 6       156 connections   12 MiB   0.6 MB/s
+Spectators  10 sessions x 256                              2,560 streams     31 MiB   4.9 MB/s
+```
+
+So memory and the uplink bound the router, not its CPU, and its spectators before
+its players: a session's audience is bounded and so is an address's share, but no
+setting bounds the router's whole ([todo](todo.md#publish-a-players-session-at-the-router)).
 
 ## 7. Verification
 

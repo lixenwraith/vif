@@ -1329,10 +1329,11 @@ names or the local network beacon offers (`Membership.newcomerDoors`).
 the networks that need a relay most block first (services §7.3); a rendezvous in
 every host would be a second front door where one already places by name; relay
 trees the authority chooses stay dropped (netcode design §4). **Later**: a host's
-door published the same way is a player's own session reached through the site, the
-router neither allocating nor authoring, which needs its listing and lifetime in
-`/vif/api/sessions` and the create budget (todo, Publish a player's session at the
-router). A relayed topology is verified under `LinkShape`s by
+door published the same way is a **routed game**, a player's own session reached
+through the site, the router neither allocating nor authoring, listed only where its
+player asks (`-listing public`), which needs its listing and lifetime in
+`/vif/api/sessions`, the create budget and a ceiling on the router's whole
+([todo](todo.md#publish-a-players-session-at-the-router)). A relayed topology is verified under `LinkShape`s by
 `TestARelayedTopologyConvergesUnderShape`, asserting hash-only convergence and the
 authority's per-link fan-out.
 
