@@ -8,6 +8,381 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
+## Code issues to review
+
+The documentation sweep met these in the code and left the code as it is, its
+docs describing what the code does. A second agent confirmed each against the
+code and reproduced all but two in a scratch run. Review an item, then fix it,
+refile it at its real priority under its area, or delete it.
+
+### Let -relay take vifs:// on the command line
+
+- Priority: P1, to review
+- Affected files: `cmd/vif/main.go`, `cmd/vif/main_test.go`, `doc/development.md`,
+  `doc/runtime.md`, `doc/services-and-networking.md`
+
+`validateInvocation` (`cmd/vif/main.go:875`) takes only `vif://` as a router, so
+`-join … -relay vifs://<router>` exits 1 ("vifs:// is dialed, never bound"), and
+`relayTarget` (`:962`) would cut it to host:port; `config.RelayRouter` takes it, and
+the `-relay` hint, `vif-router.env`, the router README, multi-player §5.6,
+auth-session §2 and §3.5 and term-index's tunnel name it. Fix: test either scheme at
+both sites, a `cmd/vif` case, `vifs://` in the three docs above.
+
+### Look up and dial a vifs:// link's listed routes
+
+- Priority: P1, to review
+- Affected files: `pkg/network/endpoint.go` (`linkSites`),
+  `internal/network/session.go` (`dialListed`)
+
+`linkSites` (`endpoint.go:550`) splits the join address with `net.SplitHostPort`,
+which refuses `vifs://host:port`, so the router's `vifs://` links are never looked
+up: no WebSocket fallback, no browser join. `dialListed` (`session.go:1608-1613`)
+dials and stores a listed `vifs://` door's bare `e.Addr`, in the clear. Fix: split
+and compare the failed `ParseEndpoint(addr).Addr`; dial and store `e.Dialable()`.
+
+### Bind a passphrase exchange the same way at both ends
+
+- Priority: P1, to review
+- Affected files: `internal/network/session.go`, `internal/network/admission.go`,
+  `internal/network/session_test.go`, `internal/app/door_test.go`,
+  `doc/auth-session-design.md`
+
+A door binds SCRAM to its leaf over TLS (`session.go:946-949`), a dial to the leaf
+it sees or none (`session.go:1026`); bound never verifies unbound, so a `vifs://`
+dial at a relay door the router publishes (`relayAcceptor`, no `Binding`) and a page
+at a gated `wss://` door (`wsConn`, no TLS) have the right phrase refused. Fix:
+`AuthRequest` says whether the dial bound; the door binds likewise, a tunnel's to
+`bindingOf(conn)`.
+
+### Present a replay on the platform's host, as -watch does
+
+- Priority: P2, to review
+- Affected files: `cmd/vif/main.go`, `internal/app/play.go`,
+  `internal/app/presentation_headless.go`
+
+`-replay` calls `app.PlayJournal` with no host and no `presenting()`
+(`cmd/vif/main.go:258`), and its lender is `runConfig{Config: cfg}`
+(`internal/app/play.go:49`), so it presents on `newTerminal`: `-g` or a `vif_gui`
+build replays in the terminal, the Windows window build has none, and the build's
+own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` take a
+`Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
+presentation), and `-replay` passes `presenting()`.
+
+### List Ctrl-S's audio states in the order it cycles them
+
+- Priority: P2, to review
+- Affected files: `internal/help/topics.go`, `web/index.html`
+
+The help (`topics.go:15`) and its browser copy (`index.html:82`) list "music and
+effects, music only, effects only, silent", but Ctrl-S steps
+`parameter.AudioMaskCycle` (`internal/parameter/audio.go:72`) the other way: from
+the default, silent, effects only, music only. Fix both to "Cycle audio: music and
+effects, silent, effects only, music only", press order from the default as the
+auto-fire entry (`topics.go:101`) lists its own.
+
+### Drop the -cli hint where the build has no terminal
+
+- Priority: P2, to review
+- Affected files: `cmd/vif/gui.go`
+
+`windowHost.Init` (`cmd/vif/gui.go:53`) ends every window that did not open with
+`(-cli plays in the terminal)`, including in the Windows window build. That build
+sets `windowOnly` (`gui_windows.go:18`) and refuses `-cli` as
+`terminal unavailable in this build` (`main.go:179`), so its message box names a
+flag the same build refuses. Smallest fix: wrap with the hint only
+`if err != nil && !windowOnly`, else `return err`.
+
+### Word the audio-free and headless builds' refusals as the unavailable sentence
+
+- Priority: P2, to review
+- Affected files: `internal/app/internal/config/audio_none.go`,
+  `internal/app/internal/config/presentation_none.go`,
+  `internal/resource/check_noaudio.go`
+
+`audio_none.go:11-17` refuses `-ab`, an audio override and `-mw` with "audio backend
+is unavailable in this build", "audio overrides are ..." and "music recording is
+..."; `check_noaudio.go:13` repeats the overrides line, and `presentation_none.go:9`
+says "presentation is unavailable in a vif_headless build". AGENTS.md (Platforms)
+has these read `<Thing> unavailable in this build`, naming no build tag. Fix: drop
+"is"/"are" from all five, and replace "a vif_headless build" with "this build".
+
+### Restore `run` and `test` to the Makefile's `.PHONY`
+
+- Priority: P2, to review
+- Affected files: `Makefile`
+
+`.PHONY` (`Makefile:114`) names `runtest`, which no rule defines, in place of
+`run test`: the `run` (`Makefile:347`) and `test` (`Makefile:300`) goals are not
+phony. A plain `make run` or `make test` still runs, as `dev` and `generate` are
+phony, but `make -t run test` writes files named `run` and `test`, and
+`make runtest` succeeds with nothing to do. Smallest fix: `runtest` -> `run test` in
+that list.
+
+### Keep the Makefile to what FreeBSD make reads, or drop the claim
+
+- Priority: P2, to review
+- Affected files: `Makefile`, `doc/packaging.md`, `README.md`
+
+Packaging §1 says the Makefile runs under FreeBSD make, but bmake reads none of its
+`$(shell)` (`Makefile:93`, `:97`), functions (`:95`, `:364`), `$(MAKECMDGOALS)`
+(`:364`, `:383`), `$(CURDIR)` (`:85`) or `export PATH :=` (`:86`), so a FreeBSD
+`make release` drops `GUI_GCFLAGS` and stops on purego's fakecgo, and `purge` purges
+nothing. Closes with §1, §5 and the README naming `gmake` on FreeBSD, or those lines
+on `!=` and `case`. Traced, not run.
+
+### Name the blend tester's additive row Add
+
+- Priority: P2, to review
+- Affected files: `tool/blend-tester/main.go`, `tool/blend-tester/blend.go`
+
+`blendOps` (`main.go:117`) labels `render.BlendAdd` (formula `min(Dst + Src, 255)`)
+as "Set". Every other row is named for its mode, and Rendering §4 calls this
+operation Add. The blend screen shows `OP: Set`, and the result switch repeats the
+name in `case 2: // Set` above `color.Add` (`blend.go:119`). Smallest fix: rename
+the label to `"Add"` and the comment to `// Add`.
+
+### Delete the sandbox's commented-out code
+
+- Priority: P2, to review
+- Affected files: `sandbox/3d/main.go`, `sandbox/rand/main.go`
+
+`sandbox/3d/main.go:709-739` holds two commented-out `blit` variants (14 and 11
+lines) under a "to be tested" header, a plan kept in code, and `asciiDensity`, which
+only the commented code reads; `sandbox/rand/main.go:28-33` is a commented-out
+`Next` after its `return`. Dead code past the 5-line comment limit: deleting both
+ranges closes it, and a tty render still wanted becomes an item in this file.
+
+### Group `network.shed` with the authority card
+
+- Priority: P2, to review
+- Affected files: `internal/status/key.go`, `doc/services-and-networking.md`
+
+`splitKey` (`internal/status/key.go:109-112`) puts `network.evicted` in the
+`network.authority` card but leaves its sibling `network.shed`
+(`Authority.driveShedding`) in the catch-all `network` card, though the reset test's
+"whole authority card" (`internal/app/telemetry_test.go:82-90`) counts it there. Add
+`name == "shed"` to that case, and name shedding beside eviction in
+`doc/services-and-networking.md`'s card list.
+
+### Group `snapshot.repair_sections` with the repair card
+
+- Priority: P2, to review
+- Affected files: `internal/status/key.go`, `doc/telemetry-reference.md`
+
+`snapshotSelectiveGroup` (`internal/status/key.go:158`) routes the repair card's
+keys but not `repair_sections` (`internal/snapshot/telemetry.go:133`), so the
+sections a repair moved land on the plain `snapshot` card among the capture costs,
+against the card comment at `key.go:127`. Fix: add `"repair_sections"` to the case
+at `key.go:163` and drop "`repair_sections` in `snapshot`" from
+`doc/telemetry-reference.md:136`.
+
+### Count the quota read in a create's HTTP deadline
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/main.go`
+
+`main.go:120-122` sets `WriteTimeout` to `ReadyTimeout + 3*RequestTimeout + 10s` for
+the "three Kubernetes requests" a create makes before readiness, but
+`createTransaction` (`allocator.go:446`) makes four: `listJobs`, `listQuotas`
+(`fits`), `createJob`, `createService`. The 10 s slack covers the fourth only up to
+the default `-kube-timeout`; past it a ready session's 201 is lost (at 16 s: EOF at
+66 s, deadline 63 s). Fix: `4*cfg.RequestTimeout` and "four" in the comment.
+
+### Word the -join-host help for a TLS front door
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/config.go`
+
+`config.go:137` helps `-join-host` as "public raw-TCP host returned to players", but
+under `-route-secure` (this deployment), `-route-cert` or `-route-selfsign` every
+`join_target` and door link it names reads `vifs://` (`allocator.go:88`,
+`main.go:107`). Fix: "public host every join_target and door link names (required)",
+the README's wording with doors added.
+
+### Hold magic's rounds past the fifth at the fifth to eighth ranks
+
+- Priority: P2, to review
+- Affected files: `wad/scenario/base/magic/scenario.toml` (`LevelUp`),
+  `doc/gameplay.md`
+
+`LevelUp` (`scenario.toml:513-515`) sets the stray to
+`min(level % 4 + level / 4, 7)`: the sixth round runs ranks 6, 7, 8, 8, the seventh
+7, 8, 8, 8 and each round from the eighth rank 8 alone, but its comment and Gameplay
+§10 say the fifth round and every one after it run the fifth rank to the eighth. Add
+`max = 4` to the round's `DivideVar` and drop the stray's `max = 7`, which no longer
+takes effect; or, if the climb is meant, say so in both.
+
+### Stop a phase once its region terminates itself
+
+- Priority: P2, to review
+- Affected files: `internal/fsm/machine.go`, `doc/fsm-reference.md`
+
+`TerminateRegion` (`machine.go:987`) defers only from `on_exit`; elsewhere the phase
+runs on over the removed region (reproduced): a transition's target or a parent's
+children exit, then enter (`:781-789`, `:171-175`), and an update's Tick exits again
+(`:207-237`). Fix: mark `terminated` while any phase runs; after the issuing list,
+the phase exits what it entered (`:741-744` too, which skips the LCA's path) and
+removes the region.
+
+### Report a bad region initial state in name order
+
+- Priority: P2, to review
+- Affected files: `internal/fsm/loader.go`, `internal/system/maprange_test.go`
+
+`LoadScenarioFromMap` step 8 (`loader.go:187`) ranges over the `config.Regions` map
+and returns at the first region whose `initial` names no state, so with two such
+regions the error names either, run to run, where the region check at `loader.go:50`
+goes in name order. Range over `slices.Sorted(maps.Keys(config.Regions))` as it
+does, and drop `regionInitials` from the loop's reason at `maprange_test.go:55`.
+
+### Delete the route weight floor that never binds
+
+- Priority: P2, to review
+- Affected files: `pkg/navigation/routegraph.go`
+
+`computeRouteWeights` (`pkg/navigation/routegraph.go:338`) floors each raw weight
+`maxDist / d` at `RouteGraphMinWeightFloor` (0.05). No `d` exceeds `maxDist`, so
+`w >= 1` never reaches the floor. After normalizing, up to 8 routes within the 50%
+tolerance still keep at least 2/23 (0.087) each. Delete the constant and its `if`,
+and the floor named in the comments of `computeRouteWeights` and `Route.Weight`.
+
+### Drop the intent no parser produces
+
+- Priority: P2, to review
+- Affected files: `internal/input/intent.go`, `internal/mode/router.go`,
+  `internal/input/strings_gen.go`
+
+`IntentInsertDeleteBack` (`intent.go:55`) is made by nothing: no action name maps to
+it, and Insert's Backspace (`text_backspace`) arrives as `IntentTextBackspace`,
+whose handler already calls `handleInsertDeleteBack` (`router.go:1230`), so its case
+(`router.go:376`) never runs. Delete the constant and the case, and
+`go generate ./internal/manifest` for its `String` case; nothing records an intent's
+number, so the shift needs no version bump.
+
+### Keep a bot's `help` and Normal-mode `escape` out of the overlays
+
+- Priority: P2, to review
+- Affected files: `internal/bot/mind.go`, `internal/mode/router.go`, `doc/bots.md`
+
+`intentFor` (`mind.go:584`) admits `help` and `escape`, which in Normal opens the
+menu (`router.go:498`), against `doc/bots.md#actions`. Either one leaves the bot in
+an overlay that pauses a solo run and drops all its pointer play (`router.go:247`).
+Refuse `IntentHelp` there and add it to the doc's list. Spare a bot's Escape in
+Normal the way macro playback's is spared (`router.go:302`, keyed on
+`World.Session().Bot`): refusing `escape` would strand a bot in Insert.
+
+### List every command a replay's viewer has in its help entry
+
+- Priority: P2, to review
+- Affected files: `internal/help/topics.go`
+
+The replay topic's `:` entry (`internal/help/topics.go:278`) lists replay, help,
+about, telemetry, hud, binaural, debug, content, flow, graph, log and quit, but
+`inspects` (`internal/mode/commands.go:186`) also gives a replay's viewer `:menu`,
+`:console`, `:fps`, `:edge` and `:machine`, as `doc/runtime.md:590` says; only a
+watched bot's is refused `:edge` (`commands.go:227`). Add the five to the list and
+name edge in its watched-bot clause.
+
+### Color a refusal on the native menus' status line
+
+- Priority: P2, to review
+- Affected files: `android/app/src/main/java/com/lixen/vif/MenuDialog.java`,
+  `web/terminal.css`
+
+The snapshot sends every refusal (`setCommandError`, or an op on a disabled row)
+with `status.kind` `error`. `MenuDialog.java:184` and `terminal.css:409-410` color
+only `alert` (danger) and `progress` (accent), so a refusal shows white like a
+notice. The console draws it salmon, and the same sentence refusing a form's submit
+shows in danger under the form. Smallest fix: give `error` the danger color `alert`
+already has, on both hosts. Traced, not run.
+
+### Name vifs:// in the menu's join row
+
+- Priority: P2, to review
+- Affected files: `internal/mode/config_form.go`
+
+The Join a session row's description (`config_form.go:84`) lists `host:port[/name]`,
+`vif://`, `tcp://` or `ws(s)://` but not `vifs://`. Yet `-join`, `:join` and
+`network.ParseEndpoint` take `vifs://`, a TLS front door's links use it, and
+`doc/config-menu.md` names it for this box. A menu search for `vifs` finds no row.
+Add `vifs://` after `vif://` in that string; the Spectate row says "as Join takes
+one" and follows.
+
+### Count -doors-per-address by the admission key, not the whole host
+
+- Priority: P2, to review
+- Affected files: `tool/vif-router/tcp_proxy.go`
+
+`tcpRouter.tunnel` passes `TunnelHub.Publish` the dialer's whole host
+(`addressHost(from)`, `tool/vif-router/tcp_proxy.go:382`). The join budget charged
+for the same publication, and the router's spectator and create counts, use the /64
+(`network.AdmissionKey`). So one IPv6 /64 that rotates hosts holds
+`-doors-per-address` doors per host, up to `-tunnels`. Fix: pass
+`network.AdmissionKey(from)` and delete `addressHost`.
+
+### Lift the top diagonal exclusion slots `padding` rows clear of the exclusion
+
+- Priority: P2, to review
+- Affected files: `pkg/position/search.go`
+
+`exclusionSlots` (`pkg/position/search.go:399-400`) stands the top-right and
+top-left slots at `-exclusion.Top - objectH + padding`, where the top slot (:394)
+takes `- padding` and the bottom diagonals (:397-398) stand `padding` rows below the
+exclusion. So a top diagonal's lower `padding` rows lie beside the exclusion's top
+rows, and a countdown there inks level with a one-row header, not a row above it.
+The fix is `- padding` on both lines.
+
+### Name RunBot beside RunScript in the network-session refusal
+
+- Priority: P3, to review
+- Affected files: `internal/app/config.go`, `internal/app/internal/config/config.go`
+
+`runConfig.validateWiring` (`internal/app/config.go:291`) refuses a headless run
+given a host or join address outside `drive` as "network sessions require
+app.RunScript", yet `drive` admits `RunBot`'s run as it does a script's
+(`internal/app/script.go:426`); only an embedder's `NewHeadless` reaches it.
+Smallest fix: "...require app.RunScript or app.RunBot", naming a bot's run beside
+the script in `ModeHeadless`'s comment too
+(`internal/app/internal/config/config.go:35`).
+
+### Drop the flag usage strings the help never prints
+
+- Priority: P3, to review
+- Affected files: `cmd/vif/main.go`
+
+`flag.Usage` prints `helpSections` (`main.go:118`), so no registration's usage
+string is ever shown, yet the comment at `main.go:51` has them agree with it, and
+two do not: `-join` (`main.go:746`) lacks `vifs://` and `-relay` (`main.go:778`)
+`vif://<router>`, forms the table and the parser take. Pass `""` for each, drop the
+hint locals and fields, and reword the comment to match.
+
+### Count a self-declared bot as no person when a dedicated host sizes its map
+
+- Priority: P3, to review
+- Affected files: `internal/app/internal/membership/session.go`
+
+`noteJoinerReport` (`session.go:293-299`) counts every joiner with no holder a
+person, one reporting `Bot` among them, so a bot's own run
+(`-join <addr> -bot N -headless`) sizes a `-serve` lobby waiting for two at its
+120x40 over the person after it, and one alone at its `-size`. Fix: test
+`!m.sessionRoster[i].Bot` there in place of `report.Holder == 0`; it closes the
+`firstPerson` bullet of [Settle what a bot's defeat leaves
+standing](#settle-what-a-bots-defeat-leaves-standing).
+
+### Drop the proof binding no dial passes
+
+- Priority: P3, to review
+- Affected files: `internal/network/admission.go`, `internal/network/session.go`,
+  `internal/app/internal/membership/relay.go`, `tool/vif-router/tcp_proxy.go`,
+  `internal/network/admission_test.go`
+
+`Key.Prove`, `SignProof`, `VerifyProof` and `VerifyProofs` (`admission.go:118-248`)
+take a `binding` every caller leaves nil (`session.go:921`, `:982`, `relay.go:687`,
+`tcp_proxy.go:199`), as every dial proves unbound (auth design §3.2); only tests
+bind. Drop it, sign `signable("proof", []byte(nonce))` and bump `ProtocolVersion`;
+drop the two bound test cases, and the binding from §3.1 and the term index's
+*Admission* entry.
+
 ## Cave
 
 The side-scroller's refinements after its first play test (2026-10-27) lead,
