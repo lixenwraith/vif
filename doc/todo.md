@@ -1842,7 +1842,7 @@ as a typed member's end is (`CompositeSystem.destroyMember`).
 
 - Priority: P3
 - Affected files: `tool/vif-router`, `internal/app/internal/membership/host.go`,
-  `internal/network`, `web/vif.js`
+  `internal/network`, `web/vif.js`; on the site, `vif-lobby.js`
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
@@ -1861,12 +1861,17 @@ part of it.
 
 What the feature itself needs, best shaped by deploying it step by step:
 - `-host vif://<site>:7777` opening the door through the router rather than binding
-  one, and the host's run reporting its state on the control connection (players,
-  ceiling, scenario, whether it admits) so the router lists it without a `/health`
-  read through the tunnel.
-- The session's row in `/vif/api/sessions`, with a `kind` beside the pods', its
-  lifetime (the control connection's, plus the resume window), and the create
-  budget charged to the publisher's address as a pod's is.
+  one (only a joined run's `-relay` publishes today, `config.RelayRouter`), and the
+  host's run reporting its state on the control connection (players, ceiling,
+  scenario, whether it admits) so the router lists it without a `/health` read
+  through the tunnel.
+- The session's row in `/vif/api/sessions`, with `kind` `hosted` beside the pods',
+  listed only where its player asked (a `PublishRequest` field, `-public` say), an
+  unlisted one reached by its link alone; its lifetime (the control connection's,
+  plus the resume window), and the create budget charged to the publisher's address
+  as a pod's is. `limits.host_target` names the address a host publishes at: the
+  site's lobby enables its Host choice, under a scenario's Multi, by it, and lists
+  `hosted` rows under the pods.
 - The publish ticket: the publish frame carries the run's key and, over TLS, its
   sign-in (`PublishRequest` is JSON, so a field is added without a protocol change);
   the router asks which account the sign-in names and refuses a publication by none
@@ -1882,8 +1887,9 @@ What the feature itself needs, best shaped by deploying it step by step:
 - A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
   `wss://` in a page, but the browser route wants a session id in its path before
   the first frame, so a publish needs a path of its own. A hosting page must be
-  exempt from `LEAVE_HIDDEN_MS`, holds only the embedded `fighter` until bundles are
-  fetched over HTTP, and is never a successor door. Wasm runs host work about 3.9x
+  exempt from `LEAVE_HIDDEN_MS`, plays a scenario from its link (`-s`), and is
+  never a successor door; until then a page's `-host` is refused
+  (`config.ErrBrowserHosting`). Wasm runs host work about 3.9x
   slower than a native core: `fighter` with eight participants takes under half the
   page's thread and `td` does not fit, so the authority belongs in a Worker of its
   own.
