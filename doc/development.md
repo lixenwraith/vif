@@ -1220,6 +1220,11 @@ resizes it, and the run's size is its log's `init completed` line
   - `?arg=-join=ws://127.0.0.1:9/x` ends the run at once with a refused join's
     message, and a native `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session
     the page joins or spectates, its status line read beside the page's.
+  - With `wad/scenario/base` linked into the served copy, `?arg=-s=http://127.0.0.1:<port>/<link>/td/`
+    plays `td` from its link, the Worker fetching each file once.
+  - The start screen covers the page and takes the press that starts the game:
+    `page.tap('#loading')` times out on it, a `touchscreen.tap` or `mouse.click`
+    at a point starts it.
   - A `devices['Pixel 7']` context is the phone's page, where a held `mouse.down` on
     the canvas's last rows is the finger that opens the menu;
     `page.keyboard.press('Control+g')` is the desktop's.
