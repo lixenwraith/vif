@@ -2790,7 +2790,10 @@ The audio library's own items are in [its todo](https://github.com/lixenwraith/a
 and those of stapes (formerly soundlab), the rip's among them, in [its
 own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md). An item here
 is vif's part of a change; a part the library or stapes makes is an item there,
-linked from it.
+linked from it. Stapes on Android, its live rip with it, is first an app of
+stapes' own, its items in [stapes'
+todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android); vif's
+app bundles it long after ([below](#bundle-stapes-in-the-android-app)).
 
 ### Measure the Windows sound on Windows
 
@@ -2877,48 +2880,6 @@ checked in a chroot); FreeBSD without `/dev/dsp`; the card on a machine with no
 sound server, at 44.1 and at 48 kHz, a USB card unplugged and plugged back, and a
 sleep mid-run.
 
-### Bring stapes to Android (stapes mobile)
-
-- Priority: P1
-- Affected files: `android/game`, `android/app`, `android/go.mod`,
-  `doc/multi-platform.md`
-
-Stapes runs on Android in-process, as the game does, over the same engine and
-the user root's `audio/` documents, so a pattern written on the phone plays in the
-phone's game. The foundation is in place: the `stapes` package holds the session,
-documents, verbs and TUI, `NewSession` takes the host's speakers as its sink
-(`Options.Sink`), and `RunTUI` runs over any `terminal.Terminal`, the host posting
-`EventClosed` to end it; `terminal.NewWithHost` makes one of the Android view
-(`terminal/android`'s `View`). The TUI's side, taps and a layout a phone held
-portrait fits, is
-[stapes' todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#play-the-screen-by-touch).
-What remains here:
-
-1. A second bound entry beside `game.Start` runs it over that `Terminal` and
-   hands `NewSession` the `Speaker` as its sink; the start screen offers stapes
-   beside the game.
-2. The system keyboard serves `:` and the prompts, as in the game, and the pinch
-   zoom gives the views their 60×16 cells on a phone held portrait.
-3. Files: the verbs name paths, which reach stapes' root and the user root's
-   `audio/` in the app's storage; a `.mid` or a `.wav` another app holds comes
-   through the system's picker, copied into the user root's `audio/` first, and
-   a written file goes back out through it ([Multi-platform
-   §8](multi-platform.md#stapes-files)).
-
-### Rip live on Android
-
-- Priority: P2
-- Affected files: `android/game`, `android/app`
-- Prerequisite: [Bring stapes to Android](#bring-stapes-to-android-stapes-mobile)
-
-The library rips a recording as it plays (`RipStream`: blocks of samples in,
-each bar frozen once two follow it from the sixth bar on, `Final` the whole rip
-once the recording ends), and stapes is to show the rip being made and save the
-song ([its todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#show-a-live-rip-as-it-is-made)).
-What remains here is the microphone: read in the app (`AudioRecord`, behind the
-`RECORD_AUDIO` permission asked at first use) and handed to stapes' session as
-its source, as the `Speaker` is its sink.
-
 ### Render a conductor timeline offline
 
 - Priority: P3
@@ -2938,6 +2899,20 @@ conductor's tier and tempo policy over it and write the WAV.
 The conductor plays tiers, not bars. A scenario that wants a fixed piece would play
 a `SongDef` through the sequencer as stapes conducts one, each bar's patterns
 scheduled while the bar before plays.
+
+### Bundle stapes in the Android app
+
+- Priority: P3
+- Affected files: `android/game`, `android/app`, `android/go.mod`,
+  `doc/audio.md`, `doc/package-map.md`
+- Prerequisite: stapes mobile fully working on its own ([stapes'
+  todo](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md#android))
+
+A later version of the app carries stapes beside the game, its live rip with
+it, over one storage, so a pattern written or ripped on the phone plays in the
+phone's game from the user root's `audio/`. `android/go.mod` then requires
+stapes, and the root module still imports none of it. What closes it: the
+start screen offers stapes beside the game, as stapes mobile runs it.
 
 ### Tune the binaural beat by ear
 
