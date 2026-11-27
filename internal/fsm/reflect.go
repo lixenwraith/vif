@@ -47,9 +47,8 @@ func fieldIndex(t reflect.Type) map[string]int {
 }
 
 // FieldByTag resolves a struct field by toml tag, falling back to the Go field
-// name. Replaces per-call linear tag scans in both the machine and the bridge.
-// Unlike reflect.Value.FieldByName it does not traverse embedded structs;
-// event payloads use no embedding.
+// name, through a per-type index built once. Unlike reflect.Value.FieldByName it
+// does not traverse embedded structs; event payloads use no embedding.
 func FieldByTag(v reflect.Value, key string) reflect.Value {
 	if v.Kind() != reflect.Struct {
 		return reflect.Value{}

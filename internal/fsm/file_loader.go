@@ -64,9 +64,10 @@ func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 }
 
 // loadAndResolve loads a TOML file, expands its macros and resolves region file
-// includes, and an entry's behavior programs. stack holds the ancestors being
-// resolved, popped on return; visited, when non-nil, collects every file read.
-// macros is nil for the entry, which defines the set every file expands against.
+// includes, and an entry's behavior programs and maps. stack holds the ancestors
+// being resolved, popped on return; visited, when non-nil, collects every file
+// read, an entry's corpus and bots among them. macros is nil for the entry, which
+// defines the set every file expands against.
 func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string, macros *macro.Set) (map[string]any, error) {
 	cleanName := path.Clean(name)
 	if stack[cleanName] {
@@ -175,7 +176,7 @@ func readExpanded(fsys fs.FS, name string, visited *[]string, macros *macro.Set)
 
 // includeTables replaces each table of the entry's key, its behaviors or its maps,
 // that names a file with that file, read as the entry's other files are; a table
-// without file is the what itself
+// without file is the program or the map itself
 func includeTables(fsys fs.FS, entry map[string]any, key, what, baseDir string, visited *[]string, macros *macro.Set) error {
 	raw, ok := entry[key]
 	if !ok {

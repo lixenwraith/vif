@@ -15,8 +15,8 @@ import (
 )
 
 // Set is a scenario's compiled programs in sorted-name order, program i species
-// SpeciesDataFirst+i, and the loot it declares, which their kills roll. Its slices
-// are shared and never change after Compile.
+// SpeciesDataFirst+i, the loot it declares, which their kills roll, and its maps.
+// Its slices are shared and never change after Compile.
 type Set[C any] struct {
 	names    []string
 	protos   []component.BehaviorPrototype
@@ -66,7 +66,7 @@ func (s *Set[C]) Loot() *component.LootSet { return &s.loot }
 func (s *Set[C]) Maps() []component.MapLayout { return s.maps }
 
 // Declared is what the scenario adds to the code's names: its programs with their
-// signals, and its kinds
+// signals, its loot kinds and its maps
 func (s *Set[C]) Declared() component.Declared {
 	d := component.Declared{Programs: s.names, Loot: s.loot.Names(), Signals: make(map[string][]string)}
 	for _, m := range s.maps {

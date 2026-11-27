@@ -63,7 +63,7 @@ type TransitionConfig struct {
 type ActionConfig struct {
 	Action       string            `toml:"action"`                  // Action function name (e.g. "EmitEvent")
 	Event        string            `toml:"event,omitempty"`         // For EmitEvent: Event Name
-	Payload      any               `toml:"payload,omitempty"`       // For EmitEvent: Event Payload (map[string]any from parser)
+	Payload      any               `toml:"payload,omitempty"`       // The action's args, for EmitEvent its event's payload (map[string]any from parser)
 	PayloadVars  map[string]string `toml:"payload_vars,omitempty"`  // Field name -> variable name for runtime injection
 	Pick         *PickConfig       `toml:"pick,omitempty"`          // For EmitEvent: a payload field's value picked from a list
 	Origin       any               `toml:"origin,omitempty"`        // For EmitEvent: the point of the map the payload's cell counts from

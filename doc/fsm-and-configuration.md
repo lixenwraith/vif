@@ -56,12 +56,13 @@ All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and
 resolution policy.
 
-The resolved entry, its macro files and its region files are read whole into a
-`resource.Scenario` before the FSM loads, and the loader reads that rather than
-the host filesystem. A scenario holds at most 64 `.toml` files, 256 KiB each and
-1 MiB in all, whether read from disk or received from a peer. It is identified by
-its name and by the SHA-256 of its canonical form, which is what a replay and a
-join are refused on; `-check` prints both.
+The resolved entry and every file it names, its macro, region, program, map, corpus
+and bot files (`fsm.ScenarioFiles`), are read whole into a `resource.Scenario`
+before the FSM loads, and the loader reads that rather than the host filesystem. A
+scenario holds at most 64 `.toml` files, 256 KiB each and 1 MiB in all, whether
+read from disk or received from a peer. It is identified by its name and by the
+SHA-256 of its canonical form, which is what a replay and a join are refused on;
+`-check` prints both.
 
 A scenario need not be on this host at all. A joining participant whose own
 resolved scenario does not match the session's digest asks the coordinator for
@@ -96,12 +97,12 @@ and `[maps]` compile with them ([FSM reference: Loot](fsm-reference.md#loot),
 [Maps](fsm-reference.md#maps)).
 
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
-plus its behavior programs and loot, keymap, audio overrides, content and every bot graph
-without starting the terminal game. `vif -schema` prints generated JSON describing
-known events and their payload fields, the names an enum field takes, the
-vocabularies of a scenario, a bot graph and a behavior program with their
-arguments, what a bot graph's network reads and asks for, comparison operators
-and script-visible config fields.
+plus its behavior programs, loot and maps, keymap, audio overrides, content and
+every bot graph without starting the terminal game. `vif -schema` prints generated
+JSON describing known events and their payload fields, the names an enum field
+takes, the vocabularies of a scenario, a bot graph and a behavior program with
+their arguments, what a bot graph's network reads and asks for, comparison
+operators and script-visible config fields.
 
 ## 3. Root schema
 
@@ -146,9 +147,11 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. `behavior` toggles too, so a list that narrows names it to run data species. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and map setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's map setups are what hold it. A scenario whose regions size the map differently leaves it out. |
+| `map.cursors` | `false` rosters each player's slot with no cursor on the map, `"fixed"` stands a whole cursor where it spawned, unmoved by its player and undrawn; `true`, a free cursor, when unset ([FSM reference: Cursor Lifecycle](fsm-reference.md#cursor-lifecycle)). |
 | `map.step` | `"WxH"`, the block a cursor walks: `h`, `j`, `k`, `l` and the arrows take it a block a press, a count that many, a cell at a time over `parameter.StepWalkDuration`, and a block a wall or the map's edge stands in is a bump; no other motion, jump or pointer moves it ([Input and modes §1](input-and-modes.md#1-input-pipeline)). Not with `cursors = false` or `"fixed"`. |
 | `navigation.field_refresh_ticks` | How often, in ticks, a navigator or drop out of sight reads its flow field, holding the way it read between ([Navigation §4](navigation-design.md#4-throttle-phase-and-laziness)); 1, every tick, when unset. |
 | `navigation.route_rebuild_ticks` | The fewest ticks between two rebuilds of a stale gateway route graph; 20 when unset. |
+| `content`, `keymap`, `behaviors`, `loot`, `drops`, `maps` | The scenario's own corpus, play keys over the player's keymap, behavior programs, loot kinds, drop tables and maps ([FSM reference](fsm-reference.md#root-config-scenariotoml)). |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization: its boot, settled before the clock starts (§5). Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |
@@ -263,6 +266,15 @@ sequenceDiagram
 
 One event may cause one transition in each parallel region. Handling in one
 region does not prevent another region from observing it.
+
+In a live session a region moves by the authority's transitions alone
+([D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)):
+the authority's machine proposes each it takes, on a tick or an event, as a crossing
+every instance applies at one tick, and a guest's evaluates none but those a local
+event triggers, which it judges where the event is and asks the authority for,
+giving the ask up after twice the apply horizon. A region waiting on a transition
+parks the events the state it is to enter reacts to, and handles them there once
+the transition lands.
 
 ## 7. Transition semantics
 
@@ -393,6 +405,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; an omitted
 | `PayloadStringEquals` | `field`, `value` | Event payload string field comparison. |
 | `PayloadSpeciesIn` | `field`, `names` | Event payload species is one of the named code species or behavior programs, resolved at load. |
 | `PayloadCursorDecides` | `field` | The cursor the payload field names is one whose defeat decides the game: a person's in play, or a bot's in play where no person holds a place. |
+| `PayloadCovers` | `x`, `y` | The event's range of cells, a delete's span, rows or block, takes the cell. |
 | `PayloadExists` | none | Event payload is non-nil. |
 | `And`, `Or` | `guards`: array of `{ name, args }` | Recursively combine parameterized/static guards; an empty list passes. |
 | `Not` | `guard`: one `{ name, args }` | Negates one guard. |
@@ -602,8 +615,9 @@ Reading and loading a scenario validates at least:
 - macro definitions, argument names and types, recursion and expansion bounds;
 - state hierarchy/path validity;
 - `only_systems` beside `disabled_systems`, at the root or in one region, and, in
-  `resource.ValidateScenario`, unknown system names and required dependencies left
-  disabled.
+  `resource.ValidateScenario`, unknown system names, required dependencies left
+  disabled, and a transition a local event triggers in a scenario whose
+  `max_players` is above 1 (`resource.CheckLocalTriggers`).
 
 A key the loader does not read fails the load, named by where it sits
 (`state 'A': unknown key "on_entr"`, `guard 'HasTarget': unknown key "whithin"`,

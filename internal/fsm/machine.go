@@ -538,7 +538,7 @@ func localTrigger(et event.EventType) bool {
 }
 
 // HandleEvent routes an external event through all active regions.
-// Returns true if some region consumed it via a transition or internal action.
+// Returns true if some region took a transition on it, asked for one or parked it.
 // The machine-wide mask rejects unmatched types before any graph walk.
 func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 	if !m.active.has(ev.Type) {

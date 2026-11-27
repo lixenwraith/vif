@@ -1,7 +1,7 @@
 // Package behavior compiles a scenario's behavior programs, each the states, edges
 // and prototype of a species defined by files, into pkg/machine graphs over the
-// verbs a host's Vocabulary names. Names resolve once, at load; a compiled program
-// runs only the host's native code.
+// verbs a host's Vocabulary names, beside the loot and maps its entry declares.
+// Names resolve once, at load; a compiled program runs only the host's native code.
 package behavior
 
 import (
