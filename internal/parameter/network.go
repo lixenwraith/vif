@@ -158,6 +158,10 @@ const (
 	// once the session's pod is ready rather than when the request arrives. Wall time.
 	NetworkSessionRequestTimeout = 2 * time.Minute
 
+	// NetworkScenarioFileTimeout bounds fetching each file of a scenario -s names by
+	// its web link. Wall time.
+	NetworkScenarioFileTimeout = 20 * time.Second
+
 	// NetworkTunnelKeepInterval is how often each end of a door's control connection
 	// through the router says it is there, NetworkTunnelKeepLost how long a silent one
 	// is kept, and NetworkTunnelOpenTimeout how long a dial placed on a door waits for

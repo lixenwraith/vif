@@ -707,7 +707,9 @@ html, body {
 
 #strip button:active        { background: var(--line); }
 #strip button[aria-pressed="true"] { background: var(--button); color: var(--text); }
-#full { margin-left: auto; }
+/* Full screen and the menu to the right: the first of them shown takes the space. */
+#full,
+#full[hidden] + #strip-menu { margin-left: auto; }
 
 /* Any touch screen: taps never zoom, select or call out. */
 @media (any-pointer: coarse) {

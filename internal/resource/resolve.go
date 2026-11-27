@@ -86,11 +86,14 @@ func newResolver(o Options) resolver {
 	return resolver{roots: paths.ConfigRoots(o.Dir)}
 }
 
-// ScenarioPath returns the scenario entry path. An empty path selects the
-// embedded fighter scenario.
+// ScenarioPath returns the scenario entry path, or the web link -s named, which
+// LoadScenario reads. An empty path selects the embedded fighter scenario.
 func ScenarioPath(o Options) (string, error) {
 	if o.Embedded {
 		return "", nil
+	}
+	if paths.IsScenarioLink(o.Scenario) {
+		return o.Scenario, nil
 	}
 	if o.Scenario != "" {
 		info, err := os.Stat(o.Scenario)
@@ -108,7 +111,7 @@ func ScenarioPath(o Options) (string, error) {
 			if o.Scenario == paths.FighterScenarioName {
 				return "", nil
 			}
-			return "", fmt.Errorf("scenario %q not found: a browser holds only the embedded %s", o.Scenario, paths.FighterScenarioName)
+			return "", fmt.Errorf("scenario %q not found: a browser holds only the embedded %s, and plays another from its link", o.Scenario, paths.FighterScenarioName)
 		}
 		switch {
 		case !errors.Is(err, os.ErrNotExist):

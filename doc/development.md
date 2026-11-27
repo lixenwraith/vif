@@ -261,7 +261,7 @@ last line.
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded scenario and content, over `vif.toml`'s; mutually exclusive with `-s` and `-f`. |
 | `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
-| `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, or a directory containing one. |
+| `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, a directory containing one, or a web link to either. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <name-or-path>` | Keymap override TOML, or the name of one in a root's `input/` or embedded, as `vim` ([Input §10](input-and-modes.md#10-keymap-override-files)). |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |
@@ -770,7 +770,7 @@ picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; three taps on the status bar toggle
 it, as on Android, and so does a strip along the top, which also sends Tab (and Esc
-while it is up) and goes fullscreen where the browser can. Neither the strip nor the keyboard refits the
+while it is up), opens the menu as Ctrl-G does and goes fullscreen where the browser can. Neither the strip nor the keyboard refits the
 grid: the keyboard covers it, and the status bar's bottom row is drawn again above
 it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host));
 the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch, or Ctrl
@@ -1220,6 +1220,11 @@ resizes it, and the run's size is its log's `init completed` line
   - `?arg=-join=ws://127.0.0.1:9/x` ends the run at once with a refused join's
     message, and a native `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session
     the page joins or spectates, its status line read beside the page's.
+  - With `wad/scenario/base` linked into the served copy, `?arg=-s=http://127.0.0.1:<port>/<link>/td/`
+    plays `td` from its link, the Worker fetching each file once.
+  - The start screen covers the page and takes the press that starts the game:
+    `page.tap('#loading')` times out on it, a `touchscreen.tap` or `mouse.click`
+    at a point starts it.
   - A `devices['Pixel 7']` context is the phone's page, where a held `mouse.down` on
     the canvas's last rows is the finger that opens the menu;
     `page.keyboard.press('Control+g')` is the desktop's.

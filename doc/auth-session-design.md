@@ -761,8 +761,8 @@ Each in [the todo list](todo.md), with what it needs from here:
   (P3): the redirect is signed by the term's authority, and a pass is good at the
   door it names only once that door's authority admits it.
 
-Adjacent, and out of scope: [Fetch a content-addressed bundle over HTTP](todo.md#fetch-a-content-addressed-bundle-over-http)
-(P1), [Promote verified images to the node](todo.md#promote-verified-images-to-the-node)
+Adjacent, and out of scope: [Fetch a scenario by its digest](todo.md#fetch-a-scenario-by-its-digest)
+(P2), [Promote verified images to the node](todo.md#promote-verified-images-to-the-node)
 (P2) and [Sign the Android build with a release key](todo.md#sign-the-android-build-with-a-release-key)
 (P2) sign content and builds, not people; a publisher's key can reuse the Ed25519
 code here. The identity service's own open items are in its repository's todo.

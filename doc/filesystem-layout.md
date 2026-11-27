@@ -92,7 +92,9 @@ documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-s
 ## 3. Resolution policy
 
 An individual resource flag (`-s`, `-f`, `-k`, `-config-music`, or
-`-config-sounds`) is strict and always wins. `-s` first accepts an existing
+`-config-sounds`) is strict and always wins. `-s` first accepts a web link
+(`http://`, `https://`) to a scenario directory or its entry, read file by file
+from there once a run and named for the directory, then an existing
 `scenario.toml` path or scenario directory; a name such as `td` then resolves
 through the roots below to the shallowest directory of that name under
 `scenario/`, the first in path order among equals, and a path below `scenario/`,

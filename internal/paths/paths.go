@@ -165,6 +165,14 @@ func IsScenarioName(name string) bool {
 		!strings.HasPrefix(slash, ".") && !strings.Contains(slash, "/.")
 }
 
+// IsScenarioLink reports whether name is an http or https link to a scenario, which
+// -s reads from the web rather than resolving it against a root.
+func IsScenarioLink(name string) bool {
+	scheme, rest, ok := strings.Cut(name, "://")
+	return ok && (strings.EqualFold(scheme, "https") || strings.EqualFold(scheme, "http")) &&
+		rest != "" && rest[0] != '/'
+}
+
 // IsKeymapName reports whether name is a keymap the roots resolve below input/ and
 // the binary embeds, rather than a file's path: one element with no extension.
 func IsKeymapName(name string) bool {

@@ -13,11 +13,14 @@ import (
 	"io/fs"
 	"maps"
 	"math"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lixenwraith/toml"
@@ -99,11 +102,102 @@ func LoadScenario(o Options) (Scenario, error) {
 	if err != nil {
 		return Scenario{}, err
 	}
-	if entry == "" {
+	switch {
+	case entry == "":
 		return ReadScenario(EmbeddedLabel, asset.FighterScenario, asset.FighterScenarioEntry)
+	case paths.IsScenarioLink(entry):
+		return readLinked(entry)
 	}
 	dir := filepath.Dir(entry)
 	return ReadScenario(filepath.Base(dir), os.DirFS(dir), filepath.Base(entry))
+}
+
+// linked holds each scenario read from a link, once a process, so the run a restart
+// or a door this one opens builds plays the same bytes without the network.
+var linked sync.Map
+
+// readLinked reads the scenario a link names: its directory, or its entry where the
+// link ends in .toml. It goes by the directory's name, as one on disk does.
+func readLinked(link string) (Scenario, error) {
+	if sc, ok := linked.Load(link); ok {
+		return sc.(Scenario), nil
+	}
+	at, err := url.Parse(link)
+	if err != nil {
+		return Scenario{}, fmt.Errorf("scenario link: %w", err)
+	}
+	dir, entry := path.Clean("/"+at.Path), paths.ScenarioFile
+	if path.Ext(dir) == ".toml" {
+		dir, entry = path.Dir(dir), path.Base(dir)
+	}
+	name := path.Base(dir)
+	if name == "/" {
+		name = "scenario"
+	}
+	at.Path, at.RawPath, at.Fragment = strings.TrimSuffix(dir, "/")+"/", "", ""
+	sc, err := ReadScenario(name, &webScenario{dir: *at, files: map[string][]byte{}}, entry)
+	if err != nil {
+		return Scenario{}, err
+	}
+	linked.Store(link, sc)
+	return sc, nil
+}
+
+var webClient = &http.Client{Timeout: parameter.NetworkScenarioFileTimeout}
+
+// webScenario is a scenario's directory on the web, which the loader reads file by
+// file as it reads one on disk: each file is fetched once and held to the bounds a
+// scenario is, and one the server has not got is fs.ErrNotExist.
+type webScenario struct {
+	dir   url.URL
+	files map[string][]byte
+	total int
+}
+
+func (w *webScenario) ReadFile(name string) ([]byte, error) {
+	if data, ok := w.files[name]; ok {
+		return bytes.Clone(data), nil
+	}
+	if !validScenarioName(name) {
+		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrInvalid}
+	}
+	if len(w.files) == parameter.ScenarioMaxFiles {
+		return nil, fmt.Errorf("more than %d files", parameter.ScenarioMaxFiles)
+	}
+	at := w.dir
+	at.Path += name
+	resp, err := webClient.Get(at.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusGone:
+		return nil, &fs.PathError{Op: "fetch", Path: at.Redacted(), Err: fs.ErrNotExist}
+	default:
+		return nil, fmt.Errorf("fetch %s: %s", at.Redacted(), resp.Status)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, parameter.ScenarioMaxFileBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: %w", at.Redacted(), err)
+	}
+	switch w.total += len(data); {
+	case len(data) > parameter.ScenarioMaxFileBytes:
+		return nil, fmt.Errorf("file %q is over the %d-byte ceiling", name, parameter.ScenarioMaxFileBytes)
+	case w.total > parameter.ScenarioMaxBytes:
+		return nil, fmt.Errorf("%d bytes exceeds the %d-byte ceiling", w.total, parameter.ScenarioMaxBytes)
+	}
+	w.files[name] = data
+	return bytes.Clone(data), nil
+}
+
+func (w *webScenario) Open(name string) (fs.File, error) {
+	data, err := w.ReadFile(name)
+	if err != nil {
+		return nil, err
+	}
+	return &scenarioOpenFile{name: name, Reader: bytes.NewReader(data)}, nil
 }
 
 // FindDownload returns the scenario saved in dir with this digest, the bytes a

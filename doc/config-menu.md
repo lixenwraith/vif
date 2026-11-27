@@ -1,7 +1,8 @@
 # Menu
 
 Press **Ctrl-G**, **F10** or, in Normal mode, **Escape**, hold a left press (a
-finger) on the status bar, or enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
+finger) on the status bar, tap the menu button on a browser's key strip, or enter
+**`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page, Relay for others, Take over as host and Visible on this network
 are `vif.toml`'s `[play]`: a run writes them
