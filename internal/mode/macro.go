@@ -8,15 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// `qa` ... `q` : Record to 'a'
-// `qa` `q` : Clear macro 'a' (empty recording)
-// `@a` : Play 'a' once
-// `3@a` : Play 'a' 3 times
-// `@@a` : Play 'a' infinitely
-// `@@@` : Play all recorded macros infinitely
-// `q@` : Stop all playback
-// `Ctrl+@` : Stop all playback (alternative)
-
 // PlaybackState tracks a single macro's playback progress
 type PlaybackState struct {
 	label         rune
@@ -74,8 +65,8 @@ func (m *MacroManager) StopRecording() {
 	m.recordLabel = 0
 }
 
-// Record appends intent to current recording buffer
-// Ignores if not recording or if intent originated from playback
+// Record appends intent to the recording, if one is on; the router keeps
+// playback's own intents out
 func (m *MacroManager) Record(intent input.Intent) {
 	if !m.recording {
 		return

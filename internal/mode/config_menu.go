@@ -213,8 +213,9 @@ var configPages = []configNode{
 
 func startupValue(*engine.GameContext) string { return "info" }
 
-// startupNotes is how a platform without a command line sets what the Startup
-// rows name, by GOOS; a terminal or desktop run takes the flags and vif.toml as named
+// startupNotes is how a platform without a command line sets what the Launch
+// options rows name, by GOOS; a terminal or desktop run takes the flags and vif.toml
+// as named
 var startupNotes = map[string]string{
 	"js":      "Settings fixed when the page loaded. A browser reads no files: launch arguments (?arg=) carry the flags these rows name, and the embedded scenario, keymap and content stand.",
 	"android": "Settings fixed when the app started. Android has no command line: vif.toml in the app's files directory sets what these rows name.",

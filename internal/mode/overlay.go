@@ -175,7 +175,8 @@ func (r *Router) handleOverlayWheel(intent *input.Intent) bool {
 	return true
 }
 
-// handleOverlayActivate pins or unpins the selected card and requests a rebuild
+// handleOverlayActivate acts on the menu's selected row, or pins or unpins the
+// selected card and requests a rebuild
 func (r *Router) handleOverlayActivate() bool {
 	if configMenu(r.ctx) != nil {
 		return r.changeConfigMenu(1, true)

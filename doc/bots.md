@@ -134,10 +134,11 @@ The words after `-bot` are the words after `:bot`, one grammar
 run starts, `-bot drop` is refused, a run's alone, and `-bot` with a verb that
 keeps bot files acts, prints and exits, for the scenario `-s` names.
 
-A watched bot takes `:`, the menu keys and the help key. While you hold its command
-line, the menu or help, its graph supplies no input: a run in a session keeps
-ticking, a solo run waits.
-`:n`, `:pause`, `:speed`, `:bot`, `:bot drop` and `:player` work there, and what
+A watched bot takes `:`, the menu keys, the help key and the backtick. While you
+hold its command line, the menu, help or the console, its graph supplies no input:
+a run in a session keeps ticking, a solo run waits.
+`:n`, `:pause`, `:speed`, `:step`, `:journal`, `:bot`, `:bot drop` and `:player`
+work there, and what
 its viewer changes of `[play]` or the zoom is saved as a player's is: a preference
 is the operator's, whatever the run presents. What the bot plays under is its own
 and reads `Unavailable while a bot plays`: `:auto`, `:mouse`, `:free`, `:wait` and
@@ -285,16 +286,16 @@ Allowance left idle builds up to one second's worth.
 | `Steer` | `network`: the `[network.<name>]` to run, which a graph with one may leave out. `outputs`: those of the network's this `Steer` acts on, every one when none is named | a pointer move to the cell that network names, after the special attack and main fire where it asks for them |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
-`prefix_g`, `prefix_macro_play`, `marker_glyph_*`), one that opens the command
-line, the menu or the console, and a pause; `quit` ends the run. `press`
-presses a key a scenario captured, as a typed key or a click on its button would,
-and does nothing while the key is not captured. The bot lets go of every key it
-presses, at once, after `hold` ticks, or with `hold = true` at a `release` of the
-key, so each press crosses its own release and the bot's slot reports releases
-([Input and modes](input-and-modes.md) §1). A press of a key it holds lets go
-first, a `release` of one it does not hold sends nothing, and play stopping ends
-its hold as it ends a person's. A press and its release are one action; a
-`release` is one of its own.
+`prefix_g`, `prefix_macro_play`, `marker_glyph_*`), `repeat_change`, whose change
+a graph names instead, one that opens the command line, the menu or the console,
+and a pause; `quit` ends the run. `press` presses a key a scenario captured, as a
+typed key or a click on its button would, and does nothing while the key is not
+captured. The bot lets go of every key it presses, at once, after `hold` ticks,
+or with `hold = true` at a `release` of the key, so each press crosses its own
+release and the bot's slot reports releases ([Input and modes](input-and-modes.md)
+§1). A press of a key it holds lets go first, a `release` of one it does not hold
+sends nothing, and play stopping ends its hold as it ends a person's. A press and
+its release are one action; a `release` is one of its own.
 
 `PointAt` aims at the nearest target of its class, clamped to the cells the view
 shows, and for `glyph` at the left edge of that text run. If the cursor may not

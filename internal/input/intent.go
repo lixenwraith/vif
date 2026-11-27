@@ -59,7 +59,7 @@ const (
 
 	// Overlay mode
 	IntentOverlayScroll   // hjkl/arrows/g/G - row scroll or card selection
-	IntentOverlayActivate // Enter/Space - pin toggle on the selected card
+	IntentOverlayActivate // Enter/Space - act on the menu row, or pin toggle on the selected card
 	IntentOverlayClose    // ESC/q
 	IntentOverlayPageUp   // PgUp
 	IntentOverlayPageDown // PgDn
@@ -93,7 +93,7 @@ type MotionOp uint8
 
 const (
 	MotionNone                MotionOp = iota
-	MotionLeft                         // h, Left arrow, Backspace
+	MotionLeft                         // h, Left arrow
 	MotionRight                        // l, Right arrow, Space
 	MotionUp                           // k, Up arrow
 	MotionDown                         // j, Down arrow

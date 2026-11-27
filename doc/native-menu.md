@@ -78,7 +78,7 @@ own, nil otherwise; the app pushes it when its bytes differ from the last pushed
 ```json
 {
   "title": "Menu · game paused",
-  "status": {"text": "Only the host can restart the game in a session", "kind": "notice"},
+  "status": {"text": "Only the host can restart the game in a session", "kind": "error"},
   "form": {"id": "multiplayer/#Session/host", "error": "Address in use"},
   "query": "pause",
   "found": [{"id": "game/pause", "label": "Game / Resume"}],
@@ -117,8 +117,9 @@ own, nil otherwise; the app pushes it when its bytes differ from the last pushed
 - `disabled` is the reason, the sentence the command refuses with
   ([unavailable](term-index.md)). A disabled node is drawn dimmed, its reason first,
   and sends no hook; an info row carries none.
-- `status` is the status bar's line and its kind (`notice`, `progress`, `alert`):
-  the native menu covers the bar, so a refusal shows here instead.
+- `status` is the status bar's line and its kind, as `parameter.StatusKindNames`
+  names it (`notice`, `progress`, `error` for a refusal, `alert`...): the native
+  menu covers the bar, so a refusal shows here instead.
 - `form` is the error of the last submit that failed, by id, until the next op. The
   host shows it on that form.
 - `query` and `found`: a search is Go's, as in the `tui` menu. `found` lists the
@@ -268,4 +269,4 @@ stay one mechanism. The `vif_headless` profile builds without it.
   place. The ops, the Back order and the keys of §7 keep everything else alike;
   `multi-platform.md` records the difference as one the host forces.
 - **Form errors** belong to the form, not to a field, so a message names its field
-  ("Bot count must be 1..8").
+  ("Bot count must be 1..16").

@@ -62,7 +62,7 @@ differences are the host's:
   game or drops a player or a bot; a one-field form is a field on its row, whose
   keyboard key submits, and a longer one opens a sheet with the focused field's help
   under it and Submit and Cancel; a read-only row is a label over its description.
-  A field raises the keyboard its input takes: numbers for Count and Players,
+  A field raises the keyboard its input takes: numbers for Count, Players and Bots,
   addresses for Address, Target and Site.
 - A row that cannot act is dimmed and starts its description with the reason. The
   status bar's line, a refusal included, shows at the menu's foot while it is up.
@@ -77,8 +77,8 @@ differences are the host's:
 
 ## Pages
 
-- **Game**: the game running now. Pause, Restart game, Console, Game speed; a
-  replay adds Restart replay.
+- **Game**: the game running now. Pause, Restart game, Console, Game speed, God,
+  Demon; a replay adds Restart replay.
 - **Scenarios**: what to play. The installed scenarios, Start, Other scenario.
 - **Multiplayer**: playing with others. Session, Nearby games, Players, Bots.
 - **Settings**: your preferences, each saved to `[play]`. Sound, Controls,
@@ -126,11 +126,11 @@ reports the bound address; share one your guests can reach, since the menu does
 not change network reachability. A browser can join a session but not host one,
 since a page cannot accept connections; the row says so.
 
-**Join a session** is a text box for `host:port[/name]`, `vif://` and `tcp://`
-links or `ws(s)://` URLs; an `http(s)://` site requests a new session with server
-defaults. Joining replaces the current solo game only after admission succeeds.
-An active session, a pending join, or a driven run without a restart loop
-disables it.
+**Join a session** is a text box for `host:port[/name]`, `vif://`, `vifs://` and
+`tcp://` links or `ws(s)://` URLs; an `http(s)://` site requests a new session
+with server defaults. Joining replaces the current solo game only after admission
+succeeds. An active session, a pending join, or a driven run without a restart
+loop disables it.
 
 **Spectate a session** takes what Join takes and only watches: the run takes no
 place in the session, plays nothing and is not named to its players, and its own
@@ -254,11 +254,12 @@ key pending. Override those sections (or use `-k`) to add or change keys;
 menu navigation uses overlay bindings.
 
 Action rows (`Enter`) run the command they name and close the menu: `:pause`,
-`:n`, `:leave`, `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`
-and `:replay restart`; Start and Other scenario submit `:n <scenario>` the same
-way, and Console opens the console in the menu's place. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
-like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time`
-stay on the command line.
+`:n`, `:god`, `:demon`, `:leave`, `:t unpin`, `:t save`, `:log rec flush`,
+`:d cpu|heap|mutex|trace` and `:replay restart`; Start and Other scenario submit
+`:n <scenario>` the same way, and Console opens the console in the menu's place.
+Views (`:t`, `:d`, help), the other developer state commands (`:energy`, `:heat`
+and the like), `:step`, `:d break`, `:emit`, `:system`, `:region` and
+`:replay tick|time` stay on the command line.
 
 Use CLI arguments and `vif.toml` for launch defaults. `[play]` is written back as
 it changes, from the menu or the command line, and a scenario change carries it
@@ -268,7 +269,7 @@ when it is the player's own, else the user root's, created at the first change; 
 browser keeps it in the site's storage
 ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)). Only a run
 with no user root, or whose `vif.toml` in the player's own root is a special file
-such as a link to `/dev/null`, or a browser refused its storage, keeps it to
-itself. The game speed, HUD pins and standing breakpoints stay this run's. Exact
-values outside menu presets remain available through commands such as
-`:log stat N`.
+such as a link to `/dev/null` or is a link into a shared root, or a browser
+refused its storage, keeps it to itself. The game speed, HUD pins and standing
+breakpoints stay this run's. Exact values outside menu presets remain available
+through commands such as `:log stat N`.

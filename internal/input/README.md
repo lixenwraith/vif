@@ -7,10 +7,10 @@ or brings one already there up to date.
 
 A document's keys override the embedded table, and `"none"` removes a binding. A
 run brings the player's own up to date, adding each embedded binding of a key it
-binds in no spelling, so it comes to hold every binding, its own bindings and
-unbindings kept; a section written inline gains none. Each key names one action,
-and several keys may name the same one (`f2` below joins Ctrl+G and F10 on the
-menu). For example:
+binds in no spelling, a section written inline included, so it comes to hold every
+binding, its own bindings and unbindings kept; one saying `fill = false` at its
+top gains none. Each key names one action, and several keys may name the same one
+(`f2` below joins Ctrl+G and F10 on the menu). For example:
 
 ```toml
 [normal]

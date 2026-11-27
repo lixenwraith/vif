@@ -47,9 +47,9 @@ releases the capture.
 
 A held key repeats. Where the keyboard reports releases (the Release item below),
 a repeat redoes a motion, text, fire or scroll but no toggle: the mute cycle,
-auto-fire, pause, the menu, help, the console, `q`, `v` and an overlay's activate
-act once a press (`Machine.processKey`). Elsewhere a repeat is a press, so a toggle held past
-the keyboard's repeat delay flips again at its rate.
+auto-fire, pause, the menu, help, the console, Escape, `q`, `v` and an overlay's
+activate and close act once a press (`Machine.processKey`). Elsewhere a repeat is
+a press, so a toggle held past the keyboard's repeat delay flips again at its rate.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
@@ -370,9 +370,9 @@ not persisted editor files; a new game ends the change history alone.
 
 Macros record semantic intents after parsing, so they replay the same actions
 even when they contain multi-key motions. Command and Overlay mode stay out of a
-recording, the `:`, menu or help key that enters them included (Escape in Normal
-among them), and so does an overlay's pointer, which Search mode hands the
-overlay too: playback waits in both, so a macro replays Normal, Insert, Visual
+recording, the `:`, menu, help or console key that enters them included (Escape
+in Normal among them), and so does an overlay's pointer, which Search mode hands
+the overlay too: playback waits in both, so a macro replays Normal, Insert, Visual
 and Search actions only.
 
 | Sequence | Behavior |
@@ -487,13 +487,14 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. A hold takes the place of a step's pause; `:step` ends a solo hold, `:new` any. |
+| `:pause [on\|off]`, `:p`; `:pause menu\|command [on\|off]` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. A hold takes the place of a step's pause; `:step` ends a solo hold, `:new` any. `menu` and `command` set whether an overlay or the command line pauses a game that can pause (§2), kept as `[play] pause_menu` and `pause_command`. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
 | `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values; a live session keeps its host's speed. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
+| `:wait [on\|off]` | Toggle or set whether a new game, and a join, waits for its player's press (§2): on by default, `-nw` off for a run. Saved in `[play]`. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:console [clear]` | Open the console; `clear` empties it. |
-| `:g`, `:config` | Open the [configuration menu](config-menu.md). |
+| `:menu`, `:g`, `:config` | Open the [configuration menu](config-menu.md). |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:f` | Toggle or set free mouse. |
 | `:auto [on\|off\|main]`, `:a` | Cycle or set automatic fire. |
@@ -588,12 +589,12 @@ for handshakes that take the world lock.
 Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinned
 overlay cards, breakpoints, and the mode with its open command line, search or
 overlay are operator-owned and survive plain `:new`. Both reset forms clear the
-issuing instance's macros, and every instance's captured keys and status text. `:new!` additionally clears the issuing
-instance's HUD, pins and breakpoints and returns its two preferences and the time
-scale to their startup values (free mouse on, auto-fire on both weapons, the
-`-speed` rate); peers retain their own operator state when the shared reset
-arrives. Logging state is process diagnostic configuration and survives both
-forms.
+issuing instance's macros, and every instance's captured keys and status text.
+`:new!` additionally clears the issuing instance's HUD, pins and breakpoints and
+returns its two preferences and the time scale to their startup values (`[play]`'s
+free mouse and auto-fire, on and both weapons by default, and the `-speed` rate);
+peers retain their own operator state when the shared reset arrives. Logging state
+is process diagnostic configuration and survives both forms.
 
 Telemetry cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before
@@ -624,8 +625,9 @@ Viewer keys are not entries in this command table or the keymap. A replay, and a
 watched script or bot, reserve `p . , + - h j k l 0 q` for viewer pause, step,
 step back, speed, pan/reset, and quit; those keys never reach the game as play. In
 a live session only pan and quit are left, and a watched bot's `p`, which asks as
-`:pause` does: its run hosting, every participant stops. `:`, the menu keys and the
-help key open the command line, the menu and help over it.
+`:pause` does: its run hosting, every participant stops. `:`, the menu keys, the
+help key and the backtick open the command line, the menu, help and the console
+over it.
 [Runtime and concurrency](runtime.md) describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
@@ -772,7 +774,7 @@ When adding interaction behavior:
 | Mode routing | `internal/mode/router.go`, `motions*.go`, `operators.go` |
 | Search | `internal/mode/search.go` |
 | Commands | `internal/mode/commands.go` |
-| Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go` |
+| Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go`, `config_snapshot.go` |
 | Help content | `internal/help` |
 | Macros | `internal/mode/macro.go` |
 | APM | `internal/parameter/apm.go`, `internal/engine/game_state.go`, admission in `internal/engine/scheduler.go` |
