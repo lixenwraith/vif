@@ -68,18 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### Restore `run` and `test` to the Makefile's `.PHONY`
-
-- Priority: P2, to review
-- Affected files: `Makefile`
-
-`.PHONY` (`Makefile:114`) names `runtest`, which no rule defines, in place of
-`run test`: the `run` (`Makefile:347`) and `test` (`Makefile:300`) goals are not
-phony. A plain `make run` or `make test` still runs, as `dev` and `generate` are
-phony, but `make -t run test` writes files named `run` and `test`, and
-`make runtest` succeeds with nothing to do. Smallest fix: `runtest` -> `run test` in
-that list.
-
 ### Keep the Makefile to what FreeBSD make reads, or drop the claim
 
 - Priority: P2, to review

@@ -111,7 +111,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config purge wad-archive release-readme notices image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows run test verify arch-check clean check-go tools router serve install uninstall install-config purge wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
