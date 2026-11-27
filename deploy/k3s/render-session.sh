@@ -7,7 +7,7 @@ set -eu
 
 usage() {
 	echo "usage: $0 SESSION_ID [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       SCENARIO, LOG_LEVEL, BOTS, FIRST_JOIN, EMPTY_GRACE, ADMIT and JOB_UID" >&2
+	echo "       SCENARIO, LOG_LEVEL, BOTS, WATCH_ONLY, FIRST_JOIN, EMPTY_GRACE, ADMIT and JOB_UID" >&2
 	echo "       override the defaults from the environment" >&2
 	exit 2
 }
@@ -23,6 +23,7 @@ EMPTY_GRACE=${EMPTY_GRACE:-90s}
 SCENARIO=${SCENARIO:-fighter}
 LOG_LEVEL=${LOG_LEVEL:-info}
 BOTS=${BOTS:-0}
+WATCH_ONLY=${WATCH_ONLY:-false}
 ADMIT=${ADMIT:-open}
 JOB_UID=${JOB_UID:-}
 
@@ -44,6 +45,10 @@ esac
 case "$PLAYERS" in
 	'' | *[!0-9]* ) echo "$0: PLAYERS must be a number" >&2; exit 2 ;;
 esac
+case "$WATCH_ONLY" in
+	true | false ) ;;
+	* ) echo "$0: WATCH_ONLY must be true or false" >&2; exit 2 ;;
+esac
 # open, or the router's public key in base64, which the session takes tickets under
 case "$ADMIT" in
 	open ) ;;
@@ -52,8 +57,10 @@ case "$ADMIT" in
 	esac ;;
 	* ) echo "$0: ADMIT must be open or ticket:<base64 key>" >&2; exit 2 ;;
 esac
-# The router's bound: a bot is a roster guest, and six fill the LimitRange
+# The router's bound: a bot is a roster guest, and six fill the LimitRange. A
+# watch-only session's bots take every seat, so its pod seats no dial but a watch.
 most=$((PLAYERS - 1))
+[ "$WATCH_ONLY" = false ] || most=$PLAYERS
 [ "$most" -le 6 ] || most=6
 if [ "$BOTS" -gt "$most" ]; then
 	echo "$0: bots must be between 0 and $most for $PLAYERS players" >&2
@@ -76,6 +83,7 @@ rendered=$(sed \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${BOTS}|$BOTS|g" \
+	-e "s|\${WATCH_ONLY}|$WATCH_ONLY|g" \
 	-e "s|\${CPU_REQUEST}|$CPU_REQUEST|g" \
 	-e "s|\${CPU_LIMIT}|$CPU_LIMIT|g" \
 	-e "s|\${MEMORY_REQUEST}|$MEMORY_REQUEST|g" \

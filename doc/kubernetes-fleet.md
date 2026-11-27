@@ -71,7 +71,7 @@ the bots its players bring, which run on their machines
 stay closed on this deployment (`VIF_ROUTER_BOTS_MAX=0`) until their cost is read
 there ([Measure a full roster](todo.md#measure-a-full-roster)). The lobby has no
 standing session to show: a session is spectated through the router (§9), and
-[the bot's game the site always runs](todo.md#keep-a-standing-session-for-the-lobby)
+[the bots' games the site always runs](todo.md#keep-standing-sessions-for-the-lobby)
 is made by hand meanwhile. Each address creates one session per first-join window and
 joins or spectates six times a minute, loose for a player whose link drops and
 comes back; one NAT is one address.

@@ -7,6 +7,13 @@ kind: Job
 metadata:
   name: vif-session-${SESSION_ID}
   namespace: vif
+  # What the router's listing reports of the session, as it writes them on the
+  # Jobs it makes; a watch-only session, its seats its own bots', is offered to
+  # spectators alone.
+  annotations:
+    vif.lixenwraith.dev/scenario: "${SCENARIO}"
+    vif.lixenwraith.dev/size: "${MAP_SIZE}"
+    vif.lixenwraith.dev/watch-only: "${WATCH_ONLY}"
   labels: &labels
     app.kubernetes.io/name: vif
     app.kubernetes.io/component: session

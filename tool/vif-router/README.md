@@ -97,7 +97,9 @@ tells which. A pod that is not ready, or whose probe fails, reports `live=false`
 with its pod phase or `starting`, and `routable` is false until its address is a
 ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
-it has, from the first tick on. `build` is the binary the session runs, named as a
+it has, from the first tick on. `watch_only`, present and true alone, marks a session
+`deploy/k3s/session.sh` made with `WATCH_ONLY=true`, its seats all its own bots': its
+pod seats no dial, being full, and a page offers it to spectators. `build` is the binary the session runs, named as a
 refusal of another build names it, so a page can be told before it dials one.
 `spectators` is how many watch the session through this router now, a dial still
 being answered included.

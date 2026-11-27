@@ -144,8 +144,11 @@ type session struct {
 	// as "this fleet is for native clients".
 	WebSocketURL string `json:"ws_url,omitempty"`
 	// Scenario and Size are what it was created with; State.Map is the map it has.
-	Scenario  string `json:"scenario,omitempty"`
-	Size      string `json:"size,omitempty"`
+	Scenario string `json:"scenario,omitempty"`
+	Size     string `json:"size,omitempty"`
+	// WatchOnly is a session its own bots fill, made to be watched: its pod seats
+	// no dial, being full, and a page offers it to spectators alone.
+	WatchOnly bool   `json:"watch_only,omitempty"`
 	CreatedAt string `json:"created_at,omitempty"`
 	Routable  bool   `json:"routable"`
 	// Spectators is how many watch it through this router now (audiences).
@@ -867,6 +870,7 @@ func (a *allocator) sessionRecord(id string, job objectMeta, routable bool, stat
 		WebSocketURL:    a.webSocketURL(id),
 		Scenario:        job.Annotations[annotationScenario],
 		Size:            job.Annotations[annotationSize],
+		WatchOnly:       job.Annotations[annotationWatchOnly] == "true",
 		CreatedAt:       job.CreationTimestamp,
 		Routable:        routable,
 		State:           state,

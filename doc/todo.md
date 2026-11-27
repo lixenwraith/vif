@@ -1531,7 +1531,7 @@ the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
 
-### Keep a standing session for the lobby
+### Keep standing sessions for the lobby
 
 - Priority: P2
 - Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
@@ -1541,39 +1541,39 @@ the volume already carries whatever the installer puts there.
 - Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
   [Multiplayer §5.8](multi-player.md#58-watching-a-session)
 
-The site's lobby is to show one game always, and the game is a bot learning `cave`
-(Lixen, 2026-11-16): one pod, made by a script, seats one bot whose learner evolves
-its genes round after round, saves them outside the pod and goes on from them in
-the next, while visitors spectate it through the router at a copy's cost each
-(fleet §9). One session then shows the learner, the game, spectating and bots.
+The site's lobby is to show two games always, both to be watched and neither
+joined (Lixen, 2026-11-27): `fighter` played on a loop by two bots, and `cave`
+by one bot whose learner evolves its genes round after round, saves them outside
+the pod and goes on from them in the next. Visitors spectate each through the
+router at a copy's cost each (fleet §9).
 
 What stands: a dedicated host's session that its own bots alone occupy starts and
-plays on with no guest, a create carries `bots`, and `BOTS=1 SCENARIO=cave
-./deploy/k3s/session.sh create <id>` makes that pod beside the router, whatever
-`bots_max` offers a visitor. The one seat of such a host learns, its rounds
-closed at its graph's limit by the host, at the host's one rate, 1x
-([Bots](bots.md#learning)). What it needs:
+plays on with no guest, and `WATCH_ONLY=true BOTS=2 PLAYERS=2 SCENARIO=fighter
+./deploy/k3s/session.sh create <id>` makes one beside the router whose bots fill
+every seat, so its pod refuses every dial but a watch as full, and whose Job the
+listing reports as `watch_only`, with its scenario, which the site's lobby offers
+Watch alone for. The one seat of a host's learner learns, its rounds closed at its
+graph's limit by the host, at the host's one rate, 1x ([Bots](bots.md#learning)).
+What they need:
 
-- **A store outside the pod.** The population is saved where a setting is, and a
-  session pod has a read-only root and two claims, its log and the wad: a third,
-  writable, at the root the learner saves under. One writer at a time, since two
-  pods of one population would each lose the other's rounds.
-- **A lifetime.** The Job's hour ends it, bots or not, which costs a learner the
-  round in flight. Its keeper is a router setting naming the scenario and the
-  bots, which makes the session at start and again whenever it is gone, charged to
-  no address's budget and counted in the quota; a timer running the script until
-  then. A spectator of the one that went is told it ended and starts a local game
-  (`Membership.feedEnded`): a name the router answers for whichever stands, or a
-  feed's end that names its successor, keeps a page watching.
-- **Its cost while nobody looks**: a pod around the clock. The router knows a
+- **A loop.** `fighter` ends, by the bots' deaths or the campaign's end, and the
+  standing one starts over at once rather than drain.
+- **A store outside the pod** for `cave`'s learner. The population is saved where a
+  setting is, and a session pod has a read-only root and two claims, its log and
+  the wad: a third, writable, at the root the learner saves under. One writer at a
+  time, since two pods of one population would each lose the other's rounds.
+- **A lifetime.** The Job's hour ends either, bots or not, which costs a learner the
+  round in flight. Its keeper is a router setting naming each standing session's
+  scenario and bots, which makes it at start and again whenever it is gone, charged
+  to no address's budget and counted in the quota, `watch_only` on its Job; a timer
+  running the script until then. A spectator of the one that went is told it ended
+  and starts a local game (`Membership.feedEnded`): a name the router answers for
+  whichever stands, or a feed's end that names its successor, keeps a page watching.
+- **Its cost while nobody looks**: two pods around the clock. The router knows a
   session with no spectator past its linger (`audiences`), and a pod its idle hub
   (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
-  wants the rounds nobody watches, so decide which it is.
-- Whether a visitor may also take a seat in it, whose cursor has the learner
-  field and score nothing until its place is given up, or only watches: a roster its bots fill is still shown to a
-  spectator, and the script and the router both keep a seat free
-  (`bots` ≤ `players` − 1).
-- The lobby showing it first, with Watch as what its row offers
+  wants the rounds nobody watches, so decide which each is.
+- The lobby showing them first, with Watch as their rows offer
   ([Watch a session as a spectator](#watch-a-session-as-a-spectator)).
 
 ## Multiplayer
