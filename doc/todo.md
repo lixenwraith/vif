@@ -1525,8 +1525,9 @@ of 20.5 a second). Worth it only if Neovim's terminal becomes the limit.
 
 Neovim's terminal (0.11.7, 0.12.6) answers the key protocol's query with every
 flag pushed (`CSI ? 31 u`) and implements `disambiguate` alone, so the module
-reports releases where every key taps: no hold sticks, but `EventInputReport`
-says `releases` and the notice a `releases = true` capture owes never shows.
+reports releases where a text key taps and Escape, an arrow or an F-key stays held
+until its next press (`KeyHolds.Report`), but `EventInputReport` says `releases`
+and the notice a `releases = true` capture owes never shows.
 Closes with Neovim's query naming only the flags its terminal acts on, reported
 upstream; failing that, the module declining the protocol where `$NVIM` is set,
 which goes by the environment where it now goes by answers.
