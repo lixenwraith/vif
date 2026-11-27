@@ -82,19 +82,22 @@ GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\)
 GO ?= $(GO_DEFAULT)
 # The Go check-go unpacks on request, for this checkout alone: last on PATH, so an
 # installed Go wins, and a dot directory, which ./... skips.
-GO_DIST ?= $(CURDIR)/.go
-export PATH := $(PATH):$(GO_DIST)/bin
+CHECKOUT != pwd
+GO_DIST ?= $(CHECKOUT)/.go
+GO_PATH := $(PATH):$(GO_DIST)/bin
+# No colon on the line, which FreeBSD make would read as a rule
+export PATH=$(GO_PATH)
 # SIMD builds the presentation with GOEXPERIMENT=simd, under which
 # lixenwraith/terminal's cell diff runs on AVX2, NEON or wasm SIMD128: auto where
 # the toolchain takes the experiment, 1 to insist on it, 0 to leave it out.
 SIMD ?= auto
-# Asked where used, so a Go check-go has just installed answers; PATH passed by
-# hand, as make before 4.4 exports none to $(shell).
-SIMD_TAKEN = $(shell PATH='$(PATH)' GOEXPERIMENT=simd $(GO) env GOEXPERIMENT >/dev/null 2>&1 && echo yes || echo no)
-comma := ,
-GOEXP = $(if $(or $(filter 1,$(SIMD)),$(and $(filter auto,$(SIMD)),$(filter yes,$(SIMD_TAKEN)))),GOEXPERIMENT=$(if $(GOEXPERIMENT),$(GOEXPERIMENT)$(comma))simd)
-# purego's FreeBSD port builds its fakecgo as std to link without cgo
-GUI_GCFLAGS = $(shell [ "$$(PATH='$(PATH)' $(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true)
+# PATH passed by hand, as GNU make before 4.4 exports none to a != shell
+GOEXP != case '$(SIMD)' in 1) ;; auto) PATH='$(GO_PATH)' GOEXPERIMENT=simd $(GO) env GOEXPERIMENT >/dev/null 2>&1 || exit 0 ;; *) exit 0 ;; esac; \
+	e='$(GOEXPERIMENT)'; echo "GOEXPERIMENT=$${e:+$$e,}simd"
+# purego's FreeBSD port builds its fakecgo as std to link without cgo; while no Go
+# answers, as before check-go installs one, the host's system decides
+GUI_GCFLAGS != goos=$$(PATH='$(GO_PATH)' $(GO) env GOOS 2>/dev/null || uname -s | tr '[:upper:]' '[:lower:]'); \
+	[ "$$goos" != freebsd ] || echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std'
 # purego, which the desktop window links, builds with cgo off on fewer platforms
 # than the terminal does (not under Termux), so a client build tries it first and
 # names the terminal-only builds rather than leaving purego's errors to explain it.
@@ -111,7 +114,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows runtest verify arch-check clean check-go tools router serve install uninstall install-config purge wad-archive release-readme notices image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm page windows run test verify arch-check clean check-go tools router serve install uninstall install-config purge wad-archive release-readme notices image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -219,7 +222,7 @@ android: check-go $(BIN_DIR)
 # runs in android/, so the path is absolute
 android-install:
 	abi=$$(android/toolchain.sh adb shell getprop ro.product.cpu.abi | tr -d '\r') && \
-	android/toolchain.sh adb install -r $(CURDIR)/$(BIN_DIR)/$(BINARY)-debug-$${abi%-v8a}.apk
+	android/toolchain.sh adb install -r $(CHECKOUT)/$(BIN_DIR)/$(BINARY)-debug-$${abi%-v8a}.apk
 
 android-toolchain: check-go
 	@android/toolchain.sh install
@@ -355,18 +358,20 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 	settings() { if [ ! -e "$$2" ]; then put 0644 "$$1" "$$2"; \
 		elif ! command -v $(GO) >/dev/null 2>&1; then echo "keep    $$2, not brought up to date: no $(GO) on PATH"; \
 		else $(GO) run ./tool/vif-settings "$$2" || echo "keep    $$2, not brought up to date"; fi; }
+# The goals on the command line, as GNU make and FreeBSD make each name them
+GOALS = $(MAKECMDGOALS)$(.TARGETS)
 # The wad mirrors the installed layout, so a copy is the install: shipped files are
 # replaced, a player's kept, and the keymap.toml and vif.toml already there brought up
 # to this build's (tool/vif-settings). The goal purge, wherever it stands, has it
 # first remove the shipped categories, bot/ whole among them, and those two files:
 # here, so an install's own checks pass before anything goes.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
-	if [ -n '$(filter purge,$(MAKECMDGOALS))' ]; then \
+	case ' $(GOALS) ' in *' purge '*) \
 		for old in $(WAD_DIR)/*/ $(WAD_DIR)/scenario/*/ bot/ input/keymap.toml vif.toml; do \
 			old=$${old%/}; old=$${old\#$(WAD_DIR)/}; \
 			[ "$$old" = scenario ] || [ ! -e "$$root/$$old" ] || { rm -rf "$$root/$$old"; echo "remove  $$root/$$old"; }; \
-		done; \
-	fi; \
+		done ;; \
+	esac; \
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
 	settings $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
@@ -380,7 +385,7 @@ install-config:
 
 # purge itself removes nothing: INSTALL_ROOT reads it among the goals
 purge:
-	@case ' $(MAKECMDGOALS) ' in *' install '*|*' install-config '*) ;; \
+	@case ' $(GOALS) ' in *' install '*|*' install-config '*) ;; \
 	*) echo "purge: name install or install-config beside it, as in make install-config purge" >&2; exit 1 ;; esac
 
 # wad-archive is that same install as one file, unpacking as vif/ into the

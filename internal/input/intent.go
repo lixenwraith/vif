@@ -52,7 +52,6 @@ const (
 	IntentTextNav             // Arrow navigation in text modes
 	IntentInsertDeleteCurrent // Delete key in Insert mode
 	IntentInsertDeleteForward // Space in Insert mode (delete + move)
-	IntentInsertDeleteBack    // Backspace in Insert mode (delete prev + move)
 
 	// Cursor movement undo (keyboard source only)
 	IntentUndo // u - motion undo, return to previous position
@@ -74,7 +73,6 @@ const (
 	IntentMouseWheelMove // Wheel: move the cursor, or press a button one notch: X, Y, ScrollDir
 	IntentMouseMove      // Free mouse movement (no button held)
 
-	// Appended so recorded intent numbers keep their meaning.
 	IntentConfigMenu   // Ctrl+G, F10
 	IntentKeyPress     // A key the scenario captured from Normal, Visual and Insert
 	IntentOverlayPoint // Left press while an overlay or its form has the keys: X, Y

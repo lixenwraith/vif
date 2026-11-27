@@ -68,68 +68,6 @@ own speakers go untried (multi-platform §8). Fix: both builds' `PlayJournal` ta
 `Host` after `viewer`, the lender's `runConfig` carries it (its copies borrow its
 presentation), and `-replay` passes `presenting()`.
 
-### List Ctrl-S's audio states in the order it cycles them
-
-- Priority: P2, to review
-- Affected files: `internal/help/topics.go`, `web/index.html`
-
-The help (`topics.go:15`) and its browser copy (`index.html:82`) list "music and
-effects, music only, effects only, silent", but Ctrl-S steps
-`parameter.AudioMaskCycle` (`internal/parameter/audio.go:72`) the other way: from
-the default, silent, effects only, music only. Fix both to "Cycle audio: music and
-effects, silent, effects only, music only", press order from the default as the
-auto-fire entry (`topics.go:101`) lists its own.
-
-### Drop the -cli hint where the build has no terminal
-
-- Priority: P2, to review
-- Affected files: `cmd/vif/gui.go`
-
-`windowHost.Init` (`cmd/vif/gui.go:53`) ends every window that did not open with
-`(-cli plays in the terminal)`, including in the Windows window build. That build
-sets `windowOnly` (`gui_windows.go:18`) and refuses `-cli` as
-`terminal unavailable in this build` (`main.go:179`), so its message box names a
-flag the same build refuses. Smallest fix: wrap with the hint only
-`if err != nil && !windowOnly`, else `return err`.
-
-### Word the audio-free and headless builds' refusals as the unavailable sentence
-
-- Priority: P2, to review
-- Affected files: `internal/app/internal/config/audio_none.go`,
-  `internal/app/internal/config/presentation_none.go`,
-  `internal/resource/check_noaudio.go`
-
-`audio_none.go:11-17` refuses `-ab`, an audio override and `-mw` with "audio backend
-is unavailable in this build", "audio overrides are ..." and "music recording is
-..."; `check_noaudio.go:13` repeats the overrides line, and `presentation_none.go:9`
-says "presentation is unavailable in a vif_headless build". AGENTS.md (Platforms)
-has these read `<Thing> unavailable in this build`, naming no build tag. Fix: drop
-"is"/"are" from all five, and replace "a vif_headless build" with "this build".
-
-### Restore `run` and `test` to the Makefile's `.PHONY`
-
-- Priority: P2, to review
-- Affected files: `Makefile`
-
-`.PHONY` (`Makefile:114`) names `runtest`, which no rule defines, in place of
-`run test`: the `run` (`Makefile:347`) and `test` (`Makefile:300`) goals are not
-phony. A plain `make run` or `make test` still runs, as `dev` and `generate` are
-phony, but `make -t run test` writes files named `run` and `test`, and
-`make runtest` succeeds with nothing to do. Smallest fix: `runtest` -> `run test` in
-that list.
-
-### Keep the Makefile to what FreeBSD make reads, or drop the claim
-
-- Priority: P2, to review
-- Affected files: `Makefile`, `doc/packaging.md`, `README.md`
-
-Packaging §1 says the Makefile runs under FreeBSD make, but bmake reads none of its
-`$(shell)` (`Makefile:93`, `:97`), functions (`:95`, `:364`), `$(MAKECMDGOALS)`
-(`:364`, `:383`), `$(CURDIR)` (`:85`) or `export PATH :=` (`:86`), so a FreeBSD
-`make release` drops `GUI_GCFLAGS` and stops on purego's fakecgo, and `purge` purges
-nothing. Closes with §1, §5 and the README naming `gmake` on FreeBSD, or those lines
-on `!=` and `case`. Traced, not run.
-
 ### Name the blend tester's additive row Add
 
 - Priority: P2, to review
@@ -140,17 +78,6 @@ as "Set". Every other row is named for its mode, and Rendering §4 calls this
 operation Add. The blend screen shows `OP: Set`, and the result switch repeats the
 name in `case 2: // Set` above `color.Add` (`blend.go:119`). Smallest fix: rename
 the label to `"Add"` and the comment to `// Add`.
-
-### Delete the sandbox's commented-out code
-
-- Priority: P2, to review
-- Affected files: `sandbox/3d/main.go`, `sandbox/rand/main.go`
-
-`sandbox/3d/main.go:709-739` holds two commented-out `blit` variants (14 and 11
-lines) under a "to be tested" header, a plan kept in code, and `asciiDensity`, which
-only the commented code reads; `sandbox/rand/main.go:28-33` is a commented-out
-`Next` after its `return`. Dead code past the 5-line comment limit: deleting both
-ranges closes it, and a tty render still wanted becomes an item in this file.
 
 ### Group `network.shed` with the authority card
 
@@ -246,19 +173,6 @@ does, and drop `regionInitials` from the loop's reason at `maprange_test.go:55`.
 tolerance still keep at least 2/23 (0.087) each. Delete the constant and its `if`,
 and the floor named in the comments of `computeRouteWeights` and `Route.Weight`.
 
-### Drop the intent no parser produces
-
-- Priority: P2, to review
-- Affected files: `internal/input/intent.go`, `internal/mode/router.go`,
-  `internal/input/strings_gen.go`
-
-`IntentInsertDeleteBack` (`intent.go:55`) is made by nothing: no action name maps to
-it, and Insert's Backspace (`text_backspace`) arrives as `IntentTextBackspace`,
-whose handler already calls `handleInsertDeleteBack` (`router.go:1230`), so its case
-(`router.go:376`) never runs. Delete the constant and the case, and
-`go generate ./internal/manifest` for its `String` case; nothing records an intent's
-number, so the shift needs no version bump.
-
 ### Keep a bot's `help` and Normal-mode `escape` out of the overlays
 
 - Priority: P2, to review
@@ -270,18 +184,6 @@ an overlay that pauses a solo run and drops all its pointer play (`router.go:247
 Refuse `IntentHelp` there and add it to the doc's list. Spare a bot's Escape in
 Normal the way macro playback's is spared (`router.go:302`, keyed on
 `World.Session().Bot`): refusing `escape` would strand a bot in Insert.
-
-### List every command a replay's viewer has in its help entry
-
-- Priority: P2, to review
-- Affected files: `internal/help/topics.go`
-
-The replay topic's `:` entry (`internal/help/topics.go:278`) lists replay, help,
-about, telemetry, hud, binaural, debug, content, flow, graph, log and quit, but
-`inspects` (`internal/mode/commands.go:186`) also gives a replay's viewer `:menu`,
-`:console`, `:fps`, `:edge` and `:machine`, as `doc/runtime.md:590` says; only a
-watched bot's is refused `:edge` (`commands.go:227`). Add the five to the list and
-name edge in its watched-bot clause.
 
 ### Color a refusal on the native menus' status line
 
@@ -344,17 +246,6 @@ app.RunScript", yet `drive` admits `RunBot`'s run as it does a script's
 Smallest fix: "...require app.RunScript or app.RunBot", naming a bot's run beside
 the script in `ModeHeadless`'s comment too
 (`internal/app/internal/config/config.go:35`).
-
-### Drop the flag usage strings the help never prints
-
-- Priority: P3, to review
-- Affected files: `cmd/vif/main.go`
-
-`flag.Usage` prints `helpSections` (`main.go:118`), so no registration's usage
-string is ever shown, yet the comment at `main.go:51` has them agree with it, and
-two do not: `-join` (`main.go:746`) lacks `vifs://` and `-relay` (`main.go:778`)
-`vif://<router>`, forms the table and the parser take. Pass `""` for each, drop the
-hint locals and fields, and reword the comment to match.
 
 ### Count a self-declared bot as no person when a dedicated host sizes its map
 

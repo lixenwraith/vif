@@ -12,7 +12,7 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Keys: "[count]", Desc: "Repeat the next motion or operator, e.g. 3w or d2j"},
 			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, open the menu"},
-			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, music only, effects only, silent"},
+			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, silent, effects only, music only"},
 			{Actions: []string{"help"}, Desc: "Open or close this help, from any mode"},
 			{Actions: []string{"config_menu"}, Desc: "Open or close the menu, from any mode"},
 			{Actions: []string{"console"}, Desc: "Open or close the console: the messages of this run and the commands typed in it, newest last, each with its time"},
@@ -275,7 +275,7 @@ var topics = []topicDef{
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},
 			{Keys: ":r tick <n>  :r time <[[h:]m:]s>", Desc: "Go to a tick of the run shown, or its game time at 1x; ahead plays there unpaced, behind replays a copy"},
 			{Keys: ":r restart", Desc: "Play the recording again from its start; :replay is :r's long form"},
-			{Keys: ":", Desc: "Command line: replay, help, about, telemetry, hud, binaural, debug, content, flow, graph, log and quit; a watched bot's also pause, speed, step, n, bot, player, journal and the session's, never what the bot plays under"},
+			{Keys: ":", Desc: "Command line: replay, menu, help, about, console, telemetry, hud, fps, edge, binaural, debug, content, flow, graph, machine, log and quit; a watched bot's also pause, speed, step, n, bot, player, journal and the session's, never edge or anything else the bot plays under"},
 			{Keys: "q", Desc: "Quit the replay"},
 		},
 	},

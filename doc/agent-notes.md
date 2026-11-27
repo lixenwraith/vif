@@ -76,7 +76,9 @@ Tests · Locks · Docs · Git and branches.
   a variable, a heredoc that only edits such a Makefile recipe included: edit the
   recipe with the Edit tool, and read what a recipe would remove with `make -n`
   (`make -n install-config purge VIF_CONFIG_DIR=<any path>` prints the recipe and
-  runs nothing); run a purge only on a root made for it.
+  runs nothing); run a purge only on a root made for it. GNU make's `-n` still
+  runs a line that holds `$(MAKE)`, as `WINDOW_PACKAGE`'s does (`steam-linux`,
+  `steam-windows`, `windows-package`), which `bmake -n` only prints.
 
 ## Dependencies
 
