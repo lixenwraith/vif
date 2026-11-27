@@ -196,10 +196,10 @@ release: check-go $(BIN_DIR) notices
 headless: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
-# The window is in every Linux and FreeBSD build, Xlib, EGL and GLES 2 loaded at
-# run time through purego so cgo stays off: gui is the same binary opening it by
-# default, for a desktop entry; cli leaves it out, for a machine with no X to load
-# or none that purego builds for.
+# The window is in every Linux and FreeBSD build, Xlib, EGL and GLES 2 or desktop
+# OpenGL loaded at run time through purego so cgo stays off: gui is the same binary
+# opening it by default, for a desktop entry; cli leaves it out, for a machine with
+# no X to load or none that purego builds for.
 gui: check-go $(BIN_DIR)
 	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
