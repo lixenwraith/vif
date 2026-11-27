@@ -222,18 +222,6 @@ Refuse `IntentHelp` there and add it to the doc's list. Spare a bot's Escape in
 Normal the way macro playback's is spared (`router.go:302`, keyed on
 `World.Session().Bot`): refusing `escape` would strand a bot in Insert.
 
-### List every command a replay's viewer has in its help entry
-
-- Priority: P2, to review
-- Affected files: `internal/help/topics.go`
-
-The replay topic's `:` entry (`internal/help/topics.go:278`) lists replay, help,
-about, telemetry, hud, binaural, debug, content, flow, graph, log and quit, but
-`inspects` (`internal/mode/commands.go:186`) also gives a replay's viewer `:menu`,
-`:console`, `:fps`, `:edge` and `:machine`, as `doc/runtime.md:590` says; only a
-watched bot's is refused `:edge` (`commands.go:227`). Add the five to the list and
-name edge in its watched-bot clause.
-
 ### Color a refusal on the native menus' status line
 
 - Priority: P2, to review
