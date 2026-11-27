@@ -45,7 +45,7 @@ Euler: update velocity from acceleration, then position from the new velocity.
 The bounce variant applies acceleration once before choosing swept substeps; its
 result therefore does not depend on how many anti-tunneling steps were needed.
 `physics.IntegratePosition` deliberately ignores acceleration and is used by
-ballistic, orbital, spring-follow, and other controller-owned paths.
+ballistic, spring-follow, and other controller-owned paths.
 
 The integer `PositionComponent` and spatial grid are the collision/rendering
 projection of precise state. `Point.Center` converts a cell to precise space and

@@ -25,7 +25,7 @@ type FlowFieldCache struct {
 	deferred bool // due and reachable, but not yet computed for LastTargets
 }
 
-// NewFlowFieldCache creates a cache with default throttling
+// NewFlowFieldCache creates a cache with the given throttle, due at its first Update
 func NewFlowFieldCache(width, height, minTicks, dirtyDist, settleTicks int) *FlowFieldCache {
 	return &FlowFieldCache{
 		Field:                  NewFlowField(width, height),
@@ -153,7 +153,7 @@ func (c *FlowFieldCache) GetDirection(x, y int) int8 {
 	return c.Field.GetDirection(x, y)
 }
 
-// GetDistance returns cached BFS distance
+// GetDistance returns the field's weighted distance, -1 if unreachable
 func (c *FlowFieldCache) GetDistance(x, y int) int {
 	return c.Field.GetDistance(x, y)
 }

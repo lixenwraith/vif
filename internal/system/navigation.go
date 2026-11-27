@@ -17,9 +17,10 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// navTier is one passability tier: the headers a footprint fits on, the grid every
-// field, reach and route graph of the footprint searches, the generation it last
-// moved at, and the cells a tick's wall change turned on it
+// navTier is one passability tier: the headers a footprint fits on, which a route
+// graph reads into a grid of its own, the grid every field and reach of the
+// footprint searches, the generation it last moved at, and the cells a tick's wall
+// change turned on it
 type navTier struct {
 	foot           vmath.Footprint
 	pass           *navigation.CompositePassability // nil on the point tier, whose passability is the walls
@@ -490,7 +491,7 @@ func (s *NavigationSystem) Update() {
 	s.syncTiers()
 	s.refreshRouteGraphs()
 
-	// Build routes before choosing a pursuit target.
+	// Fields fall due before a snake head's lock reads whether its group's did
 	s.recomputes = 0
 	for groupID, g := range s.groups {
 		s.refresh(groupID, g)
@@ -952,9 +953,9 @@ func (s *NavigationSystem) pursue(slot uint8) bool {
 
 // lockSnakeTarget holds a head on the cursor it reaches soonest. One reach from
 // the head over its tier's grid ranks every cursor, as far as the choice needs,
-// when the head has no reachable lock, the roster moved enough for its field to
-// fall due, or the settle interval passed; a lock holds until another route is
-// over a third shorter, and a cursor the head cannot reach is never chosen.
+// when it has no reachable lock and the cooldown passed, the roster moved enough
+// for its field to fall due, or the settle interval passed; a lock holds until
+// another route is over a third shorter, and a cursor it cannot reach is never chosen.
 func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.NavigationComponent) {
 	groupID := uint8(0)
 	if target, ok := s.world.Components.Target.GetPtr(entity); ok {

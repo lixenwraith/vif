@@ -81,9 +81,10 @@ In `engine`:
   `Shift`, the batch, `Resize` and `Clear`, which place the rows again or drop
   them, the wall flag beside each row that tells the index which moves are a
   wall's, once the grid holds the move, `wallOf` over `Components.Wall` as the
-  index's `blockOf`, the typing queries (`TopGlyphAt`, `IsTypeable`,
-  `IsScenery`), telemetry, and the rock: `RockField`, the two surfaces with their
-  columns. `component.WallBlockMask` is the package's `Mask`.
+  index's `blockOf`, the typing queries (`TopGlyphAt`, `EditableGlyphAt`,
+  `TakesGlyph`, `IsTypeable`, `IsScenery`), telemetry, and the rock: `RockField`,
+  the two surfaces with their columns. `component.WallBlockMask` is the package's
+  `Mask`.
 - The names the game reads are the package's: `position.Scope` with `ScopeShared`,
   `ScopePrivate` and `ScopeAll`, `position.Pattern` and its kinds,
   `position.Exclusion`, `position.Rect` (the ping's bounds embed one),

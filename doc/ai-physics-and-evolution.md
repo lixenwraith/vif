@@ -95,17 +95,16 @@ is structural, and an optional equality hook holds a genotype once, so the
 archive does not fill with clones of its best member. A repeat outcome replaces
 its genotype's score, which follows a changing objective, or under a merge hook
 folds into it with a count, as a running mean does for a noisy one that stays
-put; `Reevaluate` hands out the member scored longest ago, or the one its host
-names (`SetDue`). A rank hook keeps the
-archive by keys its host gives in place of scores, as a bot's learner ranks by
-what a member's rounds prove ([Bots](bots.md#learning)). Outcome count
-advances generations, and a schedule may set the mutation rate and strength as
-each ends. The proposal ring is bounded; the pending table is
-open-addressed, an evaluation taking the first free slot from its id's home
-slot, so `PendingCapacity` bounds the evaluations in flight and the oldest is
-evicted only from a full table. The registry manages up to
-256 independent species through atomic slots, so sampling and stats find a
-species without a lock.
+put; `Reevaluate` hands out the member scored or handed out longest ago, or the
+one its host names (`SetDue`). A rank hook keeps the archive by keys its host
+gives in place of scores, as a bot's learner ranks by what a member's rounds
+prove ([Bots](bots.md#learning)). Outcome count advances generations, and a
+schedule may set the mutation rate and strength as each ends. The proposal ring
+is bounded; the pending table is open-addressed, an evaluation taking the first
+free slot from its id's home slot, so `PendingCapacity` bounds the evaluations
+in flight and the oldest is evicted only from a full table. The registry manages
+up to 256 independent species through atomic slots, so sampling and stats find
+a species without a lock.
 
 The root `genetic` package uses `math/rand/v2` PCG streams and depends only on the
 standard library. `Seed` is explicit (`0` is valid), and deterministic queue
@@ -238,37 +237,39 @@ corner steers out instead of taking the push again each time its window closes. 
 pair on one cell, a push's or a flock's, parts a way it draws each tick (`apart`),
 so a pile scatters every way. In `magic` at 130 by 30, two minutes of bodies no
 weapon wears left 42 of 174 standing five seconds or more between a gateway's pylon
-and its corner before, none after. A second matrix adds continuous flocking separation: swarms and quasars
-repel each other and drains, and drains repel only drains, so shared motion
-never reads drain positions. A data species with mass takes the swarm's and
-quasar's part in both, across an ellipse half its footprint; one without takes
-neither. A shared target's impulse draws from a stream
-reseeded from the tick and the pair (D-8); a player-domain target's from this
-instance's player stream. Both passes read the tick's cached cells and no store,
-filed by map block, 4 cells by 2, once 16 bodies stand (`indexCaches`): a source,
-in species and cache order, meets only the bodies in the blocks its reach crosses,
-so a crowd costs its neighborhoods rather than its square, and each target still
-takes its pushes and sums its flock in the order a whole scan gave them, bit for
-bit. In `magic` at 140 by 50 with 300 bodies standing unkilled, the profiler's
-`sys soft_collision` read 453 µs a tick before and 111 after, the tick 956 and
-593; what is left is a wave's pile at its gateway, 67 bodies in one block. An
-index a species, read once for each source and target species, read 396.
+and its corner before, none after. A second matrix adds continuous flocking
+separation: swarms and quasars repel each other and drains, and drains repel only
+drains, so shared motion never reads drain positions. A data species with mass
+takes the swarm's and quasar's part in both, across an ellipse half its
+footprint; one without takes neither. A shared target's impulse draws from a
+stream reseeded from the tick and the pair (D-8); a player-domain target's from
+this instance's player stream. Both passes read the tick's cached cells and no
+store, filed by map block, 4 cells by 2, once 16 bodies stand (`indexCaches`): a
+source, in species and cache order, meets only the bodies in the blocks its reach
+crosses, so a crowd costs its neighborhoods rather than its square, and each
+target still takes its pushes and sums its flock in the order a whole scan gave
+them, bit for bit. In `magic` at 140 by 50 with 300 bodies standing unkilled,
+the profiler's `sys soft_collision` read 453 µs a tick before and 111 after, the
+tick 956 and 593; what is left is a wave's pile at its gateway, 67 bodies in one
+block. An index a species, read once for each source and target species, read 396.
 
 ## 6. Numeric model and determinism
 
 `pkg/vmath` is a `float64` numeric and geometry package and holds the named math
 constants (`TwoPi`, `Golden64`). It provides scalar and vector operations,
 lookup-table trig/decay, ellipses/arcs, float grid traversal and cell strips
-(`Ray`), and a fast seeded RNG: labeled stream seeds (`DeriveSeed`) and seeds
+(`Ray`), symmetric shadowcasting over a wedge (`ShadowCast`), and a fast seeded
+RNG: labeled stream seeds (`DeriveSeed`) and seeds
 folded from several values (`MixChain`). `pkg/vmath/physics.Kinetic` stores
 precise position in cells, velocity in cells per second, and acceleration in
 cells per second squared, all as `float64`.
 
-A flat form has its twin through a volume beside it, bar the arcs and `Ray`:
-`Point3`, `Box` and `Footprint3` for `Point`, `Area` and `Footprint`; `Line3`
-and `GridTraverser3` for the two walks; the `V3` operations on `Vec3`, cross,
-reflection and rotation about an axis among them; the ellipsoid tests. A twin
-held to one plane answers as its flat form, which its tests pin.
+A flat form has its twin through a volume beside it, bar the arcs, `Ray` and
+`ShadowCast`: `Point3`, `Box` and `Footprint3` for `Point`, `Area` and
+`Footprint`; `Line3` and `GridTraverser3` for the two walks; the `V3` operations
+on `Vec3`, cross, reflection and rotation about an axis among them; the
+ellipsoid tests. A twin held to one plane answers as its flat form, which its
+tests pin.
 
 `Sin`, `Cos` and the two rotations read a 1,024-bin table at the floor of the
 angle's bin (`lutIndex`), a rotation reading the bin once. On amd64 at its
@@ -327,8 +328,10 @@ The caller supplies the generator (`Config.Rng`); a nil one selects a fixed
 stream, so generation never reads the clock. The wall system draws from its own
 PCG stream, derived from the shared root and carried in the capture. On
 `EventMazeSpawnRequest` it scales the boolean grid by the request's cell size into
-one wall batch and clears the requested rooms; the start, end, solution path and
-room entries serve `sandbox/maze`.
+one wall batch, clears the requested rooms and answers with `EventMazeSpawned`:
+the first room's middle, and an open block in the last quarter of the way from it,
+or from the start with no room, along the passages (`Distances`). The start, end,
+solution path and room entries serve `sandbox/maze`.
 
 The grid is one array; the carve backs out of a dead end along a byte per cell
 naming the jump that carved it, with no stack, and the solve runs level by level

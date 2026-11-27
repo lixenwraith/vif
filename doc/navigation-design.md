@@ -18,7 +18,7 @@ into motion; loot reads one resource; `AdaptationSystem` reads route graphs.
 
 | Structure | What it is | Readers |
 |---|---|---|
-| `SearchGrid` | One passability read into a bordered grid with the open directions of every cell precomputed; every Dijkstra on that tier runs on it | fields, reaches, route solver |
+| `SearchGrid` | One passability read into a bordered grid with the open directions of every cell precomputed; a tier's fields and reaches share its tier's, a route graph fills its own | fields, reaches, route solver |
 | `FlowField`, `FlowFieldCache` | A field toward a target group's cells, in a cache that throttles its recompute | species through `NavigationComponent` |
 | `vmath.Footprint`, `CompositePassability` | A body's cells around its header, its species' own, and the header cells at which they fit | each composite tier's grid |
 | `Reach` | One search from a cell measuring its distance to several goals | the snake lock |
@@ -123,17 +123,17 @@ Computing a field over a large map every 50 ms tick is too expensive, so
 
 A cursor's motion reaches a field only through that drift. The caches are lazy:
 a field that falls due is computed when something first reads it that tick — a
-pursuer without sight of its target, a drop out of sight of its owner, the debug
-view — so a group nobody chases costs a cheap reachability check. The throttle
-decides exactly as it would eagerly, which is what keeps the phase identical
-between an instance that reads a field and one that does not (D-17). The
-carrier (`SaveShared`) holds each group's counters, pending flag, computed flag
-and last targets, the route rebuild budget, each gateway graph's endpoints and
-every resolved target group, since one an update set and no anchor holds is in
-no other state; an install re-derives passability and the grids from the installed walls,
-rebuilds every field whose stamp is not its tier's current generation or whose
-targets differ, keeps the rest, and derives the named graphs. The fields
-themselves are never carried.
+pursuer without sight of its target, a drop out of sight of its owner or
+sounding (§7), the debug view — so a group nobody chases costs a cheap
+reachability check. The throttle decides exactly as it would eagerly, which is
+what keeps the phase identical between an instance that reads a field and one
+that does not (D-17). The carrier (`SaveShared`) holds each group's counters,
+pending flag, computed flag and last targets, the route rebuild budget, each
+gateway graph's endpoints and every resolved target group, since one an update
+set and no anchor holds is in no other state; an install re-derives passability
+and the grids from the installed walls, rebuilds every field whose stamp is not
+its tier's current generation or whose targets differ, keeps the rest, and
+derives the named graphs. The fields themselves are never carried.
 
 A reader out of sight reads its field every `field_refresh_ticks` (the scenario's
 `[navigation]`, every tick when unset) and holds the way it read between: a
@@ -161,12 +161,12 @@ snake heads locked on it. A private group costs nothing until read.
 `NavigationComponent` records the footprint, whether an actor follows a group
 field or a route, the graph and route IDs, a snake head's lock, and each tick's
 output: `HasDirectPath` when the target is in sight, the body flown from its
-header along the line with every cell of it clear, otherwise the flow vector, bilinear over the four cells around a
-point and header-anchored for a composite, with the neighbor nearest the goal
-as the escape from a cell the field does not cover. Species systems turn that
-into a homing target through `ResolveMovementTarget` (`targeting.go`) — the
-target itself in sight, else a point `FlowLookahead` cells along the flow — and
-integrate their own motion.
+header along the line with every cell of it clear, otherwise the flow vector,
+bilinear over the four cells around a point, and for a composite
+header-anchored, with the neighbor nearest the goal as the escape from a cell
+the field does not cover. Species systems turn that into a homing target through
+`ResolveMovementTarget` (`targeting.go`) — the target itself in sight, else a
+point `FlowLookahead` cells along the flow — and integrate their own motion.
 
 ## 6. The snake lock
 
@@ -180,13 +180,13 @@ the locked one or past half as far again (`NavLockHoldNum`/`NavLockHoldDen`),
 whichever comes first. A cursor the head's own search cannot reach is measured
 from those neighbors too, and only one past a corner walled on both sides can
 lead to it, so a head beside such a corner measures every cursor. It runs when
-the head has no reachable lock, the roster moved enough for its group field to
-fall due, or `NavFlowSettleTicks` passed; `LockTicks` rides the head's
-component, so the capture carries the phase. A reachable lock holds until
-another route is over a third shorter, a cursor the head cannot reach is never
-chosen, and a head that can reach none holds still. Sight is deliberately not a
-factor: a cursor jumps at no cost, so a head that switched to whichever cursor
-it could see would be switching all the time.
+the head has no reachable lock and the cooldown passed, the roster moved enough
+for its group field to fall due, or `NavFlowSettleTicks` passed; `LockTicks`
+rides the head's component, so the capture carries the phase. A reachable lock
+holds until another route is over a third shorter, a cursor the head cannot
+reach is never chosen, and a head that can reach none holds still. Sight is
+deliberately not a factor: a cursor jumps at no cost, so a head that switched to
+whichever cursor it could see would be switching all the time.
 
 ## 7. Loot's seam
 
@@ -197,11 +197,12 @@ would drive it into the wall between it and its own. A drop therefore steers by
 its owner's private group through `PursuitResource`, with its own line-of-sight
 check against the same cursor. A field is computed when first read, so only the
 instance holding a cursor's drops ever materializes it; of the field, a capture
-holds only the way a drop read between refreshes (§4). No field covers a wall
-cell, so a drop a wall lands on without displacing it — a correction installs
-shared walls under player-domain loot — is pushed out as a spawn displaces it.
-Anything else that becomes owned rather than contested reads the same resource;
-do not add a target group per participant.
+holds only the way a drop read between refreshes (§4) and, for a drop that sounds,
+the distance it read there, which pitches its sound (`LootComponent.Route`,
+`Left`). No field covers a wall cell, so a drop a wall lands on without
+displacing it — a correction installs shared walls under player-domain loot — is
+pushed out as a spawn displaces it. Anything else that becomes owned rather than
+contested reads the same resource; do not add a target group per participant.
 
 ## 8. Route graphs
 

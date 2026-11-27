@@ -1,9 +1,8 @@
-// Package cave shapes a side-scrolling cave as a profile of columns: how many rows of
-// ceiling and of floor each column holds. A column is a pure function of its index and
-// the seed, in integer arithmetic, so any instance derives any column on its own and
-// every platform rounds it alike. A cave's channel snakes, or each of its walls is a
-// jagged fractal of its own; a mouth of open map may come before it, and an opening
-// widens it from a column on.
+// Package cave shapes a side-scrolling cave as a profile of columns, each the rows of
+// ceiling and of floor it holds: a pure function of its index and the seed, in integer
+// arithmetic, so any instance derives any column on its own and every platform rounds
+// it alike. Its channel snakes, or each wall is a jagged fractal of its own; a mouth
+// of open map may come before it, and an opening widens it from a column on.
 package cave
 
 import (
@@ -216,11 +215,10 @@ func (c Config) snaking(i int64) (top, bottom int64) {
 }
 
 // jagged is column i's walls in a jagged cave: a band of the widest gap, placed as a
-// snaking channel is, which each wall reaches into by its own fractal noise, Reach
-// rows at most when set, walls reaching in together sharing the room past the min gap
-// and detail by their reach. Band and reach sum in fixed point and floor once, so a
-// wall never steps a row out and back; where the walls share, the floor takes the row
-// two floors would leave, so the gap closes to the min gap and no wider
+// snaking channel is, each wall reaching in by its own fractal noise, Reach rows at
+// most when set, two that meet sharing the room past the min gap and detail by reach.
+// Summed in fixed point and floored once, no wall steps a row out and back; sharing,
+// the floor takes the row two floors would leave, so the gap closes to the min gap.
 func (c Config) jagged(i int64) (top, bottom int64) {
 	h, w := int64(c.Height), int64(c.Wavelength)
 	widest := int64(c.widest())

@@ -552,9 +552,9 @@ func (s *GeneticSystem) heldRegistrationLocked(species component.SpeciesType) bo
 
 // CheckShared reports whether this instance could install the record without
 // touching anything. A staging world has never entered a region declaring species,
-// so its empty registered set accepts what the live world would refuse; asked of the live system
-// before the store pass, a refusal cannot leave a world half-installed. The
-// reconciliation in LoadShared is what makes the answer yes.
+// so its empty registered set accepts what the live world would refuse; asked of
+// the live system before the store pass, a refusal cannot leave a world
+// half-installed. The reconciliation in LoadShared is what makes the answer yes.
 func (s *GeneticSystem) CheckShared(data []byte) error {
 	var snap geneticSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
