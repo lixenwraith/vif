@@ -180,7 +180,7 @@ body = { trigger = "EventModeChanged", target = "${target}", guard = "PayloadInt
 
 # --- Tutorial ---
 
-# The lessons wait for the cursor; the glyph spawner stays off until the last one,
+# The lessons wait for the cursor; the glyph spawner stays off until free practice,
 # so no corpus line lands on a lesson
 [states.Wait]
 parent = "Root"

@@ -12,8 +12,8 @@ max_players = 1
 # what it touches; a tempest or a defense fires from the middle row and column too.
 
 # The least map that holds the square on blocks a row tall with its cursor's orbs
-# circling on it, 39 by 19, and a gateway's pylon in each corner a cell clear of
-# their orbit; the outer orbit flattens to the map, and a smaller screen scrolls
+# circling on it, which takes 39 by 19, and a gateway's pylon in each corner a cell
+# clear of their orbit; the outer orbit flattens to the map, and a smaller screen scrolls
 [map]
 min_width = 41
 min_height = 19
@@ -303,8 +303,8 @@ frames = [
     { glyphs = ["[#^#]", "[>O<]", "[#v#]"], fg = ["00000", "00100", "00000"], attr = ["     ", "  B  ", "     "] },
 ]
 
-# The carrier a level sends: a heavy body in gold that the weapons wear slowly, and
-# where a player's kill ends it the ramp lays the next weapon
+# The carrier each level up sends: a heavy body in gold that the weapons wear slowly,
+# and where a player's kill ends it the ramp lays the next weapon
 [behaviors.carrier]
 macro = "Body"
 hp = 40
@@ -434,8 +434,8 @@ transitions = [
 # A gateway sends a wave: the rank's wave body at the wave's pace in place of its
 # stray. A round sends one more wave than the last, from the gateways clockwise of
 # the first, up to all four. The waves move one to three gateways on round the
-# corners, drawn anew each move, after 12 s, 9 s at the third rank and 6 s at the
-# fourth.
+# corners, drawn anew each move, after 12 s, 9 s at a round's third level and 6 s
+# at its fourth.
 [states.FloodPick]
 parent = "Root"
 on_enter = [
@@ -479,8 +479,8 @@ transitions = [
 # --- The ramp ---
 
 # A level holds until players' kills of its bodies reach its count, 30 at first, or
-# 90 s. Where a player's kill ends the carrier a level sent, the next weapon of the
-# round launcher, turret, emitter, disruptor, rod drops.
+# 90 s. Where a player's kill ends the carrier a level up sent, the next weapon in
+# the turn of launcher, turret, emitter, disruptor and rod drops.
 [states.Level]
 parent = "Root"
 transitions = [

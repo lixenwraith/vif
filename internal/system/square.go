@@ -400,7 +400,7 @@ func (s *SquareSystem) turn(e core.Entity, sq *component.SquareComponent, digit 
 // shed empties the square's dust meter into dust, the share of SquareDustShed it
 // held, in the blocks' digits evenly round the shield's rim, on this instance for
 // its own player: what special fire then detonates. A meter short of one keeps it.
-// A boosting kind's fire sheds it, and its cursor's shield falling.
+// A kind marked Shed sheds it as it fires, and its cursor's shield falling does.
 func (s *SquareSystem) shed(sq *component.SquareComponent) {
 	n := int(sq.Dust * parameter.SquareDustShed / parameter.SquareDustFull)
 	if n == 0 {

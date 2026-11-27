@@ -44,8 +44,8 @@ const (
 	SquareTempestCooldown = 2 * time.Second
 
 	// A square's dust meter charges a second a second, and SquareDustKill for each
-	// kill its cursor makes, up to SquareDustFull, which a magic state, every row
-	// and column summing alike, fills at once. Its next gust sheds that share of
+	// kill its cursor makes, up to SquareDustFull, which a magic state
+	// (SquareComponent.IsMagic) fills at once. Its next gust sheds that share of
 	// SquareDustShed motes round the shield and empties it.
 	SquareDustFull = 40 * time.Second
 	SquareDustKill = time.Second

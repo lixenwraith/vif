@@ -70,10 +70,10 @@ const (
 	CombatAttackSelfDestruct
 	CombatAttackBullet
 	CombatAttackRay
-	CombatAttackBurn      // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
+	CombatAttackBurn      // a charged pulse's follow-up; nothing spends its immunity, so only a ward blocks it
 	CombatAttackStrike    // a magic square's strike, all a body's hit points
 	CombatAttackDeathWave // a death wave, all a body's hit points as its edge passes
-	CombatAttackConfuse   // a magic square's tempest sigil: no damage, a confuse
+	CombatAttackConfuse   // a magic square's tempest spell: no damage, a confuse
 	CombatAttackTypeCount
 )
 

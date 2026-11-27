@@ -52,7 +52,7 @@ index by kind.
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | a pulse on the orb's cell when a target is inside it, striking once: area damage and stun | a Shared pulse riding its host, striking every cursor inside it; storm's green circle is one |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
-| Emitter | ray | timed ray from the cursor through its orb at an assigned target, sweeping as the orb orbits; at the cap it is sustained (§4) | warns, fires, rests along a locked ray |
+| Emitter | ray | timed ray from the cursor through its orb, fired while a target is assigned, sweeping as the orb orbits; at the cap it is sustained (§4) | warns, fires, rests along a locked ray |
 
 ## 3. Drivers
 
@@ -199,15 +199,16 @@ a status is compared state.
 A magic square's attack is that of the cursor standing on it, which owns and
 originates it, so a kill is that cursor's: `strike` takes whatever hit points a
 body on the swarm row holds (`CombatDamageSquareStrike`), or what a data species'
-row gives it a member struck, on every target with a member in the side of the
-map the firing edge faces (`SquareComponent.Faces`, `SquareSystem.strike`, the
-weapons' own `FindTargetsIn`). A family lands alike from every attacker, which a
-data species' row takes as given, so the strike is a family of its own. A hit
-that takes hit points records its family (`CombatComponent.LastAttack`), and a data
-species killed dies by that row's `death`, its prototype's unless the row names
-one, so a scenario tells its kinds of kill apart. The
-square's defense boosts that cursor, and the shield's push and drain are
-the cursor's own; with the shield down the square lands each body on its blocks
+row gives it a member struck, on every target with a member where it lands
+(`SquareSystem.land`, the weapons' own `FindTargetsIn`): the firing edge's side of
+the map within reach (`SquareComponent.Strikes`), the attack orb's corona, or, for a
+spell, all round within reach, where a tempest's lands `confuse`. A family lands
+alike from every attacker, which a data species' row takes as given, so the strike
+is a family of its own. A hit that takes hit points records its family
+(`CombatComponent.LastAttack`), and a data species killed dies by that row's
+`death`, its prototype's unless the row names one, so a scenario tells its kinds of
+kill apart. The square's defense boosts that cursor, and the shield's push and drain
+are the cursor's own; with the shield down the square lands each body on its blocks
 itself, once a touch (`SquareSystem.breach`): the body's contact through
 `strikeCursor`, which is heat, and the shield family's knockback.
 

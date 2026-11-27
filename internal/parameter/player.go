@@ -77,7 +77,7 @@ const (
 	WeaponMaxChargeDisruptor = 2
 	WeaponMaxChargeTurret    = 5
 	WeaponMaxChargeEmitter   = 3
-	WeaponMaxChargeGun       = 3 // lanes per direction; only a scenario's event drop or god mode adds one
+	WeaponMaxChargeGun       = 3 // lanes per direction; no code drop table holds the gun: a scenario's drops, :w or god mode add one
 
 	// GunPathMax is the levels a scenario's gun upgrade path holds at most; a gun on
 	// one takes a charge per level in place of WeaponMaxChargeGun
