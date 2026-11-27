@@ -46,8 +46,7 @@ on every instance and a capture mid-materialize must restore them
 
 ### Position, blocking and navigation
 
-The move into `pkg/position` is done ([Position](position-package.md)); what
-remains stands on its own.
+What remains stands on its own.
 
 #### Play a volume: the third axis's remaining foundation
 
@@ -58,11 +57,7 @@ remains stands on its own.
 - Guide: [Position §3](position-package.md#3-the-volume),
   [Rendering §2](rendering.md#2-render-context-and-coordinates)
 
-The index, the math and the physics are laid for a volume: `pkg/position` holds
-`Depth` layers and answers a `Point3`, a `Box` and a `Footprint3` on any of them,
-its surfaces on the layer they name, and `pkg/vmath` and its physics have a form
-through a volume beside each flat one. What a game in depth still needs is not
-laid:
+What a game in depth still needs:
 
 - The binding and the records: a depth in the config the binding resizes to
   (`Position.Resize` passes one layer), and a row that carries its layer, which
@@ -531,14 +526,11 @@ expanding each written element alone, which asks nothing of the macro library.
 - Guide: [FSM reference: Maps](fsm-reference.md#maps),
   [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline)
 
-A scenario carries maps: `[maps]` in its entry, each inline or a file of its own,
-read, bounded, digested and sent as a program is and compiled once a run; `rows`
-of one width over a `legend`; and `EventMapLayRequest { map, x, y }`, which a
-request naming no map of the scenario fails the load on. A legend lays a
-program's spawn and nothing else, so a formation is drawn and terrain is not. A
-wall event still takes its cells one by one, or lays a maze, a cave or an `.aimg`
-from the `image/` category, which the digest leaves out and a joiner is not sent.
-What remains, tiles first and [images after](#carry-an-image-in-the-scenario):
+A scenario's map lays a program's spawn from its legend and nothing else
+(`EventMapLayRequest`), so a formation is drawn and terrain is not. A wall event
+still takes its cells one by one, or lays a maze, a cave or an `.aimg` from the
+`image/` category, which the digest leaves out and a joiner is not sent. What
+remains, tiles first and [images after](#carry-an-image-in-the-scenario):
 
 - **A tile.** A legend entry that is a wall: its glyph, colors, box style and
   block mask named once. `MapLayout` gains its cells beside `Spawns`, and the wall
@@ -718,11 +710,8 @@ its request's, one for every cell.
 - Guide: [Input and modes §3](input-and-modes.md#3-normal-mode-grammar),
   [§10](input-and-modes.md#10-keymap-override-files)
 
-The second round is in: a register for `y` and the puts, a change undo and redo,
-marks, `o O`, `s S X ~`, counted searches, `.` with its Insert text, and Visual's
-`d c y r ~ *` over the ping bounds. A vim key whose letter vif reads its own way
-has an action no default key binds, which the vim keymap (`-k vim`) and the
-tutorial attach. What is left:
+A vim key whose letter vif reads its own way has an action no default key binds,
+which the vim keymap (`-k vim`) and the tutorial attach. What is left:
 
 - **What the vim keymap cannot give back.** `H` and `L` go to the map's top and
   bottom rows where vim's go to the window's, and `J`, `K`, Ctrl-F, Ctrl-B, Ctrl-E
@@ -1246,12 +1235,9 @@ A session's own bots are read here before a request may ask for them
 - Priority: P1
 - Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kube-docker-deploy.md`
 
-Decided: the cleanup's stale age is 75 minutes, just past the session Job's
-`activeDeadlineSeconds`, so the tmpfs holds live sessions and the ones that just
-ended instead of five hours of finished ones; a byte budget or a larger tmpfs
-were the alternatives. Apply on the node: reinstall the cleanup script as
-[Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a full
-hour of play.
+Apply the cleanup's 75-minute stale age on the node: reinstall the cleanup script
+as [Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a
+full hour of play.
 
 ### Promote verified images to the node
 
@@ -1292,7 +1278,7 @@ the volume already carries whatever the installer puts there.
 
 ### Keep a standing session for the lobby
 
-- Priority: P2, with [learning in a session](#close-what-learning-leaves-open-outside-a-solo-run)
+- Priority: P2
 - Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
   `tool/vif-router` (`allocator.go`, `config.go`, `manifest.go`), `internal/bot`,
   `internal/lifecycle`, `deploy/guest/vif-router.env`, the Hugo site's
@@ -1484,10 +1470,9 @@ fusion its sender was elected for.
 
 A crossing's target is an entity number too, its producer's: an instance that
 applied an arrival late allocates the cursor after what the others allocated
-first, and holds both under other numbers until a correction. A typed member's
-end checks what it names (`CompositeSystem.destroyMember`), after a host destroyed
-a Wraith's cursor under a gold member's number; a hit's `TargetEntity` and
-`HitEntity` are not checked against what their producer meant.
+first, and holds both under other numbers until a correction. A hit's
+`TargetEntity` and `HitEntity` are not checked against what their producer meant,
+as a typed member's end is (`CompositeSystem.destroyMember`).
 
 ### Publish a player's session at the router
 
@@ -1500,16 +1485,11 @@ A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
 reached there, the router neither allocating nor authoring. The deployment this
 leads to serves as many pods as the node has resources for (`-sessions-max`, ten
-today) and routes every session beyond them. The tunnel carries a door already, and
-the foundation stands: a name is resumed only by the run it was issued to, within
-`NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
-holds at most `-doors-per-address` doors; every connection placed is accounted for
-as it closes (`session route closed`: session, door or pod, bytes each way,
-seconds); and the listing's `limits` carry `sessions_max`, `doors` and `doors_max`,
-so the site can say when the fleet is full and offer a hosted session instead.
-Joins and creates are budgeted by account where a sign-in names one; a publication
-is budgeted by address alone, and its `Resume` token is the last bearer secret on
-the wire ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
+today) and routes every session beyond them. The tunnel carries a door already
+(`tool/vif-router/README.md`, Doors). Joins and creates are budgeted by account
+where a sign-in names one; a publication is budgeted by address alone, and its
+`Resume` token is the last bearer secret on the wire
+([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
 
 Steam Networking Sockets and its datagram relay would hide a player-hosted
 session's addresses too, and tie hosting to Steam: an option beside this one, not
@@ -1554,12 +1534,9 @@ What the feature itself needs, best shaped by deploying it step by step:
 - Affected files: `internal/app/internal/corrector/snapshot_stage.go`, `internal/system/network.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
-An install compares the staging world's stores against the live ones in place and
-writes the cells that differ, with no capture of either (`ReconcileSharedFrom`); the
-deepest td install of netcode design §3.7 holds the live lock 8 ms, 7.7 of them the
-write, down from 48. What the lock still holds is the projection: each projected
-tick adds a simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it
-past 45 ms. Moving it out: project to the live tick off the lock, then under it feed
+The live lock still holds an install's projection: each projected tick adds a
+simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it past 45 ms.
+Moving it out: project to the live tick off the lock, then under it feed
 what the barrier retained since the first feed, project the ticks the live world
 advanced meanwhile, and write. Any out-of-lock or incremental design must keep
 [Multi-player](multi-player.md) §3.3: fence membership, pending barrier crossings
@@ -1827,13 +1804,11 @@ or only on WARN and above.
 at, so a client reading two to seven times another's on the same link, as the
 Android client did against a terminal at the pod, is sending that much more unless
 `network.link_saturated` says the link was the limit. The candidate is input shape:
-a drag moves the cursor to every cell the finger crosses (`Router.moveMouseCursor`,
-`PushPointerMove`), a crossing each, where a key moves one cell a press, and god
-mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`,
-`network.sent_sync_bytes` and `network.crossings_sent` over one window, and
-`network.pace_late_ticks` for a client the OS throttles; if the epochs carry it,
-decide whether a drag's intermediate cells are a move each or one move to the cell
-the tick ends on.
+a drag crosses a placement every tick the finger moves, to the newest cell it
+reached (`Router.moveMouseCursor`, `PushPointerMove`), where a key moves one cell a
+press, and god mode multiplies the actions. Compare the two clients'
+`network.sent_epoch_bytes`, `network.sent_sync_bytes` and `network.crossings_sent`
+over one window, and `network.pace_late_ticks` for a client the OS throttles.
 
 ### Land a joining seat inside its pace band
 
@@ -2070,19 +2045,9 @@ takes whom back and what a session advertises, where today the roles (`sessionRo
 host, successor, kept, seats, left), `relaySeatingLocked`, `relayedLocked` and
 `leaveSessionLocked`'s `keepAll` each answer part of it.
 
-What the fork does: it keeps the places of everyone behind it as it forks, the people
-linked to it at its door and those behind a door of theirs, with their bots', and
-nobody else's (`relayedLocked`, `NetworkSystem.Relays`); its `-relay` door, at the
-address they joined at, goes on into the session it opens and takes back a key that
-holds a person's place there, under the left session's name and with no passphrase,
-refusing any other (`returnAcceptor`); nobody new is seated through those people
-either, by a bot of theirs or a door of their own, and no spectator is shown the
-session, until its player runs `:host` (`relaySeatingLocked`, `watchParticipant`);
-each person waits on its relay up to `NetworkFollowWindow`, frozen, then dials the
-door it joined at for one succession window, again while the run behind that door is
-itself on its way back, before it forks alone; and while it holds their places the
-session's role refuses `:join` and takes `:leave` and `:host`. `./script/test.sh tree`
-runs it over three terminals.
+What the fork does, keeping the places of those behind it and its `-relay` door for
+them alone, is Multi-player §5.5 and §5.6; `./script/test.sh tree` runs it over three
+terminals.
 
 What to look at:
 - Whether a relay hosts its people only once it is asked to, by a switch of its own as
@@ -2592,9 +2557,10 @@ delete remove exactly what is shown.
 - Priority: P2
 - Affected files: `internal/system/motion_marker.go`
 
-Markers are recomputed on cursor movement and mode changes, so under a drift they
-sit on cells the glyphs have left. Recomputing after a drift step, which the
-environment could announce as a local event, would keep them on the text.
+The colored markers `g` and a direction show before a color jump are placed once
+(`showColoredMarkers`), so under a drift they sit on cells the glyphs have left.
+Checking them every tick, as `validateBaseMarkers` checks the base markers, would
+keep them on the text.
 
 ### Widen what drifts
 
@@ -2958,15 +2924,11 @@ its source, as the `Speaker` is its sink.
 - Priority: P3
 - Affected files: `tool/vif-log`, `internal/system/music.go`
 
-`RenderTimeline` plays a timeline of slot patterns offline and stapes' `song`
-writes a `SongDef` through it; the conductor's own timeline, patterns by tier from an APM
-trace, is what still lacks a path to it. The offline conductor render that
-compared bass voicings for the music-smoothing review, an APM timeline through
-the sequencer with no device, is a test-only
-harness in a scratch repository. `AudioEngine.RenderMusic` now renders placed
-patterns offline; a verb of vif's, since stapes imports nothing of the game,
-would drive an APM timeline through the conductor's tier and tempo policy over
-it and write the WAV.
+The conductor's timeline, patterns by tier from an APM trace, lacks a path to
+the engine's offline render, `AudioEngine.RenderBars`, which takes a tempo a
+bar or a beat as the conductor's slew needs. A verb of vif's, since stapes
+imports nothing of the game, would drive an APM timeline through the
+conductor's tier and tempo policy over it and write the WAV.
 
 ### Play a song in the game
 
