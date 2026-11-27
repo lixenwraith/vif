@@ -86,7 +86,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Host loss | The session's policy, its host's to choose and `host` unless it asked for `migrate`. `host`: nobody takes the session, and every survivor continues alone once its redial ends. `migrate` (`-authority migrate`, `:host <doors> migrate`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about 0.7 s behind at the default tick, and predicts nothing; it takes each later starting point as a correction (§5.8). |
-| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and a `vifs://` front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and the tick interval, seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The tick interval, seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor, and applies a peer's artifact only if its type is one a producer sends, tagged as it sends it, from one who may author it (`crossingRules`, `event.Crosses`): the authority, a participant that plays or any, a combat hit naming its sender's cursor as owner and emitter. What an artifact names inside that is not yet held to what its sender could mean ([todo](todo.md#hold-a-crossings-content-to-what-its-sender-could-mean)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
+| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and a `vifs://` front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and the tick interval, seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The tick interval, seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor, and applies a peer's artifact only if its type is one a producer sends, tagged as it sends it, from one who may author it (`crossingRules`, `event.Crosses`): the authority, a participant that plays or any, a combat hit naming its sender's cursor as owner and, if any, emitter. What an artifact names inside that is not yet held to what its sender could mean ([todo](todo.md#hold-a-crossings-content-to-what-its-sender-could-mean)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -202,7 +202,7 @@ An install classifies queued and later-arriving frames as follows:
 | Ordinary frame, any source | `frame.Seq <= Header.Crossings.Seq(source)` |
 | Ordinary frame whose source the header does not name | never — nothing is claimed about it |
 | Barrier-bound frame, any source | `frame.ApplyTick <= Header.Tick` |
-| A hold, a rate or a reset | never — no capture holds one |
+| A hold, a rate or a reset | never — no capture holds one; a hold with `frame.ApplyTick <= Header.Tick` that its host has produced past has ended, and goes (§3.6) |
 
 The sequence rule is the whole rule for ordinary frames — the tick never decides
 one — and the tick rule is the rule for barrier-bound ones: they apply at one
@@ -621,7 +621,7 @@ answers:
 |---|---|
 | Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it, but for a relay's fork from a host-policy session, whose `-relay` door goes on for the people it relayed (§5.5). In a **migrate** session a participant whose player turned Take over as host on binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, and asks for it by itself, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. A player who did not ask, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every host-policy session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, `vifs://` where TLS fronts it, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
 
 **A relay authors nothing and still answers for what is behind it.** The term
 holder is the session's one authority, named to every participant, and it moves
@@ -690,7 +690,7 @@ The procedure on each survivor is:
 
 1. **Stop, and flood a loss notice.** Nobody plays on in a world the next host is
    about to replace, so a survivor freezes its clock when it sees its authority go,
-   by its own link, a notice or a record reaching it first (`TimeControl.Freeze`).
+   by its own link, a notice or a record reaching it first (`engine.HoldFreeze`).
    The freeze is the hold the session itself asks for, settled at once as the end
    of one is (§3.6), so a replay stands still in the pass the run did. Only a direct
    neighbor of the authority sees the link drop, and the departure crossing that
@@ -1018,8 +1018,8 @@ a terminal's or a desktop window's in `places.json` under the user's state
 directory and Android's in the app's files, so a restart, a crash or a reboot comes
 back to them, unless
 `[session] resume_after_restart` is off. When the door asks (`MsgAuthResponse`, a
-nonce), before it assigns a place, a dial proves its keys over the nonce and the
-door's channel binding (`MsgAuthRequest`): a fresh one first for the place it may be
+nonce), before it assigns a place, a dial proves its keys over the nonce
+(`MsgAuthRequest`), unbound on every route: a fresh one first for the place it may be
 given, then those it keeps of its kind, a seat its bots' and a player its own. A key an
 away entry carries takes that place back, a full session's too: the same identity,
 slot and cursor, held for that dial until its arrival crosses, so no newcomer is
@@ -1092,9 +1092,10 @@ the same way. The roster carries public keys alone
 and a proof is good for one nonce at one door, so no other peer can take a place
 from what it reads; a relay carries a dial's proofs to the authority over a
 challenge it asked the authority for (`RelayNonce`), so it can take none either. A
-proof whose signature fails is refused `RefusalCredential`. The link stays plaintext
-by decision ([Auth and session design](auth-session-design.md)), so what the key
-does not stop is whoever is on the path taking the stream after the proof.
+proof whose signature fails is refused `RefusalCredential`. A link outside TLS stays
+plaintext by decision ([Auth and session design](auth-session-design.md)), so what
+the key does not stop there is whoever is on the path taking the stream after the
+proof.
 
 **Under a hold.** A held session reaches no tick to apply a departure at (§3.6), so
 its door reads as away each participant whose last roster change scheduled is the
@@ -1246,10 +1247,11 @@ link to the authority to tell; a relay has one.
 
 **The router routes doors.** `vif-router` places a dial by the name in its first
 frame on the pod that answers to it; a **tunnel** is a door it places the same way. A
-run publishes its door through the router (`-relay vif://<site>:7777`, the router's
-address and no name) by holding a control connection open to the front door: the
-router names the door, from the pods' identifier space, and answers with the link
-(`vif://<site>:7777/<id>`) and a token the run resumes the same name with after a
+run publishes its door through the router (`-relay vif://<site>:7777`, `vifs://`
+where TLS fronts it, the router's address and no name) by holding a control
+connection open to the front door: the router names the door, from the pods'
+identifier space, and answers with the link (`vif://<site>:7777/<id>`, `vifs://`
+under TLS) and a token the run resumes the same name with after a
 blip, within `NetworkTunnelResumeWindow` of losing its control connection, a name
 the router never issued being nobody's to take; the run declares that link as its
 door. For each dial the front door places on
@@ -1509,11 +1511,11 @@ growing correction, persistent lag, repeated suffix unavailability, transport
 loss on a healthy local link, or shared actors changing backward after a
 correction.
 
-An own pause, speed, step, breakpoints and raw shared mutation (`:system`, `:emit`,
+An own pause, step, breakpoints and raw shared mutation (`:system`, `:emit`,
 `:region`) are refused in a live session. They are instance-local operations and
 cannot stop or mutate only one copy of it; a host whose only links are its own bot
-seats may still pause (`SessionState.SeatsOnly`), and the host's hold stops every
-participant (§3.6). The programmatic surface refuses by the event's declared class
+seats may still pause (`SessionState.SeatsOnly`), and the host's hold and rate move
+every participant (§3.6). The programmatic surface refuses by the event's declared class
 (`App.shareOperator`): `App.SetupMap` and `App.Region` carry `ClassShared`
 payloads, which `event.OnWire` never transports, so no participant may originate one
 in a live session — the authority included. `App.Reset` is `ClassBus`, so it crosses
@@ -1541,9 +1543,10 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
 
 ### Deferred by decision
 
-1. **Confidentiality.** TLS carries a `vifs://` front door (not the deployed one),
-   the browser route as far as the site's edge and a player's wss doors; `vif://`
-   and ws doors and the router's tunnels to published doors stay plaintext
+1. **Confidentiality.** TLS carries a `vifs://` front door and a door a run
+   publishes through it, the deployed ones as far as the site's edge, the browser
+   route as far as that edge, and a player's wss doors; `vif://` and ws doors stay
+   plaintext
    ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
    A participant proves its key at admission, peer links are proved both ways and
    reports and handoff records are signed (§5.4); loss notices are structurally

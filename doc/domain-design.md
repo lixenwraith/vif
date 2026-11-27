@@ -132,9 +132,10 @@ correction repairs a difference.
 
 `barrierBound` names the set: arrival, departure and full reset, which create or
 destroy shared identity; the swarm, quasar and behavior spawn requests and the
-species land request, which allocate it; and a drain's defeat and a cursor's
-defeat state, which advance the progression a region gates its spawns on or
-rebuild the map.
+species land request, which allocate it; a drain's defeat and a cursor's defeat
+state, which advance the progression a region gates its spawns on or rebuild the
+map; and the hold, the rate and the restart of every Wraith's wait, which take
+effect from one tick on every participant (multi-player.md §3.6, §5.4).
 
 ### D-4 — Wire payloads name Shared entities only
 
@@ -444,7 +445,7 @@ Declared system carriers are:
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity; a blue attack's pending swarm is its materialize, in the stores |
-| `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
+| `meta` | kill tallies, defeat latches and the tick each was set, reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration, scenery flag and per-level sub-cell phases |
 
 A carrier is also where a status cell the compared surface excludes has to live.
@@ -745,11 +746,12 @@ identity returns to the pool once its participant is dismissed, and a crossing
 sequence starts at one, so a fence kept from the previous holder would claim a
 capture already contains crossings the next holder has yet to produce.
 
-Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
+Step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
 instance-local operator actions and are refused while peers are live; so is an own
 pause, unless every linked participant is a bot seat this instance holds
-(`SeatsOnly`). Only the coordinator may hold or reset a live session, and both
-cross: a hold stops every participant after the same tick. The programmatic surface
+(`SeatsOnly`). Only the coordinator may hold, set the rate of or reset a live
+session, and each crosses: a hold stops every participant after the same tick, a
+rate changes on every one from the same tick. The programmatic surface
 takes the same rule through one guard: `App.SetupMap`, `App.Region` and
 `App.Reset` read the event's declared class, so the coordinator crosses a `Bus`
 request, a guest's is refused, and any other class is refused outright. Inspection
@@ -774,10 +776,11 @@ state.
 
 At 20 ticks/s the event stream is small relative to authoritative state: with the
 message header, an empty epoch is 19 bytes, four cursor moves are 55 bytes, and
-one owner-state sync of the cells that are set about 82 bytes. At the storm
-high-water fixture (`TestCostAtTheStormHighWater` logs these), a plain capture is
-about 299 KiB, a compressed keyframe about 16.1 KiB, a compressed delta about
-6.8 KiB, and a converged manifest exchange 546 bytes.
+one owner-state sync of the cells that are set about 58 bytes
+(`TestWireEncodingBudget`). At the storm high-water fixture
+(`TestCostAtTheStormHighWater` logs these), a plain capture is about 352 KiB, a
+compressed keyframe about 4.1 KiB, a compressed delta about 3.0 KiB, and a
+converged manifest exchange 634 bytes.
 
 ## 5. Telemetry and snapshot views
 

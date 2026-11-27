@@ -1,8 +1,8 @@
-// Package membership keeps a run's place in its session: it hosts and joins, holds
-// the lobby and the start gates, admits and relays, keeps the roster, the keys a
-// player comes back under and the Wraiths of whoever is away, seats the run's bots,
-// and answers the half of converge.Instance the authority protocol moves. It reads
-// the run through Run alone, which also plays its seats and replaces it.
+// Package membership keeps a run's place in its session: it hosts, joins or only
+// watches, holds the lobby and start gates, admits, relays and feeds an audience,
+// keeps the roster, the keys a player comes back under and the Wraiths of whoever
+// is away, seats the run's bots, finds games nearby, and answers the half of
+// converge.Instance the authority protocol moves, reading the run through Run.
 package membership
 
 import (
@@ -188,11 +188,9 @@ type Membership struct {
 }
 
 // Run is what the membership reads of the run beyond its world and its session
-// half: its mode, script and geometry and the files it may load, where it stands and
-// how it is paced, the lobby it shows on, the journal and identity it writes a
-// session into, the Config and wiring a join builds on, the vacancy a dedicated host
-// resumes from, the run that replaces this one, and the screen and runs it plays its
-// seats in.
+// half: its mode, script, geometry and files, where it stands and its pace, its
+// lobby, the journal and identity it writes a session into, the base a join builds
+// on, a dedicated host's vacancy, the run replacing it, and its seats' screen and runs.
 type Run interface {
 	Mode() config.Mode
 	Scripted() bool

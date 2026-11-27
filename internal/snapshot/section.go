@@ -31,12 +31,10 @@ func applyMetaShard(mine *SharedCapture, sh CorrectionShard) error {
 	return nil
 }
 
-// applyStreamShard replaces the RNG stream positions the page owns.
-//
-// A stream absent from the authority's page is dropped rather than kept: the
-// stream inventory is a property of the build and of what the run has issued, and
-// a receiver holding a stream the authority does not would draw from a position
-// nobody else has.
+// applyStreamShard replaces the RNG stream positions the page owns. A stream absent
+// from the authority's page is dropped rather than kept: the inventory is the build's
+// and what the run issued, and a receiver holding a stream the authority does not
+// would draw from a position nobody else has.
 func applyStreamShard(mine *SharedCapture, sh CorrectionShard) error {
 	kept := mine.Streams[:0:0]
 	for _, st := range mine.Streams {
@@ -81,12 +79,11 @@ func applySystemShard(mine *SharedCapture, sh CorrectionShard) error {
 	return nil
 }
 
-// applyStatusShard replaces the compared status cells the page owns.
-//
-// The four registries are separate namespaces, so a cell's identity is its type
-// prefix and its key together, and a row whose prefix names no registry is refused
-// rather than dropped: it would otherwise remove a cell from the receiver and put
-// nothing back, which is a repair that makes the surface worse.
+// applyStatusShard replaces the compared status cells the page owns. The four
+// registries are separate namespaces, so a cell's identity is its type prefix and
+// key together, and a row whose prefix names no registry is refused rather than
+// dropped: dropping it would remove a cell and put nothing back, a repair that makes
+// the surface worse.
 func applyStatusShard(mine *SharedCapture, sh CorrectionShard) error {
 	next := StatusState{
 		Ints:    filterStatusCells(mine.Status.Ints, "i:", sh, func(c IntCell) string { return c.Key }),
