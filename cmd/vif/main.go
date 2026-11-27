@@ -48,30 +48,30 @@ const (
 	colorTrue = "true"
 )
 
-// CLI flags. helpSections describes every one, and flag.Usage prints that table
-// rather than these usage strings, which only have to agree with it.
+// CLI flags. helpSections describes every one and flag.Usage prints it, so no
+// registration carries a usage string.
 var (
-	flagColor    = flag.String("color", colorAuto, "Color depth: auto, 256 or true")
-	flagMute     = flag.Bool("mute", true, "Start muted or, =false, with sound; unset, vif.toml's [play] decides")
-	flagNoWait   = flag.Bool("nw", true, "Start each new game and seat each join at once or, =false, at a key or click; unset, vif.toml's [play] wait decides")
-	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
-	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
-	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
-	flagTick     = flag.Duration("tick", parameter.GameUpdateInterval, "Game time one tick advances; a host's is its session's, which joiners take")
-	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
-	flagGUI      = flag.Bool("g", false, "Open the game in a desktop window instead of the terminal")
-	flagCLI      = flag.Bool("cli", false, "Play in the terminal, whatever vif.toml or the build says")
-	flagMaxim    = flag.Bool("maximized", false, "Open the desktop window maximized; a terminal run ignores it")
-	flagFull     = flag.Bool("fullscreen", false, "Open the desktop window full screen; a terminal run ignores it")
-	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; with -g")
-	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
-	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
-	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal, or verify a -replay")
-	flagGames    = flag.Int("games", 0, "With -headless, how many games a bot alone whose graph learns plays at once; 0 is one more than the cores")
-	flagField    = flag.Bool("field", false, "With -watch or -headless, a bot alone plays what its populations field and learns nothing")
-	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
-	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
-	flagVer      = flag.Bool("version", false, "Print the build version and exit")
+	flagColor    = flag.String("color", colorAuto, "")
+	flagMute     = flag.Bool("mute", true, "")
+	flagNoWait   = flag.Bool("nw", true, "")
+	flagCheck    = flag.Bool("check", false, "")
+	flagSchema   = flag.Bool("schema", false, "")
+	flagSpeed    = flag.String("speed", "", "")
+	flagTick     = flag.Duration("tick", parameter.GameUpdateInterval, "")
+	flagSeed     = flag.Uint64("seed", 0, "")
+	flagGUI      = flag.Bool("g", false, "")
+	flagCLI      = flag.Bool("cli", false, "")
+	flagMaxim    = flag.Bool("maximized", false, "")
+	flagFull     = flag.Bool("fullscreen", false, "")
+	flagScale    = flag.Int("scale", 1, "")
+	flagReplay   = flag.String("replay", "", "")
+	flagScript   = flag.String("script", "", "")
+	flagHeadless = flag.Bool("headless", false, "")
+	flagGames    = flag.Int("games", 0, "")
+	flagField    = flag.Bool("field", false, "")
+	flagWatch    = flag.Bool("watch", false, "")
+	flagHelp     = flag.Bool("h", false, "")
+	flagVer      = flag.Bool("version", false, "")
 
 	flagAudioBackend string
 	flagConfig       = newConfigFlags()
@@ -98,20 +98,17 @@ func init() {
 	flagConfig.register(flag.CommandLine)
 	flagLogs.register(flag.CommandLine)
 	flagSession.register(flag.CommandLine)
-	audioHint := "Play through one output alone: pulse, alsa or wasapi, a player such as pw-cat, null, or wav:path"
-	flag.StringVar(&flagAudioBackend, "ab", "", audioHint)
-	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
-	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
-	flag.BoolVar(flagGUI, "gui", false, "Open the game in a desktop window instead of the terminal")
-	flag.BoolVar(flagNoWait, "no-wait", true, "Start each new game and seat each join at once or, =false, at a key or click; unset, vif.toml's [play] wait decides")
-	flag.StringVar(flagReplay, "r", "", "Replay a recorded journal instead of playing")
-	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
-	flag.Var(&flagJournal, "j", journalHint)
-	flag.Var(&flagJournal, "journal", journalHint)
-	musicHint := "Record the music as WAV; -mw=DIR overrides the user-state directory"
-	flag.Var(&flagMusicWAV, "mw", musicHint)
-	flag.Var(&flagMusicWAV, "music-wav", musicHint)
-	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; -dev=false disables")
+	flag.StringVar(&flagAudioBackend, "ab", "", "")
+	flag.StringVar(&flagAudioBackend, "audio-backend", "", "")
+	flag.BoolVar(flagHelp, "help", false, "")
+	flag.BoolVar(flagGUI, "gui", false, "")
+	flag.BoolVar(flagNoWait, "no-wait", true, "")
+	flag.StringVar(flagReplay, "r", "", "")
+	flag.Var(&flagJournal, "j", "")
+	flag.Var(&flagJournal, "journal", "")
+	flag.Var(&flagMusicWAV, "mw", "")
+	flag.Var(&flagMusicWAV, "music-wav", "")
+	flag.Var(&flagDev, "dev", "")
 
 	// The `flag` package writes its own usage to stderr and exits non-zero, which
 	// is right for a mistake and wrong for a question. Asking is handled in main.
@@ -670,25 +667,24 @@ type configFlags struct{ resource.Options }
 func newConfigFlags() *configFlags { return &configFlags{} }
 
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.Dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/ bot/")
-	fs.StringVar(&f.Music, "config-music", "", "Music pattern override TOML")
-	fs.StringVar(&f.Sounds, "config-sounds", "", "Sound definition override TOML")
+	fs.StringVar(&f.Dir, "config-dir", "", "")
+	fs.StringVar(&f.Music, "config-music", "", "")
+	fs.StringVar(&f.Sounds, "config-sounds", "", "")
 
 	for _, alias := range []struct {
-		short, long, hint string
-		into              *string
+		short, long string
+		into        *string
 	}{
-		{"s", "config-scenario", "Installed scenario name or path below scenario/, scenario.toml, a scenario directory, or a web link to either", &f.Scenario},
-		{"f", "config-content", "Content directory, or a single content file", &f.Content},
-		{"k", "config-keymap", "Keymap TOML, or the name of one in input/ or built in, as vim", &f.Keymap},
+		{"s", "config-scenario", &f.Scenario},
+		{"f", "config-content", &f.Content},
+		{"k", "config-keymap", &f.Keymap},
 	} {
-		fs.StringVar(alias.into, alias.short, "", alias.hint)
-		fs.StringVar(alias.into, alias.long, "", alias.hint)
+		fs.StringVar(alias.into, alias.short, "", "")
+		fs.StringVar(alias.into, alias.long, "", "")
 	}
 
-	embedded := "Use the embedded scenario and content; refuses -s and -f and ignores vif.toml's scenario and content"
-	fs.BoolVar(&f.Embedded, "d", false, embedded)
-	fs.BoolVar(&f.Embedded, "config-embedded", false, embedded)
+	fs.BoolVar(&f.Embedded, "d", false, "")
+	fs.BoolVar(&f.Embedded, "config-embedded", false, "")
 }
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.
@@ -742,58 +738,34 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.host, "host", "", "Host a session at one or more doors, comma-separated: :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket")
-	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given")
-	fs.StringVar(&f.spectate, "spectate", "", "Spectate a session at an address -join takes: watch it from one of its players, taking no place in it; a slot after the address names the player looked from first")
-	fs.StringVar(&f.spectators, "spectators", "", fmt.Sprintf(
-		"How many spectators a session this run hosts feeds at once, 0..%d; 0 takes none (default %d)",
-		parameter.FeedAudienceMax, parameter.FeedAudience))
-	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
-	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player at one or more doors, e.g. :7777 or :7777,wss://:7778")
-	fs.StringVar(&f.cert, "cert", "", "Certificate chain a wss:// host serves, a PEM file; for -host, -serve or :host")
-	fs.StringVar(&f.key, "key", "", "The certificate's private key, a PEM file; default the -cert file")
-	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins")
-	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or sha256:<hex> pinning the certificate itself")
-	fs.StringVar(&f.passphrase, "passphrase", "", "The passphrase this run's doors take (Argon2-SCRAM), or new for one made and printed; with -join, the one shown to a door that asks")
-	fs.StringVar(&f.admit, "admit", "", "What a -host or -serve door admits beside a pass: open (default), or ticket:<key>[,<key>], the site's tickets under the router's public key(s) and no bare key")
-	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
-	fs.StringVar(&f.size, "size", "", "Size WxH a run's map is fixed at, or fit for its screen's as it starts")
-	fs.DurationVar(&f.firstJoin, "first-join", 0,
-		"With -serve, exit if no guest has connected within this duration, e.g. 90s; 0 waits forever")
-	fs.DurationVar(&f.empty, "empty", 0,
-		"With -serve, exit this long after the last guest leaves, e.g. 90s; 0 keeps the session")
-	fs.DurationVar(&f.drain, "drain", 0,
-		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
-	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Ceiling on the roster, itself included (2..%d; with -serve, guests only, 1..%d; default the whole roster); with a -join site, the one requested",
-		parameter.MaxPlayers, parameter.MaxPlayers))
-	fs.StringVar(&f.bot, "bot", "", fmt.Sprintf(
-		"Add bots using [N[:graph]|graph]: one where no count is given, and the scenario's own bot where no graph is, %s for a scenario that carries none. "+
-			"It takes the words of :bot, %s: drop is a run's, and a verb that keeps bot files acts and exits", app.DefaultBotGraph, engine.BotUsage("")))
-	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
-		"With -join in a %q session, listen at this address so this run can take the session over, "+
-			"whatever [play] takeover says; the session shares what is bound with its players. "+
-			"A run with takeover on and no -listen binds the host's own port, else an OS-assigned one",
-		authorityMigrate))
-	fs.StringVar(&f.relay, "relay", "",
-		"With -join, admit participants that cannot reach the host at this address and carry their traffic on this participant's link")
-	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
-		"With -host or -serve, the window a participant's lateness is judged over; 0 never evicts")
-	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond,
-		"With -host or -serve, evict a participant whose crossings reach the authority late this often per second of game time; 0 ignores lateness")
-	fs.Float64Var(&f.slow.BytesPerSecond, "slow-bytes", parameter.NetworkSlowBytesPerSecond,
-		"With -host or -serve, and whose link carries at least this many bytes per second of game time; 0 ignores throughput")
+	fs.StringVar(&f.host, "host", "", "")
+	fs.StringVar(&f.join, "join", "", "")
+	fs.StringVar(&f.spectate, "spectate", "", "")
+	fs.StringVar(&f.spectators, "spectators", "", "")
+	fs.StringVar(&f.name, "name", "", "")
+	fs.StringVar(&f.serve, "serve", "", "")
+	fs.StringVar(&f.cert, "cert", "", "")
+	fs.StringVar(&f.key, "key", "", "")
+	fs.BoolVar(&f.selfsign, "selfsign", false, "")
+	fs.StringVar(&f.ca, "ca", "", "")
+	fs.StringVar(&f.passphrase, "passphrase", "", "")
+	fs.StringVar(&f.admit, "admit", "", "")
+	fs.StringVar(&f.probe, "probe", "", "")
+	fs.StringVar(&f.size, "size", "", "")
+	fs.DurationVar(&f.firstJoin, "first-join", 0, "")
+	fs.DurationVar(&f.empty, "empty", 0, "")
+	fs.DurationVar(&f.drain, "drain", 0, "")
+	fs.IntVar(&f.players, "players", 0, "")
+	fs.StringVar(&f.bot, "bot", "", "")
+	fs.StringVar(&f.listen, "listen", "", "")
+	fs.StringVar(&f.relay, "relay", "", "")
+	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow, "")
+	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond, "")
+	fs.Float64Var(&f.slow.BytesPerSecond, "slow-bytes", parameter.NetworkSlowBytesPerSecond, "")
 	f.shed.Share = parameter.NetworkShedShare
-	fs.DurationVar(&f.shed.Window, "shed-window", parameter.NetworkShedWindow, fmt.Sprintf(
-		"With -host or -serve, the window the host's own tick keeping is judged over: dropping more than %.0f%% of its ticks there, it drops its newest bot, then its newest player; 0 never sheds",
-		parameter.NetworkShedShare*100))
-	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
-		"What losing the authoring participant does: %q ends the session and leaves every "+
-			"survivor playing alone, %q hands it to a guest that allowed taking over "+
-			"([play] takeover), whose address the session shares. Default %q",
-		authorityHost, authorityMigrate, authorityHost))
-	fs.BoolVar(&f.noCheats, "no-cheats", false,
-		"Refuse :god, :demon, :energy, :heat, :boost and :w in this run and to every player of a session it hosts")
+	fs.DurationVar(&f.shed.Window, "shed-window", parameter.NetworkShedWindow, "")
+	fs.StringVar(&f.authority, "authority", "", "")
+	fs.BoolVar(&f.noCheats, "no-cheats", false, "")
 }
 
 // authorityMigrate and authorityHost are the two -authority words, the ones
@@ -1202,22 +1174,20 @@ func newLogFlags() *logFlags {
 // register installs the logging flags and their aliases.
 func (f *logFlags) register(fs *flag.FlagSet) {
 	for _, alias := range []struct {
-		short, long, hint string
-		value             flag.Value
+		short, long string
+		value       flag.Value
 	}{
-		{"l", "log", "Enable logging; -l=DIR overrides " + paths.DefaultLogDir(), &f.dir},
-		{"lv", "log-level", "Log level: trace, debug, info, warn or error; implies -l", &f.level},
-		{"ls", "log-scope", "Which subsystems log; see the Scopes note in -h; implies -l", &f.scope},
-		{"lt", "log-stat", "Status snapshot period in game ticks, 0 disables; implies -l", &f.stat},
-		{"lr", "log-recorder", "Flight recorder depth in game ticks, 0 disables; implies -l", &f.rec},
+		{"l", "log", &f.dir},
+		{"lv", "log-level", &f.level},
+		{"ls", "log-scope", &f.scope},
+		{"lt", "log-stat", &f.stat},
+		{"lr", "log-recorder", &f.rec},
 	} {
-		fs.Var(alias.value, alias.short, alias.hint)
-		fs.Var(alias.value, alias.long, alias.hint)
+		fs.Var(alias.value, alias.short, "")
+		fs.Var(alias.value, alias.long, "")
 	}
-	fs.Var(&f.session, "log-session-id",
-		"Attach a session ID to every application log record; implies -l")
-	fs.BoolVar(&f.console, "log-stdout", false,
-		"Write the log to stdout as JSON instead of to a file; implies -l")
+	fs.Var(&f.session, "log-session-id", "")
+	fs.BoolVar(&f.console, "log-stdout", false, "")
 }
 
 // enabled reports whether any logging flag was supplied.

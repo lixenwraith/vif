@@ -271,17 +271,6 @@ Smallest fix: "...require app.RunScript or app.RunBot", naming a bot's run besid
 the script in `ModeHeadless`'s comment too
 (`internal/app/internal/config/config.go:35`).
 
-### Drop the flag usage strings the help never prints
-
-- Priority: P3, to review
-- Affected files: `cmd/vif/main.go`
-
-`flag.Usage` prints `helpSections` (`main.go:118`), so no registration's usage
-string is ever shown, yet the comment at `main.go:51` has them agree with it, and
-two do not: `-join` (`main.go:746`) lacks `vifs://` and `-relay` (`main.go:778`)
-`vif://<router>`, forms the table and the parser take. Pass `""` for each, drop the
-hint locals and fields, and reword the comment to match.
-
 ### Count a self-declared bot as no person when a dedicated host sizes its map
 
 - Priority: P3, to review
