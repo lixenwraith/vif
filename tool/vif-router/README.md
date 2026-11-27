@@ -252,7 +252,8 @@ behind a shared address is held to its own budget, not its neighbors'.
 
 A run that joined a session and relays for people who cannot reach the host can
 publish its `-relay` door through the router instead of binding one (`vif -join …
--relay vif://<site>:7777`): it sends `MsgSessionPublish` on the front door and
+-relay vif://<site>:7777`, `vifs://` under the edge's TLS): it sends
+`MsgSessionPublish` on the front door and
 holds the stream as its control connection, and the router names the door from the
 pods' identifier space and answers with the link (`vif://<site>:7777/<id>`) and a
 token the run resumes the same name with after a lost connection. A dial on that
