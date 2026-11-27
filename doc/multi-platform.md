@@ -776,7 +776,8 @@ The configuration menu is the page's own, a `<dialog>` drawn from the run's
 snapshot and answering with ops, as Android's app draws it (`menuPresentation`,
 [Native menu §8](native-menu.md#8-browser)), on a mouse's page and a finger's alike.
 A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
-keyboard would, to cycle the channels.
+keyboard would, to cycle the channels, and its menu button Ctrl-G: a phone's
+browser may have no Back to open the menu with, where Android's app always has.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` and a
