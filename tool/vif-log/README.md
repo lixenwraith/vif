@@ -15,7 +15,7 @@ The two share an envelope (`time`, `level`, `sub`, `run`, `tick`, `fields`), so 
 * **Index pass**: a hand-rolled RFC3339Nano parser and JSON tokenizer (`internal/logfile`) build a pointer-free 48-byte `Meta` row per record; `sub` and `msg` strings are interned to integer IDs.
 * **Background indexing**: the index publishes to the render loop without locks. A single file publishes as it scans, so the UI is usable while a large one loads; several files scan in parallel and publish once, merged.
 * **Multi-source merge**: several `.jsonl` files (a client and a server, or a log and its journal) merge stably by nanosecond timestamp without rewriting the row index.
-* **Snapshot collapse**: the status registry's periodic `sub:"stat"` snapshots (around 40 records each) collapse into one navigable row (`filter.Collapse`); `Enter` expands one.
+* **Snapshot collapse**: the status registry's periodic `sub:"stat"` snapshots (around a hundred records each) collapse into one navigable row (`filter.Collapse`); `Enter` expands one.
 * **Cost-ordered filters**: predicates that read only the index row (`level`, `snap`, `dom`, `tick`, `run`, `sub`, `msg`, pins) run first; `fields` and an all-column or `fields` search read the line through a per-source sliding window, only for records that survive. The pass is incremental: 40 ms of filtering on a filter change, then 8 ms per tick.
 
 ## Journal Support

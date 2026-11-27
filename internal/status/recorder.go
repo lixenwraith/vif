@@ -289,9 +289,9 @@ func (rc *Recorder) CrashFlush() {
 	rc.Flush(TrigCrash)
 }
 
-// Flush writes the current window. Safe from any goroutine, but a concurrent
-// sample may overwrite the oldest slot mid-read; the tick stamps in the window
-// header make that visible rather than silent.
+// Flush writes the current window. Only the tick goroutine's drain and the crash
+// path call it: a concurrent sample overwrites slots mid-read and can tear a string
+// header in bufS, which the crash path accepts since the process is ending.
 func (rc *Recorder) Flush(reason string) {
 	if rc.tick == nil || !rc.flushing.CompareAndSwap(false, true) {
 		return

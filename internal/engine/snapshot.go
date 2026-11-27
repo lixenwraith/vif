@@ -5,13 +5,10 @@ import (
 	"github.com/lixenwraith/vif/internal/status"
 )
 
-// SnapshotContext emits the state an on-demand dump needs that the registry does
-// not carry: geometry, camera, cursor placement, and the operator session.
-// Five records. context, world and player are shared simulation state and must
+// SnapshotContext emits the five records an on-demand dump needs that the registry
+// does not carry. context, world and player are shared simulation state and must
 // match across instances; view and session are owner-authored, and a consumer
-// comparing two instances drops both — see App.SnapshotShared. The player record
-// carries the shared roster size only: the local binding lives in view, because a
-// remote participant binds a different slot to a different entity.
+// comparing two instances drops both (App.SnapshotShared).
 // Caller MUST hold updateMutex — reads Config, Positions and Systems.
 func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 	cfg := ctx.World.Resources.Config
@@ -30,13 +27,10 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 		"color_mode", int(cfg.ColorMode)}
 
 	// Roster size is shared; which slot this instance drives, and where that cursor
-	// stands, is this instance's binding and travels with the view record.
-	//
-	// The cell reported is the one this instance is looking at and typing against,
-	// so it is the D-18 prediction while this participant's own placements are
-	// outstanding, with the depth of that queue beside it. This is the only record
-	// the prediction appears in: it is owner-authored input the shared world has not
-	// agreed yet, and a consumer comparing two instances drops the whole record.
+	// stands, is this instance's binding and travels with the view record: the cell
+	// it types against, the D-18 prediction while its own placements are outstanding,
+	// with the queue's depth. No other record carries the prediction, input the
+	// shared world has not agreed yet, so a comparison drops the whole record.
 	player := ctx.World.Resources.Player
 	view = append(view,
 		"entity", uint64(player.Entity),

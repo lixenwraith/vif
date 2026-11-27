@@ -17,12 +17,8 @@ type Handler interface {
 	EventTypes() []EventType
 }
 
-// Router dispatches events to registered handlers
-//
-// Architecture:
-//   - Single-threaded dispatch
-//   - Multiple handlers can register for the same event type
-//   - Handlers are invoked in registration order
+// Router dispatches events to registered handlers one at a time, a type's
+// handlers in registration order
 type Router struct {
 	queue *EventQueue
 	// EventType is contiguous in [0, EventTypeCount)

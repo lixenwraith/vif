@@ -274,8 +274,7 @@ func trimFloat(tok []byte) []byte {
 }
 
 // payloadText decodes a journal record's payload with the game's own codec and
-// shows the prototype as its TOML, the text the journal used to carry; a payload
-// another build wrote shows as written.
+// shows the prototype as its TOML; a payload another build wrote shows as written.
 func payloadText(ev string, b64 []byte) ([]byte, bool) {
 	registry.Do(event.EnsureRegistry)
 	et, ok := event.GetEventType(ev)

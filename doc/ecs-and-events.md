@@ -77,7 +77,7 @@ Operational rules:
 - `GetComponent` returns a value copy; update it with `SetComponent`.
 - `GetPtr` exposes an in-store pointer for a hot path, but any append or removal
   from that store can invalidate it. A per-tick loop reads a large component
-  (`SnakeHead` 2,104 bytes, `Combat` 256) through it; one of 120 bytes or under
+  (`SnakeHead` 2,104 bytes, `Combat` 336) through it; one of 120 bytes or under
   is as well copied.
 - Entity slices returned for live iteration must not be used while structurally
   changing the same store. Collect work first or use a snapshot/copy helper.
@@ -192,9 +192,9 @@ place in the shared-world capture.
 
 | Group | Components |
 |---|---|
-| Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
+| Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Wraith`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
-| General behavior | `Particle`, `Tracer`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Ray`, `Spirit`, `Materialize` |
+| General behavior | `Particle`, `Tracer`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Ray`, `Pulse`, `Spirit`, `Materialize` |
 | Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower`, `Square`, `Kraken`, `Devourer`, `DevourerGut`, `Behavior` (every data species) |
 | Composite entities | `Header`, `Member` |
 | Transient effects and overlays | `Flash`, `Fadeout`, `Splash`, `Marker`, `Button` |
@@ -227,7 +227,8 @@ differs, and each behavior's contact rule and collision bookkeeping are its own.
 
 Resources carry state that has exactly one instance per world or coordinates
 services shared by many systems. `GameContext` creates the world resources, the
-app seeds `Rand` with the run seed, the systems that write `RouteGraph`,
+app seeds `Rand` with the run seed and sets `Behaviors`, `Loot` and `Maps` from the
+scenario before the systems are built, the systems that write `RouteGraph`,
 `Pursuit`, `Adaptation` and `Genetics` create them, services contribute `Files`,
 `Content` and `Audio`, and `Network` comes from the network service or a
 transport the app attaches.
@@ -235,9 +236,9 @@ transport the app attaches.
 | Resource | Role |
 |---|---|
 | `Time` | Tick-derived game time, the clock's real time, and the tick delta. |
-| `Config` | Map, viewport and camera geometry, crop policy, the scenario's map floor, and color mode. |
+| `Config` | Map, viewport and camera geometry, crop policy, cell aspect, the scenario's map floor, cursor rules and step, its content and navigation settings, and color mode. |
 | `Game` | Mode, game tick counter and APM. |
-| `Player` | Bounded cursor roster, occupied slots, the slot selected for local input/camera, and the D-18 placement prediction. |
+| `Player` | Bounded cursor roster, occupied slots, the slot selected for local input/camera and the one a spectator views from, and the D-18 placement prediction. |
 | `Event` | The event queue. |
 | `Rand` | Root seed and the labeled per-domain RNG streams systems draw in `Init` (D-8). |
 | `Target` | Resolved navigation target groups, written by `NavigationSystem`. |
@@ -245,6 +246,10 @@ transport the app attaches.
 | `Pursuit` | Navigation's field toward each cursor, published every tick and read for what one cursor owns (loot); a field is computed at its first read, which leaves the shared throttle phase alone (D-17). |
 | `Adaptation` | Per-gateway route-selection learner weights and pre-sampled route pools. |
 | `Genetics` | Population registry spawners sample genotypes from. |
+| `Behaviors`, `Loot`, `Maps` | The prototypes of the scenario's behavior programs and its loot kinds and drop tables, which the systems bind and size by, and its maps, which `:emit` resolves a payload's map name against. |
+| `Scenario` | The scenario machine's variables as the scheduler reads them out, for a behavior program's guards; a view, never copied with a world. |
+| `Machines` | Each machine species' state names, as its system built its graph, for the overlay that labels its instances. |
+| `Drift`, `Cave`, `Entry` | The drift's layers, the cave's scroll and rock look, and the lines the glyph spawner is feeding in, as the tick left them; derived, never copied with a world. |
 | `Transient` | Player-domain explosion presentation, the Krakens burning away, the Devourers drawing back and the walls a maze laid fading in. |
 | `View` | Player-domain screen effects: grayout, strobe, sight (a dark map, a trail) and this instance's button echo. |
 | `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
@@ -518,6 +523,7 @@ type GameEvent struct {
     Origin      Origin
     Domain      core.Domain
     Phase       EventPhase
+    Own         bool
 }
 ```
 
@@ -530,8 +536,9 @@ from `World.WithDomain` or explicit through `PushLocal`, `PushCrossing` and
 the dying entities' domain on a death batch (D-7, D-10). `CrossingSeq` marks this
 instance's own crossing as the barrier published it, and `Phase` marks a shared
 derivation a predicting guest may have to make again (`PhasePredicted`); a
-reward that follows one waits for `EventSpeciesKillConfirmed`. The dispatcher
-routes on none of them.
+reward that follows one waits for `EventSpeciesKillConfirmed`. `EventQueue.Push`
+stamps `Own` on a push this participant's own simulation made, which
+`event.OnWire` reads (§9). The dispatcher routes on none of them.
 
 `EventNone` is zero: the FSM's tick-transition sentinel (`Tick` in graphs) and
 the no-effect value of an effect field such as a death batch's. It is never
@@ -595,7 +602,8 @@ diagnostics](logging-and-diagnostics.md) §9.
 
 `internal/event/type.go` is the authoritative event list. Its declaration
 comments are consumed by generation to produce event names, payload reflection,
-the replication class table, schema output, and command-mode `:emit` support.
+the replication class table, the journal's payload codecs, schema output, and
+command-mode `:emit` support.
 The comment carries an optional payload type and a required replication class:
 
 	// EventFoo (FooPayload) [bus] short description
@@ -615,16 +623,16 @@ The catalog covers these domains:
 | Domain | Representative responsibilities |
 |---|---|
 | Session and map | map setup, terminal resize, reset, pause, time scale and stepping |
-| Audio and music | sound requests, mute state, music start/stop, beat and melody patterns, tempo, intensity, seed and swing |
-| FSM and meta | region control, system commands, cycle damage multiplier, overlays, status messages, debug views |
-| Player and input | cursor lifecycle/placement, character input, deletion, key capture and captured-input presses, mode, per-cursor energy, heat, boost, shield and weapons, nugget and gold jumps |
-| World structure | walls, maze, the scrolling cave, composites, gateways, towers, buttons, navigation targets and route graphs, wind and glyph drift |
-| Species and combat | spawn and cancel requests, creation, death, fusion and spirits, attacks and heals, explosions, projectiles, loot, genetics |
-| Visual effects | flash, fadeout, splash, particles, lightning, materialize, markers, motion markers, grayout and strobe |
+| Audio and music | sound requests, mute state, music start/stop, beat and melody patterns, tempo, intensity, seed, swing and the binaural bed |
+| FSM and meta | region control, the authority's transitions and a guest's asks for one, system commands, cycle damage multiplier, overlays, status messages, debug views |
+| Player and input | cursor lifecycle/placement and a bot's respawn, character input, deletion and retyping (`r`, `~`, undo), key capture and captured-input presses, mode, per-cursor energy, heat, ember, burst meter, boost, shield and weapons, death waves, nugget and gold jumps |
+| World structure | walls, maze, the scrolling cave, laid maps, glyph placement, composites, gateways and their holds, sends and waves, towers, the magic square, buttons, navigation targets and route graphs, wind and glyph drift |
+| Species and combat | spawn and cancel requests, creation, death, behavior signals, fusion and spirits, attacks and heals, explosions, projectiles, loot, genetics |
+| Visual effects | flash, fadeout, splash, particles, lightning, materialize, markers, motion markers, grayout, strobe and sight, a maze's walls fading in, a Kraken's burn, a Devourer's recede |
 | Multiplayer network | connect/disconnect, participant join/departure, playout lead, cursor state sync, session state |
 
 Payload ownership depends on the event. Death requests, explosion batches, typed
-characters and the flash, particle and fadeout batch payloads are pooled and
+characters and the flash, fadeout, scatter and particle batch payloads are pooled and
 returned by their consumer; handlers must treat payloads as borrowed for the
 duration of `HandleEvent`. A handler that needs data later should copy the
 fields it owns into a component, resource, or new value.
@@ -660,7 +668,7 @@ fields it owns into a component, resource, or new value.
 | Generic store | `internal/engine/store.go` |
 | Generated stores/masks/domains | `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
 | Positions and grid | `internal/engine/position.go`, `internal/engine/rock.go`, `pkg/position` |
-| Resources | `internal/engine/resource.go`, `resource_transient.go`, `resource_audio.go` |
+| Resources | `internal/engine/resource.go`, `resource_transient.go`, `resource_kraken.go`, `resource_audio.go` |
 | Components | `internal/component/*.go`, `internal/manifest/definition.go` |
 | Composites | `internal/component/header.go`, `member.go`, `internal/system/composite.go` |
 | Events and producer origins | `internal/event/type.go`, `payload.go`, `origin.go`, `class.go`, `queue.go`, `router.go`, `pool.go`, `batch_pool.go` |

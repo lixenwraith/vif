@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// Integer metric encoding is carried by the key suffix; no metadata is
-// stored and the log emits raw values. Display consumers — overlay, status
-// bar, log viewer — resolve through here so the convention has one owner.
+// Integer metric encoding is carried by the key suffix; no metadata is stored and
+// the log emits raw values. The overlay's cards resolve a key through here; vif-log
+// reads a record's projected field names by their last segment instead.
 var intUnits = []struct {
 	suffix string
 	scale  time.Duration
