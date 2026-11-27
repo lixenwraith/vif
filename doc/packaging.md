@@ -225,7 +225,13 @@ replacements that stop the build unless each happens exactly once. `node
 script/extension-check.mjs bin/vif-chrome` loads the build headless in
 Playwright's Chromium and holds it to the start screen, a frame, the share link
 and a silent network; the release workflow runs it before the zip joins a
-release ([Platforms §5](multi-platform.md#the-chrome-extension)).
+release ([Platforms §5](multi-platform.md#the-chrome-extension)). Chrome's
+permission prompt is the browser's window, not the page's, so a headless run
+leaves `chrome.permissions.request` pending for good: under `Xvfb` with
+`headless: false` it shows, `import -window root` captures it and
+`xdotool mousemove <x> <y> click 1` answers it. A stubbed `chrome.permissions`
+covers the page's logic, and a scratch manifest holding the host as
+`host_permissions` the fetches a grant would allow.
 
 - **Version.** Chrome's is one to four integers up to 65535, not all zero, and an
   upload must be larger than the last. `EXT_VERSION` is `X.Y.Z.N`: the tag's
@@ -322,6 +328,18 @@ tar -xJf SteamLinuxRuntime_4.tar.xz
 SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -check -s td
 SteamLinuxRuntime_4/run -- "$PWD/bin/steam/linux/bin/vif" -fullscreen
 ```
+
+`run` is pressure-vessel, which needs no Docker and works as root in a cloud
+container, under `Xvfb` with `LIBGL_ALWAYS_SOFTWARE=1`. It takes the machine's
+graphics libraries (`/usr/lib/pressure-vessel/overrides`), so what the runtime
+itself lacks shows only in its platform image
+(`com.valvesoftware.SteamRuntime.Platform-amd64,i386-steamrt4-sysroot.tar.gz`,
+beside the archive; `repo.steampowered.com` serves both with a `SHA256SUMS`),
+unpacked and entered with `chroot`. Mount `/proc` in it, since `os.Executable`
+reads `/proc/self/exe` and the wad beside `bin/` is found by it; an `Xvfb` of the
+machine is reached by its display number, an abstract socket no chroot hides, and
+a sound server outside by its socket file hard-linked under the root, whose own
+path is too long to bind a socket in.
 
 The check's lines must name files under the depot's `wad/`, as §7's name the
 staged root. Steam Linux Runtime 4.0 (4.0.20261021, Debian 13) holds

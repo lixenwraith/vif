@@ -243,6 +243,16 @@ The event queue offers each event to the FSM before system handlers. For every
 unpaused region in its deterministic snapshot, the machine looks for matching
 transitions from leaf to root and executes the first whose guard passes.
 
+So a transition reads the world as the event found it (`Scheduler.dispatchOnePass`):
+a transition on an event guards on the world (`PayloadCursorDecides`), not on a
+status key the event is about to move. A transition on a request runs its entry
+before the system that handles the request, so what that system pushes lands after
+the entry's events ([FSM reference](fsm-reference.md#splash-text-and-glyph-lines)).
+A mode is the router's alone: the tutorial's `Stand` asks for Normal, which the
+router takes on its input tick, so a headless test runs `InputTick` too. What must
+follow a resize is an engine hook (`engine.Reflower`), not a transition on
+`EventScreenResize`, which acts on the map as it stood.
+
 Each region keeps a trigger mask of the event types its active path names, and
 the machine their union over unpaused regions, so an event no active state reacts
 to is rejected with one bit test. `Reacts` answers for every state, active or not,

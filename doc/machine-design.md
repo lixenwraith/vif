@@ -499,7 +499,10 @@ at load; only `Op.Holds` runs per evaluation.
   as species and styles, each program's signals, its loot kinds and its maps;
   `event.AuthoredPayload` decodes through it for a scenario's and a program's
   `EmitEvent`, `:emit` and a script's event, and `List` is what `-schema` prints
-  under `names`.
+  under `names`. A map's or a signal's enum takes `""` as its zero, naming none,
+  and the decode is the whole check: no `EmitEvent`, `:emit` or script checks a
+  name of its own. `:emit` builds its `component.Declared` from `Resources`
+  (`parseEventPayload`), so what it should name has to be readable there.
 
 `fsm.Machine` registers a name with the struct its arguments decode into, through
 generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
@@ -575,14 +578,15 @@ register a name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, the
 program's guards and probes numbered in load order), `Probe[A]`, `Effect[A]`,
 `Named[A]` (an effect whose payload names a species or a style, which the
-scenario's programs extend), `Sustained[A]`, `Emit` (an effect reading `event` and
-`origin` beside `payload`), `Flag(name, bit)` and `Fitting(key, build)` (a
-`[prototype]` table of the host's own, built once into what each spawn applies
-before its machine starts, as the game's `mount` pushes its `EventMountRequest`),
-with the host's `Integrate`, `Entered` and `Stalled` hooks. `Entries` lists them
-for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
-`BehaviorVocabulary` (`internal/system/behavior.go`) to `behaviorCtx`, refilled
-per instance:
+scenario's programs extend: the vocabulary is built before any program compiles,
+so `Named`'s build gets the set's payload names, where `Effect` decodes without
+them), `Sustained[A]`, `Emit` (an effect reading `event` and `origin` beside
+`payload`), `Flag(name, bit)` and `Fitting(key, build)` (a `[prototype]` table of
+the host's own, built once into what each spawn applies before its machine starts,
+as the game's `mount` pushes its `EventMountRequest`), with the host's
+`Integrate`, `Entered` and `Stalled` hooks. `Entries` lists them for `-schema`'s
+`vocabularies.behavior`. The game's verbs bind in `BehaviorVocabulary`
+(`internal/system/behavior.go`) to `behaviorCtx`, refilled per instance:
 
 - Predicates read the instance and the world: `TargetDistance`, `LineOfSight`,
   `HPFraction`, `Stunned`, `HasTarget`, `HitWall`, `AtEdge`, `Chance`, `Param` (the
@@ -869,7 +873,11 @@ Each rule above has a test named for it, beside its code:
 - `internal/system`: `quasar_test.go`, `swarm_stall_test.go`,
   `storm_attack_test.go`, `fuse_test.go` and `behavior_test.go` hold §4's and
   §6.4's rules. `aboutToExpire`, generic over the state type, starts an entry one
-  nanosecond before it expires.
+  nanosecond before it expires. A test there stepping `BehaviorSystem.Update` by
+  hand has no composite system and no scheduler: an instance a step ended stands
+  until the test delivers its `EventCompositeDestroyRequest`, so further steps end
+  it again, and `Chance` repeats one roll unless the test advances the tick
+  (`GameState.IncrementGameTicks`).
 - `internal/behavior`: IDs by sorted name, a compiled program stepping as its
   states say, a compile error naming program, place and key, the name rules, the
   vocabulary's entries. `internal/resource`: a program as a scenario file, and

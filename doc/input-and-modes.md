@@ -153,6 +153,10 @@ them, nor what an overlay shows. Leaving one returns to Normal, recorded when th
 changes the play mode, but for the command line the console opens, which returns
 to the console.
 
+A live run's mode changes only through the router (`transitionMode`), which keeps the
+input machine in step: a path that sets the play mode elsewhere leaves every key but
+Ctrl+Q dead.
+
 A scenario asks for Normal, Visual or Insert with `EventModeRequest { mode }`:
 `MetaSystem` leaves the ask on the context (`GameContext.AskMode`), and the router
 enters it as the mode's key would, before its next intent or on its input tick,
@@ -244,7 +248,8 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   of it, yanked rows on the rows below and above, a count that many copies on. A
   cell a glyph, a wall or rock holds is passed over, and the cursor goes to the
   far end of what was put, where a repeat continues. `p` pauses, so no default key
-  binds a put, nor then a yank, which nothing there would put.
+  binds a put, nor then a yank, which nothing there would put: a router test binds
+  `y` with `vimKeys`, an input test on its machine's own table.
 - **Change undo.** `undo_change` takes back the last delete, retype or put and
   `redo_change` makes it again, one a press, from the last `changeHistorySize`
   (64); a new change ends what could be redone. A change whose cells changed
@@ -263,7 +268,10 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
   it, or after `i`, `I`, `A`, `a`, `o` or `O`, up to `insertTextMax` (64)
   characters, is part of the change: `.` types it again over whatever glyphs stand
   there, so a repeat scores as typing does, then returns to Normal
-  (`Machine.Next`). A yank is no change.
+  (`Machine.Next`). `Next` types nothing until the router has entered Insert, so
+  whatever routes `Process`'s intent drains `Next` after it, settling each, as
+  `App.takeEventWith` and the test helpers `press` and `tutorialKeys` do. A yank
+  is no change.
 - **Visual.** The ping bounds are the selection, the cursor's cell with no shield
   up: `d`, `c` and `y` take every glyph the bounds cover at once, with no motion,
   as one block range, `r` and `~` retype each, and `*` and `#` search for the run
@@ -648,9 +656,10 @@ the first of:
 
 `make install-config` installs the built-in table as `input/keymap.toml`, or brings
 one already there up to date, and the embedded keymaps beside it. The retired
-action name `append` is an alias of `toggle_auto_fire`; vim's append is
-`mode_append`, which no default key binds, `a` cycling auto-fire.
-See [External filesystem layout](filesystem-layout.md) for the shared root policy.
+action name `append` is an alias of `toggle_auto_fire` (`resolveAction`), the one
+way a renamed action keeps a player's bindings; vim's append is `mode_append`,
+which no default key binds, `a` cycling auto-fire. See [External filesystem
+layout](filesystem-layout.md) for the shared root policy.
 
 A file is merged over the built-in table, and a run fills the player's own with
 each built-in binding it lacks unless it says `fill = false` (below), so every
@@ -737,6 +746,13 @@ table and says `fill = false`:
 A keymap `-k` names is read in place of a root's `input/keymap.toml`, never over
 it, so a player's own changes to the vim keymap go in a copy under another name.
 
+The built-in table is what a fill draws from, so another embedded keymap says
+`fill = false`, without which a copy's first upgrade gains the whole table, and needs
+its `put` line in the Makefile, as `vim.toml` has (`$(VIM_KEYMAP_SRC)`). Whether a
+name is a keymap's or a file's is `paths.IsKeymapName`'s test, in the resolver and
+in `Settings.resolve` alike, since a `[paths]` keymap name joined to the file's
+directory is lost.
+
 A scenario binds play keys for its run in its entry's `[keymap.normal]`,
 `[keymap.operator]`, `[keymap.prefix_g]` and `[keymap.normal_keys]`, merged over
 the default and the player's keymap, after the player's: an installed keymap is a
@@ -748,6 +764,8 @@ and open the menu and help stay the player's; a scenario breaking a rule fails t
 load. The tutorial, with no gun to cycle, no clock to stop and no fight to find a
 column in, binds the keys of §4's last item to vim's actions, but for the
 backtick, each as the vim keymap binds it.
+`TestTheVimKeymapPlaysTheKeysTheTutorialTaught` holds the two alike; a scenario
+cannot bind `pause`, which the vim keymap moves to `Ctrl-Z`.
 
 ## 11. Change checklist
 
@@ -764,6 +782,13 @@ When adding interaction behavior:
    in `commands.go`; a test fails on any command the help names that it lacks.
 6. Decide explicitly whether the action counts toward APM, can be recorded, can
    run from playback, and is allowed while paused.
+
+A router test that chains keys, a motion then what acts from its cell, applies each
+move and edit from the queue itself, a key at a time (`lineWorld` in
+`internal/mode/router_test.go`, read back with `screen`): in a bare world whose cursor
+entity carries no `CursorComponent`, `PushCursorMove` predicts nothing and only
+crosses `EventCursorMoveRequest`, which no `CursorSystem` applies, so `LocalCursor`
+stays put.
 
 ## 12. Source map
 

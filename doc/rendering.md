@@ -85,6 +85,14 @@ renderers:
 | Map | logical map width/height and centering offsets |
 | Host | complete terminal screen width/height |
 
+The frame's `GameTime` is the pacing clock, which a live run starts at its launch and
+a new game does not rewind; a driven run's manual clock starts at `SimEpoch`, as the
+simulation does. A phase a renderer takes off it therefore agrees with the simulation
+in every test and headless run and parts from it only live, where the square's orb
+was drawn 142° from where it struck: simulated motion is drawn from
+`TimeResource.GameElapsed` plus the time since the tick (`sinceTick`,
+`TestAnOrbIsDrawnWhereItStrikes`).
+
 There are three coordinate spaces:
 
 ```mermaid
@@ -260,6 +268,13 @@ Blend mode is encoded as an operation plus foreground/background flags.
 | Soft light | Subtle shield glow. |
 | Screen | Light-emitting fields, lightning, pulses. |
 | Overlay | Ember ring/color shaping. |
+
+Add and Screen have no such base: written through `Set` over a cell nothing
+painted they blend onto black, a band darker than the theme's background. A glow
+there blends with `SetBgScreen` on `visual.RgbBackground`, as the shield's glow
+and the square's boost glow, wind streaks and strike flash do, and a field mixes
+over `BackgroundAt`'s color and writes with `SetBgOnly`, as the explosion field
+does.
 
 Predefined modes include both-channel variants plus foreground-only screen,
 replace, and add, and background-only max and alpha. A renderer should choose
@@ -732,7 +747,9 @@ The overlay renderer adapts help/about/telemetry/console content into buffer cel
 and telemetry draw with the game live and allocate nothing a frame: `tui` draws a
 box's edges as runs of cells, not a string per edge, which took fourteen telemetry
 cards in a 160×50 window from 30 allocations (3.9 KB) a frame to none and from
-149 to 122 µs; a card's title, under 32 bytes and not escaping, never allocated. The
+149 to 122 µs; a card's title, under 32 bytes and not escaping, never allocated.
+`tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
+a one-row text field, as the menu's, passes `tui.LineNone` or draws nothing. The
 about window draws the lixen mark from its shape (`logoCells`): in truecolor as
 quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), as an
 emulator in 256 colors does too, on a text console as whole blocks in the entry
@@ -782,6 +799,11 @@ game-specific asset interpretation and layering.
    pause, grayout/dim/strobe, and overlapping fields.
 7. Check that the surface flush remains outside the world lock and that no
    renderer retains store pointers across frames.
+
+A bench that reuses one `RenderBuffer` calls its `Clear` each iteration, as a frame
+does, or `KeepExact`'s rects pile up as bytes with no allocation behind them. A bare
+`engine.NewWorld` draws in 256 colors, as an emulator, `ColorMode`'s zero value.
+Measuring a renderer is [Development §14](development.md#14-measuring).
 
 ## 12. Source map
 

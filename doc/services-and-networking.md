@@ -514,9 +514,14 @@ by closing the stream. The dialer acts on
 the kind, never the wording: one table gives each kind's retry (`RetryOf`: a seat
 and a first join retry only a `RetrySoon` kind, a rejoin anything but
 `RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
-76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
-link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing
-epoch and `MsgStateSync` for one owner-authored cursor snapshot. Authority travels as
+76 (`EX_PROTOCOL`) on any refusal. A `RetrySoon` refusal is redialed every
+`parameter.SessionRejoinInterval` (250 ms), a first dial's as a rejoin's, so six
+dials spend an address's budget for a minute: a state that can last, as a lobby
+does for a dial that only watches, takes a refusal a person retries instead
+(`ErrUnstarted`, [Multiplayer §5.8](multi-player.md#58-watching-a-session)). A
+relayed join's answer (`RelayAdmit`) and a peer link's `MsgAck` carry the same two
+fields. Gameplay uses `MsgEvent` for a closed crossing epoch and `MsgStateSync`
+for one owner-authored cursor snapshot. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it

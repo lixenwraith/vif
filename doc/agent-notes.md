@@ -1,621 +1,283 @@
 # Agent Notes
 
 What agents working on this repository learned that no rule in
-[AGENTS.md](../AGENTS.md) and no design document states: facts that cost a session
-an hour to rediscover, and how to check them. Read it before starting. When a task
-teaches you one, add it in the same PR, one bullet under its topic. A note is a
-trap or a technique the next task meets; how a feature works belongs in its design
-document. Keep it short: delete a note that proves wrong, whose trap is gone, or
-that a document or a code comment now states, and link that instead.
+[AGENTS.md](../AGENTS.md) and no design document states: the traps any task meets,
+and how to check them. Read it before starting. When a task teaches you one, add it
+in the same PR, one bullet under its topic. A note here is a trap or a technique the
+next task meets whatever its area; one that only a task in one area meets goes in
+that area's design document, and a technique for one kind of work in
+[Development](development.md). Keep it short: delete a note that proves wrong, whose
+trap is gone, or that a document or a code comment now states, and link that
+instead.
 
-Topics: Toolchain · Events and ticks · Sessions · Runs and their wiring ·
-Determinism and the harness · Session tests · Tests that flake · Locks · Networking
-and admission · Position · Math and physics · Combat · Glyphs and widgets · Looking
-at the game without a device · Measuring · Settings files · Scenario TOML · Corpus ·
-Docs · Libraries · Branches.
+Where the rest lives:
+
+- Builds in a container (the APK, the session image, another architecture, dead
+  code): [Development §12](development.md#12-builds-in-a-container).
+- Looking at the game without a device (tmux, sessions, headless probes, the window
+  under Xvfb, real keys, the browser under Playwright, the emulator, Wine, sound):
+  [Development §13](development.md#13-looking-at-the-game-without-a-device).
+- Measuring (two builds compared, benches that mislead, the compiler's output,
+  profiles, a terminal's bytes, threads and clocks, long runs):
+  [Development §14](development.md#14-measuring).
+- Writing a session test:
+  [Multiplayer §9.1](multi-player.md#91-writing-a-session-test); a bot's reading:
+  [Bots: Taking a reading](bots.md#taking-a-reading).
+- A subsystem's own traps: its design document, as
+  [Multiplayer](multi-player.md) for sessions,
+  [Auth and session design](auth-session-design.md) for admission,
+  [Build profiles](multi-platform.md), [Position](position-package.md),
+  [Domains](domain-design.md),
+  [Netcode §3.5](netcode-design.md#35-the-divergence-harness),
+  [FSM](fsm-and-configuration.md) and [its reference](fsm-reference.md),
+  [Behavior machines](machine-design.md), [Rendering](rendering.md),
+  [Gameplay](gameplay.md), [AI and physics](ai-physics-and-evolution.md),
+  [Input](input-and-modes.md) and
+  [Filesystem §3](filesystem-layout.md#3-resolution-policy) for settings.
+
+Topics: Toolchain · Dependencies · Generated code and versions · Events and ticks ·
+Tests · Locks · Docs · Git and branches.
 
 ## Toolchain
 
 - The `gofmt` on a container's `PATH` can be older than the module's Go and reject
   generic methods ("method must have no type parameters"); run
   `"$(go env GOROOT)/bin/gofmt" -l`.
-- A long session's Go build cache fills the disk allowance, 27 GB after some
-  sixty scratch builds, and a link then fails with "no space left on device":
+- A long session's Go build cache fills the disk allowance, 27 GB after some sixty
+  scratch builds, and a link then fails with "no space left on device":
   `go clean -cache` frees it and the next build takes 40 s.
 - `git ls-files <path>` before creating a file: `internal/app` names its test files
   for concepts (`door_test.go`), and a write to a path that exists replaces it.
-- `android/` is its own module: a dependency bump in the root `go.mod` also needs
-  `go -C android mod tidy`, which `android/toolchain.sh` checks before Gradle. A
-  container without egress to `dl.google.com` cannot build the APK; with it and a
-  JDK, `android/toolchain.sh install` asks nothing and sets the SDK up in
-  minutes, under a scratch `ANDROID_HOME` if one is set. Gradle then stops on Maven
-  Central's 429 to the shared egress even for an artifact another repository holds:
-  an init script hooking `beforeSettings` and re-pointing every `mavenCentral()` at
-  Google's mirror (`maven-central.storage-download.googleapis.com/maven2/`), passed
-  with `-I`, builds the APKs in about four minutes.
-- The Java app type-checks without an SDK: `javac --release 17 -cp android-all.jar`
-  (Robolectric's `org.robolectric:android-all` from Maven Central, at the release
-  `compileSdk` names: `16-robolectric-13921718` for `android-36.1`) over
-  `android/app/src/main/java`, a stub for `R` and the binding itself, which
-  `go -C android tool gobind -lang=java -javapkg=com.lixen.vif -outdir=<dir>
-  github.com/lixenwraith/vif/android/game` writes without an SDK; `androidTest`
-  adds `junit:junit:4.13.2` and a stub of `AndroidJUnit4`. The jar's
-  `UnsupportedAppUsage` warnings are noise.
-- The Android CLI reads without being run: its launcher fetches
-  `https://dl.google.com/android/cli/<version>/<host>/android-cli` (`latest` for
-  the version), a native stub followed by a zip of a JRE and `main.jar`; Python's
-  `zipfile` opens that zip from its first `PK\x03\x04`, and `javap -c -constants`
-  reads `com.android.cli.ui.commands.Sdk` and `com.android.cli.sdk.SdkManager`.
-- Go on Android reads local time as UTC whatever the device's zone (`time` sets
-  `Local` to UTC there), so a wall-clock time the player reads, as the console's
-  stamps, takes the zone the app names (`game.Zone`), which the first `game.Start`
-  makes `time.Local`.
-- The emulator boots without KVM (`-no-window -gpu swiftshader_indirect -accel
-  off`, about 14 minutes on 4 vCPUs) but runs some 30x slower than a phone, so
-  Android's 5 s input limit swallows taps behind "isn't responding" dialogs: a
-  device pass belongs on a phone or an accelerated emulator. `adb shell input` taps
-  one finger; `adb shell uinput -` injects multi-touch from JSON, after one frame
-  with no finger down, or the first tap reads as a 3 s press.
-- After bumping `lixenwraith/terminal`, build `./...`, not only `./cmd/vif`: the
-  tools and sandboxes break on a change the game does not use.
-- `deploy/docker/Dockerfile` pins the Go image's index digest: HEAD
-  `registry-1.docker.io/v2/library/golang/manifests/<tag>` with an `auth.docker.io`
-  pull token and the OCI index Accept header, and read `Docker-Content-Digest`. HEAD
-  the current pin first: it matches unless Docker Hub rebuilt the tag on a newer
-  Alpine since, which a GET of the pinned digest shows in its manifests'
-  `org.opencontainers.image.created`. Docker Hub answers a shared egress 429 at
-  times: retry after a pause.
-- A cloud container builds the session image: `sudo env HTTPS_PROXY=... dockerd`,
-  then a scratch copy of the Dockerfile that copies the proxy's CA in from a
-  `--build-context` and sets `SSL_CERT_FILE` before `apk add`, built with
-  `--network host` and the proxy's variables as build args.
-- A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
-  development machine): keep a long task's notes and working files in the
-  checkout's `tmp/`, which `.gitignore` holds. A `.go` file there is a package to
-  `go build ./...` and `go vet ./...` all the same: a scratch program or a copy of a
-  source kept under `tmp/` stops both.
-- `vif-router` at the repository's root is a tracked binary, and `go build
-  ./tool/vif-router/` run there writes over it: gate with `go build ./...`, which
-  writes nothing, and `git checkout -- vif-router` after a slip.
-- `qemu-user-static` from apt runs a test binary built for another architecture
-  (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
-  path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
-- The gates against a dependency's branch run under a `go.work` kept outside both
-  trees and named by `GOWORK=`: `use` each checkout, a nested module's too
-  (`terminal/window`). Once a `go.mod` there requires a version no tag serves, as
-  the window's does of terminal, every build stops ("reading .../go.mod at
-  revision vX: unknown revision"): a workspace still reads the required version's
-  `go.mod`, so it takes `replace <module> vX => <its checkout>` as well.
-- A bump to a dependency's untagged release: serve the commit the tag will name
-  from a file `GOPROXY` (`golang.org/x/mod`'s `zip.CreateFromVCS` writes
-  `<module>/@v/<v>.zip`; `<v>.mod`, `<v>.info` and `list` beside it), listed first
-  with `GONOSUMDB` naming the module and a scratch `GOMODCACHE`. `go get`, then
-  `go mod tidy` and `go -C android mod tidy`, write the `go.sum` lines, which
-  verify against the tag once a squash merge keeps that tree. The last tag's
-  commit zipped the same way must hash (`dirhash.HashZip`) to the `h1` main's
-  `go.sum` holds, which proves the zip before the new line is trusted, and
+- A session's scratchpad can sit on a `/tmp` that a reboot empties: keep a long
+  task's notes and working files in the checkout's `tmp/`, which `.gitignore` holds.
+  A `.go` file there is a package to `go build ./...` and `go vet ./...` all the
+  same, so a scratch program or a copy of a source kept there stops both unless it
+  carries a build tag of its own.
+- `internal/app`'s tests do not build with `-tags vif_headless`: `config_test.go`,
+  `geometry_test.go`, `join_press_test.go` and `watch_test.go` drive the presentation
+  that profile leaves out, so its gate is `go build -tags vif_headless ./...` alone.
+- A `vif_headless` or `vif_noaudio` build links no `lixenwraith/audio` but its
+  `model` package: `make verify` checks the headless one with `go list -deps`
+  ([Build profiles §3](multi-platform.md#3-reference-artifact-measurements));
+  nothing checks the `vif_noaudio` one, CI checks neither, and a build passes either
+  way. A package those builds import takes an audio bound from `internal/parameter`
+  (`AudioBufferMsMin`), which an audio-tagged test holds equal to the library's.
+- A change to a package's API is compiled against every test file by
+  `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
+  nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
+  package the change never touched. `android/` is a module of its own that no root
+  `go test` compiles: a method added to `game.Listener` stops `android/game`'s tests
+  building until its double (`menuListener`) has it, so run
+  `go -C android test ./game`.
+- Go 1.27 takes a promoted field as a struct literal's key, though not through an
+  embedded pointer, so fields moved into an embedded struct keep every literal,
+  selector and method call compiling.
+- Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
+  a variable, a heredoc that only edits such a Makefile recipe included: edit the
+  recipe with the Edit tool, and read what a recipe would remove with `make -n`
+  (`make -n install-config purge VIF_CONFIG_DIR=<any path>` prints the recipe and
+  runs nothing); run a purge only on a root made for it.
+
+## Dependencies
+
+- The gates against a dependency's branch (AGENTS.md, Commits and PRs) run under a
+  `go.work` kept outside both trees and named by `GOWORK=`: `use` each checkout, a
+  nested module's too (`terminal/window`). Once a `go.mod` there requires a version
+  no tag serves, as the window's does of terminal, every build stops ("reading
+  .../go.mod at revision vX: unknown revision"), since a workspace still reads the
+  required version's `go.mod`: the `go.work` takes `replace <module> vX => <its
+  checkout>` as well. `make notices NOTICES_OF=android` lists `./game` from
+  `android/`, so under a `GOWORK` that leaves `android/` out it stops ("main module
+  ... does not contain package .../android/game"): run it with `GOWORK=off`. A
+  scratch copy of the tree under a directory that holds a `go.work` is in that
+  workspace too.
+- The `go.sum` lines for a dependency's untagged release come from a file
+  `GOPROXY` serving the commit the tag will name (`golang.org/x/mod`'s
+  `zip.CreateFromVCS` writes `<module>/@v/<v>.zip`; `<v>.mod`, `<v>.info` and `list`
+  beside it), listed first with `GONOSUMDB` naming the module and a scratch
+  `GOMODCACHE`: `go get`, then `go mod tidy` and `go -C android mod tidy`, write
+  them, and they verify against the tag once a squash merge keeps that tree. The
+  last tag's commit zipped the same way must hash (`dirhash.HashZip`) to the `h1`
+  main's `go.sum` holds, which proves the zip before the new line is trusted, and
   `GOFLAGS=-modcacherw` lets the scratch cache be removed.
 - `gomobile bind` builds `./gobind` in a temporary module of its own, which no
-  `go.work` lists ("directory gobind is contained in a module that is not one of
-  the workspace modules listed in go.work"), so a workspace cannot stand in for a
-  dependency's untagged version in `make android`. The device run for terminal
-  v0.7.1 appended a `replace` to `android/go.mod` and reverted it before the
-  commit; the file `GOPROXY` above is environment, which should reach gomobile's
-  module, and no build has tried it.
-- `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
-  it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
-  component structs compiles once per component, and each copy's name spells the
-  struct's fields, costing a third as much as its code.
-- `internal/app`'s tests do not build with `-tags vif_headless`: `config_test.go`,
-  `geometry_test.go` and `join_press_test.go` drive the presentation that profile
-  leaves out, so its gate is `go build -tags vif_headless ./...` alone.
-- A `vif_headless` or `vif_noaudio` build links no `lixenwraith/audio` (its `model`
-  package aside): `make verify` checks `go list -deps`, CI does not, and a build
-  passes either way. A package those builds import takes an audio bound from
-  `internal/parameter` (`AudioBufferMsMin`), which an audio-tagged test holds equal
-  to the library's.
+  `go.work` lists ("directory gobind is contained in a module that is not one of the
+  workspace modules listed in go.work"), so a workspace cannot stand in for a
+  dependency's untagged version in `make android`: a `replace` appended to
+  `android/go.mod` and reverted before the commit can. The file `GOPROXY` above is
+  environment, which should reach gomobile's module; no build has tried it.
+- A bump in the root `go.mod` also runs `go -C android mod tidy` in the same commit
+  ([android/README.md](../android/README.md#build)), which `android/toolchain.sh`
+  checks before Gradle.
+- `cmd/vif/gui.go` alone imports `terminal/window`: while that module does not
+  verify against `go.sum` ("checksum mismatch"), `-tags vif_nogui` still builds and
+  gates everything else.
+- A probe of a dependency's API against the checkout's files runs from a module of
+  its own outside the tree: its `go.mod` takes this module's `go` line (a lower one
+  asks for a toolchain nothing serves) and its `go.sum` a copy of this one's, and
+  `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module cache with no
+  network. A dependency of that dependency stops it on the older version it names
+  unless the scratch `go.mod` requires this module's too, as `golang.org/x/crypto`
+  for `lixenwraith/auth`.
+- audio, genetic, ascimage, transformer and stapes are modules of their own
+  ([package map §8](package-map.md#8-external-module-boundary)): a change to one
+  lands in its repository, under its own `AGENTS.md` and agent notes, and vif takes
+  its tag.
+
+## Generated code and versions
+
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
   generated files included, so removing a payload struct, a field of one or an
   event stops the generator on the stale use of it ("type-check ...: has no field",
   "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
   first, and the run writes them anew.
-- A change to a package's API is compiled against every test file by
-  `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
-  nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
-  package the change never touched.
-- Go 1.27 takes a promoted field as a struct literal's key, though not through an
-  embedded pointer, so fields moved into an embedded struct keep every literal,
-  selector and method call compiling.
-- `go install golang.org/x/tools/cmd/deadcode@latest` outside the module builds with
-  the tool's own minimum Go (1.26), which refuses this module ("package requires
-  newer Go version go1.27"): install it, and staticcheck, under
-  `GOTOOLCHAIN=go1.27.4`.
-- deadcode asks the Go version with `GO111MODULE=off go list`, which follows
-  neither `go.mod`'s toolchain line nor `GOTOOLCHAIN`: on a container whose base Go
-  is older it stops on "requires go1.26 or later". Put the module's toolchain
-  first on `PATH` (`$(go env GOROOT)/bin`).
-- deadcode reads one profile: a function can read dead on linux and be live on
-  js/wasm or Android. Call one dead only where every profile compiling its file
-  reports it. Its `-test` run stops on `vif_headless` and windows, where
-  `internal/app`'s tests do not build: list the packages without it. The Android module has no
-  `main`; a scratch one under `android/tmp/` calling every bound function, run with
-  `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`, stands in for
-  gomobile's wrapper.
-- deadcode lists code that is reserved and stays: `pkg/vmath` and
-  `pkg/vmath/physics` (other repositories import them), `appendF32`/`readF32` (what
-  gen-manifest emits for a float32 field) and the vlog stub's mirrors of live
-  functions.
-- A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
-  commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
-- Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
-  a variable, a heredoc that only edits the Makefile's install recipe included:
-  edit that recipe with the Edit tool, and read what a purge would remove with
-  `make -n install-config purge VIF_CONFIG_DIR=<any path>`, which
-  prints the recipe and runs nothing; run one only on a root made for it.
-- A probe of a dependency's API against the checkout's files runs from a module of
-  its own outside the tree: its `go.mod` takes this module's `go` line, a lower
-  one asking for a toolchain nothing serves, and its `go.sum` a copy of this
-  one's, and `GOFLAGS=-mod=mod GOPROXY=off go run .` builds it from the module
-  cache with no network. A dependency of that dependency stops it on the older
-  version it names unless the scratch `go.mod` requires this module's too, as
-  `golang.org/x/crypto` for `lixenwraith/auth`.
-- `make notices NOTICES_OF=android` lists `./game` from `android/`, so under a
-  `GOWORK` that leaves `android/` out it stops ("main module ... does not contain
-  package .../android/game"): run it with `GOWORK=off`. A scratch copy of the tree
-  under a directory that holds a `go.work` is in that workspace too.
-- A binary names the modules it links: `go version -m <binary>` for ELF and PE,
-  and `grep -a -o` of its `dep` lines for `vif.wasm`; the headers of the `NOTICES`
-  beside it are the same list.
-- The About window draws one row an entry, cuts a value at its column (20 columns
-  at 80 wide) and does not scroll: at 80x24 it stops after `source`, so a row
-  added to it is seen from 80x30 up.
-- `cmd/vif/gui.go` alone imports `terminal/window`: while that module does not
-  verify against `go.sum` ("checksum mismatch"), `-tags vif_nogui` still builds
-  and gates everything else.
-
-- A Windows build runs under Wine: Ubuntu's Wine 9.0 wants `/run/user/0` to
-  exist, a prefix of its own (`WINEPREFIX`, made by `wineboot -u` in 10 s),
-  `WINEDEBUG=-all`, `WINEDLLOVERRIDES="mscoree,mshtml="`, a display (an `Xvfb` of
-  one's own, with openbox for a managed window) and a `wineserver -p` kept up, or
-  every run starts a server and its services. `make windows-package` and `wine
-  bin/vif.exe` from the folder is the game, driven with xdotool as on X11; its
-  sound needs `PULSE_SERVER` naming a private server. A package's Windows tests
-  run there: `GOOS=windows go test -c -tags "vif_gui novlog" -o x.exe ./cmd/vif`,
-  then `wine x.exe -test.run <name>` from the package's directory. An idle
-  prefix still costs 2 % of a core: `wineserver -k` when done.
-- Wine hands a windowsgui program the shell's streams, so what it prints shows
-  with no console attached, and its message box appears only where it has none:
-  `wine bin/vif.exe -cli` from a shell shows the box, the same from a batch file
-  under `wineconsole cmd /c` prints in the console. Windows itself gives such a
-  program no streams from a console, which is why the build attaches.
-- A script that sets `HOME` for a private sound server or Wine prefix moves Go's
-  module and build caches with it: the next `go` command downloads the toolchain
-  and every module again. Run `go` before sourcing it.
-- A COM interface is called through its method table with
-  `syscall.SyscallN(obj.table[slot], uintptr(unsafe.Pointer(obj)), ...)`, every
-  pointer conversion inside that call's own argument list, the one place the
-  runtime holds a local's address still: a helper taking ready-made `uintptr`s
-  is unsafe for locals, and vet does not say so. A stand-in for a COM object in
-  a test is a table of `windows.NewCallback` functions, which take pointer
-  arguments (`cmd/vif/wasapi_test.go`).
+- A registered struct payload decodes from TOML, so every enum it holds at any depth
+  must take names (`TestEveryEnumAPayloadHoldsTakesNames`), and a payload that is a
+  component fails on that component's enums. Annotate the event with the qualified
+  type (`(component.KrakenBurn)`), which registers nil: right only for a `[local]`
+  event a system pushes, which is neither journaled nor sent.
+- A new crossing type adds a row to `crossingRules` (`internal/system/network.go`)
+  naming its author and, where its payload names its producer's cursor or slot, the
+  reader of it: with no row every instance refuses it, its producer's own included
+  (`TestEveryCrossingASystemPushesHasItsRule`). One only the authority may make is
+  `byAuthority` there, and joins `barrierBound` when it sets shared state from one
+  tick on; with no payload it needs no codec (`crossSession(et, nil)`). A peer's
+  frame is held to the tag its producer stamps, Player on a Bus type and Shared on a
+  Stamped one, so a frame a test builds by hand carries it; a player-domain push of
+  a replicated event is named in `crossingPushes` too
+  ([Combat §8](combat.md#8-adding-a-weapon)).
+- A new event type moves the number of every one declared after it, so it takes the
+  next `network.ProtocolVersion` and `event.JournalSchema`. A shipped scenario
+  written in a form an older build's expander refuses takes the next
+  `ProtocolVersion` too: a joiner is sent the scenario's files and expands them
+  itself, so the older build is refused at the door instead. The capture carries
+  `registry.SpeciesState`, which embeds the streaming engine's checkpoint, so a
+  change to `genetic.StreamingState`'s layout, or to how a state is continued, bumps
+  `snapshot.Schema` beside `StreamingStateVersion`. Take the next `snapshot.Schema`,
+  `event.JournalSchema` or `manifest.SchemaVersion` past main's, and check again
+  after merging main, where another PR may have taken it.
 
 ## Events and ticks
 
 - An event a system pushes in its `Update`, a crossing due at the tick and an FSM
   action's event all dispatch in the tick's one settle, after every system's
-  `Update` that tick ([runtime §5](runtime.md#5-simulation-tick-steps)): a system
-  first sees them in its next `Update`. A consumer that must act on it inside the
-  same tick, before its own motion, reads a derived resource the producer writes
-  instead, as the particle system reads `CaveResource` and the glyph spawner
-  `DriftResource`, or makes the thing itself, as a mount creates the pulse it fires
-  in its own `Update`.
-- A derived resource is created in `engine.newGameContext`, rewritten by its owner
-  every tick and never captured, so it bumps no schema. Systems run in ascending
-  `Priority`, so only a later system reads it the same tick.
-- The settle dispatches pass by pass, breadth first: what a handler pushes runs
-  after every event of the pass it ran in. An arrival and a departure applying in
-  one tick both run before the cursor the arrival asks for is made
-  (`rosterDue.spawning`), and what the departure asks of that cursor is queued
-  behind the spawn.
+  `Update` ([Runtime §5](runtime.md#5-simulation-tick-steps)), pass by pass, breadth
+  first: what a handler pushes runs after every event of the pass it ran in. A
+  consumer that must act on one inside the same tick, before its own motion, reads a
+  derived resource the producer writes instead, as the particle system reads
+  `CaveResource` and the glyph spawner `DriftResource`, or makes the thing itself,
+  as a mount creates the pulse it fires in its own `Update`. A derived resource is
+  created in `engine.newGameContext`, rewritten by its owner every tick and never
+  captured, so it bumps no schema; systems run in ascending `Priority`, so only a
+  later system reads it the same tick.
 - A journaled event, of any origin but a system or a device, is never pushed inside
-  the tick body: the tick's settle would dispatch it live while a replay injects it
-  after the tick. The barrier's are the exception, stamped as the body's (settle
-  group 0), which a replay queues for its own tick (`ReplayTarget.PushBody`,
-  `EventQueue.Defer`) instead of settling before it.
-- A registered struct payload decodes from TOML, so every enum it holds at any
-  depth must take names (`TestEveryEnumAPayloadHoldsTakesNames`), and a payload
-  that is a component fails on that component's enums. Annotate the event with the
-  qualified type (`(component.KrakenBurn)`), which registers nil: right only for a
-  `[local]` event a system pushes, which is neither journaled nor sent.
-- A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
+  the tick body ([Logging §9](logging-and-diagnostics.md#position-lattice)): the
+  tick's settle would dispatch it live while a replay injects it after the tick. The
+  barrier's are the exception, stamped as the body's (settle group 0), which a replay
+  queues for its own tick (`ReplayTarget.PushBody`, `EventQueue.Defer`). What only
+  the operator does or sees, a pause, an overlay request, the speakers, is pushed
+  `OriginDevice`, never journaled and outside the event tallies, so a replay, which
+  has an operator of its own, still matches: one left on the ambient origin diverges
+  every replay whose recording made it.
+- A run's tick is `World.TickInterval`, which its host may choose (`-tick`,
+  [Runtime §3](runtime.md#3-runtime-clocks-and-cadence));
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant. A comment or doc giving ticks in
   seconds says "at the default tick", 20 a second: 300 ticks once read five seconds.
-- A frame's `ctx.GameTime` is the pacing clock, which a live run starts at its
-  launch and a new game does not rewind; a driven run's manual clock starts at
-  `SimEpoch`, as the simulation does. A phase a renderer takes off the frame's clock
-  agrees with the simulation in every test and headless run and parts from it only
-  live, where the square's orb was drawn 142° from where it struck. Draw simulated
-  motion from `TimeResource.GameElapsed` plus `sinceTick`
-  (`TestAnOrbIsDrawnWhereItStrikes`).
-- A staging world's `Config` is written out field by field (`App.newStagingApp`),
-  and a field left out takes its default. It names what decides the simulation and
-  an install does not write, as the run's tick: `World.tick` stays as built, and the
-  header's `TickInterval` moves only the clock. Without it a projection plays ticks
-  the live world does not (`TestAStagingWorldPlaysItsRunsTick`).
-- `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
-  world reads and the journal records; Command and Overlay are the operator's, held
-  on the context over it (`GameMode.Operator`), and reach neither. A live run's
-  mode changes only through the router (`transitionMode`), which keeps the input
-  machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
-  A scenario's `EventModeRequest` is left on the context for the router to take.
-- `World.PushLocal` stamps player in any scope, and the FSM bridge pushes every
-  class but local in the ambient domain, Shared during a region's actions. A
-  request a region raises on every instance that changes Shared state is
-  `[stamped]`, as `EventFuseRequest` is: Shared from the region, player from a
-  participant's own producer's `PushLocal`; a `[local]` one may not reach Shared
-  state (D-10).
-- A push is its participant's own only inside the producer scope the world's update
-  loop and the scheduler open around a player-profile system's code: a test calling
-  that system's `Update` or `HandleEvent` directly pushes nothing as its own, so a
-  crossing it expects needs `EventQueue.SetOwn(true)` around the call, or the real
-  loop (`TestAPushCrossesByItsProducersDomain`).
-- What a Shared request does to Shared state may turn only on what every instance
-  holds alike. An election or a guard that one instance alone sees decides nothing
-  there: a fusion that consumes composites on every instance lands them by a Shared
-  carrier on each, not by the elected instance's own (`FuseSystem.fuse`).
-- A player-domain mechanic reading the whole roster (`ClosestCursor`,
-  `CheckCursorOverlaps`, navigation's group 0) meets other participants' cursors,
-  which never see it: `strikeCursor`'s owner gate stops the damage but not a
-  knockback, a death or the crossing either pays. A drain locks on its own cursor and
-  meets no other (`DrainSystem.handleDrainInteractions`).
-- What only the operator does or sees, a pause, an overlay request, the speakers,
-  is pushed `OriginDevice`: never journaled and outside the event tallies, so a
-  replay, which has an operator of its own, still matches. One left on the ambient
-  origin diverges every replay whose recording made it.
-- A headless `Tick` steps through an own pause, a step's or the menu's
-  (`Scheduler.RunTicks` runs `stepTick`), and stops only at a hold, so a test of a
-  pause reads `TimeCtl.OwnPause` and `Held`, never the tick count. A random walk of
-  keys (`takeEvent`), menu ops (`menuOp`) and aways (`setAway`) on `newApp` over a
-  `framePresentation` reads them after each step; `q` waits for a register, so a
-  command typed after it is Normal keys.
-- The dispatch hands an event to the FSM before its systems, so a transition on
-  `EventScreenResize` acts on the map as it stood: what must follow a resize is
-  an engine hook (`engine.Reflower`), not a scenario's transition.
 
-## Sessions
+## Tests
 
-- A crossing whose effect no capture carries, as the hold and the rate are the
-  clock's (`TimeControl`) and a reset ends the run its captures are read in, is no
-  part of a world installed at or past its tick: it joins `snapshotContainsLocked`'s
-  first cases, or a guest a correction carries to that tick loses it for good.
-- The barrier judges an install by the tick its capture was read at
-  (`AdoptSnapshot`'s `captured`), which `WriteStagedLocked` keeps apart from the tick
-  it writes the world at. Handed the projected tick, it prunes a late artifact as
-  held by a world that never had it, and forgets a retained one the next older
-  capture needs. The staging world's barrier outlives an install: one that put its
-  own retained artifacts back on its schedule doubled them at every projection.
-- A crossing names entities by its producer's numbers. An instance that applied
-  an arrival late allocated its cursor after what the others allocated first, so
-  until a correction one number is a gold member there and a cursor here: a handler
-  that destroys what a crossed number names checks the entity is what was meant
-  (`CompositeSystem.destroyMember`), or a guest's typed letter ends a cursor.
-- Only the authority ends a run, and its epochs name the run it is in: a guest
-  follows that (`leaveRun`), since what ends a run on it, a crossed reset or a
-  transition whose entry emits one, can be lost, refused or left behind a hold. Two
-  resets settled in one tick advance the run twice, so the tick that leaves a run
-  applies nothing else, and a new path to a reset is checked against that.
-- A new crossing type adds a row to `crossingRules` (`internal/system/network.go`),
-  naming its author and, where its payload names its producer's cursor or slot, the
-  reader of it: with no row every instance refuses it, its producer's own included
-  (`TestEveryCrossingASystemPushesHasItsRule`). A peer's frame is also held to the
-  tag a producer stamps, Player on a Bus type and Shared on a Stamped one, so a
-  frame a test builds by hand carries it.
-- A crossing only the authority may make is `byAuthority` there, and joins
-  `barrierBound` when it sets shared state from one tick on; with no payload it
-  needs no codec (`crossSession(et, nil)`). A new event type moves the number of
-  every one declared after it, so it takes the next `network.ProtocolVersion` and
-  `event.JournalSchema`.
-- A joiner's arrival can reach it inside a correction rather than as the crossing,
-  which the capture's fence then drops: state a joiner takes on arriving is derived
-  in `RebindCursorRoster` too, never only in the arrival's handler.
-- A joiner's world holds no entry for it until its arrival crosses there, while the
-  authority's may already: what the run itself is, a bot seat, is its own word
-  (`Instance.Seated`), never read off its roster entry.
-- A guest's own crossings apply a lead after it produced them even with host and
-  guest on one machine: the default lead plus the relay slack is four ticks. What a
-  crossing's resolution draws (a hit's zap) shows that late on its producer, so a
-  cell the producer captured is stale by then; draw a shot as it fires, its ends
-  naming entities (`pushDrainBolt`).
-- A reset clears the barrier and every crossing scheduled on it: what the authority
-  still owes the session past one is state its system keeps and crosses again in
-  the new game ([Multiplayer §5.4](multi-player.md#54-wraiths)). The reset's tick
-  settles on after `MetaSystem.handleGameReset` cleared the world and closes with no
-  flush; `Scheduler.executeReset` then takes the world lock again, and
-  `NetworkSystem.Init` empties the barrier bar what `keepLost` keeps before the
-  boot's spawn rebuilds the cursors. What a crossing applied at that tick raised,
-  and a goroutine in between (a correction's off-tick drain, the accept loop), meet
-  no cursor, only the roster waiting in `PlayerResource.Restores`: an event that
-  writes every cursor or Wraith writes that roster too (`JoinRestore`,
-  `RestartWaits`). A queue event pushed in between goes with the queue.
-- A held host flushes nothing, so what it crosses under a hold reaches no guest,
-  relay or successor until the resume
-  ([Multiplayer §3.6](multi-player.md#36-holding-a-session)): a guest's barrier holds no
-  roster change there, so a guest's rule reading `arrivalScheduled`, or a mark an
-  arrival clears, needs another source.
-- A session policy on the wall clock lives in `Authority.drive`, which the
-  correction loop reaches between ticks and a driven run once per `App.Tick` call,
-  however many ticks that advances. One that crosses needs a running transport,
-  which a replay has none of, and restarts its own watch as it crosses, since the
-  roster it reads (`WorldRoster`) shows the crossing only as it applies, a lead
-  later.
-- Session state a replay must follow changes only through the latch's note
-  (`World.LatchSession`, `Supersede`): a flag an install or a link event flips with
-  no note binds the replay's cursor at another tick. A change a dispatch makes needs
-  none, since the replay dispatches too (`World.TakePlace`).
-- A redial lends the run's place to its dial for the whole walk (`Membership.lent`),
-  and `m.place` is nil meanwhile: what signs for the run, a link, a notice or the
-  record that takes a term, reads `LocalKey`, which answers through the loan.
-- A relayed join's frames are taken under the world lock (`onRelayJoin`), and its
-  steps are asked from the handshake's goroutine, which takes that lock to send
-  (`tellAuthority`): a step the frame handler sends goes by `tellAuthorityLocked`.
-  A place taken back through a relay keeps its own holder meanwhile
-  (`returnPlace.via`), or a person with bots waiting reads as a bot holding bots.
-- What a player brings back to its Wraith (`event.CursorRecord`) is judged where it
-  is written, `CursorSystem.restore` on every instance, never at the door: by the
-  game it names (`Run` against the queue's run, which a reset advances), by
-  `heldInRange`, which the owner sync's check shares, and by reading no defeat,
-  no energy and no heat. A field added to the record that play bounds joins
-  `heldInRange`.
-
-## Runs and their wiring
-
-- A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
-  test that builds a joiner as a join does goes through `configForJoin` into
-  `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
-  and a test of what a join holds to then passes on nothing.
-- The platform's `Host` reaches a run only in its `runConfig` (`host`), which `Run`,
-  `RunScript` and `RunBot` fill from the `Host` handed beside the `Config`: a
+- A run's wiring and the platform's `Host` reach it only in its `runConfig`
+  (`wiring`, `host`), never in a `Config`: `NewHeadless` on a `Config` drops a
+  session's `-players`, so a test of what a join holds to passes on nothing, and a
   presenting entry point built on a `Config` alone draws on the terminal, not the
-  window, page or Android view, and no test catches that for a watched script or
-  bot. A test that presents builds its run with `newApp` on a `runConfig`.
-- A type `internal/app` aliases from `internal/app/internal/config` carries its
-  exported methods to `cmd/vif` and Android, which cannot import the package, and
-  `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
-  `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
-- `RunBot` and `RunScript` return counters alone. A test reads the world a driven
-  run is built on through `drive`, whose `build` is handed the App and ends the run
-  before it presents by returning an error (`TestABotAlonePlaysOneMapWatchedOrNot`),
-  and a run's size from its journal's anchor (`journal.NewCapture().Anchors()`).
-- A watched run's viewer's input never passes the interactive loop's
-  `inputTick`: `player.route` hands it to the router, so what a player's input
-  does besides, as saving a changed `[play]`, is done there for a watched run.
-- A presentation's size is read once by what keeps it
-  ([Runtime §1](runtime.md#1-process-modes)), so a host whose size settles after
-  it opens waits for it in `Init` (`window.Open`'s `settle`, `terminal.OpenPage`'s
-  `fitted`) and
-  posts no resize for it: one at the launch starts a person's held first game
-  over (`App.handleResize`), as run 1 on the next session's streams, and reaches
-  a host's map after its door locked it.
-- `LockMap` latches the world as session-shared, which also engages the playout
-  barrier: a run in no session whose map must not follow its screen, as a person's
-  under `-size`, latches `World.FixMap` instead. `World.MapSizeLocal` answers for
-  both and gates the resize's crop, the reset's return to the viewport, a map
-  setup of no size and a held game starting over, so a new path that sizes a map
-  from a screen asks it.
-- A run that shows nothing reads its terminal off any standard stream still on it
-  (`startedIn`): under `go test` there is none, and a test names one by swapping it.
-- The run a restart builds starts from the launch line and what earlier restarts
-  named (`runConfig.restarted`), never from the live `m.cfg`: what a command wrote
-  there, a phrase, a policy, a door, is gone at the next restart unless the ask
-  carries it (`RestartAsk`, `restartRequest`, which `replaceWith` alone latches).
-- A session property a host sets travels four ways, and a new one checks each: the
-  offer (`offerLocked`), a joiner's wiring (`configForJoin`, cleared by `alone`), a
-  leave that forgets it (`leaveSessionLocked`'s `left`) and a host's scenario change
-  (`RestartAsk`); `-no-cheats` takes all four.
-
-## Determinism and the harness
-
-- A choice every instance must make alike is tested over two worlds holding one
-  roster, each latched as its own participant (`World.AdoptSession`) and driving its
-  own slot, fed the same events
-  (`TestASweepNamingNoCursorTakesTheFirstParticipantsDrains`); a mesh session adds
-  only the order crossings reach them in.
-- `TestSystemDomainProfiles` holds each system to its declared domain: a Shared one
-  touching a Player-only store needs an allowlist entry with its reason (the wall
-  system's `"wall:Particle"` mask lookup), while a Player system may read Shared
-  state.
-- `TestNoOrderDependentMapRange` matches a ranged identifier by name against every
-  map-typed name in `internal/system`: a local slice named `drains` trips on
-  `ParticleSystem`'s map field. Rename the local, or allowlist it with its reason.
-  It lints `internal/fsm`, `fsm/std`, `engine`, `event` and others too (`lintDirs`),
-  keyed by function name, so renaming an allowlisted function there fails it.
-- A test proven to pin a rule by mutating the rule's line runs from a copy of the
-  tree (`tar` it out), so the working tree stays editable; a mutation that survives
-  is run against main's own tests in a `git worktree`, where surviving too makes it
-  an old gap rather than a lost pin. One that only fails to build, a name left
-  unused, proves nothing: keep the name read (`false && x`).
-- A correction leaves a cursor's owner-authored cells (D-13) alone four ways:
-  `applyShard`'s owner check, the encoder's exclusion, the owner-authored cursor
-  sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and
-  `RebindCursorRoster`'s restore. Each masks a mutation of the others, so a test
-  proving the rule turns them all off.
-- The divergence harness
-  ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)) compares two
-  binaries: `git worktree add` main, build `go test -c ./internal/app` in each tree,
-  run the four shapes on both from their package directories, a second or so each,
-  and read late commits and late copies; pages repaired move with any change of
-  timing. Diff the two outputs whole, the link's B/s aside: the transitions
-  logged with their ticks show a simulation that moved while every count stood,
-  as a storm going active two ticks later did.
-- The harness's counts read the compared surface, which leaves out every D-13 cell,
-  so an owner sync a receiver drops moves none of them. A change to what a sync may
-  write is checked on a copy whose drop prints the sync instead
-  (`NetworkSystem.stateInRange`), over the four shapes and the `internal/app` suite
-  under `-test.v -test.parallel=1`, which puts each print under the test that sent it.
-- In a bare world whose cursor entity carries no `CursorComponent`,
-  `PushCursorMove` predicts nothing and only crosses `EventCursorMoveRequest`, which
-  no `CursorSystem` applies, so `LocalCursor` stays put. A router test that chains
-  keys, a motion then what acts from its cell, applies each move and edit from the
-  queue itself, a key at a time (`lineWorld` in `internal/mode/router_test.go`,
-  read back with `screen`).
-- `.` owes the text Insert typed after its change through `Machine.Next`, which
-  types nothing until the router has entered Insert: whatever routes `Process`'s
-  intent drains `Next` after it, settling each, as `App.takeEventWith` and the
-  test helpers `press` and `tutorialKeys` do.
-
-## Session tests
-
-- In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
-  `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
-  participant's `link.MeshPort` under its world lock drops it. An authority's lead
-  is 1 once its first tick closes: a test of what lands inside a lead reads
-  `network.barrier_delay_ticks`, and a guest in step with its host over a link
-  with latency takes the host's crossings late, so stand it the latency behind
-  (`shapedFightOf`). A mesh
-  opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
-  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`). A pair led by
-  1 is a join through the host, and one whose ends are both in already is a link
-  beside (`meshOf`): a second link to the host is `{3, 1}`, after the pair that
-  brings 3 in.
-- A solo run takes a transition a local event triggers in place, so only a session
-  shows its ask (D-20): `tutorialSession` is a cursorless host and its guest on a
-  mesh, the guest's keys typed with `tutorialPress` and both ticked a lead or two.
-- A journal's digests stand too far apart to catch a transition taken a lead
-  early: a replay made to grant a recorded ask in place reproduced every one.
-  Compare the surface tick for tick (`replayMatches`, whose `edit` names the root
-  of a scenario that is not embedded).
-- A Bus request applies on every instance, its sender's included, so what only
-  the authority does with one is gated where the handler runs
-  (`Scheduler.grantTransition`), never by who receives it.
-- Code that traces a refusal inside `admissibleFromSource` takes no lock of the
-  network system's: `eachRosterScheduled` calls it with `mu` held, and a tracer
-  that read `participantID` there hung a test for its whole timeout.
-- `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
-  the game resets near tick 35; a session test that waits a fixed count of ticks
-  past that reads the reset. Wait for the condition, bounded.
-- A joiner's `LocalSlot` stays `NoPlayerSlot` until its arrival crosses on its own
-  world, which takes the joiner's own ticks: a test waiting on it ticks the joiner
-  (`arrival` in `host_test.go`).
-- A spawn request naming a participant joins a reset's roster while one waits
-  (`PlayerResource.JoinRestore`) and spawns nothing, so a unit test that leaves a
-  restore pending rebuilds through the boot's request, one with no `PeerID`.
-- A host admits `NetworkAdmitBurst` (6) dials from one address per
-  `NetworkAdmitWindow` (a minute), a fixed window, and loopback is one address: a
-  test lobby past six dials fills a window more per six (`lobbySession` sizes its
-  wait so), a dial refused after admission counts and a budget refusal does not.
-  A dial reaching a host with `MaxHandshakes` (8) handshakes in flight is closed
-  unanswered, which the dialer reads as `io.EOF` ("connected, but no vif session
-  answered there"), and is retried as a refusal is (`scriptedRun`).
-- A run that only watches is `mustWatching` (`internal/app/watch_test.go`), its
-  dial one more in its host's budget above. `followTo` steps it to its host's tick,
-  which shows what a player crossed only a lead later: play the lead out on the
-  players first. A fight (`brawl`) whose players are not `:god`'s ends in a defeat
-  and a new game, which starts the tick count over.
-- A viewer's world holds no cursor of its own (`World.Watches`), and a system that
-  lays Player-domain entities with none, as `GlyphSystem` and `NuggetSystem` did,
-  draws them on a spectator's screen, where nobody plays them. Such a system
-  returns early there (`TestAViewersWorldLaysNoFieldOfItsOwn`); no viewer test
-  compares the Player domain, so only a spectating page shows the next one.
-- A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
-  end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
-  do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
-  `settleCorrections` before `alignTicks` and `assertSharedParity`, and close no
-  host publication while a hold's end or a new game is still to land.
-- A seat stands a tick ahead of its holder nine samples in ten from its join on
-  ([todo](todo.md#land-a-joining-seat-inside-its-pace-band)), so its holder's
-  crossings reach it late under load. A hold lands where the seat stands
-  ([Multiplayer §3.6](multi-player.md#36-holding-a-session)), its holder's tick
-  unless it ran a whole tick further: a socket test asserts each stands still, the
-  guest at or past its host's tick. A mesh test makes a crossing late by ticking
-  the guest before the host flushes it
-  (`TestAHoldComeLateLandsWhereItsGuestStands`). A replay test levels its guest
-  with its host before it plays, or an install that carries it forward leaves the
-  replay's `predicted` depth behind the run's.
-- `EventQueue.Consume` returns the queue's own slice, which the next `Consume`
-  overwrites: a test dispatching handlers that push clones it first. A unit
-  `NetworkSystem` reads its identity at `Init` from the latched session, so latch
-  before building it, and `Cross` takes nothing until `barrierActive` is set.
-- A headless run ticks `WraithTimeout` of game time in a fraction of a second, its
-  resets included (`a.Tick(int(d / DeltaTime))`), so a test of a wait waits it out.
-  `replayMatches` wants fifty compared ticks.
-- A new game starts the tick count over (`Stamp.Run` moves), so a tick read before
-  one bounds nothing after it: a wait for a tick ends when the run moves
-  (`KeyframeAt`, `ProvedWorld`, `gateJoiner`). The harness's host ticks every 10 ms,
-  five times the game's rate, so a wait that outlasts a 5 s deadline in play is
-  over in a test unless the test ticks its host by hand.
-- A host a test does not tick parks a mid-run gate in its lead, and gates run one
-  at a time (`midRunGate`): a raw dial's reply holds the gate (`dialSession`,
-  `Complete`), a second joiner's waits behind it, and what the test crosses
-  meanwhile lands before that gate reads its offer.
-- Only a play run redials the host it lost (`Membership.redial`), so the mesh and
-  headless succession tests never do: a rule about a person's run losing its host
-  sets the guest's `cfg.Mode` to `ModePlay` under `RunSafe` before the host goes
-  (`TestAGuestThatRedialsItsLostHostTakesItsTurn`).
-- `:join`, the menu's join and a redial dial on the run they replace and hand the
-  dial to the next (`wiring.dialed`): a test of that path calls
-  `membership.DialJoin` on a wiring of its own and builds its run with `driveRun`
-  on a `runConfig` carrying the dial.
-- A fixture's session takes the default policy, `host`, and its guests join as
-  leaves: a test of the succession opens with `hostMigrating` and joins with
-  `takingOver()` or a `ListenAddress`, or nothing walks and each guest forks as its
-  host goes.
-- A guest whose host closed its link plays on as a fork or a successor, on its own
-  clock, and still applies what that host crossed before the close: a departure
-  crossed for the guest itself turns its bots Wraith there a lead later, and a
-  successor's freeze only delays it. A test reading that guest's world reads a
-  race; read the instance the rule belongs to.
-- One goroutine ticks a run. `waitForRosterPair` ticks both of its runs, so a run
-  already under `tickInBackground`, which `gatedHost` returns, is waited on with
-  `waitForCursors` or `waitUntil`, which only read. A second ticker passes
-  `go test` and fails CI's race run: run a new socket test once under `-race`.
-
-## Tests that flake
-
+  window, page or Android view, which no test catches for a watched script or bot
+  (`Run`, `RunScript` and `RunBot` fill `host` from the `Host` handed beside the
+  `Config`). A test that presents builds its run with `newApp` on a `runConfig`, and
+  one that builds a joiner as a join does goes through `configForJoin` into
+  `newDriven`. `RunBot` and `RunScript` return counters alone: a test reads the
+  world a driven run is built on through `drive`, whose `build` is handed the App
+  and ends the run before it presents by returning an error
+  (`TestABotAlonePlaysOneMapWatchedOrNot`), and a run's size from its journal's
+  anchor (`journal.NewCapture().Anchors()`). A run that shows nothing reads its
+  terminal off any standard stream still on it (`startedIn`): under `go test` there
+  is none, and a test names one by swapping it.
+- `engine.NewGameContextWithClock(w, 80, 40, ...)` takes the terminal's size; the
+  map is what the status bar and rulers leave of it (79x36 there), so a test of a
+  cell at an edge reads `Positions.Width` and `Height`.
+- The two lints in `internal/system`
+  ([Development §5](development.md#5-validation-and-tests)) read files and names,
+  not behavior. `TestSystemDomainProfiles` reads a system's file, not its guards: a
+  shared system that touches `Boost`, `Energy` or another D-13 store fails it even
+  behind `ResolveOwnedCursor`, so what it wants of one stays where the store's owner
+  reads it, as the square's boost cap and energy step ride `ShieldComponent`; it
+  narrows a dual system by what its file creates (`PulseSystem` creating a cursor's
+  pulse reads as player alone, so `WeaponSystem` fires the death wave); and a Shared
+  system touching a Player-only store needs an allowlist entry with its reason
+  (`"wall:Particle"`). `TestNoOrderDependentMapRange` matches a ranged identifier by
+  name against every map-typed name in `internal/system`, so a local slice named
+  `drains` trips on `ParticleSystem`'s map field: rename the local, or allowlist it
+  with its reason. It lints `internal/fsm`, `fsm/std`, `engine`, `event` and others
+  too (`lintDirs`), keyed by function name, so renaming an allowlisted function
+  fails it.
+- A new non-ASCII rune in a drawing package or a shipped scenario's TOML must be one
+  the terminal module's atlas holds (`atlas.Hack()`), and only
+  `go test ./internal/asset`, a package the change never touches, catches it
+  ([Content §7](content-assets-and-tools.md#7-embedded-assets)). A rune it lacks is
+  one Hack lacks: pick another, since nothing is regenerated in vif and only
+  terminal's `tool/font-atlas` could draw it. The test reads every string in
+  `internal/mode`, `app`, `help` and `prof` too, and a comment after code on its
+  line as code, so a key nobody sees and that comment stay ASCII.
+- A test that reads a shipped scenario skips, not fails, when it is missing (an
+  `os.Stat` or `ScenarioPath` guard), so moving one under `wad/scenario/` passes
+  green while testing nothing: run those tests with `-v` and read the SKIP lines,
+  and search the `filepath.Join(..., "scenario", ...)` form beside the slash one.
+- `os.UserConfigDir` reads `XDG_CONFIG_HOME` only on Linux and the BSDs, so a test
+  setting it alone writes the developer's own files on macOS and Windows: point
+  `HOME` and `AppData` there too and skip where `paths.UserRoot` still lies
+  elsewhere, or write a `-config-dir` root instead. A store test never names
+  `/dev/null`, which a broken refusal renames over as root: use a FIFO.
+- A test is proven to pin its rule by undoing the rule. One file's mutation compiles
+  in its place under `go test -overlay <json>`
+  (`{"Replace":{"<the file's absolute path>":"<the scratch file>"}}`), several in a
+  `tar` copy of the tree, so the working tree stays editable. A mutation that
+  survives is run against main's own tests in a `git worktree`, where surviving too
+  makes it an old gap rather than a lost pin. One that only fails to build, a name
+  left unused, proves nothing: keep the name read (`false && x`). One that
+  deadlocks hangs where it should fail: run it under `timeout`, whose 124 is the
+  test holding, and give a run past ten minutes `-test.timeout 0`.
 - The cadence tests (`internal/app/cadence_test.go`) run a shaped mesh on its
   virtual clock and are deterministic: one fails every run alone or never, so it is
   not load. A capture a few bytes larger or smaller reshapes every publication over
   a thin link: bisect, then print the host's `LinkMetric` and `Cadence()` each tick.
-- A few `internal/app` tests over real sockets have failed on main alone, rarely and
-  more under `-race` or load, a mid-session journal test among them. A failure
-  there takes about 16.5 s, a 15 s socket wait running out. Before calling one a
-  regression, run it alone in fresh processes, alternating main's binary and the
-  branch's under the same load: eight processes of one test on four CPUs, three
-  runs each, failed a quarter of the processes where a quiet run never did. A flake
-  that appears after a merge can be older: one quiet process at `-test.count=40`
-  read 2 failures on the commit before and 7 after, a merge that only moved timing.
-  `TestAJoinerLandsInAGameWaitingForItsHostsStart` is one: `shared snapshot
-  diverged` at its last parity, the two a tick apart, in 3 of 192 processes run
-  eight at once on four cores and in none of 20 run alone.
-- A race only CI saw: build once with `go test -race -c`, then run the test in
-  several processes at once; load exposes it, quiet runs do not. Keep it near twice
-  the CPU count: at five times, a socket join's catch-up is refused ("behind the
-  session ... retry in a moment"), the harness's host ticking every 10 ms faster
-  than the loaded joiner closes the gap, a refusal a production seat retries.
-- The race run reports two accesses only with no lock between them, and a lock both
-  goroutines take in between hides the pair. One load does not show is forced in a
-  worktree copy: sleep so the read lands while the writer holds its own lock, ahead
-  of its write, as a leave's config write met a mid-run gate's offer.
-- `internal/app` tests start no log sink, so a socket test that times out says
-  nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
-  copy, build its race binary there and run it under the same load, keeping the
-  branch clean. Probe after the wait has run out: a dump ahead of the racing step
-  moves it, and hid a failure seen one run in ten.
-- Eight race processes of one socket test starve its host to 11 to 18 ticks a
-  second, under the game's 20, so a gate's 5 s and a test's 15 s end before a
-  convergence floor of 60 ticks does: a join three relays deep then fails by load
-  alone (`TestARunBehindARelaySeatsItsBotsAndRelaysForOthers`, 1 of 80). A probe
-  in `World.removeEntity` printing the stack when the entity is a cursor names
-  whatever ended one without a despawn.
-- A mesh link loses exactly the frames that arrive while its `LossEvery` is 1
-  (`MeshPort.SetShape`): a test loses one epoch by setting it round the host tick
-  that flushes it (`TestAGuestFollowsItsHostIntoTheNextGame`).
-- A socket test's dump whose status reads "" where the test set one saw a new game
-  come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
-  the resets since the run began. Which of two runs applies a new game first races
-  their tickers; a test puts the guest first by sleeping once in a ticker of its own
-  on the authority, after the tick that crosses the reset and before the one that
-  applies it.
+- A few `internal/app` tests over real sockets fail on main alone, rarely and more
+  under `-race` or load (`TestAJoinerLandsInAGameWaitingForItsHostsStart`: `shared
+  snapshot diverged` at its last parity, the two a tick apart); a failure there
+  takes about 16.5 s, a 15 s socket wait running out. Before calling one a
+  regression, build each tree's binary once (`go test -c`, with `-race` for a race
+  only CI saw) and run the test alone in fresh processes, alternating main's and the
+  branch's under the same load, near twice the CPU count: eight processes of one
+  test on four CPUs failed a quarter of them where a quiet run never did. At five
+  times the CPU count a socket join's catch-up is refused ("behind the session ...
+  retry in a moment"), the harness's host ticking every 10 ms faster than the loaded
+  joiner closes the gap, a refusal a production seat retries. Eight race processes
+  starve a host to 11 to 18 ticks a second, under the game's 20, so a gate's 5 s and
+  a test's 15 s end before a convergence floor of 60 ticks does: a join three relays
+  deep then fails by load alone
+  (`TestARunBehindARelaySeatsItsBotsAndRelaysForOthers`). A flake that appears
+  after a merge can be older: count it in one quiet process at `-test.count=40` on
+  the commit before and after. Run a new socket test once under `-race`: a second
+  goroutine ticking one run passes `go test` and fails CI's race run.
+- The race run reports two accesses only with no lock between them, and a lock
+  both goroutines take in between hides the pair: a race load does not show is
+  forced in a worktree copy, by a sleep that lands the read while the writer holds
+  its own lock, ahead of its write. `internal/app` tests start no log sink, so a
+  socket test that times out says nothing of why: put
+  `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree` copy, build its race
+  binary there and run it under the same load, keeping the branch clean, and probe
+  after the wait has run out, since a dump ahead of the racing step moves it. A
+  probe in `World.removeEntity` printing the stack when the entity is a cursor
+  names whatever ended one without a despawn.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
@@ -626,1192 +288,67 @@ Docs · Libraries · Branches.
 - The order is the world lock (`engine.UpdateMutex`, taken by `RunSafe`, not
   reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
   Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
-  correction loop, between ticks.
-- The session half of a run's config (`m.cfg`, `m.wiring`: addresses, name, policy,
-  ceiling) changes on the run's driving goroutine alone, under the world lock and
-  `sessionMu` together, so a reader elsewhere holds either: a handshake reads an
-  offer's fields under `sessionMu` alone (`offerLocked`), a router's door builds its
-  acceptor on each connection's goroutine (`relayAcceptor`), and a redial copies the
-  whole config under the world lock (`JoinBase`), where `persistPlay` writes too.
+  correction loop, between ticks. The session half of a run's config (`m.cfg`,
+  `m.wiring`: addresses, name, policy, ceiling) changes on the run's driving
+  goroutine alone, under both, so a reader elsewhere holds either: a handshake reads
+  an offer's fields under `sessionMu` alone (`offerLocked`), a router's door builds
+  its acceptor on each connection's goroutine (`relayAcceptor`), and a redial copies
+  the whole config under the world lock (`JoinBase`), where `persistPlay` writes too.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
   `redialRelay` raise their wait first.
-- `Router.ProcessMacroTick` runs off the world lock (`loop.go`, `headless.go`): a
-  component read there races. Read a status cell, or take `RunSafe`.
-- Tests reach a play run's paths by switching a running App's `cfg.Mode` under
-  `RunSafe`, so a goroutine that reads the run's config off the world lock (the
-  drive loop, a bot seat) reads the copy it started with instead.
-- `World.CopyIn` overwrites `Config`, `Time`, `Player`, `Transient` and `View`
-  whole, so a goroutine off the world lock (a bot seat, the drive loop, the
-  correction loop) reads none of their fields, even one that never changes: the
-  race detector flags the copy's write.
+- `World.CopyIn` overwrites `Config`, `Time`, `Player`, `Transient` and `View` whole,
+  so a goroutine off the world lock (a bot seat, the drive loop, the correction loop)
+  reads none of their fields, even one that never changes: the race detector flags
+  the copy's write. Tests reach a play run's paths by switching a running App's
+  `cfg.Mode` under `RunSafe`, so such a goroutine reads the copy of the config it
+  started with instead.
 - A player's setting the engine reads, as the camera edge, is a `World` atomic
   outside `Resources`, not a `Config` field: a copy a seek installs would put back
   the value it was captured with, and `livePlay` reads it off the lock. A replay's
   `player.adopt` must carry each such setting to the copy it presents (HUD, frame
-  rate, camera edge), and the console's lines, or the viewer's are lost at the
-  next seek. A setting only the speakers read sits on `engine.AudioResource`
-  instead (`Pref`, `Bed`), which `system.HandOverAudio` moves whole to the copy;
-  what its system last sent the engine goes over in that system's `takeOver`.
-
-## Networking and admission
-
-- `io.Copy` between two sockets reaches Go's kernel `splice(2)` path only when both
-  ends are a `*net.TCPConn` or `*net.UnixConn` themselves: a wrapper that renews a
-  deadline on each write (the router's `stallBounded`) hides `ReadFrom`, so each
-  direction copies through a 32 KiB user buffer. Put the deadline on the socket, not
-  on a wrapper, before reading a splice's memory.
-- `encoding/json` compacts a `json.RawMessage` when it marshals one, so a signature
-  over raw JSON bytes survives a round trip only when the signer emitted compact JSON,
-  which `json.Marshal` does; a token re-encoded with whitespace by another writer
-  fails its signature, which is the intended refusal, not a bug to relax.
-- A challenge-response handshake cannot be fuzzed from a static script past its
-  challenge: a proof over a random nonce is never in the corpus. The join target
-  pins the nonce through `Coordinator.Nonce` and seeds proofs over it; the peer
-  link target asserts instead that no script ever opens a link.
-- A public key travels as its base64 string (`network.EncodeKey`), not `[]byte`:
-  `RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is
-  TOML a scenario could name, and the generated capture codec has string and slice
-  kinds and no bytes kind. Decode at the boundary that verifies.
-- `auth`'s SCRAM client refuses a challenge below the cost it was built with, and
-  an empty channel binding is its error, not its unbound: pass `WithChannelBinding`
-  only over TLS (`bindingOption`), and read the leaf from under a websocket
-  (`tlsOf`), since `*tls.Conn` has a `NetConn` of its own to stop at.
-- The router intercepts exactly one frame each way of the admission exchange, the
-  door's question and the dial's answer, and splices everything after, so a
-  passphrase door's later steps pass through it untouched; a stand-in pod in a test
-  hands its connection to `HostAcceptor` whole, which reads the route frame itself.
-- A refusal that passes in moments (`RetrySoon`) is redialed every 250 ms, by a
-  first dial as by a rejoin, and six dials spend an address's budget for a minute:
-  a state that can last, as a lobby does for a dial that only watches, takes a
-  refusal a person retries (`ErrUnstarted`).
-- The router counts per address by `network.AdmissionKey`, an IPv6 address's /64,
-  as the join budget does: a count keyed by the whole host (`addressHost`) lets one
-  prefix's addresses take a share each.
-- A port a run opens serves a dial that only watches at every door it answers at,
-  a second one's included (`link.Config.AcceptWatch`), and
-  `Membership.watchParticipant` decides whether the session is shown: a door that
-  must show it to nobody, as the one a pinned fork keeps for the players it
-  relayed, is refused there, and its test dials it with `network.WatchSession` too.
-- nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
-  router reads version 2 too for other edges. A probe of the front door behind the
-  edge writes the header first or is closed unanswered.
-- A join address keeps its `vifs://` scheme (`Endpoint.Dialable`): a bare host:port
-  stored in `Joining` or the flags dials a TLS door in the clear. A sign-in is shown
-  over TLS alone (`tlsOf`), whatever the door asks.
-- An account command runs its KDF and requests in a goroutine and reports on the
-  status line: a `SessionController` method runs under the world lock, which cannot
-  wait on a site.
-- A door reads what gates it as each dial arrives (`Coordinator.Passphrase` is a
-  func): a run's port is made before its player's `:host ... passphrase`, behind
-  its bots or a session it left, so a credential captured as the acceptor is built
-  is the wrong one. The run's bots dial the same acceptor on a stream inside the
-  process (`seatLink`) holding no phrase or ticket, so a gate is set only for a
-  door (`sessionAcceptor`'s `door`).
-- What a dial reads before it holds a place, the preview and a seat's offer, goes
-  through `handshake`, which strips the chain: a `SessionOffer` field only a seated
-  participant should hold is stripped there too.
-- A browser trusts a self-signed door only by being told to: pinning from a page
-  needs WebTransport's `serverCertificateHashes`, which the route does not speak,
-  so a page joins a player's door over the site or by a passphrase bound to that
-  door's certificate; a native run pins the fingerprint the sessions API carries.
-- Two runs on one machine find each other over UDP broadcast
-  ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)): a datagram
-  to an interface's directed broadcast reaches local sockets too, from that
-  interface's address, and the second run to bind UDP 7777 takes an OS-assigned
-  port. `ss -lnup` names who holds the port, and a few lines of Python sending the
-  512-byte probe (`vif?`, 1, 2, then zeros) read a visible host's beacon back.
-
-## Position
-
-- [Position](position-package.md) states the index's rules: bounds that are the
-  grid's, the package's names, the point a query takes, the planes
-  `BlockChangedAt` keeps, `WallBlockAll`. What it leaves out:
-- `pkg/position` knows no entity: a test over walls or glyphs needs a world and
-  stays in `internal/engine`; a grid-only test goes to the package with a test id
-  whose class is its top byte.
-- A body's size is one `vmath.Footprint`, its header offset inside it, and a
-  species' is read through `Resource.Footprint`, never as four ints or a parallel
-  parameter: the searches, line of sight, passability tiers and a materialize take
-  the struct, and an event's or a component's cell names the header, never the
-  top-left.
-- `engine.NewGameContextWithClock(w, 80, 40, ...)` takes the terminal's size; the
-  map is what the status bar and rulers leave of it (79x36 there), so a test of a
-  cell at an edge reads `Positions.Width` and `Height`.
-- A cell's view (`EntitiesAt`, `Occupants`, `EachOccupied`) is the cell's own
-  storage or its crowd's, and a cell going from one occupant to two, or back,
-  moves them: copy a view before writing its cell, as every call site does
-  (`copy(buf[:], ...)`).
-- The probe path lives on the inliner's budget: `go build -gcflags=-m=2
-  ./pkg/position` prints each function's cost against 80, and `probe` stands at
-  79. A table of indices beside a stale flag cost it 88 and a call a probe.
-- A row's wall flag (`Position.wall`) is read when the row is made, on
-  `WallChanged`, and for every row once rows are written whole (`readWalls`, in
-  `CopyIn` and the order install). A new path writing `dense` and `entities`
-  whole calls it; the fuzz test's invariant fails one that does not.
-- `BeginBatch` returns the store's one batch, begun again: commit it before the
-  next begins, and hold none across a call that may begin one.
-- A cell holds 31 and keeps whichever came first, so a world rebuilt by insertion
-  seats a full cell's first rows instead: what must hold cells alike carries the
-  placements held out (`WorldOrder.Unindexed`). `magic` fills one at a gateway
-  some 1,000 s in.
-- `PositionBatch.Commit` refuses a cell any entity holds, a Player one included,
-  as `GlyphSystem.occupied` does for a line drifting in: an entity put on the
-  index or taken off it, an effect's too, moves where glyph lines and nuggets
-  land and the glyph stream with them, and from there the fight.
-- A query is a generic method over its point (`Blocks[P Coord]`), the form read
-  by size in `at`, `as`, `box` and `body`, a constant in each instantiation: a
-  flat instantiation must keep the flat function's instructions, which `go tool
-  objdump -s 'Index.*\.Blocks' <test binary>` counts for both. A helper that
-  returns six fields (a `Box`, a `Footprint3`) goes through memory: return the
-  four-field form and two ints. A local named `at` shadows the helper.
-- A search names the zero point with false where it finds nothing: the swarm's
-  `findRoom` and the storm's attack landing keep the point without reading
-  `found`, and what they build from it is in the digests.
-- A loop around a call spills every live value before its first pass, so a
-  helper that calls once in the common case takes it straight (`clear`'s one
-  layer) and loops in a function of its own (`plane.deep`).
-- The volume tests hold a layer against a flat map through the same code, so
-  they see no flat rule broken: a flat rule needs a model of its own, as
-  `placedAround` is the exclusion search's. The block log is lost past
-  `cells/8+64` entries, so a test reads it before that many changes.
-- Two builds with the same instructions can read 15% apart on one probe by link
-  layout alone: rebuild both with `-ldflags=-randlayout=N` for a few N and
-  compare the spreads before believing either, or, where the hot function did
-  not change, diff its `go tool objdump -s` in both with the addresses masked.
-- A surface a column ahead of the others of its mask and layer leaves
-  `staleShift`, so a probe lays the surfaces again; a scroll of every one leaves
-  `stale` clear, which the surface test holds and `BenchmarkCaveStep` shows. A
-  test that probes after each change never lets a scroll finish: change in
-  batches, as that test does.
-
-## Math and physics
-
-- `pkg/vmath` names a flat form's twin through a volume with a 3 (`Point3`,
-  `Line3`, `Footprint3`, `PointAt3`, `GridTraverser3`) and a vector operation
-  `V3...`; a twin is tested held to one plane against its flat form, exactly
-  where no table rounds an angle.
-- The compiler keeps a struct in registers only up to 32 bytes, four fields a
-  level and no array, which is `Line`'s eight int32s in four pairs. A larger
-  walk steps in place through a pointer method and names its fields:
-  `Line3` read 68 µs over the bench segments as arrays stepped by value, 106 as
-  named fields by value and 10 as named fields in place (`Advance`).
-- A helper's scratch of a known ceiling lives on its caller's stack: an `Append`
-  form leaks `dst` only to its result, so `var buf [N]T` passed as `buf[:0]`
-  allocates nothing, as `updateOrbs` samples its orbit. `-gcflags=-m` printing no
-  `moved to heap` for the buffer confirms it.
-- Appending a two-int array a sample read twice the time of growing the slice
-  once and writing each element in place (`AppendEllipseGrid`, 620 to 310 ns for
-  64 samples).
-- The sine tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very
-  angles a sample count dividing `LUTSize` asks for: reading them there gives
-  the computed cells bit for bit. `Sin` and `Cos` floor any other angle to a bin.
-- A benchmark that feeds a pure function constants measures nothing: the call
-  folds at compile time, and `vmath`'s older benches read 0.9 ns for a sine that
-  costs 5.5. Feed package variables, and read a loop over varied inputs beside
-  the lone call, since inlining and what one iteration waits on differ there.
-- On amd64 at its default level `math.Floor`, `Ceil` and `Trunc` compile to a CPU
-  feature test with a call for the fallback. Inlined in a loop the rounding also
-  waits on its output register's last value, chaining the iterations: the table
-  sine read 5.5 ns, a rotation 7.5. `lutIndex` truncates and steps down by a
-  borrow (`bits.Sub64`); the same step as an `if` compiled to a branch in some
-  callers and missed on angles of either sign (a collision 9 to 18 ns). Built
-  at `GOAMD64=v2` or later the floor is one instruction, a lone sine 0.8 ns
-  against the borrow's 1.2, so `floorChecked` is a build constraint
-  (`amd64 && !amd64.v2`) and such a build keeps the floor.
-- The same truncation in `PointAt` reads a third faster alone and costs more
-  than it saves: its inline cost goes from 12 to 50, `physics.Integrate` (55 to
-  93) and three more stop inlining, and a system's loop over bodies reads 20 to
-  40% slower. To name every function a change stops inlining, list
-  `go build -gcflags='github.com/lixenwraith/vif/...=-m' ./...` before and
-  after and compare the sorted `can inline` lines.
-- `pkg/vmath/physics` names a 3D twin with the suffix its older functions carry
-  (`Integrate3D`, `ApplyHoming3D`), beside its flat form in the same file and on
-  the flat form's scalar helper where one exists (`HomingProfile.arrival`,
-  `impulseMagnitude`, `reflectCell`, `bounceSteps`). Two tests hold a twin: in
-  one plane it is the flat form, and with its axes cycled it answers alike.
-- A twin's test compares floats within 1e-9, never by `==`: an architecture that
-  fuses a multiply into an add (arm64, amd64 at `GOAMD64=v3`) rounds two orders
-  of one sum apart. Cells and counts compare exactly.
-- A flat form's result is simulation state. A refactor of one is compared with
-  its previous body, kept in a scratch test, on random inputs by
-  `math.Float64bits`, negative zeros among them, before the headless digests are
-  read: `v -= v*0` turns a negative zero positive, so a branch that skips a
-  subtraction is not one that subtracts nothing. A system's pass is held the same
-  way: `git show HEAD:<file>` under a scratch tag with its types renamed, both
-  stepped over twin random worlds, every velocity compared by its bits. A pass
-  that visits pairs in another order keeps them only if each target still takes
-  its pushes and sums its sources in the old order (soft collision's scatter).
-- A term hoisted out of a float sum keeps the sum's bits only in the sum's own
-  order, `(a+b)+c`: the Devourer's rebuild was rewritten against main's, tick by
-  tick, on that rule; a table or an angle identity in its place moves cells.
-
-## Combat
-
-- A family lands alike from every attacker (`TestAFamilyLandsAlikeFromEveryAttacker`),
-  since a data species' row sets a family's damage and effects whoever throws it: a
-  new attacker that must deal otherwise takes a family of its own, as the magic
-  square's `strike` does.
-- A target group holds `parameter.MaxTargetsPerGroup` (8) anchors and drops the rest
-  in store order, saying nothing: a ninth anchor is no target until one goes.
-- `CompositeSystem.Update` destroys a header holding no member, one at zero hit
-  points aside, the tick after it is made: a body that grows in from nothing stands
-  its first members as it spawns, as the Devourer's first frame covers the edge
-  cells (`DevourerEdge`), and a gut laid wholly under the body is reaped so.
-- No target finder or blast reads the profile matrix: they take any header with a
-  `Combat` that is no `CompositeTypeContainer` and not on the player's side, so a
-  kind dropped from `cursorDefenders` takes no damage but still draws every aimed
-  shot. A body nothing may hit is a container, as the Devourer's is and an `inert`
-  pylon: a loadout shot `magic`'s gateway pylons down, which ended its spawns.
-- A cursor's pulse, ray and blast land on every member they cover, so what they
-  take off a body does not fall as a crowd grows: the emitter alone at three
-  charges ends ten 30-point bodies a second. What presses a full loadout is a
-  body's hit points and speed against its walk, never its numbers, and a strike
-  that ends whatever it faces every 2 s outruns any rank: `magic`'s strike ends
-  every rank and reaches two shield radii for that (`SquareStrikeReach`).
-- Each kill boosts a plain shield half a second, and a boosted shield takes no
-  touch, so a horde the weapons can kill never costs it: under a stepped shield
-  (`ShieldComponent.Step`) a kill earns none, which is what lets `magic` count
-  touches at all.
-- `TestSystemDomainProfiles` reads a system's file, not its guards: a shared
-  system that touches `Boost`, `Energy` or another D-13 store fails it even behind
-  `ResolveOwnedCursor`. What it wants of one it leaves where the store's owner
-  reads it, as the square's boost cap and energy step ride `ShieldComponent`. The
-  same test narrows a dual system by what its file creates: `PulseSystem` creating
-  a cursor's pulse reads as player alone, so `WeaponSystem` fires the death wave.
-- Fighter's swarm is no body for a scenario with a small shield: it charges at its
-  target enraged, which refuses the shield's knockback, and costs 1,000 energy a
-  tick inside it (`profile.Contact`, fighter's scale). `magic`'s carrier is a
-  declared species for that, its touch the scenario's.
-- `EventCursorArmRequest` sets energy with heat and ember, so a payload that names
-  no energy zeroes the shield; `EventHeatEmberRequest` moves the ember alone.
-- A `[bus]` event needs its row in `crossingRules` (`internal/system/network.go`)
-  and a payload naming the cursor it acts as, or every peer refuses it.
-- `CombatAttackType`'s zero is `tracer` and `CombatAttackNone` is -1, so a field of
-  it reads tracer until a hit writes it: `CombatComponent.LastAttack` is read only
-  on a kill, which a hit that wrote it brought.
-- A wind long and strong enough to move a homing body holds it off for good: one
-  second in two of a uniform radial wind at force 16 held `magic`'s lightest body
-  six columns out, where it had touched every 4.5 s. The square's gust is short
-  and fades with distance for that; measure a wind by a body's distance a tick.
-- A wind turned round a cell holds off as one blown out of it does: at force 500
-  for 0.7 s of each 2 s, fading over 30 columns, 7 in 100 of `magic`'s lightest
-  bodies reached the shield. Read a tempest by the degrees a body is carried from
-  its gateway to the shield, summed tick by tick since one carried past half a turn
-  reads backward, the share carried 45 to 135, the share that arrives
-  and when fixed lines fall: a scratch test writes `SquareComponent.Lines` each
-  tick, which only a turn recomputes, and `App.Position().Run` moving marks the
-  fall. A wind's pull is its force over a body's mass, so ranks carried alike need
-  masses that stand close (`magic`'s run 1.6 to 2.6).
-- A gust's throw does not scale with its force: drag above the cruise speed eats
-  the rest, so ten times the force threw `magic`'s bodies three to four times as
-  far, and a body thrown onto the map's edge bounces back in at speed unless its
-  prototype's `restitution` is 0. A gust that throws well needs a cooldown near
-  the time its lightest body takes to walk back, or it is a wall.
-- Species nothing kills gather without bound: with no weapon wearing them,
-  `magic`'s wave bodies passed 700 in nine minutes. A cap is the scenario's, a
-  `StatusIntCompare` on `behavior.count` that holds the gateways, and bodies
-  that stand without dying spend it: 291 held in one corner stopped every
-  gateway, and the game with them.
-- Bodies sent faster than they leave jam at their gateway: a soft collision opens
-  a kinetic-immunity window in which a body does not steer, so a pile kicks itself
-  along the map's edge at 40 cells a second and walks nowhere. `magic`'s largest
-  leave a gateway cleanly one each 600 ms and jam at 200. A pylon stood off its
-  corner holds bodies in the pocket behind it: stand it flush.
-- A cursor's burst meter counts every heat gain, so a scenario that gives back
-  what special fire spends, an `EventHeatAddRequest` of it, fills the meter by as
-  much.
-
-## Glyphs and widgets
-
-- `Positions.TopGlyphAt` passes over scenery, as typing does: a check of what a
-  cell holds, a lesson's notes among it, reads `Occupants`. A glyph of type gold
-  is drawn only as a gold composite's member, so a line laid gold shows nothing.
-- The magnifier's box is twelve cells square and stands 25 cells or more from the
-  cursor: beside it, the box needs six rows above the cursor's and five below, so
-  on the tutorial's 20 rows it clears a lesson's text only at the map's right, and
-  only where that text ends by column 65 and the heading's box by column 63
-  (`TestTutorialsMagnifierStandsClearOfItsText`).
-- No default key yanks: a router test binds `y` with `vimKeys`, an input test on
-  its machine's own table.
-- A new non-ASCII rune in a drawing package or a shipped scenario's TOML must be
-  one the terminal module's atlas holds (`atlas.Hack()`), and only
-  `go test ./internal/asset`, a package the change never touches, catches it. A
-  rune it lacks is one Hack lacks: pick another, since nothing is regenerated in
-  vif and only terminal's `tool/font-atlas` could draw it. The test reads every
-  string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody sees
-  stays ASCII, and a comment after code on its line as code, so that comment
-  does too.
-- A glow added (`BlendAdd`) or screened (`BlendScreen`) through `Set` over a cell
-  nothing painted blends onto black, a band darker than the theme's background:
-  blend it with `SetBgScreen` on `visual.RgbBackground`, as the shield's glow and
-  the square's gust do.
-- The explosion field, as any field written with `Set`, blended onto cells nothing
-  had painted from black and faded through a blotch darker than the theme: it
-  now mixes over `BackgroundAt`'s color and writes with `SetBgOnly`.
-- A row added to a Settings section moves two tests that hold the page by its
-  rows: `TestTheSnapshotCarriesEachKindWithWhatItsWidgetNeeds` counts the Sound
-  section's, and `TestAPressDrivesTheMenu` presses rows by number down to
-  Controls' auto-fire.
-- A row whose command asks by an event, as the mute and the binaural beat do,
-  reads its new value only once the event settles. `internal/mode`'s tests are
-  tag-free on a world with no audio resource, so they read what was pushed off
-  the queue (`TestTheBinauralBeatIsAskedAsTheMuteIs`); what the setting then
-  does is held in `internal/system`'s audio-tagged tests, on a real engine.
-- `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
-  a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
-- The menu's rows are built again each frame the menu shows them, and a host that
-  draws its own menu takes the whole tree each frame (`Router.MenuSnapshot`), as a
-  `tui` search does: a row builder with a side effect, as Nearby games' `Look`,
-  runs on every page there.
-- A method the menu comes to call on `engine.SessionController` panics in
-  `internal/mode`'s tests, whose double (`menuSession`) embeds the interface as
-  nil, and one added to `game.Listener` stops `android/game`'s tests building
-  (`menuListener`), which no `go test ./...` at the root compiles: give both
-  doubles the method, and run `go -C android test ./game`.
-
-## Looking at the game without a device
-
-- Run `bin/vif` in a tmux pane (`-nw` starts it without waiting for a key) and read
-  it with `tmux capture-pane -p -e`, which keeps the SGR colors; turned into HTML
-  spans and shot with Playwright, it shows real colors. `TERM=linux COLORTERM=`
-  gives the console tier. The capture carries SGR state from one line into the
-  next, so a converter that resets colors at each line paints wrong backgrounds.
-- A dark map (`EventSightRequest`) hides what a capture would read:
-  `:emit EventSightRequest { dark = false, trail = true }` lights it and draws the
-  walk so far. A scratch copy of the scenario whose status message prints a
-  variable (`message = "goal {}"` with `payload_vars`) names a cell, and the
-  cursor's entity number, captured off `EventCursorSpawned`, for `:emit
-  EventCursorMoveRequest { entity, x, y }`, which a stepped map still applies.
-- `tmux capture-pane -e` drops a line's trailing cells of the default colors, so a
-  converter paints black where the theme's background stands: add `-N`.
-- A scenario whose keys are its only input plays headless from a `-script` of
-  `press` intents under `-speed max -lv debug -log-stdout`: the FSM's transitions,
-  and the stat lines every 200 ticks (`combat`, `swarm`, the event tallies), say
-  what the presses did, a 200-second game in seconds.
-- A status message longer than its room rises onto the row above the status line
-  (the bar's `spill`), and the last row reads empty: read a capture's last two rows.
-- A run started with `XDG_CONFIG_HOME` and `XDG_STATE_HOME` in a scratch directory
-  reads and writes no file of the player's, so a setting it writes back never
-  reaches their `vif.toml`; `-mute` keeps it silent, and a tmux server of its own
-  (`tmux -L <name>`) keeps it out of their sessions.
-- A host loss is three such runs: a host opened with `:host`, two guests that
-  `:join` it mid-run, then `:q` on the host. `:session` on each guest, and its log's
-  `session` and `net` lines (`-l=<dir>`), say who took the term or why nobody did.
-- Each run of a session needs a state root of its own (`XDG_STATE_HOME`): a place is
-  kept under the key that root holds, so a second run from one root is refused as
-  "this player's place is still linked to the run it left". `-nw` seats a run
-  without its press, a run started with `-bot -watch` is driven and never redials,
-  and `kill -9` on a `-serve` host is a host lost, where a signal it takes drains.
-- A browser plays a scenario that is not embedded, as the tutorial, only as a
-  server's guest, so a change to one is read there too: `-serve <addr> -players 1
-  -probe <addr>` and a `-join` in tmux. A page's reload is `kill -9` on that guest
-  and a second run from its `XDG_STATE_HOME`, which takes the place back while the
-  probe reads `ready=true` with `guests` at `capacity`.
-- A tree is a guest with `-relay <addr>`, a run that joined there with a `-relay` of
-  its own, and one behind that: `./script/test.sh tree` loses its host. A Go test
-  has no restart loop, so a run coming back through its relay's new run is seen
-  only there.
-- A takeover needs the host's `-authority migrate` and a guest's `[play] takeover =
-  true` in its scratch `vif.toml` before it starts. `kill -STOP` on the host is one
-  gone silent: the loss shows a link timeout later, as the guest's convergence floor
-  breaches, and the two alerts race by milliseconds, so compare builds by their log.
-- Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
-  arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
-  `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
-- A game left running in tmux plays on between captures: `magic` unattended falls
-  in two and a half minutes and starts over, so a clock near zero after a change
-  is that, not the change. `:emit DeathWaveRequest {entity = 2}` runs its death wave, its
-  cursor being entity 2.
-- `tmux kill-server` returns before the server is gone: a `new-session` sent at
-  once can land on the dying one and take the next command down with "server
-  exited unexpectedly". Wait a moment, or start under a new `-L` name.
-- A renderer's look iterates fastest off the game: a scratch test draws it into a
-  `render.RenderBuffer` over a stand-in frame, as its own test does, and writes
-  the cells to a PNG, a half block two pixels high.
-- `tmux send-keys` drops a `;`: one alone is its command separator and a trailing
-  one in a `-l` string is cut, so `fx;;;;` sends three repeats; send `'\;'` as its
-  own argument. A capture shows the cursor on a glyph as the glyph, so read the
-  cursor from the telemetry overlay's player card (`:t`, `/player.0`) instead.
-- `-l <dir>` is `-l=<dir>`: with a space the log lands under `~/.local/state/vif/log`.
-- To watch one moment tick by tick, `:step ev <Event> pause` runs to the tick the
-  event is dispatched, `:step 1` advances a tick and `:step off` resumes. A paused
-  frame is dimmed by half (`DimFactor`): for true colors resume and capture every
-  50 ms, which lands one capture a tick. A drain's end raises `EventSpeciesKilled`
-  too, so `:system drain disable` first.
-- A campaign encounter is entered from a running game by `:emit
-  EventFSMRegionRequest { op = "pause", region = "main" }`, then `{ op = "spawn",
-  region = "kraken", state = "KrakenSetup" }` (the Devourer's is `devourer` at
-  `DevourerSetup`). A fresh cursor stands where the Kraken rises, so `:energy
-  900000000` first, or its strike starts a new game. A
-  capture of a 256-color run writes entries 0-15 as `30`-`37`, `90`-`97` and their
-  backgrounds, not `38;5;n`: a parser reading only that form reads them as unset.
-- `armada`'s squadrons are watched with auto-fire off (`a`), the ship kept alive
-  (`:energy 900000000`) and the formation ended (`:emit EventBehaviorCancelRequest
-  {}`), which brings the squadron wave on. A headless probe reads the route a
-  squadron drew as its ships land (`Resources.Scenario.Var("route")`) and plots
-  each ship's cells a tick.
-- A scenario's balance is read by a scratch test in `internal/app` under a build
-  tag of its own, its path in `.git/info/exclude`: a headless `App` ticked under a
-  policy that reads `Resources.Scenario.Var` and the stores in `RunSafe` and presses
-  keys through `a.inputMachine.Process`. Auto-fire is the router's, so the probe
-  injects `input.IntentFireMain` every five ticks, and a gateway sends one body a
-  tick at most. Read a policy that presses nothing and one that plays: `magic`'s
-  turns the attack to the side holding the most bodies by a breadth-first search
-  over the turns, a few moves deep, and strikes by a turn along its edge, at a
-  turn a second and at four. Read them on the smallest map and a large one, since
-  a body's walk is the weapons' time over it, and where the bodies stand (a count
-  by block of 8 by 4 cells) before believing a game that never ends. A reset
-  stands a new cursor: read `Player.Slot(0)` each tick, and take the scenario's
-  `level` falling as the game lost, or the old cursor's empty stores read as play.
-- The 3 by 3 square's row and column turns reach the even permutations of its
-  places alone, 181,440 states: from 2 7 6 over 9 5 1 over 4 3 8 neither 1 2 3
-  over 4 5 6 over 7 8 9 nor its reverse can be reached, and from the mirror image
-  both are four turns off. A layout a scenario must reach is checked by that search.
-- An effect a second long is caught in a terminal by capturing the pane on a loop
-  (`tmux capture-pane -p -e` every 100 ms to numbered files) and rendering the
-  frames that show it. A flat tint is one SGR run a row, so its frames are found
-  by one cell's background read from each capture, not by counting sequences.
-- What an effect costs a terminal is its bytes: run the game under `script -qfc
-  '<vif ...>' <file>` in the pane and read the file's size before and after the
-  effect, against an idle window as long. A shape in one tone changes a cell
-  twice, as it comes and as it goes; one shaded across its width changes every
-  cell it covers every frame, 3.6 MB a death wave where two tones sent 0.34.
-- `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
-  without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
-  nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
-  under five at `:speed 8`.
-- Two looks of one effect compare at one tick: a `-script <file> -watch` run is
-  the same game whatever draws it, a build a look, each in its own tmux session.
-  `-speed 1/2` lets a capture every 50 ms land on every tick, read from the status
-  bar's `GT:`. A mark on the cell a cursor stands on lies under that cursor's
-  shield, 21 cells by 11: script the cursor to leave, and look at both moments.
-- A renderer's own test does not show how layers compose. A flash's glyph under a
-  fading ground was blended to nothing, and a fade over a cell nothing painted
-  (black in staging, the theme background after `finalize`) went through black:
-  both showed only in the running game, read from a capture's colors, not its glyphs.
-- An effect is read frame by frame, composed as the game composes it, from a
-  scratch program under `tmp/`: a headless `App`, `manifest.BuildRenderers` on a
-  `render.NewRenderOrchestrator` whose `Surface` keeps the cells `Flush` hands it,
-  and each frame's `RenderContext` with `GameTime` a part of a tick past
-  `Resources.Time.PaceTime`. Its world draws in 256 colors until its
-  `Config.ColorMode` is set, a kill is `Combat.HitPoints = 0` on a header, on its
-  members for an ablative kind, and the cells written as HTML spans shoot as a
-  filmstrip. A dead species' loot and its scenario's strobe are in the frames too.
-  The program takes a build tag of its own: a headless build has no
-  `BuildRenderers`, so untagged it stops `go build -tags vif_headless ./...`.
-- Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
-  input: `xdotool key` types, and tmux inside the window reads the screen back.
-  Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under
-  `LIBGL_ALWAYS_SOFTWARE=1`; it speaks the key protocol, and Xvfb autorepeats a
-  key held by `xdotool keydown` (660 ms, then 25 Hz), so presses, repeats and
-  releases reach vif as from a desk. tmux in between drops the protocol. With no
-  window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
-  `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
-- The desktop window runs under `Xvfb` with Mesa's `libegl1`, `libgles2` and
-  `libgl1-mesa-dri` and `LIBGL_ALWAYS_SOFTWARE=1`; `openbox` beside it grants
-  `-maximized` and `-fullscreen`. `xwininfo -root -tree` reads the window's pixels,
-  a cell being 12x24 until a zoom, which the scratch `vif.toml`'s `[presentation]
-  cell` reads back, `xdotool windowsize` resizes it, and the run's size is its
-  log's `init completed` line (`-l=<dir> -lv debug`).
-- Steam's launch runs with no Steam client and no Docker
-  ([Packaging §9](packaging.md#in-the-runtime)): `SteamLinuxRuntime_4/run --
-  <binary> <args>` is pressure-vessel, which works as root in a cloud container,
-  under `Xvfb` with `LIBGL_ALWAYS_SOFTWARE=1`. It takes the machine's graphics
-  libraries (`/usr/lib/pressure-vessel/overrides`), so what the runtime itself
-  lacks shows only in its platform image
-  (`com.valvesoftware.SteamRuntime.Platform-amd64,i386-steamrt4-sysroot.tar.gz`,
-  beside the archive) unpacked and entered with `chroot`: mount `/proc` in it,
-  since `os.Executable` reads `/proc/self/exe` and the wad beside `bin/` is found
-  by it, and reach an `Xvfb` of the machine by its display number, an abstract
-  socket no chroot hides. `repo.steampowered.com` serves both with a `SHA256SUMS`.
-- Neovim comes from the Nix cache where apt is off limits: `nix-build -E 'with
-  import (fetchTarball "https://channels.nixos.org/<channel>/nixexprs.tar.xz")
-  {}; neovim-unwrapped' -o <dir>/nvim` (0.11.7 on `nixos-25.11`, 0.12.6 on
-  `nixpkgs-unstable`), and `neovim-unwrapped.src` is its source where github.com
-  is blocked. Run it in Alacritty with `--listen <sock>`: `nvim --server <sock>
-  --remote-send` types, and `--remote-expr` reads `mode()` or a terminal buffer's
-  text, with no screenshot; it blocks while a `Press ENTER` prompt stands, so
-  bound it with `timeout`.
-- Neovim's terminal confirms every key protocol flag pushed and sends no release:
-  a text key taps, and Escape, an arrow or an F-key stays held in the terminal
-  module's table until its next press. Read a hold from the game's log (`-lv
-  trace -ls input+push`: `IntentKeyPress`, `IntentKeyRelease`) on a scratch
-  scenario that captures a key at boot. Neovim 0.12 inside apt's Alacritty 0.13.2
-  also gets Escape, Enter, Tab and Backspace twice, in Neovim itself too; 0.11
-  and Alacritty 0.17.0 (Nix's) are not affected.
-- Frames that reach a screen are counted from the X server: `ffmpeg -f x11grab
-  -framerate 120 -video_size <WxH> -i :<n>+<x>,<y> -t <s> -f framecrc <file>`
-  writes a checksum a sample, and the changes between neighbors are the distinct
-  frames. The game changes its picture some 20.5 times a second at the default
-  tick, whatever `engine.fps` reads, and every frame at `-speed 4`.
-- With `-l` the game prints `logging enabled: ...` on stdout before its screen,
-  and a mistyped flag prints its error first and the usage after it: what a
-  wrapper shows of an exit is the whole main screen, not its last line.
-- A headless probe in `internal/app` drives a scenario by intents
-  (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
-  starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
-  clears what it recorded there.
-- The browser launcher runs end to end in the container: `make wasm`, serve a copy
-  of `web/` with `python3 -m http.server` and drive it with Playwright. A checkout's
-  `web/` holds no `terminal.js` or `worker.js` until then: a copy built by hand
-  (`GOOS=js GOARCH=wasm go build -o <copy>/vif.wasm ./cmd/vif`) takes them from
-  `make page PAGE_DIR=<copy>`. `?arg=-join=ws://127.0.0.1:9/x`
-  ends the run at once with a refused join's message, and a native
-  `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session the page joins or
-  spectates, its status line read beside the page's. A `devices['Pixel 7']`
-  context is the phone's page, where a held `mouse.down` on the canvas's last
-  rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
-  the desktop's. The browser tests (`-run Browser ./cmd/vif ./pkg/network`, and
-  the page host's by import path, `-run Page github.com/lixenwraith/terminal`) run
-  under node with
-  `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`;
-  in a container whose environment is large, Go's `wasm_exec.js` refuses it ("total
-  length of command line and environment variables exceeds limit"): run it under
-  `env -i` with `HOME`, `PATH`, `GOCACHE` and `GOMODCACHE`.
-- The Chrome extension loads in Playwright's Chromium headless only as a
-  persistent context of the full browser: `chromium.launchPersistentContext` with
-  `channel: 'chromium'` and both `--load-extension=<dir>` and
-  `--disable-extensions-except=<dir>`. Its id is the host of
-  `context.serviceWorkers()[0].url()`, and `worker.evaluate(() =>
-  chrome.action.onClicked.dispatch({}))` presses its toolbar button.
-  `script/extension-check.mjs` is the pattern.
-- Chrome's permission prompt is the browser's window, not the page's: a headless
-  run leaves `chrome.permissions.request` pending for good. Under `Xvfb` with
-  `headless: false` it shows, `import -window root` captures it and `xdotool
-  mousemove <x> <y> click 1` answers it. A stubbed `chrome.permissions` covers the
-  page's logic, and a scratch manifest holding the host as `host_permissions` the
-  fetches a grant would allow.
-- `page.evaluate` and `page.waitForFunction` run as a user gesture: a test that
-  polls a page keeps `navigator.userActivation.isActive` true. A path that must
-  find no gesture needs six seconds with no evaluate, an ask sent from the service
-  worker, or a stubbed `userActivation`.
-- Chromium on Linux takes its proxy from the environment, so in a container whose
-  `HTTPS_PROXY` is set its own calls home, and any stray request of a test, leave
-  through it. `--proxy-server=http://127.0.0.1:<port>` naming a local server that
-  answers 502 to everything keeps a run on loopback, which is never proxied, and
-  its record is what the browser tried. Chromium also keeps a singleton socket
-  under `TMPDIR` and stops on a long one (`Socket path too long`): a session's
-  scratchpad path is too long, `/tmp` is not.
-- A stand-in for the site is a few lines of node: `GET` and `POST
-  /vif/api/sessions` answering a `ws_url`, and an `upgrade` handler that writes
-  the request on to a native `vif -host ws://127.0.0.1:<port> -name <id> -bot 2`.
-  The name must be the route's last segment, or the host answers `this address is
-  not serving the session that was dialed`.
-- An init script wrapping `window.Worker` hears the worker's `frame` messages
-  before the page does: each record's second word is its cell's rune, so the
-  records, kept as terminal's `applyFrame` keeps them, give the screen's text. The
-  status bar is two rows, its items (`PAUSED` for a hold, `GT:` the tick)
-  above its line; a menu's or an away's pause shows nothing there, but the map
-  cells changed over a second tell a running game from a paused one, and the first
-  frame after a return against the last before it tells whether the game ran
-  while away. `page.goBack({ waitUntil: 'commit' })` is the Back button, landing
-  on the entries the page pushes in a gesture, which a key `press` in the game is.
-
-- A private sound server for a test: `pipewire`, `wireplumber` and
-  `pipewire-pulse` under `dbus-run-session` with `XDG_RUNTIME_DIR`, `HOME` and
-  `PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native` in a scratch directory;
-  wireplumber gives it a null sink, `auto_null`, and `pw-top -b` reads the
-  quantum. The runtime directory's path must leave room for `pipewire-0-manager`
-  inside a socket address's 107 bytes. On Ubuntu 24.04 `pipewire-pulse`
-  conflicts with the `pulseaudio` daemon and installing it removes the other:
-  unpack the daemon's package (`dpkg-deb -x`) and run it as `pulseaudio -n -F
-  <file> -p <its modules>` with its two library directories on
-  `LD_LIBRARY_PATH`; as root it only warns. Its idle null sink renders 2 s
-  blocks and takes over a second to start a stream: keep a silent `pacat
-  --latency-msec=50 /dev/zero` on it.
-- The window's keys under Xvfb with no window manager: `xdotool search --name
-  '^vif$'`, `windowfocus`, then `key`.
-- A build inside an unpacked Steam runtime runs under `chroot <root>` with the
-  sound server outside: hard-link the server's socket file under the root, the
-  root's own path being too long to bind a socket in.
-- The latest distribution's sound stack runs in a chroot of Arch's bootstrap image,
-  its pacman trusting the proxy's CA, with a null sink made by `pw-cli create-node
-  adapter` (`object.linger=true`) and `pw-record --target <sink> -P
-  stream.capture.sink=true` on it. A run sounds only once a key starts the game:
-  recorded with no input, every build reads as silence.
-- The kernel's PCM is tested with no sound card in QEMU, TCG being enough: Arch's
-  `linux` package's `vmlinuz`, an initramfs of a static busybox, the `.ko.zst`
-  modules decompressed (`soundcore`, `snd`, `snd-timer`, `snd-pcm`, `snd-aloop`,
-  `snd-dummy`) and a static `vif_nogui` test binary that `-overlay` adds a scratch
-  test to boots and runs in 15 s. `snd-aloop pcm_substreams=1` makes a held device
-  busy and captures on device 1, bit for bit, what device 0 plays, at the rate and
-  width the side opened first set: its capture opened at 48 kHz or in 32 bits
-  makes a card that takes no other. `snd-dummy model=ac97` is a 48 kHz-only card.
-  A test paced by `time.Sleep` falls behind the device and underruns; pace it by a
-  ticker, as the mixer is.
-
-## Measuring
-
-- `Bitmap.recycle` shows in `dumpsys meminfo`'s native heap, not in its Graphics,
-  which still rose 54 MB over eight strike swaps on a Pixel 8 Pro and fell most
-  of the way back within 24 s; `dumpsys meminfo` itself makes the app collect.
-  Read the native heap to tell a bitmap held from one freed.
-- A browser-build bench runs under Node
-  ([Development §5](development.md#5-validation-and-tests)), which refuses a run
-  whose arguments and environment pass about 8 KB ("total length of command line
-  and environment variables exceeds limit"), as a cloud container's environment
-  does: run it under `env -i PATH=... HOME=/tmp`. An `internal/app` test file
-  calling what `js/wasm` lacks takes `//go:build !js`, as `readings_test.go` does,
-  or that package's wasm test binary stops building.
-- Benchmarks in a cloud container move a fifth between runs, and benchstat is not
-  installed: build main's and the branch's test binaries (`go test -c` in a `git
-  worktree` of main) and compare medians of alternating runs. A bench file the
-  branch adds is copied into the worktree, kept on main's API where the branch
-  changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
-  32 in the next: for a few percent, read the minimum of seven to nine rounds
-  beside the median.
-- What a bot's figures mean, and which of them luck moves, is in
-  [Bots: Learning](bots.md#learning); what was measured and left out is in
-  [Tried and not built](bots.md#tried-and-not-built). The notes here are how
-  to take a reading.
-- A graph with no network is compared in seconds: a 60 s round at 120x40 under
-  `-headless -speed max` takes 0.1 to 0.2 s. At `-lv debug -log-stdout` each FSM
-  transition carries a tick that restarts with the game, so `cave`'s
-  `"to":"PlayerCrushed"` and `"to":"PlayerDied"` lines are round lengths, as
-  `magic`'s `"to":"Fallen"` are under a `-script` of `press` intents and `-ls fsm`.
-  A scenario copied to `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s
-  <name>`.
-- A network graph and its learners are compared in rounds by a scratch test in
-  `internal/app`, kept out of the commit. It puts `bot.NewDriver` on a
-  `NewHeadless` run, its `Play` from `botPlay`, and has it learn as `RunBot`
-  does: `App.playBeside` builds the further games, `App.learn` the learners
-  over every driver, `sideGames.start` steps them and the test steps the run's
-  own, then `Driver.End` at its tick and `sideGames.close`. The binary learns
-  as the harness does, a seed's rounds the same in both. A graph parsed under
-  another name (`bot.ParseGraph`) keeps its populations apart.
-- A model or a population is read held out by `vif -headless -field`, a line a
-  round, under an `XDG_CONFIG_HOME` holding the population files, or an empty
-  one for the document's weights. The line says what ended the round, under
-  which network, each network's part and each source's count
-  ([Bots](bots.md#learning)). What it does not say takes a scratch test: an
-  `Instance` wrapping the App, whose `SetDispatchTap` calls the test's tap
-  ahead of the driver's, counts `EventFireSpecialRequest` for a special asked
-  for and `EventHeatSpendRequest` for one spent.
-- `-field` plays until it is stopped: read N rounds through a FIFO and kill the
-  run at the Nth line. Several games tell their rounds by the tick each closed
-  at, so the first N lines of `-games 5` hold the short rounds and miss the
-  long ones in flight: read `-games 1`, a process a seed, four seeds at once.
-  A half-hour `cave` round costs a core 6 s, so 100 rounds read in 3 minutes,
-  and a learning run of 15 million ticks takes 10.
-- What a population fields is played with no learner: `App.field` reads each
-  network's file (`Graph.Kept`) and `Driver.Field` has the driver play its
-  member. The package's TestMain points `XDG_CONFIG_HOME` at an empty
-  directory, and a relative one is no root: a run under it reads and keeps no
-  population and says nothing.
-- A world's transport is never taken away once attached
-  (`Membership.attachResourceLocked`; `:leave` opens a session of the run's
-  own), so alone is read off the cursors, not the transport
-  (`Membership.Alone`), and turns true again when the others' go. A joining
-  seat holds no cursor of its own for its first ticks, which reads as alone.
-- `timeout -s TERM` signals its child and then its whole group, so a `-serve`
-  run takes two signals, and the second ends it at once: its seats may not
-  have saved what they learned. Stop one with `timeout --foreground` or `kill`.
-- Only a learner's save writes a population this build reads: a test outside
-  `internal/bot` gets one by playing a round, as
-  `TestASoloBotKeepsWhatItsRoundsScoredInTheUserRoot` does.
-- `-field` over rounds too short to reach a Kraken reads `raid` alone: at
-  `round_seconds = 15`, `cave`'s shipped weights and a trainer's populations
-  print the same lines. Read a `kraken` member at the graph's half-hour limit.
-- What a watched run's bar says for a moment, as `Round N scored S`, is read
-  from the terminal's bytes: `script -qfec '<vif ... -watch>' <file>` under
-  `timeout`, the CSI sequences stripped. A watched run stays up after its graph
-  quits.
-- Held-out rows are a function of the genomes played: two runs fielding one
-  pair give the same rows, so a queue keeps them by the genomes. The i-th round
-  of a seed draws one game's streams for every member
-  (`RandResource.NextSession`), but two members part as soon as they differ,
-  so rounds are not paired. Cap a held-out round at the graph's limit, as a run
-  would, and give a learning run ticks, not rounds: a learner that masters a
-  phase makes its rounds long.
-- One member is held alone from a population of it only, its rounds raised to
-  eight, which `Graph.Kept` then fields: a file in the run's user root, or a
-  `bot.Store` in memory for a scratch test. A member is held beside another
-  network's by populations of a member each. Hold a member this way before
-  calling it promising: its own mean over a few rounds does not say.
-- A learner's rule or setting is read as an arm: a `tar` copy of the tree
-  whose constant or rule reads the environment, so one frozen test binary
-  serves every row. With no knob set it must keep main's population bytes.
-  Read it by the candidates' recent mean and by every proved member held out,
-  on six seeds a start or more, from nothing, from `seed`'s weights and on a
-  population already good. What a run fields at its stop is a lottery.
-- A rule of who is fielded is read inside one archive: the pair the rule
-  fields and the pair main's rule would field of the same population differ
-  by the rule alone, where two runs differ by their search. Try it on a
-  trainer's kept populations too, a run begun on a copy of them in a fresh
-  user root: a rule at work in young populations can do nothing there.
-- A learner's archive is read by its events, not its file: a scratch
-  `learner.go` logging each scored round with its genome's key, what drew it,
-  its member's mean and rounds, and who holds the title.
-- Whether a change leaves the search alone is read by bytes: one seed and one
-  count of ticks leave the same population files (`sha256sum`), between two
-  runs and between main's test binary, built in a `git worktree`, and the
-  branch's. Two binaries read it with no harness: each plays `-headless -speed
-  max -seed N -games G` on `-config-dir <checkout>/wad` under its own
-  `XDG_CONFIG_HOME`, the graph a file named as the shipped one with a `stop`
-  region that quits at a game time, as `botscore` appends one. The line's
-  `actions` and ticks of several games move by one between runs: compare the
-  files, and across a change of `version` or `scored_by` with those keys cut
-  (`jq -S 'del(.version, .scored_by)'`).
-- From `seed`'s weights a run of five games is mid-climb at nine million
-  ticks, its seeds fielding 73,000 to 134,000 held out, and near the limit by
-  fifteen: read an arm at nine, where it can still part from its control. The
-  bytes check of a knob-free arm needs 300,000 ticks a game, a minute.
-- A scoring rule that reads as a corner is one only once population bytes say
-  so. A Kraken shot down in the tick it rose was 27 of 670 kills in a run of 1.5
-  million ticks from `seed`'s weights, and paying it as a timed one moved every
-  population from its first. An arm and its control come from one binary.
-- A fix to the learner is proven by undoing it: a `tar` copy of the tree, a
-  script that puts each fix's lines back and runs the one test of its rule,
-  which must fail. A mutation that deadlocks the games' order hangs where it
-  should fail: run it under `timeout`, whose 124 is the test holding, and give
-  a scratch run past ten minutes `-test.timeout 0`. One file's mutation needs
-  no copy: `go test -overlay <json>` compiles a scratch file in its place
-  (`{"Replace":{"<the file's absolute path>":"<the scratch file>"}}`).
-- A merge under a measurement is checked before a baseline is kept: main's
-  binary after it and before it play one seed from nothing, and the same
-  population bytes say the runs read so far are main's still. A gameplay change
-  is held the same way against `cave`'s own bot learning alone.
-- A population kept under an older `version` or another `scored_by` is fielded
-  by a newer binary from a copy with its `version` raised and its `scored_by`
-  the document's, by a JSON round trip that keeps every key and not by `sed`,
-  whose spacing is its writer's. A model is landed in a bot document by `-bot
-  export`, and moves to a graph that reads its inputs and more by `-bot
-  import` ([Bots](bots.md#a-players-bot-files)). `toml.Document.Delete` takes a
-  table with the comment block above it.
-- An output is held off in a copy of a population: its weights zeroed and its
-  bias negative in every member. `Inject` merges members whose genes then
-  match, so check that the member fielded keeps its score and rounds.
-- A learning run's ticks at a save are in nothing the binary prints: run it
-  with `-lv info -ls fsm -lt 0 -lr 0`, which logs a `session reset` a game
-  whose `tick` is the length of the run it ended, and sum those by the log's
-  time to each save. Copy the population files as their mtime moves to keep
-  what the run fielded along the way.
-- What a bot's inputs read in play is counted, not guessed: a scratch `Driver`
-  method running `network.read` under `World.RunSafe` on a probe network of
-  every input, tallied by `Driver.Stats().State`. `Driver.Stats` takes the
-  world lock: called inside `RunSafe` it hangs with nothing printed.
-- A rewritten reader of the world is proven where it reads: a copy of the tree
-  keeps the old one beside the new, `mind.steer` reads every sensor both ways
-  and stops at the first that differs by `math.Float64bits`. A form a bot
-  document takes is proven on `cave` the same way: a copy of its graph written
-  in the new form leaves main's population bytes.
-- A scan a table calls is told its visitor as an interface whose value the mind
-  or the network already holds: a closure handed through a table escapes, an
-  allocation a scan, which `TestASteerAndASightingAllocateNothing` holds at
-  none. A local array sliced into a call through a table moves to the heap
-  too: `go build -gcflags=-m` names what moves.
-- A steer is timed in the game, not in a loop: a field read of an entity after
-  its scan runs cold there. Two binaries timed side by side differ by 30 ns a
-  steer from run to run, so each plays alone, in turn, three rounds or more.
-- A scratch probe's files are excluded by a pattern (`internal/app/zz_probe*_test.go`
-  in `.git/info/exclude`), not by name: `git add -A internal` takes a second probe a
-  named line misses, and its build tag keeps every gate green over it.
-- A status counter a scratch probe adds is registered in its system's
-  constructor: the registry freezes once the world is built, and a later
-  `Ints.Get` hands back a detached cell that reads zero.
-- A headless bot run is not repeatable from its seed: one binary and seed played
-  5 cave games averaging 34,000 ticks, then 14 averaging 16,000. A change to
-  physics is read over several `-field` runs a build, by their game lengths.
-- Games that learn together are read by ticks a second, and only against a run
-  whose rounds are alike: a tick costs by where its game stands. A build or a
-  probe beside a timed run takes a tenth off its rate.
-- A tick can run no system. One whose opening settle dispatches a new game
-  asked for between ticks ends there, and `App.InputTick` settles one ahead of
-  the tick when the step injected input. What a system leaves for a tick, as
-  `Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens,
-  and a driver closes its round before it counts such a tick.
-- `genetic`'s `Inject` keeps the gene slices it is handed, so a test builds each
-  learner its own population.
-- A learner's search is read without a game by a scratch test in
-  `internal/bot`: it deals and settles scripted rounds into a learner on a
-  store in memory, over 1, 5, 9 and 17 games, and hashes what the store keeps.
-  A changed repeat order moves every hash.
-- An output added to the catalog is listed (`outputRow.listed`): given to
-  every network that lists none, `cave`'s two would grow a unit, their layouts
-  change and every population of theirs start over.
-- A dotted key in an inline table is a table of its own, which is how a score
-  names an event's owner field (`score = { EventGoldCompleted.entity = 25 }`).
-- What a page keeps is tested under Node with a `terminalPage` of the test's
-  own: `kept` holds the documents of an earlier visit and `post` hears each
-  `keep` (`cmd/vif/browser_test.go`).
-- A test changes a shipped graph's rate or round limit on `Graph.Settings`
-  after `ParseGraph`, which `NewDriver` reads; one that hands `RunBot` a path
-  replaces the key whatever its figure. No test pins a shipped layout's digest:
-  a changed layout fails nothing and starts its populations over.
-- A scenario's bots are files of the scenario, and only `default` is embedded.
-  A test reads one through `resource.LoadScenario` and `Scenario.Bot`. A copy
-  of the name in a root's `bot/` plays in its place. A harness built earlier
-  refuses a scenario whose entry has a key it does not know: run it on a copy
-  of `wad/` taken before the change.
-- The scenario machine takes an event before any system handles it
-  (`Scheduler.dispatchOnePass`), so a transition on an event reads the status
-  keys as they stood: guard it on the world (`PayloadCursorDecides`), not on a
-  key the event is about to move.
-- Whether a bot plays a run reaches its replay only by the session latch's note
-  (`SessionState.Bot`). `drive` with kind "bot" marks its run a bot's;
-  `playBot` and a bare `NewHeadless` with a driver do not, and a harness built
-  so holds a person's cursor, whose defeat ends its game, and takes every command
-  its viewer types (`World.DrivenByBot`): a test of what a watched bot's viewer
-  may do builds its run with `drive`, as `play_test.go`'s `mustHeadless` ones do not.
-- A seat fields what its player's population holds, read once as the seat is
-  taken (`PlaySeat`, `App.field`). Read what a seated bot plays on a run of two
-  bots with and without the population in the user root, at `-speed 8`, as a
-  session cannot run flat out.
-- Compare graphs at one round length: the embedded game pays about twice as
-  much late as early. Weights learned in one scenario are tried in every
-  scenario their graph plays before they are written into it, and a reflex is
-  tried by hand, as a state, before a learner is asked for it. `armada` is the
-  quick map to try a graph on.
-- A bar a model must clear is set in standard errors read from its rows, not
-  in points.
-- A bot that falls where it typed well has `typing.errors` to read, beside its
-  heat and energy every few hundred ticks and what it sent each tick before an
-  error. Regions update in name order, which decides what a step sends first.
-- In `cave` a ship that does not steer falls at tick 144 and one that only
-  fires at about 158: rounds that all end there steer nothing. A defeat is
-  energy and heat both at nothing, so a lost round ends at heat 0: read what
-  its blasts left by what the round had, 10 and its loot, less its blasts.
-  `explosion.triggered` counts the cells blasted, reset each game. A Kraken's
-  `Kinetic` holds no velocity in play: its motion is its `State` and target.
-  A Kraken policy is read by fights won of those met.
-- A hold reads the graph file it names as its process starts: one queued
-  behind others on a file of the checkout fails once that file changes, so a
-  chain holds copies. A script a background arm is running is replaced by a
-  rename, never edited in place: bash reads a script as it goes.
-- A cloud machine restarts, ending the run in flight and whatever `nohup` had
-  started, and nothing runs between a session's turns. Queue runs by a done
-  marker a run, so a restart costs one, play them at `nice -n 19`, send each
-  run's lines to its file line-buffered, and chain a long run as legs, each on
-  the populations the last kept. A waiter that follows a queue by `pgrep -f`
-  finds its own command line: bracket a letter of the pattern.
-- A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`:
-  keep it out of commits (`.git/info/exclude`) and out of a search
-  (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd`
-  into the worktree moves the shell there.
-- valgrind's callgrind counts the instructions one function runs
-  (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
-  tells a build that does more work from one laid out differently (Position's
-  layout note). It asserts on Go's preemption signal: run the test binary with
-  `GODEBUG=asyncpreemptoff=1 GOMAXPROCS=1`.
-- B/op can rise as retained memory falls: a smaller heap collects sooner, and
-  each collection empties the event batch `sync.Pool`s, which then allocate
-  again. Read both sides with `GOGC=off` before blaming an allocation: td's
-  headless ticks read 6% more bytes with the grid 30 MB smaller, and the same
-  bytes with the collector off.
-- Two binaries simulate alike when a scratch test in each prints
-  `snapshot.DigestWorld` and `Positions.Order()` every fifty ticks of the headless
-  shapes and the outputs diff empty; the divergence harness reads the link, this
-  reads the world.
-- `snapshot.DigestWorld` hashes no flash field (`RemainingHitFlash`,
-  `HitEntity`), so a branch adding one still compares with main; a region is
-  held tighter by printing its components, member tables and
-  `Rand.SaveStreams(core.DomainShared)` beside it each tick.
-- `snapshot.DigestWorld` hashes entity ids, so a change in how many Player
-  entities live differs from its first tick and says nothing. Trace without ids,
-  a tick at a time on the harness's host (`shapedFight`): each shared section's
-  rows (`CaptureShared`, `snapshot.BuildManifest`; `w.cursor` holds a session key
-  and differs every run), every stream's state (`Rand.SaveStreams`) and the
-  counts of glyphs, drains and particles. The first stream to differ names the
-  system that drew differently. The cause is proven when main, made to do the
-  same in a scratch edit, traces as the branch does on every tick.
-- A renderer's first call in a live frame runs about twice its hot-bench time,
-  its tables and code gone cold under the frame's other work: the ember paints in
-  9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
-  live, with `:d prof` under `:log on` (`prof.top` lines) or a `time.Now` probe
-  round the call in a scratch build, before calling a bench gain felt.
-- A renderer that paints on some frames alone hides them in a bench's mean:
-  time each `Render` of a scratch run and read the 99th percentile, as the
-  Devourer's painted frame read 3.1 ms under a 0.57 ms mean.
-- A value kept live across a hot per-cell loop can cost more than the work it
-  guards: a burn's cut held across the Kraken renderer's stamping loop slowed a
-  living Kraken's frames 4% with nothing burning. Filter before the loop, keep the
-  loop in a function that takes only what it reads (`KrakenRenderer.stamp`), and
-  measure the common path against main.
-- An indirect call on a per-cell probe shows: reading the bounds through an
-  interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
-  interface over the wall entities a tenth more. Measure a probe path with the
-  renderer's benches, not only the tick's.
-- Find an allocation before removing it: `-memprofile` with `-memprofilerate 1`,
-  then `pprof -sample_index=alloc_objects`. A concatenation that does not escape
-  (`-gcflags=-m`) and fits 32 bytes stays on the stack: the overlay's titles a todo
-  blamed never allocated, while `tui`'s box edges did.
-- A renderer bench reusing one `RenderBuffer` calls its `Clear` each iteration, as
-  a frame does, or `KeepExact`'s rects pile up as bytes with no allocation behind
-  them. A bare `engine.NewWorld` draws as an emulator in 256 colors, `ColorMode`'s
-  zero value.
-- What a layer costs the terminal is its bytes, which no CPU bench shows: a scratch
-  test in `internal/app` hands each frame of an orchestrator holding that layer alone
-  to `terminal.NewWithBackend` over a backend that counts what it is written, waiting
-  for each write as `sandbox/termbench`'s sink does. The Devourer read 2.38 MB/s so,
-  99% of the game's output, while its renderer took 2% of a core. A layer's frames
-  without its `SetCoarseBg` are read under `go test -overlay` of a copy without it.
-- Navigation's cost in `cave` depends on how the ship is flown: one that keeps
-  still keeps sight of the raiders and shows little of it. Measure as a player
-  flies, headless under `:god` with auto-fire, the ship sweeping between the map's
-  middle and near its left edge every three seconds; a group cache's
-  `FlowField.CurrentGen` counts the fields actually computed.
-- A headless test reads the checkout's `wad/` (`soakRoot`), so main's test binary run
-  from the branch's package directory reads the branch's scenarios and refuses a key
-  main does not know: run main's from its worktree's package directory.
-- Navigation's per-tick wall path is read by two benches with opposite shapes:
-  `BenchmarkNavigationWallMoves` moves one wall, `BenchmarkCaveStepNavigation`
-  turns hundreds of cells a step. A cost per changed cell shows in the second
-  alone, a cost per row or per map in the first alone, at the largest map; read
-  both before calling a change to `applyWalls` or `CompositePassability` neutral.
-- td's storm is read headless with eight cursors walking a cell a tick, the
-  `td_monitor` region paused, towers healed and `EventStormSpawnRequest` pushed
-  after 2,400 ticks. A storm left alone takes few walls a tick (Navigation §10):
-  a tick where hundreds go is made by moving its circles into untouched maze.
-  Label each tick with `pprof.Do` and profile at the default 100 Hz; at
-  1,000-2,000 Hz a cloud container kept a quarter of the samples or fewer.
-  `nav.recomputes` is a gauge, not a count.
-- tmux can throw frames away while vif sees nothing: it reads a pane at once, so
-  writes return and held frames stay near zero. Attach a client (Alacritty, or a
-  Python pty reader sized with `TIOCSWINSZ`) and poll `#{client_discarded}` and
-  `#{client_written}` through one control client (`tmux -C attach -f
-  no-output,ignore-size`, a `display -p -c <client>` a sample), not a fork a
-  sample: a rising discard is the client frozen some 200 ms and repainted whole.
-  `client_written` against vif's `wchar` (`/proc/<pid>/io`) is tmux's
-  amplification, and the `\e[?2026h` a pty reader counts are the whole frames it
-  got. A pty takes some 12 KB a write and tmux tests its limit after one, so a
-  frame past eight bytes a cell is discarded however fast the client reads. The
-  Devourer shows it on tmux 3.8 ([Rendering §1](rendering.md#1-frame-pipeline));
-  tmux's master, built beside it, runs under a `-L` server of its own. Keys sent
-  start from Normal, where Escape opens the menu and pauses the run.
-
-- A recorder on a sink's monitor must not set the graph's pace: on PipeWire
-  `stdbuf -o0 pw-record --target <sink> -P stream.capture.sink=true --latency 2s
-  ... -` (a `parec --latency-msec` there asks a quantum of its own, and
-  pw-record's stdout is otherwise buffered by 4096 bytes); on PulseAudio `parec
-  --process-time-msec=5`. Stamp each read and anchor the sample clock on the
-  least (arrival - frames/rate). PulseAudio's rewinds rewrite frames the monitor
-  already gave, so time a sound there by the read that brought it.
-- A pipe player's queue is the pipe's unread bytes: `FIONREAD` on the write end
-  reads it. It only grows, to the pipe's 64 KiB (371 ms of 44.1 kHz stereo s16),
-  which is latency no stat line shows.
-- A goroutine waiting more than a few milliseconds inside a purego (or cgo) call
-  costs the runtime's sysmon some 58 wakeups a call:
-  `/proc/<pid>/task/*/schedstat` by thread shows one thread switching a thousand
-  times a second. A write that blocks every period cost 0.9 to 2 % of a core
-  that way.
-- On a machine other jobs share, read `/proc/stat` over each run and keep the
-  share of all cores busy with the reading: a batch splits into quiet runs and
-  the rest afterwards, where a repeat may not find the machine quiet either.
-- A variant of one file for a measurement is `go build -overlay <json>` from a
-  copy outside the tree (`{"Replace":{"<the file>":"<the copy>"}}`), as `go test
-  -overlay` is for a mutation: the worktree never holds the variant.
-
-- Go under Wine reads a clock up to 16 ms stale between waits (`time.Now` reads
-  the shared user page, which wineserver refreshes as it wakes): stamp with
-  `QueryPerformanceCounter`, which there is Linux's `CLOCK_MONOTONIC_RAW` in
-  100 ns, so a Linux process beside it stamps on the same clock. Go's sleeps and
-  tickers are sound under Wine.
-- A goroutine that leaves a system call only to wait in the next never passes
-  the scheduler: from 10 ms on `sysmon` takes its P at every wait and goes back
-  to polling every 20 us, 5 % of a core for the polling thread under Wine.
-  `runtime.Gosched()` once a turn stops it; a locked goroutine pays two thread
-  wakes for it.
-- Wine's WASAPI is not Windows': a 30 ms buffer whatever is asked, a 10 ms timer
-  thread for the device, no loopback capture, `IAudioClient3` and `avrt` as
-  stubs. It asks PipeWire for a 128-frame quantum, at which an unprivileged
-  graph misses cycles on a busy machine, and its driver plays behind whatever
-  each miss held back, so its latency grows within a run: read a sink's own part
-  from a trace of its render thread's turns, not from the monitor alone.
-  Stopping its pipewire-pulse is the one way to make it raise
-  `AUDCLNT_E_DEVICE_INVALIDATED`.
-- Go's monotonic clock on Windows counts the time a machine slept, and the
-  runtime wakes every thread at resume: a timeout armed before a sleep fires
-  the moment the machine wakes, before the thread it waits on has run.
-
-## Settings files
-
-- A key added to the shipped `vif.toml` or `keymap.toml` reaches a player's copy
-  only through the upgrade a run makes, which carries the comment lines directly
-  above the key and none of its table's: give a new key a comment of its own, since
-  a mention in the block above `[play]` never reaches a copy that has the table.
-- A renamed key or section is a drop and an add, so the player's value starts at
-  the default; a renamed action keeps a player's bindings only through an alias in
-  `resolveAction`, as `append` does.
-- Only a settings file goes through `Play.check`: a test's `paths.Play` built by
-  hand leaves a word key empty, so the run reads an unknown word as its first
-  (`initAudioService`'s bed, `applyPlay`'s auto-fire) rather than refusing it.
-- A changed shipped default reaches only a copy that lacks the key: a run writes
-  every default into the player's own file and keeps it from then on as their
-  value. A default every player must get takes a new key name, dropping the old.
-- `Fill` puts a key it adds above the comments that close its table, and copies the
-  comments above a table's header but not those that open the file: compare an
-  upgrade by what it reads or binds, never by the embedded file's text.
-- Each `Delete` reads the document again, so dropping n keys costs n reads: an
-  upgrade of thousands of unknown keys takes seconds
-  ([TODO](todo.md#drop-a-settings-files-keys-in-one-read)).
-- Which file is the player's own is `paths.OwnRoot`, `paths.Shared` and
-  `paths.Special`, and every host builds its `resource.Options` from `vif.toml` with
-  `Options.ApplySettings`, which marks a root or keymap another's `vif.toml` names
-  foreign: a host never decides it alone. A `-k` file setting something but neither
-  `fill` nor a keymap section is refused rather than upgraded, so a wrong path never
-  has its file replaced; an empty one is a keymap binding nothing of its own.
-- `keymap.toml` is the built-in table and what `Fill` draws from; any other embedded
-  keymap (`vim.toml`) is read over it by name and says `fill = false`, without
-  which a copy's first upgrade gains the whole table. A new one needs its `put`
-  line in the Makefile. A name is `paths.IsKeymapName`, in the resolver and in
-  `Settings.resolve` alike: a `[paths]` name joined to the file's directory is lost.
-- The tutorial keeps its own `[keymap]` and a test holds the vim keymap to it: a
-  scenario cannot bind `pause`, which the vim keymap moves to Ctrl-Z.
-- `os.UserConfigDir` reads `XDG_CONFIG_HOME` only on Linux and the BSDs, so a test
-  setting it alone writes the developer's own files on macOS and Windows: point
-  `HOME` and `AppData` there too and skip where `paths.UserRoot` still lies
-  elsewhere, or write a `-config-dir` root instead. A store test never names
-  `/dev/null`, which a broken refusal renames over as root: use a FIFO.
-
-## Scenario TOML
-
-- A test that reads a shipped scenario skips, not fails, when it is missing (an
-  `os.Stat` or `ScenarioPath` guard), so moving one under `wad/scenario/` passes
-  green while testing nothing: run those tests with `-v` and read the SKIP lines,
-  and search the `filepath.Join(..., "scenario", ...)` form beside the slash one.
-- A payload's untagged fields decode by their Go names: a wall batch's cells take
-  `OffsetX`, `OffsetY` and `WallVisualConfig = { ... }`, and a rune field such as
-  `char` takes the character's code, `43` for `+` (`wad/scenario/base/dummy`'s pads).
-- An event drop belongs to a cursor, so drops a scenario lays before
-  `EventCursorSpawned` go to nobody: lay them on that event.
-- A payload's `duration` is nanoseconds (`3000000000` for three seconds), where a
-  `duration_ms` field is milliseconds; `vif -schema` prints each field's type.
-- `EventDustAllRequest` turns every glyph into dust that orbits the cursor for as
-  long as nothing bursts it, over whatever is laid next: a scenario clears text
-  with `EventGlyphClearRequest`. A transition between two children of one parent
-  runs neither the parent's exit nor its entry, so a lesson's clear sits on the
-  lesson, and a state re-entering itself runs no entry actions at all.
-- A splash text cleared and written at one cell in one pass is one entity: the
-  clear destroys it at once rather than by a death batch, or the write reuses an
-  entity the batch then takes.
-- A line delete's `EventDeleteRequest` carries rows alone (`start_x` stays 0), so
-  a guard on `dd` compares `range_type` and `start_y`; `x` fills every field, and
-  a range's start is its first cell whichever way the motion went.
-- A transition on a request runs its entry before the system that handles the
-  request, so what that system pushes lands after the entry's events: typing's step
-  right overtook the next lesson's cursor placement until the tutorial's `Stand`
-  took `delay_ms = 1`. A mode is the router's alone: `Stand` asks for Normal, which
-  the router takes on its input tick, so a headless test runs `InputTick` too.
-- The router's change history ends at a glyph clear (`glyph.cleared`) and a new
-  game: without the first, `u` in a lesson laid back the line the lesson before
-  deleted, into cells the new one left empty.
-- Reading a pane: the status bar's first item is the FSM state and its time, the
-  column ruler counts from the cursor, and the large glyph some way off the cursor
-  is the magnifier, the glyph under it in the large face.
-- The entry's top-level keys the FSM loader does not know are the embedder's
-  (`resource.entryKeys` lists them), so a new entry key needs no loader change
-  beyond reading its files into the container.
-- A drop table's rolls are player-domain, each instance rolling its own: a test of a
-  kill whose drop is below certain shoots until the table's pity makes it certain
-  (`cave`'s U within two kills), and counts a kill's drops as the loot new since
-  it, since earlier drops may still be flying (`internal/app/cave_test.go`).
-- The behavior vocabulary is built before any program compiles, so a verb whose
-  arg names what programs extend (a species, a materialize style) registers with
-  `Named`, whose build gets the set's payload names; `Effect` decodes without them.
-- A payload field naming what a scenario declares, a map or a program's signal, is
-  an enum `event.PayloadNames` builds from `component.Declared`, its zero naming
-  none: both `EmitEvent`s, `:emit` and a script then refuse a wrong name at load
-  with no check of their own. `:emit` builds its `Declared` from `Resources`
-  (`parseEventPayload`), so what it should name has to be readable there.
-- A unit test stepping `BehaviorSystem.Update` by hand has no composite system and
-  no scheduler: an instance a step ended stands until the test delivers its
-  `EventCompositeDestroyRequest`, so further steps end it again, and `Chance`
-  repeats one roll unless the test advances `Game.State.IncrementGameTicks`.
-- An edge into a state with a probe can fail, so the load demands a `fallback` on
-  each, a global edge included. Instances spawned on one tick time out together:
-  a roll on a `Timeout` sends a salvo, a `Chance` on a `Tick` edge one at a time.
-- To watch a scenario play, capture `tmux capture-pane -e -p` and render the SGR
-  to HTML for a headless browser screenshot; a headless `App` ticked with a
-  dispatch tap, a scratch test in `internal/app`, reads what a capture cannot.
-- A rewrite of scenario files that must leave what a scenario does alone is
-  proven on the resolved tree: a program under `tmp/` writes
-  `fsm.ResolveScenario`'s result for every folder holding a `scenario.toml`, keys
-  sorted, each value with its kind and a float by its bits, and the runs before
-  and after compare by bytes. What a set spends
-  ([TOML macros §4](toml-macros.md#4-invocations)) is `macro.Set`'s unexported
-  `spent` and `open`: a scratch test in `internal/fsm` reads them by reflection
-  off the set `readExpanded` returns, the entry's behaviors and regions loaded
-  through it as `loadAndResolve` loads them.
-- A shipped scenario written in a form an older build's expander refuses takes
-  the next `network.ProtocolVersion`: a joiner is sent the scenario's files and
-  expands them itself, so the older build is refused at the door instead.
-- A maze spawn's `rooms` are areas cleared after the maze is carved, not the
-  generator's rooms, unless `room_count` asks for them: `maze.Result.Rooms` is then
-  empty, so what reads a room reads the payload's (`WallSystem.mazeLaid`). A room
-  one block in size on a block's middle clears that block and the eight round it.
-- `RandomVar` is a function of the run's seed, `seed_var` and `index_var` alone,
-  never of the variable it sets: two draws on one index draw one value, so each
-  takes its own index.
-- The shipped `[play] auto_fire = "on"` repeats special fire every cooldown, so a
-  transition on `EventFireSpecialRequest` meaning a press guards
-  `PayloadBoolEquals { field = "repeat", value = false }`, as `shadows` does.
-- `magic`'s `[map]` floor is the least map its layout holds, which
-  `TestMagicShowsItsWholeLayoutOnEveryScreenDownToItsFloor` proves both ways: a
-  change to the square's blocks, its shield's margin, the orbs' orbit or the
-  gateways' pylons moves it, and the test's failures name the size to take.
-- A system the manifest drops leaves every `only_systems` that names it, which
-  `-check` and `internal/resource`'s systems test refuse as unknown: search
-  `wad/scenario/` for its name (`tutorial` lists its systems one by one). A list
-  that narrows turns `behavior` off too: a scenario of data species names it.
-
-## Corpus
-
-- `vif -d -check` parses the embedded corpus and prints its block and line counts,
-  the quick test of an edit to `internal/asset/content/tutorial.toml`. A line wider
-  than the map is cropped (`GlyphSystem.placeLine`), so the tutorial's stay under
-  40 columns.
-- An edit to the embedded corpus moves every line a seeded test sees: lines land
-  at random rows, and `w` without a ping keeps to the cursor's row, which a third
-  of seeds leave empty for 160 ticks. A test that needs a glyph under the cursor
-  steps rows until one is reached, never counts on its seed.
+  rate, camera edge), and the console's lines, or the viewer's are lost at the next
+  seek. A setting only the speakers read sits on `engine.AudioResource` instead
+  (`Pref`, `Bed`), which `system.HandOverAudio` moves whole to the copy; what its
+  system last sent the engine goes over in that system's `takeOver`.
 
 ## Docs
 
-- Nothing checks a doc link's file or anchor, so a broken one outlives sweeps.
-  After editing links or headings, run a short script that slugs each heading as
-  GitHub does (lowercase, punctuation and `§` dropped, spaces to hyphens) over
-  every `*.md`; its only false hits are `machine-design.md`'s `New[S, C](observe)`
-  and `Decode[A](raw)`.
-- A renamed or removed identifier outlives a sweep that reads prose: list every
-  backticked name and path in the docs and look each up in the sources (a
-  `go/parser` pass over this module and those it requires, and the words of every
-  file but Markdown for flags, keys and tags); a name found nowhere is stale.
+- Nothing checks a doc link's file or anchor, or a backticked name, so a broken one
+  outlives sweeps. After editing links or headings, run a short script that slugs
+  each heading as GitHub does (lowercase, punctuation and `§` dropped, spaces to
+  hyphens) over every `*.md`; its only false hits are `machine-design.md`'s
+  `New[S, C](observe)` and `Decode[A](raw)`, and this note quoting them. A renamed
+  or removed identifier outlives a sweep that reads prose: list every backticked
+  name and path in the docs and look each up in the sources (a `go/parser` pass
+  over this module and those it requires, and the words of every file but Markdown
+  for flags, keys and tags); a name found nowhere is stale.
 - Code, docs and scenarios spell American; `codespell --builtin en-GB_to_en-US`
   finds what slips in. Its hits that stay are Actions' `cancelled()` and the tests
   proving a `colour` key and a `programme` field refused, as `Materialise` is; it
   passes over ARIA's `aria-labelledby` and `sandbox/3d`'s `disc`, a discriminant.
 
-## Libraries
+## Git and branches
 
-- audio, genetic, ascimage, transformer and stapes (formerly soundlab) left this
-  repository for their own ([package map §8](package-map.md#8-external-module-boundary)):
-  a change to one lands there, under its own `AGENTS.md` and agent notes, and vif
-  takes its tag. Stapes keeps its verbs, the rip and the model's training over
-  transformer, which vif does not require; `make tools` builds ascimage's command
-  from the version `go.mod` requires.
-- The capture carries `registry.SpeciesState`, which embeds the streaming
-  engine's checkpoint, so a change to `genetic.StreamingState`'s layout, or to
-  how a state is continued, bumps `snapshot.Schema` beside
-  `StreamingStateVersion`.
-
-## Branches
-
+- A cloud checkout is shallow (`git rev-parse --is-shallow-repository`): `git log
+  -S` names the boundary commit as a line's origin, and
+  `git fetch --deepen=3000 origin main` reaches the rest.
 - `git checkout <file>` to take back one line takes the file's whole uncommitted
   work with it: undo a line with an edit, and commit a checkpoint before a long
   tuning run.
 - A session pushes only its own branch. A rebase its owner asked for goes up with
-  `git push --force-with-lease=<branch>:<the head its PR shows>`, which is taken;
-  a force push with no lease was refused, so a branch whose PR merged starts again
+  `git push --force-with-lease=<branch>:<the head its PR shows>`, which is taken; a
+  force push with no lease was refused, so a branch whose PR merged starts again
   from main only once its owner deletes it: ask.
 - An agent's `git rm` stages its deletions in the checkout it shares, and the
   parent's next `git commit` takes them with another agent's work: a commit that
   does not build alone. An agent deletes with `rm`; the parent commits by path
   (`git commit -- <paths>`).
-- Take the next `snapshot.Schema`, `event.JournalSchema` or `manifest.SchemaVersion`
-  past main's, and check again after merging main, where another PR may have taken
-  it.
+- A sub-agent's worktree lies inside the checkout, under `.claude/worktrees`: keep
+  it out of commits (`.git/info/exclude`) and out of a search
+  (`--exclude-dir=.claude`), and name the checkout in every command, as a `cd` into
+  the worktree moves the shell there.
 - A rebase replays each commit on main as it stands, so what the branch's merges of
   main settled comes back as conflicts, and what a merge commit changed beyond them
   is lost. Merge main on a scratch branch first: the rebase is done when `git diff

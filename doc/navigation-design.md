@@ -147,10 +147,11 @@ capture carries, and the reading ticks are navigation's phase (`refresh_ticks`).
 
 A target group is one navigation goal for many actors. Group 0 is the live
 cursor roster up to the eight-target cap (`MaxTargetsPerGroup`); script groups
-1–15 (`MaxTargetGroups` is 16) hold up to eight `TargetAnchor` entities, follow
-one entity, hold a fixed cell, or mirror the roster. A field seeded from a group
-selects the nearest reachable target at each cell, which is the right answer for
-a hostile species and the wrong one for anything that belongs to a particular
+1–15 (`MaxTargetGroups` is 16) hold up to eight `TargetAnchor` entities (the rest
+dropped in store order, silently: a ninth anchor is no target until one goes),
+follow one entity, hold a fixed cell, or mirror the roster. A field seeded from a
+group selects the nearest reachable target at each cell, which is the right answer
+for a hostile species and the wrong one for anything that belongs to a particular
 participant.
 
 Every cursor on the map also has a private group (`MaxTargetGroups` + roster
@@ -292,12 +293,19 @@ The `cave` scenario's jagged cave steps a column every tick, and more in a later
 cave. At 500×254 a step turns about 350 cells and the wall upkeep is 71 µs
 (`BenchmarkCaveStepNavigation`); a tick with eight composites, most of them out of
 sight of the cursor, costs 180 µs, and 103 µs with them near it
-(`BenchmarkCaveNavigation`). In play a step turns more than a fiftieth of a small
-map on a third of the ticks. Played headless as a player plays it (`:god`, the
-ship sweeping from the middle to near the left edge every three seconds, firing),
-navigation took 95–100 µs a tick at 120×40 and 220–245 µs at 200×60 while a
-fiftieth derived whole, two thirds of it those derivations, and takes 27–43 µs and
-64–79 µs at an eighth; at 400×120, 145–165 µs before and 90–120 µs.
+(`BenchmarkCaveNavigation`). The wall path is read by two benches of opposite
+shapes: `BenchmarkNavigationWallMoves` moves one wall and
+`BenchmarkCaveStepNavigation` turns hundreds of cells a step, so a cost per
+changed cell shows in the second alone and one per row or per map in the first
+alone, at the largest map, and a change to `applyWalls` or `CompositePassability`
+reads both before it is called neutral. In play a step turns more than a fiftieth
+of a small map on a third of the ticks. Played headless as a player plays it
+(`:god`, the ship sweeping from the middle to near the left edge every three
+seconds, firing; a ship that keeps still keeps sight of the raiders and shows
+little of the cost, and a group cache's `FlowField.CurrentGen` counts the fields
+computed), navigation took 95–100 µs a tick at 120×40 and 220–245 µs at 200×60
+while a fiftieth derived whole, two thirds of it those derivations, and takes
+27–43 µs and 64–79 µs at an eighth; at 400×120, 145–165 µs before and 90–120 µs.
 
 What is left is the fields. A cell closes every tick, so a raider out of sight
 computes its group's composite field on every tick it reads one, a fifth of the

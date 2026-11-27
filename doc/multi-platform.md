@@ -135,6 +135,15 @@ It should produce no output: the audio module's `model` package alone stays. The
 container is one static binary in `scratch`; its exact layer size should be
 measured for each release.
 
+A binary names the modules it links: `go version -m <binary>` for ELF and PE, and
+`grep -a -o` of its `dep` lines for `vif.wasm`; the headers of the `NOTICES`
+beside it are the same list. Its size is read by package from `go tool nm -size`,
+which reads nothing in a binary linked with `-s`, as the flags above link every
+artifact and `bindGo` the Android library (`-s -w`): build or bind with
+`-ldflags=-w` for that. A generic over component structs compiles once per
+component, and each copy's name spells the struct's fields, costing a third as
+much as its code.
+
 ## 4. Platform matrix
 
 | Target | Current support | Important constraints |
@@ -312,9 +321,12 @@ one binds a `wss://` door and serves the certificate `-cert` and `-key` name, or
 either; the dialing browser must trust that certificate (one a public authority
 issued for the host's name, or a self-signed one the player's browser was told to
 trust by opening `https://host:7778` once, which the door answers with a line saying
-so), and its page's `connect-src` must allow the host's origin. A terminal joins it
-with `-join wss://host:7778/<name>`: a certificate the system's roots vouch for, or
-a self-signed one taken as it is, encrypted and naming nobody, open to a man in the
+so), and its page's `connect-src` must allow the host's origin. A page cannot pin
+the certificate instead: that takes WebTransport's `serverCertificateHashes`,
+which the route does not speak, so a page joins a player's self-signed door over
+the site unless its browser was told to trust it. A terminal joins it with
+`-join wss://host:7778/<name>`: a certificate the system's roots vouch for, or a
+self-signed one taken as it is, encrypted and naming nobody, open to a man in the
 middle unless a passphrase bound to that door's certificate rules one out
 ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)); `-ca`
 names an issuer's PEM file or pins the certificate's own fingerprint, `sha256:<hex>`, which
@@ -489,6 +501,10 @@ keys a run comes back to its session with live in the site's storage
 (`localStorage`), held by the first tab under a Web Lock, so a reload or a new tab
 after a closed one takes back the place it left; a second tab beside the first
 keeps its own in `sessionStorage` and is another player ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+
+What a page keeps is tested under Node with a `terminalPage` of the test's own, whose
+`kept` holds the documents of an earlier visit and whose `post` hears each `keep`
+(`cmd/vif/browser_test.go`).
 
 A guest already receives custom maps. When the scenario it resolves does not have
 the session's digest, the coordinator serves it during the join, between the offer
@@ -667,22 +683,27 @@ and the game holds its 60 frames a second; Windows' own figure is owed
 
 There the window's speakers are WASAPI's, with cgo off and no library beyond
 the system's (`cmd/vif/wasapi.go`, in every Windows window build with audio):
-each COM interface is called through its method table with `syscall.SyscallN`.
-One thread holds COM and a shared stream on the default output device, opened
-event-driven in the mixer's own 44.1 kHz 16-bit stereo, which Windows converts
-to the device's format, and kept at two of the device's periods, 20 ms. A write
-is handed to that thread, which gives the device a slice of it at each of the
-device's calls, and returns once the device holds it all, so the mixer renders
-its next period as late as the device allows: between a render and its sound
-leaving the device lie 10 to 30 ms whatever the mixer's period, and a device
-that stalls queues nothing behind itself, where a ring of two mixer periods that
-took each write as it fit measured 6 to 16 ms more at the median and kept 17 to
-82 ms more after one 200 ms stall. A stream that fails (its device unplugged,
-disabled or given another format) or takes nothing for two seconds (a program
-holding the device for itself) is opened again on the default device of the
-moment, once a second until one plays; the mixer runs on meanwhile and is told
-nothing, since a write error silences the engine for the run. A default changed
-while the old device stays is not followed
+each COM interface is called through its method table with
+`syscall.SyscallN(obj.table[slot], uintptr(unsafe.Pointer(obj)), ...)`, every
+pointer conversion inside that call's own argument list, the one place the runtime
+holds a local's address still: a helper taking ready-made `uintptr`s is unsafe for
+locals, and vet does not say so. A test's stand-in for a COM object is a table of
+`windows.NewCallback` functions, which take pointer arguments
+(`cmd/vif/wasapi_test.go`). One thread holds COM and a shared stream on the
+default output device, opened event-driven in the mixer's own 44.1 kHz 16-bit
+stereo, which Windows converts to the device's format, and kept at two of the
+device's periods, 20 ms. A write is handed to that thread, which gives the device
+a slice of it at each of the device's calls, and returns once the device holds it
+all, so the mixer renders its next period as late as the device allows: between a
+render and its sound leaving the device lie 10 to 30 ms whatever the mixer's
+period, and a device that stalls queues nothing behind itself, where a ring of two
+mixer periods that took each write as it fit measured 6 to 16 ms more at the
+median and kept 17 to 82 ms more after one 200 ms stall. A stream that fails (its
+device unplugged, disabled or given another format) or takes nothing for two
+seconds (a program holding the device for itself) is opened again on the default
+device of the moment, once a second until one plays; the mixer runs on meanwhile
+and is told nothing, since a write error silences the engine for the run. A
+default changed while the old device stays is not followed
 ([todo](todo.md#follow-the-default-output-device-on-windows)). The render loop
 yields to Go's scheduler once a device period: without it the runtime's monitor
 takes the thread's processor at every wait and polls at full rate, which under
@@ -704,6 +725,18 @@ whether the Windows window should start there is open
 ([todo](todo.md#feed-the-windows-speakers-a-shorter-period-by-default)). The
 figures on Windows are owed
 ([todo](todo.md#measure-the-windows-sound-on-windows)).
+
+Wine's WASAPI is not Windows': a 30 ms buffer whatever is asked, a 10 ms timer thread
+for the device, no loopback capture, and `IAudioClient3` and `avrt` as stubs. It asks
+PipeWire for a 128-frame quantum, at which an unprivileged graph misses cycles on a
+busy machine, and its driver plays behind whatever each miss held back, so its
+latency grows within a run: a sink's own part is read from a trace of its render
+thread's turns, not from the monitor alone. Stopping its pipewire-pulse is the one
+way to make it raise `AUDCLNT_E_DEVICE_INVALIDATED`. On Windows itself Go's monotonic
+clock counts the time a machine slept, and the runtime wakes every thread at resume,
+so a timeout armed before a sleep fires the moment the machine wakes, before the
+thread it waits on has run. Measuring a sound stream is
+[Development §14](development.md#threads-clocks-and-audio).
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `terminal.Page` (`terminal.OpenPage`). The program, in
@@ -788,12 +821,14 @@ larger strike, and 71 ms before and 77 and 90 ms after toward the smaller. A
 replaced picture's and drawer's pixels are freed then (`Bitmap.recycle`), not at
 the next collection: eight swaps grew the native heap by 0.5 MB where they grew
 it by 47 MB, and sixteen raised the app's PSS by 33 MB where they raised it by
-127 MB.
-`FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
-system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
-through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
-the drawer the whole grid. Nearby games
-([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)) take two
+127 MB. That is read off `dumpsys meminfo`'s native heap, where `Bitmap.recycle`
+shows, not its Graphics line, which rose 54 MB over eight swaps on a Pixel 8 Pro
+and fell most of the way back within 24 s; `dumpsys meminfo` itself makes the app
+collect. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is
+copied to the app's files directory as the system root (`VIF_SYSTEM_ROOTS`); the
+user root, logs and journals live beside it through the XDG variables. `onPause`
+reaches the run as `Away`, `onResume` hands the drawer the whole grid. Nearby
+games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)) take two
 things of the app, both the `Listener`'s: `Subnets`, the device's IPv4 networks as
 `NetworkInterface` lists them, asked each time the run sends, and `Listening`, on
 which `MainActivity` holds a Wi-Fi multicast lock (`CHANGE_WIFI_MULTICAST_STATE`,

@@ -339,6 +339,13 @@ program's own, and a loot field a code kind or one of the scenario's own
 the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
+A field with no `toml` tag decodes by its Go name: a wall batch's cells take
+`OffsetX`, `OffsetY` and `WallVisualConfig = { ... }`, and a rune field such as
+`char` takes the character's code, `43` for `+` (`wad/scenario/base/dummy`'s pads).
+A `time.Duration` field (`duration`, `transition_time`, `max_lifetime`) is
+nanoseconds (`3000000000` for three seconds), where a `duration_ms` field is
+milliseconds; `vif -schema` prints each field's type.
+
 `pick` sets one payload field to an entry of `from`: the one its `var`'s value
 names, modulo the list's length, a negative value counting back from the last entry.
 The draw behind it need not know the list: `cave`'s rock wears the stone art its
@@ -503,6 +510,11 @@ requires on. A system the running regions decide, or whose wanted state changed,
 goes to it; any other keeps what `EnableSystem`, `DisableSystem` or `:system` left
 it at. The runtime runs it after init, reset, an installed capture and each
 `:region` command, and the region actions run it, so a scenario has no need to.
+
+A system the manifest drops leaves every `only_systems` that names it, which
+`-check` and `internal/resource`'s systems test refuse as unknown, so its removal
+searches `wad/scenario/` for its name (`tutorial` lists its systems one by one). A
+list that narrows turns `behavior` off too: a scenario of data species names it.
 
 ### Status Registry Actions
 
@@ -760,6 +772,11 @@ miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
 
 `value` defaults to `true`.
 
+A transition on `EventFireSpecialRequest` meaning a press guards
+`{ field = "repeat", value = false }`, as `shadows` does: the shipped
+`[play] auto_fire = "on"` repeats special fire every cooldown, each repeat marked
+`repeat`.
+
 ### PayloadCovers
 
 ```toml
@@ -888,9 +905,10 @@ countdown's face the same way; a large countdown that finds no clear slot takes
 the small face as it spawns. `EventGlyphLineRequest` lays a line of typeable
 glyphs from a cell, left to right, as the corpus's lines are laid: cropped at the
 map's right edge, dropped whole where it meets a wall, rock or glyph, laid under a
-cursor or an effect, in `type` and `level` (dark green when unset), and
-`scenery = true` makes it part of the map that nothing types or deletes.
-`accent` names a mark the text brackets the runes it calls out with, as
+cursor or an effect, in `type` and `level` (dark green when unset; a line laid in
+type `gold` shows nothing, since a gold glyph is drawn only as a gold composite's
+member), and `scenery = true` makes it part of the map that nothing types or
+deletes. `accent` names a mark the text brackets the runes it calls out with, as
 `"|dw| a word"` with `accent = "|"`: they are laid bright white and the mark takes
 no cell. A laid line is text to read, which the magnifier keeps off where it has
 room.
@@ -905,9 +923,11 @@ status message is. `wad/scenario/base/tutorial` is the worked example.
 A player's edits are requests a state can wait on, each made on the pressing
 instance alone: `EventDeleteRequest { range_type, start_x, start_y, end_x, end_y }`,
 its start the range's first cell whichever way the motion went and `range_type`
-0 a span, 1 whole rows, 2 Visual's block; `EventGlyphReplaceRequest { x, y, text }`
-for `r`, `~` and a retype undone; `EventGlyphPutRequest { cells }` for a put and
-a delete undone, each cell an `x`, `y`, `rune`, `type` and `level`;
+0 a span, 1 whole rows, 2 Visual's block (a line delete carries rows alone,
+`start_x` staying 0, so a guard on `dd` compares `range_type` and `start_y`, and
+`x` fills every field); `EventGlyphReplaceRequest { x, y, text }` for `r`, `~` and
+a retype undone; `EventGlyphPutRequest { cells }` for a put and a delete undone,
+each cell an `x`, `y`, `rune`, `type` and `level`;
 `EventCharacterTyped { char, x, y }` for a key typed in Insert, a miss included;
 and `EventModeChanged { mode }`, 0 Normal, 1 Visual, 2 Insert, 3 Search. A state
 that moves on one runs its entry before the system that handles the request, so
@@ -1203,7 +1223,9 @@ target = "Roam"
   first raider rank gives the snake's values and each later rank its own, slower.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
-  `HitWall` reads this step's move). A global edge has none.
+  `HitWall` reads this step's move). A global edge has none. Instances spawned on
+  one tick time out together: a roll on a `Timeout` sends a salvo, a `Chance` on a
+  `Tick` edge one at a time.
 - `target`: a state, or candidates tried in order, each a name or
   `{ state, guard, guard_args, duration_ms }`, the duration overriding the state's.
 - `actions`: effects run between the exit and the entry.
@@ -1315,6 +1337,9 @@ kind's look and, collected, grants its kind's reward. `-check` prints
 `loot ok: <n> (<names>)` and `drops ok: <n> (<names>)`; each fault names its kind
 or table and place (`drops 'raider': tiers[1]: entries[0]: loot "upgrde" names no
 kind`).
+
+A drop belongs to a cursor ([Gameplay: Species loot](gameplay.md#species-loot)), so
+one a scenario lays before `EventCursorSpawned` goes to nobody: lay it on that event.
 
 ```toml
 [loot.beacon]

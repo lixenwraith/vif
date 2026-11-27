@@ -234,6 +234,18 @@ bodies, `MaxAuthFrame` their bound; the refusal kinds `RefusalSignIn` (retry aft
 signing in), `RefusalCredential` and `RefusalDropped` (no retry). Tests, one a rule,
 and fuzz targets over the token forms, the join handshake and the peer link.
 
+A public key travels as its base64 string (`network.EncodeKey`), not `[]byte`:
+`RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is TOML
+a scenario could name, and the generated capture codec has string and slice kinds and
+no bytes kind; it is decoded at the boundary that verifies it. `encoding/json`
+compacts a `json.RawMessage` it marshals, so a `Signed` body survives a round trip
+only as the compact JSON `json.Marshal` emits: a token another writer re-encoded with
+whitespace fails its signature, the refusal intended. A challenge-response handshake
+cannot be fuzzed from a static script past its challenge, a proof over a random nonce
+never being in the corpus: the join target pins the nonce through `Coordinator.Nonce`
+and seeds proofs over it, and the peer link target asserts instead that no script
+ever opens a link.
+
 ### 3.2 Participant keys
 
 [Multiplayer §5.4](multi-player.md#54-wraiths) states it where it is used. A run
@@ -290,7 +302,9 @@ bounded (`MaxAuthFrame`) and the join handshake's fuzz target scripts them.
 Through the router (D5) the same frames run end to end, the router placing itself
 between the question and the answer for one frame each way (`tcpRouter.exchange`):
 it reads the dialer's answer, forwards a pass whole, and turns a sign-in or nothing
-into a ticket (§3.6); a passphrase door's later steps it splices.
+into a ticket (§3.6); a passphrase door's later steps it splices. A stand-in pod
+in a test hands its connection to `HostAcceptor` whole, which reads the route
+frame itself.
 
 ### 3.4 Session passes
 
@@ -370,7 +384,10 @@ exchange on every redial.
 On a TLS door both ends bind the exchange to the leaf certificate the door serves
 (`LeafBinding` on the door, the handshake's peer certificate on the dial, under a
 websocket too), so a self-signed door is authenticated both ways; on tcp and ws it
-authenticates the handshake alone. The offer carries the credential's verifier
+authenticates the handshake alone. `auth` reads an empty binding as an error, not
+as unbound, so the binding is passed only over TLS (`bindingOption`), and the leaf
+is read from under a websocket (`tlsOf`), stopping at the `*tls.Conn`, which has a
+`NetConn` of its own. The offer carries the credential's verifier
 (`SessionOffer.Door`, `DoorVerifier`: the salt, the cost and the two keys, never
 the phrase), which every participant proved, so a relay's door and a successor's
 serve the exchange from it (`OpenDoor`) and a newcomer joins there as at the host's;
@@ -412,8 +429,11 @@ passphrase door's steps among them. The front door reads the edge's PROXY header
 version 1 or 2, when `-route-proxy-protocol` says an edge fronts it, and ends TLS
 itself under `-route-cert` or `-route-selfsign`; `-route-secure`, implied by either,
 has every link read `vifs://`, which the game dials with the system's roots, `-ca`
-or the fingerprint the sessions API carries (`door_fingerprint`). `vif-router keygen`
-writes the seed `-ticket-key` names; `GET /vif/api/keys` lists the public key.
+or the fingerprint the sessions API carries (`door_fingerprint`). A join address
+keeps that scheme wherever it is kept (`Endpoint.Dialable`): a bare host:port kept
+for a `:join` (`membership.Joining`) or in the flags dials a TLS door in the
+clear. `vif-router keygen` writes the seed `-ticket-key` names;
+`GET /vif/api/keys` lists the public key.
 
 Accounts are the identity service's (D8), whose routes and introspection are:
 
@@ -463,8 +483,9 @@ grants it the site ([Platforms §5](multi-platform.md#the-chrome-extension)).
 ### 3.7 Budgets
 
 Every budget is a fixed window per key (`AdmissionLimiter`), the key an address's
-host (an IPv6 host's /64) or an account, tables bounded at `NetworkAdmitTracked`
-and failing closed past it:
+host (an IPv6 host's /64, since a key of the whole host would let one prefix's
+addresses take a share each) or an account, tables bounded at
+`NetworkAdmitTracked` and failing closed past it:
 
 - **Joins at the router**: the route frame charges the dialer's address
   (`-client-joins` a minute), the front door's from the PROXY header or the socket
@@ -477,8 +498,11 @@ and failing closed past it:
 - **At a pod**: every dial arrives from the node's address, so a pod run with
   `-admit ticket` spends no address budget and charges the ticket's subject, the
   player the router named; a pass, a participant's own redial, spends none.
-- **Doors**: `-doors-per-address` publications an address holds and the join budget
-  per publication; by account once the publish ticket lands (§9).
+- **Doors**: `-doors-per-address` publications an address holds, the address
+  counted by its whole host and not its /64
+  ([todo](todo.md#count--doors-per-address-by-the-admission-key-not-the-whole-host)),
+  and the join budget per publication; by account once the publish ticket lands
+  (§9).
 - **The identity service's**: 5 registrations, 10 sign-ins and 5 deletions a minute
   per address, believed from the router's forward alone.
 

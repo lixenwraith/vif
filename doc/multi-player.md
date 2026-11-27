@@ -86,7 +86,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Host loss | The session's policy, its host's to choose and `host` unless it asked for `migrate`. `host`: nobody takes the session, and every survivor continues alone once its redial ends. `migrate` (`-authority migrate`, `:host <doors> migrate`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about 0.7 s behind at the default tick, and predicts nothing; it takes each later starting point as a correction (§5.8). |
-| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and a `vifs://` front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and the tick interval, seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The tick interval, seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor, and applies a peer's artifact only if its type is one a producer sends, tagged as it sends it, from one who may author it (`crossingRules`, `event.Crosses`): the authority, a participant that plays or any, a combat hit naming its sender's cursor as owner and, if any, emitter. What an artifact names inside that is not yet held to what its sender could mean ([todo](todo.md#hold-a-crossings-content-to-what-its-sender-could-mean)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`). |
+| Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and a `vifs://` front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and the tick interval, seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The tick interval, seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor, and applies a peer's artifact only if its type is one a producer sends, tagged as it sends it, from one who may author it (`crossingRules`, `event.Crosses`): the authority, a participant that plays or any, a combat hit naming its sender's cursor as owner and, if any, emitter. What an artifact names inside that is not yet held to what its sender could mean ([todo](todo.md#hold-a-crossings-content-to-what-its-sender-could-mean)). A crossing names its producer's entities, which an instance that applied an arrival late holds under other numbers until a correction: a handler that destroys what a crossed number names checks it is what was meant, as a typed member's end ends only what is that header's member where it applies (`CompositeSystem.destroyMember`), or a guest's typed letter would end a cursor. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -215,7 +215,8 @@ and applies at the guest's next tick, and what the guest applied after the
 capture's tick stays retained for every older capture still to come. What no
 capture holds is never judged held (`snapshotContainsLocked`): the hold and the
 rate, which are the clock's (§3.6), and the reset, which ends the run every capture
-of it was read in.
+of it was read in. A new crossing whose effect no capture carries joins those
+cases, or a guest a correction carries to its tick loses it for good.
 
 This closes the guest-action pattern — a correction undoes the player's own
 keystroke, and the next one puts it back a cadence later — because a frame the
@@ -254,7 +255,9 @@ next. A guest still in the old run a tick after that epoch, its clock past the
 authority's last epoch of it, has lost what would have ended it (a refused epoch, a
 relay that left, a transition its own machine refused), which nothing sends again:
 it ends the run itself (`leaveRun`), applying nothing more of it, and the new
-game's first correction brings what its roster missed. A held guest takes that
+game's first correction brings what its roster missed. Two resets settled in one
+tick would advance the run twice, so the tick that leaves a run applies nothing
+else, and a new path to a reset is checked against that. A held guest takes that
 epoch as its resume: a new game its host starts from a hold sends a guest standing
 a tick past that hold no later epoch of the old one.
 
@@ -291,6 +294,12 @@ The whole commit — projection and write — runs under the live world lock, so
 live tick can land between the tick the projection reached and the write. The write
 compares the staging world's stores against the live ones where they stand and
 moves the cells that differ; neither world is captured for it.
+
+The staging world's `Config` is written out field by field (`App.newStagingApp`),
+and a field left out takes its default, so it names what decides the simulation and
+an install does not write, as the run's tick: `World.tick` stays as built, and the
+header's `TickInterval` moves only the clock. Without it a projection plays ticks
+the live world does not (`TestAStagingWorldPlaysItsRunsTick`).
 
 A capture ahead of the clock is a join or a jump and is adopted at its own tick;
 within `NetworkHoldTicks` it waits ([Netcode design §2.1](netcode-design.md#21-the-playout-buffer)).
@@ -430,6 +439,12 @@ over, so a join's stall is grace and one shed waits a whole window for the next.
 dismissal carries `Shed`: every participant reads which bot or player went and why,
 and the dropped one starts a local game saying so. `-shed-window 0` turns it off.
 
+A session policy on the wall clock lives in `Authority.drive`, which the correction
+loop reaches between ticks and a driven run once per `App.Tick` call, however many
+ticks that advances. One that crosses needs a running transport, which a replay has
+none of, and restarts its own watch as it crosses, since the roster it reads
+(`WorldRoster`) shows the crossing only as it applies, a lead later.
+
 ### 3.6 Holding a session
 
 A session stops only as a whole, and only its host stops it. The host's `:pause`
@@ -493,7 +508,10 @@ A roster change crossed under a hold stays scheduled until the hold ends, since 
 held session reaches no tick to apply it at, and applies then in the order it
 crossed. A player whose link drops under one is crossed out and no Wraith yet; the
 door reads it as away from the crossing on, and its key takes the place back held
-(§5.4).
+(§5.4). Since a held host flushes nothing, what it crosses under a hold reaches no
+guest, relay or successor until the resume: a guest's barrier holds no roster
+change meanwhile, so a guest's rule reading `arrivalScheduled`, or a mark an
+arrival clears, needs another source.
 
 A session runs at its host's rate as it stops at its host's hold. The host's
 `:speed` (Simulation → Game speed) crosses `EventGameSpeed`, admissible from the
@@ -533,7 +551,11 @@ to send by `NetworkJoinReadyTimeout`, as a relay's is while its proof has not co
 refuses its joiner the same way (`joinBehind`); a bot seat retries each, since a
 fresh attempt brings a fresher world. A joiner drives no cursor until its own
 exists: the arrival binds it, or a correction that already holds the arrival, whose
-fence drops the crossing, binds it by identity (`RebindCursorRoster`).
+fence drops the crossing, binds it by identity (`RebindCursorRoster`). State a
+joiner takes on arriving is therefore derived there too, never only in the
+arrival's handler. Its world holds no roster entry for it until its arrival
+crosses there, while the authority's may already, so what the run itself is, a bot
+seat, is its own word (`Instance.Seated`), never read off its entry.
 
 A gate's lead counts the ticks of the game its offer names. A new game that starts
 under it ends the wait (`KeyframeAt`, `ProvedWorld`), and the host refuses the
@@ -612,6 +634,12 @@ slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 Holder checks are structural; they do not authenticate a peer. The player's view of
 these rules is [Bots](bots.md#ownership-and-leaving).
 
+A relayed join's frames are taken under the world lock (`onRelayJoin`), and its steps
+are asked from the handshake's goroutine, which takes that lock to send
+(`tellAuthority`), so a step the frame handler sends goes by `tellAuthorityLocked`. A
+place taken back through a relay keeps its own holder meanwhile (`returnPlace.via`),
+or a person with bots waiting reads as a bot holding bots.
+
 ### 5.0 Who listens, who authors, who can be reached
 
 Three questions the rest of this section depends on, and they have different
@@ -621,7 +649,7 @@ answers:
 |---|---|
 | Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it, but for a relay's fork from a host-policy session, whose `-relay` door goes on for the people it relayed (§5.5). In a **migrate** session a participant whose player turned Take over as host on binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, and asks for it by itself, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. A player who did not ask, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every host-policy session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, `vifs://` where TLS fronts it, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, `vifs://` where TLS fronts it, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`, which clears the chain alone: a new offer field only a seated participant should hold is cleared there too), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
 
 **A relay authors nothing and still answers for what is behind it.** The term
 holder is the session's one authority, named to every participant, and it moves
@@ -666,6 +694,11 @@ A host started with `-no-cheats` refuses the grants (`:god`, `:demon`, `:energy`
 it (`RestartAsk.NoCheats`), and each participant refuses them itself, since what
 they set reaches the others through its owner's sync, which no host bounds. A run
 that leaves the session takes them back, unless its own `-no-cheats` refuses them.
+
+A session property a host sets travels four ways, and a new one checks each: the
+offer (`offerLocked`), a joiner's wiring (`configForJoin`, which `alone` clears), a
+leave that forgets it (`leaveSessionLocked`'s `left`) and the host's scenario change
+(`RestartAsk`); `-no-cheats` takes all four.
 
 ### 5.1 Succession
 
@@ -716,7 +749,9 @@ The procedure on each survivor is:
    later; a bot and a script's run fork with the relay. The place is the
    dial's to prove while the redial and the walk last, and the run is its
    participant throughout: its key signs its notices, its links and, its turn come,
-   the record it takes the term with (`Membership.LocalKey`).
+   the record it takes the term with (`Membership.LocalKey`, which answers through
+   the loan, `Membership.lent`, while the run's own place is nil: what signs for
+   the run reads it, never the place).
 3. **Walk the list.** A survivor dials each candidate whose turn has begun, once a
    second, and announces itself on each link it opens and again on every link each
    pass, since the notice sent as the loss was seen is dropped by a peer still
@@ -970,6 +1005,15 @@ An arrival applying at the reset's own tick joins the roster the reset rebuilds,
 its slot or over its own cursor's entry, a Wraith or not, and the boot's spawn
 builds it with the rest from the template (`PlayerResource.JoinRestore`).
 
+Between the reset's settle and that spawn no cursor stands: the reset's tick settles
+on after `MetaSystem.handleGameReset` clears the world and closes with no flush,
+`Scheduler.executeReset` takes the world lock again, and `NetworkSystem.Init`
+empties the barrier bar what `keepLost` keeps. What a crossing applied at that tick
+raised, and a goroutine in between (a correction's off-tick drain, the accept loop),
+meet only the roster waiting in `PlayerResource.Restores`, so an event that writes
+every cursor or Wraith writes that roster too (`JoinRestore`, `RestartWaits`); a
+queue event pushed in between goes with the queue.
+
 A notice dismisses only a seat, which its holder dropped; a player whose link
 closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
@@ -1078,10 +1122,12 @@ arrival crossing carries it, and `CursorSystem.reclaim` equips the Wraith at the
 cell nearest the one it held, on every instance, and writes the record over the
 template only where it names the game being played, holds what a sync may and
 reads no defeat, zero heat and zero energy: a cursor comes back as new, never down
-(`CursorSystem.restore`, `heldInRange`). A reset starts another game, at `:n` or a
-defeat, so a player back after one, or whose arrival the reset crossed again, plays
-the cursor the new game built: leaving ahead of a loss brings nothing back. A Wraith
-is driven by nobody, its own participant included, until that arrival.
+(`CursorSystem.restore`, `heldInRange`). It is judged there, on every instance,
+never at the door: a field added to the record that play bounds joins
+`heldInRange`. A reset starts another game, at `:n` or a defeat, so a player back
+after one, or whose arrival the reset crossed again, plays the cursor the new game
+built: leaving ahead of a loss brings nothing back. A Wraith is driven by nobody,
+its own participant included, until that arrival.
 
 A key whose place is still linked, which the host has not yet seen go, closes that
 link (`Membership.closeStaleLink`): its departure crosses as any lost link's does, and the
@@ -1113,9 +1159,11 @@ lost before its arrival applies, under a hold or inside its lead, is one as well
 the place stays taken, the authority crosses the departure behind the arrival from
 the slot it names, a guest flooding its notice with no cursor to name, and the
 departure finds the cursor the arrival is making in the tick both apply
-(`rosterDue`), so the newcomer waits as a Wraith for its key. A departure whose
-arrival stands behind it, or whose place a dial is taking back, tells the session
-layer nothing and closes no link, that dial's among them (`rosterBehind`,
+(`rosterDue.spawning`: a settle runs breadth first, so both handlers run before
+that cursor is made, and what the departure asks of it is queued behind the
+spawn), so the newcomer waits as a Wraith for its key. A departure whose arrival
+stands behind it, or whose place a dial is taking back, tells the session layer
+nothing and closes no link, that dial's among them (`rosterBehind`,
 `NetworkResource.OnDeparture`). The arrival then finds its participant's own cursor
 in the slot, a Wraith or one no departure turned, and is that participant back
 (`addParticipant`, `CursorSystem.spawnOne`).
@@ -1131,9 +1179,13 @@ cursor in its place (`takeOwnPlaceLocked`). A run whose authority goes first for
 at once: a held host flushed nothing, so no successor's group holds its arrival
 (`Authority.adopt`, `driveWalk`), and its place waits there as a Wraith for its
 key. The session note carries the wait (`SessionStatePayload.Superseding`), so a
-replay binds the cursor where the run did. Its bots are seated once the hold ends,
-their retries lasting it (`playSeat`): a relay that joined under a hold has proved
-no world to gate them with.
+replay binds the cursor where the run did. Session state a replay must follow
+changes only through that note (`World.LatchSession`, `Supersede`): a flag an
+install or a link event flips with no note binds the replay's cursor at another
+tick, while a change a dispatch makes needs none, since the replay dispatches too
+(`World.TakePlace`). Its bots are seated once the hold ends, their retries lasting
+it (`playSeat`): a relay that joined under a hold has proved no world to gate them
+with.
 
 ### 5.5 Leaving a session
 
@@ -1329,6 +1381,10 @@ session stream and the simulation are unchanged.
   A firewall has to pass UDP 7777 in for a host to hear a probe and a looking run
   an answer or a beacon: the rule that opens a host's door covers it where it
   names the port and no protocol.
+- **Two runs on one machine** find each other: a datagram to an interface's directed
+  broadcast reaches local sockets too, from that interface's address. `ss -lnup`
+  names who holds UDP 7777, and a probe written by hand, `vif?`, version 1, kind 2
+  and zeros to 512 bytes, reads a visible host's beacon back.
 - **Android** lists the device's networks for the run, which its system keeps
   from the Go runtime (golang/go#40569), and holds a Wi-Fi multicast lock while
   the run listens and the player is at the game, since its Wi-Fi drops
@@ -1383,10 +1439,14 @@ that computes differently (below). It owns no cursor, so it simulates no player
 (D-2) and lays no glyph or nugget of its own (`GlyphSystem`, `NuggetSystem`): its
 screen is the Shared domain, with the session-wide effects every instance raises
 for it (D-6), and a player's glyphs, weapon shots and loot stay on that player's
-run, as they do between players. It stands a record and its slack behind, 13 to 14
-ticks beside a host at the game's rate, pacing its tick interval by the closed
-ticks it has in hand (`paceViewer`, `FeedSlackTicks`); a hold stops it on the tick
-that stops the players.
+run, as they do between players. A system that lays Player-domain entities returns
+early on a viewer's world (`World.Watches`,
+`TestAViewersWorldLaysNoFieldOfItsOwn`), or it draws them on a spectator's screen,
+where nobody plays them: no viewer test compares the Player domain, so only a
+spectating page shows one that does not. It stands a record and its slack behind,
+13 to 14 ticks beside a host at the game's rate, pacing its tick interval by the
+closed ticks it has in hand (`paceViewer`, `FeedSlackTicks`); a hold stops it on
+the tick that stops the players.
 
 **Starting points** (`Membership.syncAudience`) are written when a viewer waits for
 one (`FeedHub.Wanted`), when the game changed, and every `FeedSyncTicks` (600,
@@ -1409,7 +1469,12 @@ session, at a session a fork keeps for the players it relayed until `:host` open
 it (§5.5), as `RefusalAudience` past the ceiling, `-spectators` (8, `FeedAudience`;
 1024 at most; 0 takes none), and as `ErrUnstarted` while the session is in its
 lobby, which holds players alone: a refusal a person retries and a dial does not,
-since a lobby can outlast the budget a dial retrying in moments would spend.
+since a lobby can outlast the budget a dial retrying in moments would spend. A
+port a run opens serves the watch dial at every door it answers at, a second one's
+included (`link.Config.AcceptWatch`), and `Membership.watchParticipant` decides
+whether the session is shown, so a door that must show it to nobody, as the one a
+pinned fork keeps for the players it relayed, is refused there, and a test of such
+a door dials it with `network.WatchSession` as well as a join.
 
 **What a viewer is shown** is `SessionOffer.Watched()`: the game, and the roster's
 slots and names. Nothing in it takes, keeps or comes back to a place or says where
@@ -1720,6 +1785,120 @@ at that port is admitted into the session; `:host :7778` there opens another doo
 which `:session` then names. Repeat without `-listen` on the first guest and the
 second hosts instead; without `-authority migrate` on the host, each guest
 continues alone.
+
+### 9.1 Writing a session test
+
+`internal/app` builds sessions two ways: a mesh (`meshSession`, `meshOf`), instances
+linked in memory and ticked by the test, and sockets (`mustHosting`,
+`mustSocketJoiner`, `arrival`), real doors.
+
+- **Fixtures.**
+  - In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
+    `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
+    participant's `link.MeshPort` under its world lock drops it. A mesh opens no door
+    (`Membership.GuestCount` reads 0): what the door's roster keeps is tested over
+    sockets. A pair led by 1 is a join through the host, and one whose ends are both
+    in already is a link beside (`meshOf`): a second link to the host is `{3, 1}`,
+    after the pair that brings 3 in.
+  - A fixture's session takes the default policy, `host`, and its guests join as
+    leaves: a test of the succession opens with `hostMigrating` and joins with
+    `takingOver()` or a `ListenAddress`, or nothing walks and each guest forks as its
+    host goes.
+  - A solo run takes a transition a local event triggers in place, so only a session
+    shows its ask (D-20): `tutorialSession` is a cursorless host and its guest on a
+    mesh, the guest's keys typed with `tutorialPress` and both ticked a lead or two.
+  - A run that only watches is `mustWatching` (`internal/app/watch_test.go`), its dial
+    one more in its host's budget. `followTo` steps it to its host's tick, which shows
+    what a player crossed only a lead later: play the lead out on the players first. A
+    fight (`brawl`) whose players are not `:god`'s ends in a defeat and a new game,
+    which starts the tick count over.
+  - A unit `NetworkSystem` reads its identity at `Init` from the latched session, so
+    latch before building it, and `Cross` takes nothing until `barrierActive` is set.
+    A spawn request naming a participant joins a reset's roster while one waits
+    (`PlayerResource.JoinRestore`) and spawns nothing, so a unit test that leaves a
+    restore pending rebuilds through the boot's request, one with no `PeerID`.
+- **Ticks and waits.**
+  - An authority's lead is 1 once its first tick closes: a test of what lands inside a
+    lead reads `network.barrier_delay_ticks`, and a guest in step with its host over a
+    link with latency takes the host's crossings late, so stand it the latency behind
+    (`shapedFightOf`).
+  - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
+    the game resets near tick 35: a test that waits a fixed count of ticks past that
+    reads the reset. A new game starts the tick count over (`Stamp.Run` moves), so a
+    tick read before one bounds nothing after it: wait for the condition, bounded, and
+    end a wait for a tick when the run moves (`KeyframeAt`, `ProvedWorld`,
+    `gateJoiner`).
+  - The harness's host ticks every 10 ms, five times the game's rate, so a wait that
+    outlasts a 5 s deadline in play is over in a test unless the test ticks its host
+    by hand. A headless run ticks `WraithTimeout` of game time in a fraction of a
+    second, its resets included (`a.Tick(int(d / DeltaTime))`), so a test of a wait
+    waits it out. `replayMatches` wants fifty compared ticks.
+  - A joiner's `LocalSlot` stays `NoPlayerSlot` until its arrival crosses on its own
+    world, which takes the joiner's own ticks: a test waiting on it ticks the joiner
+    (`arrival` in `host_test.go`).
+  - A host a test does not tick parks a mid-run gate in its lead, and gates run
+    one at a time (`midRunGate`): a raw dial's reply holds the gate
+    (`dialSession`, `Complete`), a second joiner's waits behind it, and what the
+    test crosses meanwhile lands before that gate reads its offer.
+- **Holds, resets and replays.**
+  - A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
+    end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
+    do. A test-driven guest (`mustSocketJoiner`) runs no corrector: it applies a
+    correction only as a `Tick` call begins (`ApplyPendingCorrections`), so one can
+    re-base it mid-comparison. Run `settleCorrections`, which stops the host's
+    publication and drains what it sent, before `alignTicks` and `assertSharedParity`,
+    and close no host publication while a hold's end or a new game is still to land.
+  - A seat stands a tick ahead of its holder nine samples in ten from its join on
+    ([todo](todo.md#land-a-joining-seat-inside-its-pace-band)), so its holder's
+    crossings reach it late under load. A hold lands where the seat stands (§3.6), its
+    holder's tick unless it ran a whole tick further: a socket test asserts each
+    stands still, the guest at or past its host's tick. A mesh test makes a crossing
+    late by ticking the guest before the host flushes it
+    (`TestAHoldComeLateLandsWhereItsGuestStands`), and loses exactly the frames that
+    arrive while a link's `LossEvery` is 1 (`MeshPort.SetShape`), so one set round the
+    host tick that flushes an epoch loses that epoch
+    (`TestAGuestFollowsItsHostIntoTheNextGame`).
+  - A replay test levels its guest with its host before it plays, or an install that
+    carries it forward leaves the replay's `predicted` depth behind the run's. A
+    journal's digests stand too far apart to catch a transition taken a lead early (a
+    replay made to grant a recorded ask in place reproduced every one): compare the
+    surface tick for tick (`replayMatches`, whose `edit` names the root of a scenario
+    that is not embedded).
+  - A socket test's dump whose status reads "" where the test set one saw a new game
+    come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
+    the resets since the run began. Which of two runs applies a new game first races
+    their tickers; a test puts the guest first by sleeping once in a ticker of its own
+    on the authority, after the tick that crosses the reset and before the one that
+    applies it.
+- **Dials and succession.**
+  - A host admits `NetworkAdmitBurst` (6) dials from one address per
+    `NetworkAdmitWindow` (a minute), a fixed window, and loopback is one address: a
+    test lobby past six dials fills a window more per six (`lobbySession` sizes its
+    wait so); a dial refused after admission counts and a budget refusal does not. A
+    dial reaching a host with `MaxHandshakes` (8) handshakes in flight is closed
+    unanswered, which the dialer reads as `io.EOF` ("connected, but no vif session
+    answered there"), and is retried as a refusal is (`scriptedRun`).
+  - `:join`, the menu's join and a redial dial on the run they replace and hand the
+    dial to the next (`wiring.dialed`): a test of that path calls
+    `membership.DialJoin` on a wiring of its own and builds its run with `driveRun` on
+    a `runConfig` carrying the dial.
+  - Only a play run redials the host it lost (`Membership.redial`), so the mesh and
+    headless succession tests never do: a rule about a person's run losing its host
+    sets the guest's `cfg.Mode` to `ModePlay` under `RunSafe` before the host goes
+    (`TestAGuestThatRedialsItsLostHostTakesItsTurn`).
+  - A guest whose host closed its link plays on as a fork or a successor, on its own
+    clock, and still applies what that host crossed before the close: a departure
+    crossed for the guest itself turns its bots Wraith there a lead later, and a
+    successor's freeze only delays it. A test reading that guest's world reads a race;
+    read the instance the rule belongs to.
+- **Goroutines and locks.**
+  - One goroutine ticks a run. `waitForRosterPair` ticks both of its runs, so a run
+    already under `tickInBackground`, which `gatedHost` returns, is waited on with
+    `waitForCursors` or `waitUntil`, which only read. A second ticker passes `go test`
+    and fails CI's race run, so a new socket test runs once under `-race`.
+  - Code that traces a refusal inside `admissibleFromSource` takes no lock of the
+    network system's: `eachRosterScheduled` calls it with `mu` held, and a tracer that
+    read `participantID` there hung a test for its whole timeout.
 
 ## 10. Where this came from
 

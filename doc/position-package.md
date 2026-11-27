@@ -39,7 +39,14 @@ In `pkg/position`:
   as it holds it, or a `Point3`, a cell of the volume; a region is a
   `vmath.Area` or a `Box` (`Region`), a body a `Footprint` or a `Footprint3`
   (`Body`). A search answers in the point it was asked in, on its origin's
-  layer, with the zero point and false where it finds nothing.
+  layer, with the zero point and false where it finds nothing. The storm's attack
+  landing (`StormSystem.findLanding`) keeps the header cell it builds from that
+  point whatever `found` says, as the circle's `AttackTargetX` and
+  `AttackTargetY`, which the digests compare. A body's size is one
+  `vmath.Footprint`, its header offset inside it, and a species' is read through
+  `Resource.Footprint`, never as four ints or a parallel parameter: the searches,
+  line of sight, passability tiers and a materialize take the struct, and an
+  event's or a component's cell names the header, never the top-left.
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
@@ -139,7 +146,13 @@ Each names the choice taken and what the other would have cost.
   held cells read moves and installs lower still but an occupant probe at the
   ceiling half again over main, a second load waiting on the first, and its
   swap-removal let a view of one cell show another's occupants after a move
-  elsewhere.
+  elsewhere. A cell's view (`EntitiesAt`, `Occupants`, `EachOccupied`) is the
+  cell's own storage or its crowd's, and a cell going from one occupant to two, or
+  back, moves them: a caller copies a view before writing its cell, as every call
+  site does (`copy(buf[:], ...)`). A cell holds `CellCapacity` (31) and keeps
+  whichever came first, so a world rebuilt by insertion seats a full cell's first
+  rows instead: what must hold cells alike carries the placements held out
+  (`WorldOrder.Unindexed`), and `magic` fills one at a gateway some 1,000 s in.
 - Kinds, the mask's bits: a block's kinds are what its `blockOf` names, in the
   game the movers a wall stops and the box style it draws in (`component.BoxKind`,
   two bits no `BlockMask` carries), so the box characters' neighbor test reads a
@@ -206,7 +219,11 @@ Each names the choice taken and what the other would have cost.
   it looked the entity up in the world's component masks, a map. A destroy
   empties the wall store before the row goes, and the flag still names the wall
   whose cell the log takes. A store keeps one batch, begun again in its own
-  storage, whose commit sorts the additions' cells to find two on one cell.
+  storage, whose commit sorts the additions' cells to find two on one cell. The
+  batch `BeginBatch` returns is committed before the next begins, and none is held
+  across a call that may begin one. A new path writing `dense` and `entities`
+  whole calls `readWalls`, as `CopyIn` and the order install do; the fuzz test's
+  invariant (`FuzzWallTestAnswersAsHasBlockingWallAt`) fails one that does not.
 - Names: the package's classes are shared and private, the game's shared and
   player; the game reads the package's types by the package's names, never
   through an engine alias, since a method cannot be declared on an alias and a
@@ -216,11 +233,11 @@ Each names the choice taken and what the other would have cost.
   binding keeps only what the rows, the components and the rock need. The grid's
   own writes (`Set`, `RemoveEntityAt`, `Load`, `Reorder`) come with the promotion
   and move no row; a view type hiding them would cost the forwarding the
-  promotion saves, and the hazard is named in the type's comment and the agent
-  notes. `Resize` and `Clear` are the binding's, shadowing the grid's. Methods
-  nothing called were deleted rather than moved or promoted: `ScanLine`,
-  `ScanLineFirst`, `WallGeneration`, the `Unsafe` twins, `IsPointValidForOrbit`
-  and `IsPathBlocked`, negations of `IsBlocked` and `HasLineOfSight`.
+  promotion saves, and the hazard is named in the type's comment. `Resize` and
+  `Clear` are the binding's, shadowing the grid's. Methods nothing called were
+  deleted rather than moved or promoted: `ScanLine`, `ScanLineFirst`,
+  `WallGeneration`, the `Unsafe` twins, `IsPointValidForOrbit` and
+  `IsPathBlocked`, negations of `IsBlocked` and `HasLineOfSight`.
 - The cell aspect, read live through `Frame`: the searches round a radius on it
   (`SpiralSearch`, `MapSearchRadius`, `FindFreeFromPattern`), so a graphical host
   drawing square cells asks the same index; the one definition is
@@ -250,12 +267,16 @@ serves a flat map as a volume one cell deep, at no cost to it.
   switch on the parameter read a probe 10 to 20% slower and a constraint with
   methods a quarter. A box or a deep footprint comes back from those helpers in
   parts: six fields leave the registers four stay in, which cost the area probe
-  half again to twice. What it costs: no interface can hold a generic method,
-  every signature carries a type parameter, and nothing at compile time stops a
-  `Point3` on a flat map, where a layer past the first is outside it. An index
-  typed by its coordinate, `Index[E, P]`, which the compiler would hold to one
-  point, is the todo's [item](todo.md#an-index-typed-by-its-coordinate-indexe-p)
-  for when flat and volume games run on the engine together.
+  half again to twice. `go tool objdump -s 'Index.*\.Blocks' <test binary>` counts
+  a flat instantiation's instructions in main's test binary and the branch's, so a
+  change is read there, and a helper that would return six fields returns the
+  four-field form and two ints; a local named `at` shadows the helper. What it
+  costs: no interface can hold a generic method, every signature carries a type
+  parameter, and nothing at compile time stops a `Point3` on a flat map, where a
+  layer past the first is outside it. An index typed by its coordinate,
+  `Index[E, P]`, which the compiler would hold to one point, is the todo's
+  [item](todo.md#an-index-typed-by-its-coordinate-indexe-p) for when flat and
+  volume games run on the engine together.
 - The grid: `Depth` layers, one on a flat map, the cells indexed
   `(z*Height+y)*Width+x`, the planes and the presence bits each one `Bits` whose
   rows are the layers' in turn, so a cell's index names its row and a flat query
@@ -298,6 +319,10 @@ What the index keeps, across multiplayer, netcode and interactions:
 - Determinism: Shared positions, each cell's order (`WorldOrder.Cells`) and every
   query's answer alike on every instance; the journal digest hashes positions,
   and the divergence harness and the cross-instance tests read as before.
+  `PositionBatch.Commit` refuses a cell any entity holds, a Player one included,
+  as `GlyphSystem.occupied` does for a line drifting in, so an entity put on the
+  index or taken off it, an effect's too, moves where glyph lines and nuggets
+  land, the glyph stream with them, and from there the fight.
 - Domains: the Shared and Player halves of a cell (`PrivateBudget`), geometry
   over both (D-12), bounds as Shared authority (D-14), prediction's private
   writes (D-18), the staging world's grid.
@@ -313,6 +338,18 @@ What the index keeps, across multiplayer, netcode and interactions:
   `BenchmarkNavigationWallMoves`, `BenchmarkMazeSpawn`, `BenchmarkRouteGraph` and
   the renderer benches, as §5 reads them.
 
+The tests hold these where they can. `pkg/position` knows no entity, so a test over
+walls or glyphs needs a world and stays in `internal/engine`, and a grid-only test
+goes to the package with a test id whose class is its top byte (`mk`,
+`grid_test.go`). The volume tests hold a layer against a flat map through the same
+code, so they see no flat rule broken: a flat rule needs a model of its own, as
+`placedAround` is the exclusion search's. The block log is lost past `cells/8+64`
+entries, so a test reads it before that many changes. A surface a column ahead of the
+others of its mask and layer leaves `staleShift`, so a probe lays the surfaces again,
+and a scroll of every one leaves `stale` clear, which the surface test holds and
+`BenchmarkCaveStep` shows: a test that probes after each change never lets a scroll
+finish, so it changes in batches, as that test does.
+
 ## 5. Costs
 
 Benchmarks in a cloud container move a fifth between runs, so a change is read
@@ -323,8 +360,13 @@ A difference inside the band is noise, and a reading that holds in every round i
 not; a tick reads in two modes there, a third apart, so a few percent is read by
 the minimum of seven rounds beside the median. The package's own benches
 (`pkg/position` `bench_test.go`) read each operation on a scrolling scenario's map
-and on the ceiling's with a maze's walls. What each change read, against the
-main it landed on:
+and on the ceiling's with a maze's walls. The probe path lives on the inliner's
+budget: `go test -c -o /dev/null -gcflags=-m=2 ./pkg/position` prints each
+function's cost against 80, the generic index's methods as its tests instantiate
+them (a `go build` of the package instantiates none and prints no `probe`), and
+`probe` stands at 79 in its shaped form (`Index[go.shape.uint64]`), where a table
+of indices beside a stale flag cost it 88 and a call a probe. What each change
+read, against the main it landed on:
 
 - The move itself, the grid and the geometry behind the binding: parity, once the
   bounds were the grid's and the wall test a predicate rather than an interface.

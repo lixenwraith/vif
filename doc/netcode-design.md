@@ -522,6 +522,17 @@ is chaotic, so pages repaired move with any change of timing and the late counts
 are the robust measure. Pacing's dynamics were also modeled apart, by integrating
 `paceDecision` against periodic spikes.
 
+A change is read against main's binary: `git worktree add` main, build
+`go test -c ./internal/app` in each tree, run the four shapes on both from their
+package directories, a second or so each, and diff the two outputs whole, the link's
+B/s aside: the transitions logged with their ticks show a simulation that moved
+while every count stood, as a storm going active two ticks later did. The counts read
+the compared surface, which leaves out every D-13 cell, so an owner sync a receiver
+drops moves none of them: a change to what a sync may write is checked on a copy
+whose drop prints the sync instead (`NetworkSystem.stateInRange`), over the four
+shapes and the `internal/app` suite under `-test.v -test.parallel=1`, which puts each
+print under the test that sent it.
+
 Its first day found and fixed, in phase 1: the lead reading the newest epoch's age
 rather than the worst since its last reading, so a spike never taught it (field-like
 link: late commits 309 to 1); a spike's reading falling out of a 60-tick window

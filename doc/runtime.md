@@ -165,6 +165,10 @@ the same world. Only pan and quit are offered while a presented script is in a
 session: step is instance-local, the rate is the host's, and a session stops only by
 its host's hold (§8), which a watched bot's `p` asks for as `:pause` does.
 
+A watched run's viewer's input never passes the interactive loop's `inputTick`:
+`player.route` hands it to the router, so what a player's input does besides, as
+saving a changed `[play]`, is done there for a watched run.
+
 ### 1.2 The dedicated host
 
 `-serve <address>` runs a host with no terminal, no renderer, no audio and no
@@ -803,6 +807,12 @@ ends the tick there, as one between ticks does: the rest of the body, the epoch
 flush and the tail are skipped on every participant alike, and the scheduler
 resets the FSM before the new run's tick 1.
 
+So a tick can run no system: one whose opening settle dispatches a new game asked
+for between ticks ends there, and `App.InputTick` settles one ahead of the tick
+when a bot's step injected input. What a system leaves for a tick, as
+`Cave.Steps`, the columns that tick scrolled, is cleared as the tick opens, and a
+bot's driver closes its round before it counts such a tick.
+
 Every relative clock (a timer slot, a carried age, a species countdown, a
 machine's elapsed time) advances in its owner's `Update`: step 6, or step 5 for the
 FSM's own. Nothing renders inside a tick, and every clock a tick starts, it starts
@@ -905,7 +915,10 @@ state loss and is logged when observed.
 `mode.Router.Handle`. Nothing reachable from the router may call
 `World.RunSafe`, `World.Lock`, or another lock wrapper for the same mutex. The
 router can directly access stores because its caller already provides the
-critical section.
+critical section. `Router.ProcessMacroTick` is the exception: `inputTick`
+(`loop.go`) and `InputTick` (`headless.go`) call it before `handleIntent` takes
+the lock, so a component read there races; it reads status cells or takes
+`RunSafe`.
 
 ### Operator commands hold the lock
 
@@ -981,6 +994,11 @@ an end no command made here, and the start of a freeze, go through the request a
 command makes, settled at once, and a journal's opening records a hold standing,
 so a replay holds and ends its hold in the pass the run did.
 
+So a test of a pause reads `TimeCtl.OwnPause` and `Held`, never the tick count. A
+scratch test's random walk of keys (`takeEvent`), menu ops (`menuOp`) and aways
+(`setAway`) on `newApp` over a `framePresentation` reads them after each step; `q`
+waits for a register, so a command typed after it is Normal keys.
+
 ## 9. Time control
 
 `TimeScale` is an exact rational `Num/Den`, not a float. Operator-visible rates
@@ -1039,18 +1057,21 @@ the run for a `:join` or `:spectate`, a session restart and a removal by the hos
 and the first of these asked for is the one served: a run already being replaced
 refuses another.
 One builder, `runConfig.restarted`, makes each next run from the command line `Run`
-was given and what the restart names. A scenario change, a restart and a `:join` seat
-the run's bots again, read when the restart is asked for, since a session closing
-ends them before the switch; a bot told to leave is not among them, and a removal
-by the host seats none.
-Everything operator-owned restarts with it but what the next run takes: the
-`[play]` this one was left at, whether it journaled (a viewer's run keeps no
-journal) and the console's lines (`restartRequest.Play`, `Journal`, `Console`).
-The screen does not: every run presents on the platform `Host`'s `Presentation`,
-handed to `Run` beside its `Config`, or on the one terminal `Run` opens for the
-process where that `Host` names none, so a replacement redraws the screen rather
-than leaving and re-entering it. See
-[HFSM and configuration](fsm-and-configuration.md) §2.
+was given and what the restart names. Each run is built on the one before, so what
+an earlier restart named stands until a later one names another, and never on the
+live `m.cfg`: what a command wrote there, a phrase, a policy, a door, is gone at
+the next restart unless the ask carries it (`RestartAsk`, `restartRequest`, which
+`replaceWith` alone latches). A scenario change, a restart and a `:join` seat the
+run's bots again, read when the restart is asked for, since a session closing ends
+them before the switch; a bot told to leave is not among them, and a removal by
+the host seats none. Everything operator-owned restarts with it but what the next
+run takes: the `[play]` this one was left at, whether it journaled (a viewer's run
+keeps no journal) and the console's lines (`restartRequest.Play`, `Journal`,
+`Console`). The screen does not: every run presents on the platform `Host`'s
+`Presentation`, handed to `Run` beside its `Config`, or on the one terminal `Run`
+opens for the process where that `Host` names none, so a replacement redraws the
+screen rather than leaving and re-entering it. See [HFSM and
+configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;
 it broadcasts `MsgSessionRestart` before its transport goes and rebuilds solo,

@@ -222,6 +222,11 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 for that run alone and is never written back; `vif.toml` holds the defaults
 ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)).
 
+With `-l` the game prints `logging enabled: <file> (level …, scope …)` on stdout
+before it takes the screen, and a mistyped flag prints its error first and the
+usage after it, so what a wrapper shows of an exit is the whole main screen, not its
+last line.
+
 ### Session
 
 | Flag | Purpose |
@@ -640,6 +645,16 @@ GOOS=js GOARCH=wasm go test -c -o kraken.wasm .
 node "$(go env GOROOT)/lib/wasm/wasm_exec_node.js" kraken.wasm -test.run '^$' -test.bench BenchmarkKrakenRegion -test.benchtime 1500x
 ```
 
+Go's `wasm_exec.js` refuses a run under Node whose arguments and environment pass
+about 8 KB ("total length of command line and environment variables exceeds
+limit"), as a cloud container's environment does: run it under `env -i` with `PATH`
+and `HOME`, and `GOCACHE` and `GOMODCACHE` for a `go test`. The browser tests
+(`-run Browser ./cmd/vif ./pkg/network`, and the page host's by import path,
+`-run Page github.com/lixenwraith/terminal`) run that way, with
+`GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`.
+An `internal/app` test file calling what `js/wasm` lacks takes `//go:build !js`, as
+`readings_test.go` does, or the package's wasm test binary stops building.
+
 The soak profiles are tiered, because the widest one costs too much for an edit
 cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.
 `soakScale(short, normal, full)` in `internal/app` selects a repetition or step
@@ -913,7 +928,594 @@ implementations stay behind their package boundaries. Anything iterating a map
 before a write, an RNG draw or an event push has to sort first; determinism
 across instances is the invariant the domain model rests on.
 
-## 12. Source map
+## 12. Builds in a container
+
+A cloud container reaches what a build needs only through its proxy; these get each
+build through it.
+
+### Android
+
+- The APK needs egress to `dl.google.com`. With it and a JDK,
+  `android/toolchain.sh install` asks nothing and sets the SDK up in minutes,
+  under a scratch `ANDROID_HOME` if one is set
+  ([android/README.md](../android/README.md#build)). Gradle then stops on Maven
+  Central's 429 to a shared egress, even for an artifact another repository holds:
+  an init script passed with `-I`, hooking `beforeSettings` and pointing every
+  `mavenCentral()` at Google's mirror
+  (`https://maven-central.storage-download.googleapis.com/maven2/`), builds the
+  APKs in about four minutes.
+- The Java app type-checks without an SDK: `javac --release 17 -cp android-all.jar`
+  over `android/app/src/main/java`, a stub for `R` and the binding, where the jar is
+  Robolectric's `org.robolectric:android-all` from Maven Central at the release
+  `compileSdkVersion` names (`16-robolectric-13921718` for `android-36.1`), and the
+  binding is what gobind writes without an SDK:
+
+  ```sh
+  go -C android tool gobind -lang=java -javapkg=com.lixen.vif -outdir=<dir> \
+      github.com/lixenwraith/vif/android/game
+  ```
+
+  `androidTest` adds `junit:junit:4.13.2` and a stub of `AndroidJUnit4`. The jar's
+  `UnsupportedAppUsage` warnings are noise.
+- The Android CLI that `toolchain.sh` bootstraps reads without being run: its
+  launcher fetches `https://dl.google.com/android/cli/<version>/<host>/android-cli`
+  (`latest` for the version), a native stub followed by a zip of a JRE and
+  `main.jar`; Python's `zipfile` opens that zip from its first `PK\x03\x04`, and
+  `javap -c -constants` reads `com.android.cli.ui.commands.Sdk` and
+  `com.android.cli.sdk.SdkManager`.
+
+### The session image
+
+- `deploy/docker/Dockerfile` pins the Go image's index digest. Its current one is
+  read by a HEAD of `registry-1.docker.io/v2/library/golang/manifests/<tag>` with an
+  `auth.docker.io` pull token and the OCI index `Accept` header, as
+  `Docker-Content-Digest`. HEAD the pin first: it matches unless Docker Hub rebuilt
+  the tag on a newer Alpine since, which a GET of the pinned digest shows in its
+  manifests' `org.opencontainers.image.created`. Docker Hub answers a shared egress
+  429 at times: retry after a pause.
+- The image builds in a cloud container under `sudo env HTTPS_PROXY=... dockerd`,
+  from a scratch copy of the Dockerfile that copies the proxy's CA in from a
+  `--build-context` and sets `SSL_CERT_FILE` before `apk add`, built with
+  `--network host` and the proxy's variables as build args.
+
+### Other architectures
+
+`qemu-user-static` from apt runs a test binary built for another architecture
+(`GOARCH=arm64 go test -c -o x.test ./<pkg>`, then `qemu-aarch64-static ./x.test`):
+arm64's NEON path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run
+that way.
+
+### Static analysis
+
+- `go install golang.org/x/tools/cmd/deadcode@latest` outside the module builds
+  with the tool's own minimum Go (1.26), which refuses this module ("package
+  requires newer Go version go1.27"): install it, and staticcheck, under
+  `GOTOOLCHAIN=go1.27.4`. deadcode asks the Go version with `GO111MODULE=off go
+  list`, which follows neither `go.mod`'s toolchain line nor `GOTOOLCHAIN`, so on a
+  container whose base Go is older it stops on "requires go1.26 or later": put the
+  module's toolchain first on `PATH` (`$(go env GOROOT)/bin`).
+- deadcode reads one profile: a function can read dead on linux and be live on
+  `js/wasm` or Android, so call one dead only where every profile compiling its file
+  reports it. Its `-test` run stops on `vif_headless` and windows, where
+  `internal/app`'s tests do not build: list the packages without it. The Android
+  module has no `main`: a scratch one under `android/tmp/` calling every bound
+  function, run with `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`,
+  stands in for gomobile's wrapper.
+- What it lists that is reserved and stays: `pkg/vmath` and `pkg/vmath/physics`,
+  which other repositories import; `appendF32`/`readF32`, what gen-manifest emits
+  for a float32 field; and the vlog stub's mirrors of live functions.
+
+## 13. Looking at the game without a device
+
+A container has no screen, keyboard, phone or sound card; these stand in for them.
+
+- Give each run a scratch config and state root (`XDG_CONFIG_HOME`,
+  `XDG_STATE_HOME`), so it reads and writes no file of the player's and a setting it
+  writes back never reaches their `vif.toml`. Both paths are absolute: a relative
+  `XDG_CONFIG_HOME` is no root, and a run under it reads and keeps nothing, saying
+  nothing, while under a relative `XDG_STATE_HOME` a run writes its state to
+  `~/.local/state`, the player's own. `-mute`
+  keeps a run silent, and a tmux server of its own (`tmux -L <name>`) keeps it out
+  of the player's sessions. A scenario copied to `<dir>/scenario/base/<name>` runs
+  as `-config-dir <dir> -s <name>`.
+- A script that sets `HOME`, for a private sound server or a Wine prefix, moves
+  Go's module and build caches with it, and the next `go` command downloads the
+  toolchain and every module again: run `go` before sourcing it.
+- The Steam runtime is entered as [Packaging §9](packaging.md#in-the-runtime) says.
+
+### The terminal in tmux
+
+- Run `bin/vif` in a tmux pane (`-nw` starts it without waiting for a key) and read
+  it with `tmux capture-pane -p -e -N`: `-e` keeps the SGR colors, and `-N` the
+  trailing cells of the default colors, where a converter would otherwise paint
+  black over the theme's background. Turned into HTML spans and shot with
+  Playwright, a capture shows real colors; `TERM=linux COLORTERM=` gives the console
+  tier.
+- A capture carries SGR state from one line into the next, so a converter that
+  resets colors at each line paints wrong backgrounds, and a 256-color run writes
+  entries 0-15 as `30`-`37`, `90`-`97` and their backgrounds, not `38;5;n`: a
+  parser reading only that form reads them as unset.
+- Reading a capture: the status bar is two rows, its items above its line (the
+  first the FSM state and its time, `GT:` the tick, `PAUSED` a hold); a status
+  message longer than its room rises onto the row above (the bar's `spill`) and the
+  last row reads empty, so read the last two. The column ruler counts from the
+  cursor, and the large glyph some way off it is the magnifier, the glyph under the
+  cursor in the large face. A cursor on a glyph shows as the glyph: read the cursor
+  from the telemetry overlay's player card (`:t`, `/player.0`).
+- Drive it with `tmux send-keys`. Keys start from Normal, where Escape opens the
+  menu and pauses the run. `:emit <Event> { ... }` raises any event, `:god` arms
+  every weapon, `a` toggles auto-fire, and `:log on` writes the JSONL log under
+  the state root's `vif/log/` (`$XDG_STATE_HOME` when absolute, else
+  `~/.local/state`), where every install logs; vif never writes `/var/log`.
+  `send-keys` drops a `;`: one alone is its command separator and a trailing one in
+  a `-l` string is cut, so `fx;;;;` sends three repeats; send `'\;'` as its own
+  argument.
+- `tmux kill-server` returns before the server is gone: a `new-session` sent at once
+  can land on the dying one and take the next command down with "server exited
+  unexpectedly". Wait a moment, or start under a new `-L` name.
+- What a capture hides:
+  - A dark map (`EventSightRequest`): `:emit EventSightRequest { dark = false,
+    trail = true }` lights it and draws the walk so far.
+  - A cell: a scratch copy of the scenario whose status message prints a variable
+    (`message = "goal {}"` with `payload_vars`) names one, and the cursor's entity
+    number, captured off `EventCursorSpawned`, feeds
+    `:emit EventCursorMoveRequest { entity, x, y }`, which a stepped map still
+    applies.
+  - What dies under fire: `:god`'s weapons hide it. `:energy 900000000` survives
+    without them, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
+    nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
+    under five at `:speed 8`.
+- Reaching a moment:
+  - A game left running plays on between captures: `magic` unattended falls in two
+    and a half minutes and starts over, so a clock near zero after a change is that,
+    not the change. `:emit DeathWaveRequest {entity = 2}` runs its death wave, its
+    cursor being entity 2.
+  - A campaign encounter: `:emit EventFSMRegionRequest { op = "pause", region =
+    "main" }`, then `{ op = "spawn", region = "kraken", state = "KrakenSetup" }`
+    (the Devourer's is `devourer` at `DevourerSetup`). A fresh cursor stands where
+    the Kraken rises, so `:energy 900000000` first, or its strike starts a new game.
+  - `armada`'s squadrons: auto-fire off (`a`), the ship kept alive
+    (`:energy 900000000`) and the formation ended
+    (`:emit EventBehaviorCancelRequest {}`), which brings the squadron wave on.
+  - One moment tick by tick: `:step ev <Event> pause` runs to the tick the event is
+    dispatched, `:step 1` advances a tick and `:step off` resumes. A paused frame is
+    dimmed by half (`DimFactor`): for true colors resume and capture every 50 ms,
+    which lands one capture a tick. A drain's end raises `EventSpeciesKilled` too, so
+    `:system drain disable` first.
+- An effect a second long is caught by capturing on a loop (`tmux capture-pane -p -e`
+  every 100 ms to numbered files) and rendering the frames that show it. A flat tint
+  is one SGR run a row, so its frames are found by one cell's background read from
+  each capture, not by counting sequences.
+- Two looks of one effect compare at one tick: a `-script <file> -watch` run is the
+  same game whatever draws it, a build a look, each in its own tmux session, and
+  `-speed 1/2` lets a capture every 50 ms land on every tick, read from the bar's
+  `GT:`. A mark on the cell a cursor stands on lies under that cursor's shield, 21
+  cells by 11: script the cursor to leave, and look at both moments.
+
+### A session in tmux
+
+- Each run of a session needs a state root of its own (`XDG_STATE_HOME`): a place is
+  kept under the key that root holds, so a second run from one root is refused as
+  "this player's place is still linked to the run it left". `-nw` seats a run
+  without its press, and a run started with `-bot -watch` is driven and never
+  redials.
+- A host loss is three runs: a host opened with `:host`, two guests that `:join` it
+  mid-run, then `:q` on the host. `:session` on each guest, and its log's `session`
+  and `net` lines (`-l=<dir>`), say who took the term or why nobody did. `kill -9`
+  on a `-serve` host is a host lost, where a signal it takes drains, and
+  `kill -STOP` is one gone silent, whose loss shows a link timeout later, as the
+  guest's convergence floor breaches.
+- A takeover needs the host's `-authority migrate` and a guest's `[play] takeover =
+  true` in its scratch `vif.toml` before it starts. The two alerts of a silent host
+  race by milliseconds, so compare builds by their log.
+- A tree is a guest with `-relay <addr>`, a run that joined there with a `-relay` of
+  its own, and one behind that: `./script/test.sh tree` loses its host. A Go test has
+  no restart loop, so a run coming back through its relay's new run is seen only
+  there.
+- A browser plays a scenario that is not embedded, as the tutorial, only as a
+  server's guest, so a change to one is read that way too: `-serve <addr> -players 1
+  -probe <addr>` and a `-join` in tmux. A page's reload is `kill -9` on that guest and
+  a second run from its `XDG_STATE_HOME`, which takes the place back while the probe
+  reads `ready=true` with `guests` at `capacity`.
+- `timeout -s TERM` signals its child and then its whole group, so a `-serve` run
+  under it takes two signals, and the second ends it at once, before its seats save
+  what they learned: stop one with `timeout --foreground` or `kill`.
+
+### Headless probes
+
+- A scenario whose keys are its only input plays headless from a `-script` of
+  `press` intents under `-speed max -lv debug -log-stdout`: the FSM's transitions,
+  and the stat lines every 200 ticks (`combat`, `swarm`, the event tallies), say what
+  the presses did, a 200-second game in seconds.
+- A scenario's balance is read by a scratch test in `internal/app` under a build tag
+  of its own: a headless `App` ticked under a policy that reads
+  `Resources.Scenario.Var` and the stores in `RunSafe`, and presses keys through
+  `a.inputMachine.Process` or drives by intents; `App.SetDispatchTap` hands it each
+  event as dispatched, which no capture shows. Auto-fire is the router's, so the
+  probe injects `input.IntentFireMain` every five ticks; a gateway sends one body a
+  tick at most.
+  - Read a policy that presses nothing beside one that plays (`magic`'s turns the
+    attack to the side holding the most bodies, by a breadth-first search over the
+    turns a few moves deep, and strikes by a turn along its edge, at a turn a second
+    and at four), on the smallest map and a large one, since a body's walk
+    is the weapons' time over it, and where the bodies stand (a count by block of 8
+    by 4 cells) before believing a game that never ends.
+  - A reset stands a new cursor: read `Player.Slot(0)` each tick, and take the
+    scenario's `level` falling as the game lost, or the old cursor's empty stores
+    read as play. A crush in `cave` starts a new game, which
+    `Positions.Rock().Origin` stepping back marks, so the probe clears what it
+    recorded there.
+  - A squadron's route is read as its ships land
+    (`Resources.Scenario.Var("route")`), each ship's cells plotted a tick.
+- A probe's files are kept out of commits by a pattern in `.git/info/exclude`
+  (`internal/app/zz_probe*_test.go`), not by name: `git add -A internal` takes a
+  second probe a named line misses, and the build tag keeps every gate green over it.
+- A renderer's look iterates fastest off the game: a scratch test draws it into a
+  `render.RenderBuffer` over a stand-in frame, as its own test does, and writes the
+  cells to a PNG, a half block two pixels high.
+- That test does not show how layers compose: a flash's glyph under a fading ground
+  can blend to nothing, and a fade over a cell nothing painted (black in staging,
+  the theme background after `finalize`) can go through black, both seen only in
+  the running game's colors. An effect is read frame by frame, composed as the game
+  composes it, by a scratch program under `tmp/`: a headless `App`,
+  `manifest.BuildRenderers` on a `render.NewRenderOrchestrator` whose `Surface` keeps
+  the cells `Flush` hands it, and each frame's `RenderContext` with `GameTime` a part
+  of a tick past `Resources.Time.PaceTime`.
+  - Its world draws in 256 colors until `Config.ColorMode` is set; a kill is
+    `Combat.HitPoints = 0` on a header, on its members for an ablative kind; a dead
+    species' loot and its scenario's strobe are in the frames too, and the cells
+    written as HTML spans shoot as a filmstrip.
+  - The program takes a build tag of its own: a headless build has no
+    `BuildRenderers`, so untagged it stops `go build -tags vif_headless ./...`.
+
+### The window under Xvfb
+
+The desktop window runs under `Xvfb` with Mesa's `libegl1`, `libgles2` and
+`libgl1-mesa-dri` and `LIBGL_ALWAYS_SOFTWARE=1`; `openbox` beside it grants
+`-maximized` and `-fullscreen`. With no window manager its keys go by
+`xdotool search --name '^vif$'`, `windowfocus` (not `windowactivate`), then `key`.
+`xwininfo -root -tree` reads the window's pixels, a cell being 12x24 until a zoom,
+which the scratch `vif.toml`'s `[presentation] cell` reads back; `xdotool windowsize`
+resizes it, and the run's size is its log's `init completed` line
+(`-l=<dir> -lv debug`).
+
+### Real keys
+
+- Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
+  input: `xdotool key` types, and tmux inside the window reads the screen back,
+  though tmux in between drops the key protocol. Alacritty 0.13 from apt also needs
+  `libxkbcommon-x11-0` and runs under `LIBGL_ALWAYS_SOFTWARE=1`; it speaks the key
+  protocol, and Xvfb autorepeats a key held by `xdotool keydown` (660 ms, then
+  25 Hz), so presses, repeats and releases reach vif as from a desk. With no window
+  manager `xdotool windowfocus` gives it the keys. `ffmpeg -f x11grab` records the
+  window to set against a probe's wall-clock lines.
+- Neovim comes from the Nix cache where apt is off limits, and
+  `neovim-unwrapped.src` is its source where github.com is blocked (0.11.7 on
+  `nixos-25.11`, 0.12.6 on `nixpkgs-unstable`):
+
+  ```sh
+  nix-build -E 'with import (fetchTarball "https://channels.nixos.org/<channel>/nixexprs.tar.xz") {}; neovim-unwrapped' -o <dir>/nvim
+  ```
+
+  Run it in Alacritty with `--listen <sock>`: `nvim --server <sock> --remote-send`
+  types, and `--remote-expr` reads `mode()` or a terminal buffer's text, with no
+  screenshot; it blocks while a `Press ENTER` prompt stands, so bound it with
+  `timeout`.
+- Neovim's terminal sends no release
+  ([Build profiles §4](multi-platform.md#4-platform-matrix)): a text key taps, and
+  Escape, an arrow or an F-key stays held in the terminal module's table until its
+  next press. Read a hold from the game's log (`-lv trace -ls input+push`:
+  `IntentKeyPress`, `IntentKeyRelease`) on a scratch scenario that captures a key
+  at boot. Neovim 0.12 inside apt's Alacritty 0.13.2 also gets Escape, Enter, Tab
+  and Backspace twice, in Neovim itself too; 0.11 and Alacritty 0.17.0 (Nix's) are
+  not affected.
+
+### The browser under Playwright
+
+- The browser launcher runs end to end in the container: `make wasm`, serve a copy
+  of `web/` with `python3 -m http.server` and drive it with Playwright. A checkout's
+  `web/` holds no `terminal.js` or `worker.js` until then: a copy built by hand
+  (`GOOS=js GOARCH=wasm go build -o <copy>/vif.wasm ./cmd/vif`) takes them from
+  `make page PAGE_DIR=<copy>`.
+  - `?arg=-join=ws://127.0.0.1:9/x` ends the run at once with a refused join's
+    message, and a native `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session
+    the page joins or spectates, its status line read beside the page's.
+  - A `devices['Pixel 7']` context is the phone's page, where a held `mouse.down` on
+    the canvas's last rows is the finger that opens the menu;
+    `page.keyboard.press('Control+g')` is the desktop's.
+  - `page.goBack({ waitUntil: 'commit' })` is the Back button, landing on the
+    entries the page pushes in a gesture, which a key `press` in the game is.
+  - `page.evaluate` and `page.waitForFunction` run as a user gesture, so a test that
+    polls a page keeps `navigator.userActivation.isActive` true: a path that must
+    find no gesture needs six seconds with no evaluate, an ask sent from the service
+    worker, or a stubbed `userActivation`.
+- The page's screen is read by an init script wrapping `window.Worker`, which hears
+  the worker's `frame` messages before the page does: each record's second word is
+  its cell's rune, so the records, kept as the terminal module's `applyFrame` keeps
+  them, give the screen's text. A menu's or an away's pause shows nothing on the
+  status bar, but the map cells changed over a second tell a running game from a
+  paused one, and the first frame after a return against the last before it tells
+  whether the game ran while away.
+- A stand-in for the site is a few lines of node: `GET` and `POST /vif/api/sessions`
+  answering a `ws_url`, and an `upgrade` handler that writes the request on to a
+  native `vif -host ws://127.0.0.1:<port> -name <id> -bot 2`. The name must be the
+  route's last segment, or the host answers `this address is not serving the session
+  that was dialed`.
+- Chromium on Linux takes its proxy from the environment, so in a container whose
+  `HTTPS_PROXY` is set its own calls home, and any stray request of a test, leave
+  through it: `--proxy-server=http://127.0.0.1:<port>` naming a local server that
+  answers 502 to everything keeps a run on loopback, which is never proxied, and its
+  record is what the browser tried. Chromium also keeps a singleton socket under
+  `TMPDIR` and stops on a long one (`Socket path too long`): an agent's scratchpad
+  path is too long, `/tmp` is not.
+
+### The Android emulator
+
+The emulator boots without KVM (`-no-window -gpu swiftshader_indirect -accel off`,
+about 14 minutes on 4 vCPUs) but runs some 30x slower than a phone, so Android's 5 s
+input limit swallows taps behind "isn't responding" dialogs: a device pass belongs
+on a phone or an accelerated emulator. `adb shell input` taps one finger;
+`adb shell uinput -` injects multi-touch from JSON, after one frame with no finger
+down, or the first tap reads as a 3 s press.
+
+### Windows under Wine
+
+- A Windows build runs under Wine. Ubuntu's Wine 9.0 wants `/run/user/0` to exist, a
+  prefix of its own (`WINEPREFIX`, made by `wineboot -u` in 10 s), `WINEDEBUG=-all`,
+  `WINEDLLOVERRIDES="mscoree,mshtml="`, a display (an `Xvfb` of its own, with openbox
+  for a managed window) and a `wineserver -p` kept up, or every run starts a server
+  and its services. An idle prefix still costs 2 % of a core: `wineserver -k` when
+  done.
+- `make windows-package` and `wine bin/vif.exe` from the folder is the game, driven
+  with xdotool as on X11; its sound needs `PULSE_SERVER` naming a private server
+  (below). A package's Windows tests run there:
+  `GOOS=windows go test -c -tags "vif_gui novlog" -o x.exe ./cmd/vif`, then
+  `wine x.exe -test.run <name>` from the package's directory.
+- Wine hands a windowsgui program the shell's streams, so what it prints shows with
+  no console attached, and its message box appears only where it has no console:
+  `wine bin/vif.exe -cli` from a shell shows the box, and the same from a batch file
+  under `wineconsole cmd /c` prints in the console. Windows gives such a program no
+  streams from a console, which is why the build attaches
+  ([Build profiles §4](multi-platform.md#4-platform-matrix)).
+
+### Sound with no sound card
+
+- A private sound server: `pipewire`, `wireplumber` and `pipewire-pulse` under
+  `dbus-run-session`, with `XDG_RUNTIME_DIR`, `HOME` and
+  `PULSE_SERVER=unix:$XDG_RUNTIME_DIR/pulse/native` in a scratch directory;
+  wireplumber gives it a null sink, `auto_null`, and `pw-top -b` reads the quantum.
+  The runtime directory's path must leave room for `pipewire-0-manager` inside a
+  socket address's 107 bytes.
+- On Ubuntu 24.04 `pipewire-pulse` conflicts with the `pulseaudio` daemon, and
+  installing it removes the other: unpack the daemon's package (`dpkg-deb -x`) and
+  run it as `pulseaudio -n -F <file> -p <its modules>` with its two library
+  directories on `LD_LIBRARY_PATH`; as root it only warns. Its idle null sink renders
+  2 s blocks and takes over a second to start a stream: keep a silent
+  `pacat --latency-msec=50 /dev/zero` on it.
+- The latest distribution's sound stack runs in a chroot of Arch's bootstrap image,
+  its pacman trusting the proxy's CA, with a null sink made by
+  `pw-cli create-node adapter` (`object.linger=true`) and
+  `pw-record --target <sink> -P stream.capture.sink=true` on it. A run sounds only
+  once a key starts the game: recorded with no input, every build reads as silence.
+- The kernel's PCM is tested with no sound card in QEMU, TCG being enough: Arch's
+  `linux` package's `vmlinuz`, an initramfs of a static busybox, the `.ko.zst`
+  modules decompressed (`soundcore`, `snd`, `snd-timer`, `snd-pcm`, `snd-aloop`,
+  `snd-dummy`) and a static `vif_nogui` test binary that `-overlay` adds a scratch
+  test to boot and run in 15 s.
+  - `snd-aloop pcm_substreams=1` makes a held device busy and captures on device 1,
+    bit for bit, what device 0 plays, at the rate and width the side opened first
+    set: its capture opened at 48 kHz or in 32 bits makes a card that takes no other.
+  - `snd-dummy model=ac97` is a 48 kHz-only card.
+  - A test paced by `time.Sleep` falls behind the device and underruns: pace it by a
+    ticker, as the mixer is.
+
+## 14. Measuring
+
+A change made for performance reports its reading before and after
+([AGENTS.md](../AGENTS.md)); these keep a reading honest.
+
+### Comparing two builds
+
+- Benchmarks in a cloud container move a fifth between runs, and benchstat is not
+  installed: build main's and the branch's test binaries (`go test -c` in a
+  `git worktree` of main) and compare medians of alternating runs. A bench file the
+  branch adds is copied into the worktree, kept on main's API where the branch
+  changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to 32 in
+  the next: for a few percent, read the minimum of seven to nine rounds beside the
+  median.
+- Two builds with the same instructions can read 15% apart on one probe by link
+  layout alone: rebuild both with `-ldflags=-randlayout=N` for a few N and compare
+  the spreads before believing either, or, where the hot function did not change,
+  diff its `go tool objdump -s <regexp> <binary>` in both with the addresses masked.
+  valgrind's callgrind counts the instructions one function runs
+  (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
+  tells a build that does more work from one laid out differently; it asserts on
+  Go's preemption signal, so run the test binary with
+  `GODEBUG=asyncpreemptoff=1 GOMAXPROCS=1`.
+- On a machine other jobs share, read `/proc/stat` over each run and keep the share
+  of all cores busy with the reading: a batch splits into quiet runs and the rest
+  afterwards, where a repeat may not find the machine quiet either. A build or a
+  probe beside a timed run takes a tenth off its rate.
+- A headless test reads the checkout's `wad/` (`soakRoot`), so main's test binary run
+  from the branch's package directory reads the branch's scenarios and refuses a key
+  main does not know: run main's from its worktree's package directory. A harness
+  built before a change refuses a scenario entry with a key it does not know: run it
+  on a copy of `wad/` taken before the change.
+- A variant of one file for a measurement is `go build -overlay <json>` from a copy
+  outside the tree (`{"Replace":{"<the file>":"<the copy>"}}`), as `go test -overlay`
+  is for a mutation: the worktree never holds the variant.
+- Two binaries simulate alike when a scratch test in each prints
+  `snapshot.DigestWorld` and `Positions.Order()` every fifty ticks of the headless
+  shapes and the outputs diff empty; the divergence harness
+  ([Netcode §3.5](netcode-design.md#35-the-divergence-harness)) reads the link, this
+  the world.
+  - `DigestWorld` hashes no flash field (`RemainingHitFlash`, `HitEntity`), so a
+    branch adding one still compares with main; a region is held tighter by printing
+    its components, member tables and `Rand.SaveStreams(core.DomainShared)` beside it
+    each tick.
+  - `DigestWorld` hashes entity ids, so a change in how many Player entities live
+    differs from its first tick and says nothing. Trace without ids, a tick at a time
+    on the harness's host (`shapedFight`): each shared section's rows
+    (`CaptureShared`, `snapshot.BuildManifest`; `w.cursor` holds a participant key and
+    differs every run), every stream's state (`Rand.SaveStreams`) and the counts of
+    glyphs, drains and particles. The first stream to differ names the system that
+    drew differently; the cause is proven when main, made to do the same in a
+    scratch edit, traces as the branch does on every tick.
+- The result of a flat form in `pkg/vmath` or `pkg/vmath/physics` is simulation
+  state, so a refactor of one is compared with its previous body, kept in a scratch
+  test, on random inputs by `math.Float64bits`,
+  negative zeros among them, before the headless digests are read: `v -= v*0` turns
+  a negative zero positive, so a branch that skips a subtraction is not one that
+  subtracts nothing. A system's pass is held the same way: `git show HEAD:<file>`
+  under a scratch tag with its types renamed, both stepped over twin random worlds,
+  every velocity compared by its bits.
+  - A pass that visits pairs in another order keeps them only if each target still
+    takes its pushes and sums its sources in the old order (soft collision's
+    scatter).
+  - A term hoisted out of a float sum keeps the sum's bits only in the sum's own
+    order, `(a+b)+c`; a table or an angle identity in its place moves cells.
+  - A rewritten reader of the world is proven where it reads: a copy of the tree
+    keeps the old one beside the new, and the reader (a bot's `mind.steer`, reading
+    every sensor both ways) stops at the first that differs by `math.Float64bits`.
+
+### Benches that mislead
+
+- A benchmark that feeds a pure function constants measures nothing: the call folds
+  at compile time, and a sine fed a constant read 0.9 ns where, in the same build,
+  one fed a variable read 5.5. Feed package variables, and read a loop over varied
+  inputs beside the lone call, since inlining and what one iteration waits on
+  differ there.
+- What runs once a frame or a step runs cold in the game: a renderer's first call in
+  a live frame runs about twice its hot-bench time, its tables and code gone cold
+  under the frame's other work (the ember paints in 9-12 µs repeated at once and
+  20-26 µs as the frame's first), and a field read of an entity after its scan runs
+  cold in a bot's steer. Read a gain live, with `:d prof` under `:log on`
+  (`prof.top` lines) or a `time.Now` probe round the call in a scratch build, before
+  calling a bench gain felt. Two binaries timed side by side differ by 30 ns a steer
+  from run to run: each plays alone, in turn, three rounds or more.
+- A renderer that paints on some frames alone hides them in a bench's mean: time
+  each `Render` of a scratch run and read the 99th percentile, as the Devourer's
+  painted frame read 3.1 ms under a 0.57 ms mean.
+- B/op can rise as retained memory falls: a smaller heap collects sooner, and each
+  collection empties the event batch `sync.Pool`s, which then allocate again. Read
+  both sides with `GOGC=off` before blaming an allocation: td's headless ticks read
+  6% more bytes with the grid 30 MB smaller, and the same bytes with the collector
+  off.
+- A renderer bench's own traps are in
+  [Rendering §11](rendering.md#11-adding-a-renderer).
+
+### What the compiler did
+
+- The compiler keeps a struct in registers only up to 32 bytes, four fields a level
+  and no array, which is `Line`'s eight int32s in four pairs. A larger walk steps in
+  place through a pointer method and names its fields: `Line3` read 68 µs over the
+  bench segments as arrays stepped by value, 106 as named fields by value and 10 as
+  named fields in place (`Advance`).
+- A loop around a call spills every live value before its first pass, so a helper
+  that calls once in the common case takes it straight and loops in a function of
+  its own (`pkg/position`'s `clear` takes its one layer straight, `plane.deep`
+  loops). A value kept live across a hot per-cell loop can cost more than the work it
+  guards: a burn's cut held across the Kraken renderer's stamping loop slowed a
+  living Kraken's frames 4% with nothing burning. Filter before the loop, keep the
+  loop in a function that takes only what it reads (`KrakenRenderer.stamp`), and
+  measure the common path against main.
+- A helper's scratch of a known ceiling lives on its caller's stack: an `Append` form
+  leaks `dst` only to its result, so `var buf [N]T` passed as `buf[:0]` allocates
+  nothing, as `updateOrbs` samples its orbit; `-gcflags=-m` printing no
+  `moved to heap` for the buffer confirms it. Growing a slice once and writing each
+  element in place beats appending a two-int array a sample (`AppendEllipseGrid`, 620
+  to 310 ns for 64 samples).
+- A closure handed through a table escapes, an allocation a call, as does a local
+  array sliced into a call through a table: a scan a table calls is told its visitor
+  as an interface whose value the caller already holds, which
+  `TestASteerAndASightingAllocateNothing` holds at none for a bot's steer.
+  `go build -gcflags=-m` names what moves.
+- To name every function a change stops inlining, list
+  `go build -gcflags='github.com/lixenwraith/vif/...=-m' ./...` before and after and
+  compare the sorted `can inline` lines; `go build -gcflags=-m=2 <pkg>` prints each
+  function's cost against the budget of 80.
+
+### Profiles and allocations
+
+- Find an allocation before removing it: `-memprofile` with `-memprofilerate 1`,
+  then `pprof -sample_index=alloc_objects`. A concatenation that does not escape
+  (`-gcflags=-m`) and fits 32 bytes stays on the stack
+  ([Rendering §9](rendering.md#9-ui-and-debug-projections)).
+- Label each tick with `pprof.Do` and profile at the default 100 Hz: at 1,000 to
+  2,000 Hz a cloud container kept a quarter of the samples or fewer.
+
+### A terminal's bytes
+
+- What an effect or a layer costs a terminal is its bytes, which no CPU bench shows.
+  - In the game: run it under `script -qfc '<vif ...>' <file>` in the pane and read
+    the file's size before and after the effect, against an idle window as long. A
+    shape in one tone changes a cell twice, as it comes and as it goes; one shaded
+    across its width changes every cell it covers every frame, 3.6 MB a death wave
+    where two tones sent 0.34.
+  - Off it: a scratch test in `internal/app` hands each frame of an orchestrator
+    holding that layer alone to `terminal.NewWithBackend` over a backend that counts
+    what it is written, waiting for each write as `sandbox/termbench`'s sink does.
+    The Devourer read 2.38 MB/s so, 99% of the game's output, while its renderer
+    took 2% of a core. A layer's frames without its `SetCoarseBg` are read under
+    `go test -overlay` of a copy without it.
+- tmux can throw frames away while vif sees nothing
+  ([Rendering §1](rendering.md#1-frame-pipeline)): it reads a pane at once, so writes
+  return and held frames stay near zero. Attach a client (Alacritty, or a Python pty
+  reader sized with `TIOCSWINSZ`) and poll `#{client_discarded}` and
+  `#{client_written}` through one control client
+  (`tmux -C attach -f no-output,ignore-size`, a `display -p -c <client>` a sample),
+  not a fork a sample: a rising discard is the client frozen some 200 ms and repainted
+  whole. `client_written` against vif's `wchar` (`/proc/<pid>/io`) is tmux's
+  amplification, and the `\e[?2026h` a pty reader counts are the whole frames it got;
+  a pty takes some 12 KB a write. tmux's master, built beside the system's, runs
+  under a `-L` server of its own.
+- Frames that reach a screen are counted from the X server: `ffmpeg -f x11grab
+  -framerate 120 -video_size <WxH> -i :<n>+<x>,<y> -t <s> -f framecrc <file>` writes a
+  checksum a sample, and the changes between neighbors are the distinct frames. The
+  game changes its picture some 20.5 times a second at the default tick, whatever
+  `engine.fps` reads, and every frame at `-speed 4`.
+
+### Threads, clocks and audio
+
+- A goroutine waiting more than a few milliseconds inside a purego (or cgo) call
+  costs the runtime's sysmon some 58 wakeups a call: `/proc/<pid>/task/*/schedstat`
+  by thread shows one thread switching a thousand times a second, and a write that
+  blocks every period cost 0.9 to 2 % of a core that way. One that leaves a system
+  call only to wait in the next never passes the scheduler: from 10 ms on sysmon
+  takes its P at every wait and polls every 20 µs, 5 % of a core for the polling
+  thread under Wine. `runtime.Gosched()` once a turn stops it
+  ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
+  and a locked goroutine pays two thread wakes for it.
+- A recorder on a sink's monitor must not set the graph's pace: on PipeWire
+  `stdbuf -o0 pw-record --target <sink> -P stream.capture.sink=true --latency 2s ... -`
+  (a `parec --latency-msec` there asks a quantum of its own, and pw-record's stdout
+  is otherwise buffered by 4096 bytes); on PulseAudio `parec --process-time-msec=5`.
+  Stamp each read and anchor the sample clock on the least (arrival - frames/rate).
+  PulseAudio's rewinds rewrite frames the monitor already gave, so time a sound there
+  by the read that brought it.
+- A pipe player's queue is the pipe's unread bytes: `FIONREAD` on the write end reads
+  it. It only grows, to the pipe's 64 KiB (371 ms of 44.1 kHz stereo s16), which is
+  latency no stat line shows.
+- Go under Wine reads a clock up to 16 ms stale between waits (`time.Now` reads the
+  shared user page, which wineserver refreshes as it wakes): stamp with
+  `QueryPerformanceCounter`, which there is Linux's `CLOCK_MONOTONIC_RAW` in 100 ns,
+  so a Linux process beside it stamps on the same clock. Go's sleeps and tickers are
+  sound under Wine.
+
+### Long runs
+
+- A cloud machine restarts, ending the run in flight and whatever `nohup` had
+  started, and nothing runs between a session's turns. Queue runs by a done marker a
+  run, so a restart costs one, play them at `nice -n 19`, send each run's lines to its
+  file line-buffered, and chain a long run as legs, each on what the last kept. A
+  waiter that follows a queue by `pgrep -f` finds its own command line: bracket a
+  letter of the pattern.
+- A run reads a file it names as its process starts, so one queued behind others on a
+  file of the checkout fails once that file changes: a chain holds copies. A script a
+  background run is running is replaced by a rename, never edited in place: bash
+  reads a script as it goes.
+
+## 15. Source map
 
 | Concern | Primary source |
 |---|---|

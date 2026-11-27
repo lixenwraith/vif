@@ -305,7 +305,10 @@ Composite types define where damage and ownership live:
 offset puts off the map, tombstones members whose `Member` component is gone,
 and compacts the list. It emits integrity-breach events instead of silently
 leaving broken backlinks, and destroys an emptied header unless it carries
-`Combat` at zero hit points, the ablative case its owner retires. A destroy
+`Combat` at zero hit points, the ablative case its owner retires. It does so the
+tick after the header is made, so a body that grows in from nothing stands its
+first members as it spawns, as the Devourer's first frame covers the edge cells
+(`DevourerEdge`), and a gut laid wholly under the body is reaped so. A destroy
 request sends the living members through one death batch and destroys the
 header; where the kind draws a body, the system first reads what the members
 showed and sends it to the effect the request names
@@ -350,6 +353,10 @@ text placed as scenery ([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-e
 despawn. Other direct `World.DestroyEntity` and batch-destruction callers assume
 they have already established that removal is safe, so gameplay code should prefer
 the appropriate death request unless it owns that invariant.
+
+Splash text is one such owner: a text cleared and written at one cell in one pass is
+one entity, so the clear destroys it at once rather than through a death batch, which
+would take the entity the write reuses.
 
 Every death request is an `EventDeathBatch` carrying a pooled
 `DeathRequestPayload`, emitted through `event.EmitDeath`, which names the effect

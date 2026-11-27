@@ -87,7 +87,12 @@ tutorial gave back to vi. What it stands on:
   magnifier takes the nearest place clear of it, from the cursor or from the row
   nearest it that a place beside it fits the map on, and covers it only where
   there is none (`SplashSystem.calculateProximityAnchor`). The notes keep to 62
-  columns, which leaves it the map's right on an 80 by 24 terminal.
+  columns, which leaves it the map's right on an 80 by 24 terminal. The
+  magnifier's box is twelve cells square and stands 25 cells or more from the
+  cursor, so beside it the box needs six rows above the cursor's and five below:
+  on the tutorial's 20 rows it clears a lesson's text only at the map's right, and
+  only where that text ends by column 65 and the heading's box by column 63
+  (`TestTutorialsMagnifierStandsClearOfItsText`).
 - A lesson on a key that enters Insert is a step a key (`Append`, `Open`): each
   lays its own line, stands the cursor and waits for the bright glyph the key
   lands on, then for esc, so no step is done before its turn and none waits on

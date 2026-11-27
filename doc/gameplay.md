@@ -75,7 +75,8 @@ Insert-mode character input emits a character event at the cursor cell.
 validates the rune. `Position.TopGlyphAt` picks it, passing over scenery (§9): a
 Shared glyph (a gold member) before a player glyph, then the nearer drift layer
 (bright, normal, dark), then the lower entity ID. Motions, search, motion markers
-and bots look through scenery by the same test, `Position.IsTypeable`.
+and bots look through scenery by the same test, `Position.IsTypeable`. A check of
+what a cell holds, a lesson's notes among it, reads `Occupants` instead.
 
 ```mermaid
 flowchart TD
@@ -334,8 +335,12 @@ map; when it skips every entry, their fallback counts add to the drop of each la
 non-unique tier, and a tier that rolls and misses adds none. Pity improves repeated
 misses: an entry's chance grows by as much again for each roll in a row it misses,
 on streaks a table keeps for each cursor, every species rolling it sharing them,
-until the game starts over. Drops burst away from the death point, then home using
-direct line of sight or a flow field and collect near the player.
+until the game starts over. Each instance rolls its own, so a test of a kill whose
+drop is below certain shoots until the table's pity makes it certain (`cave`'s U
+within two kills), and counts a kill's drops as the loot new since it, since
+earlier drops may still be flying (`internal/app/cave_test.go`). Drops burst away
+from the death point, then home using direct line of sight or a flow field and
+collect near the player.
 
 A drop belongs to the cursor it was rolled for and only that cursor can collect
 it, so both halves of the route are the owner's: the line of sight is tested
@@ -835,15 +840,19 @@ fire would blast the stars among the ranks, and they would fall with nobody aimi
 `magic` is for one player, whose cursor is fixed at the middle (`[map] cursors =
 "fixed"`), on a map of at least 41 by 19, a 42 by 23 terminal's: the least that
 holds the square on blocks a row tall with its cursor's orbs circling on it, and a
-gateway's pylon in each corner a cell clear of their orbit. The map follows the
-screen down to that size, and a resize stands the gateways, the square and the
-cursor on the new map as a new game would ([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)):
-the blocks are as tall as the map leaves the cursor's orbs room to circle, three rows
-down to one (`SquareComponent.Fit`), and the outer orbit flattens to the map. A
-smaller screen keeps the smallest map and looks at the square from its middle.
-The square stands there: the Lo Shu square, 6 7 2 over 1 5 9 over 8 3 4, its digits in
-three kinds, 2 1 3 attack, 6 5 4 tempest and 8 7 9 defense, one of each along every
-row and column. The scenario captures 1-9, h j k l, a s d f and Enter: a digit selects its
+gateway's pylon in each corner a cell clear of their orbit.
+`TestMagicShowsItsWholeLayoutOnEveryScreenDownToItsFloor` proves that floor both
+ways: a change to the square's blocks, its shield's margin, the orbs' orbit or the
+gateways' pylons moves it, and the test's failures name the size to take. The map
+follows the screen down to that size, and a resize stands the gateways, the square
+and the cursor on the new map as a new game would
+([D-14](domain-design.md#d-14--map-bounds-are-shared-authority)): the blocks are
+as tall as the map leaves the cursor's orbs room to circle, three rows down to one
+(`SquareComponent.Fit`), and the outer orbit flattens to the map. A smaller screen
+keeps the smallest map and looks at the square from its middle. The square stands
+there: the Lo Shu square, 6 7 2 over 1 5 9 over 8 3 4, its digits in three kinds,
+2 1 3 attack, 6 5 4 tempest and 8 7 9 defense, one of each along every row and
+column. The scenario captures 1-9, h j k l, a s d f and Enter: a digit selects its
 block, h and l turn the block's row a place left and right, the last block round to
 the first (1 5 9 turned right is 9 1 5), and j and k its column down and up; a and
 f, d and s do the same for the other hand (auto-fire, `a` elsewhere, is `:auto`
@@ -856,7 +865,11 @@ fire and 8 s for the defense, runs out while the line holds. An attack strikes
 the side an edge faces, so the middle row and column fire a tempest or a defense
 and never the attack. Since a row turn keeps the row's kinds, and the square's
 rows are turns of one another, aligning one column by row turns aligns all three:
-a player chooses the kind in the middle, where an attack stands idle.
+a player chooses the kind in the middle, where an attack stands idle. Row and
+column turns reach the even permutations of the places alone, 181,440 states: from
+the square's mirror image, 2 7 6 over 9 5 1 over 4 3 8, neither 1 2 3 over 4 5 6
+over 7 8 9 nor its reverse can be reached, so a layout a scenario must reach is
+checked by a search over the turns.
 
 The square lies under the cursor's own shield, which the square sizes to reach four
 columns past its corners and steps ([Shield](#shield)): it starts with 1,400
@@ -1008,3 +1021,23 @@ Each entry declares a domain profile and its dependencies in
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when
 adding a campaign or balancing a system.
+
+Readings that bound a balance, taken on `magic`:
+
+- A cursor's pulse, ray and blast land on every member they cover, so what they take
+  off a body does not fall as a crowd grows: the emitter alone at three charges ends
+  ten 30-point bodies a second. What presses a full loadout is a body's hit points
+  and speed against its walk, never their number, and a strike that ends whatever it
+  faces every 2 s outruns any rank, which is why `magic`'s strike ends every rank and
+  reaches two shield reaches of the square's middle (`SquareStrikeReach`).
+- Species nothing kills gather without bound: with no weapon wearing them, `magic`'s
+  wave bodies passed 700 in nine minutes. A cap is the scenario's, a
+  `StatusIntCompare` on `behavior.count` that holds the gateways, and bodies that
+  stand without dying spend it, so enough of them stop every gateway, and the game
+  with them.
+- Fighter's swarm is no body for a scenario with a small shield: it charges at its
+  target enraged, which refuses the shield's knockback, and costs 1,000 energy a tick
+  inside it (`profile.Contact`, at fighter's scale). `magic`'s carrier is a declared
+  species for that, its touch the scenario's.
+- What a wind does to a body is
+  [Generic kinetic §6](generic-kinetic.md#6-wind-as-the-first-environment-effect)'s.

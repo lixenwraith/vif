@@ -219,6 +219,14 @@ its root: its rank's macro with its cave and its look, frames given as
 `[[frames]]`. `dummy`, `magic` and `recall` are each one document that defines
 its own; `armada` and `tutorial` define theirs in the entry, beside a corpus file.
 
+A rewrite of scenario files that must leave what a scenario does alone is proven on
+the resolved tree: a program under `tmp/` writes `fsm.ResolveScenario`'s result for
+every folder holding a `scenario.toml`, keys sorted, each value with its kind and a
+float by its bits, and the runs before and after compare by bytes. What a set spends
+(§4) is `macro.Set`'s unexported `spent` and `open`: a scratch test in `internal/fsm`
+reads them by reflection off the set `readExpanded` returns, the entry's behaviors
+and regions loaded through it as `loadAndResolve` loads them.
+
 ## 7. Rejected alternatives
 
 - **Text preprocessing** (m4, Go templates, includes with substitution). It breaks

@@ -195,7 +195,11 @@ A 3D form held to one plane steers, drags, reflects, strikes and moves a body as
 its flat form, and treats its three axes alike; both are tested. Two things part
 by design: a collision's angle spread turns about an axis drawn round the
 direction, a cone where the flat spread is an arc, and a body sunk in a wall
-tests it once an axis a sub-step, three times where the flat one tests twice.
+tests it once an axis a sub-step, three times where the flat one tests twice. A
+new twin takes the suffix the older twins carry (`Integrate3D`, `ApplyHoming3D`),
+beside its flat form in the same file and on the flat form's scalar helper where
+one exists (`HomingProfile.arrival`, `impulseMagnitude`, `reflectCell`,
+`bounceSteps`).
 
 Homing separates desired cruise speed, acceleration, overspeed drag, arrival
 radius, near-target drag/acceleration, and a snap dead zone. The profiles in
@@ -268,17 +272,20 @@ A flat form has its twin through a volume beside it, bar the arcs, `Ray` and
 `ShadowCast`: `Point3`, `Box` and `Footprint3` for `Point`, `Area` and
 `Footprint`; `Line3` and `GridTraverser3` for the two walks; the `V3` operations
 on `Vec3`, cross, reflection and rotation about an axis among them; the
-ellipsoid tests. A twin held to one plane answers as its flat form, which its
-tests pin.
+ellipsoid tests. A twin held to one plane answers as its flat form wherever no
+table rounds an angle, which its tests pin. A twin's test compares floats within
+1e-9, never by `==`: an architecture that fuses a multiply into an add (arm64,
+amd64 at `GOAMD64=v3`) rounds two orders of one sum apart. Cells and counts
+compare exactly.
 
 `Sin`, `Cos` and the two rotations read a 1,024-bin table at the floor of the
 angle's bin (`lutIndex`), a rotation reading the bin once. On amd64 at its
-default level a `math.Floor` is a CPU feature test with a call behind it, and
-inlined in a loop it makes each sine wait on the one before; there the index
-truncates and steps down past a negative fraction by a borrow, the same bin on
-every input, a NaN and an angle past an int's range among them. Other targets
-and an amd64 build at `GOAMD64=v2` keep the floor, one instruction, which reads
-a sine in 0.8 ns (`floorChecked`). A call in a loop, before and after:
+default level a `math.Floor`, as a `Ceil` or a `Trunc`, is a CPU feature test with
+a call behind it, and inlined in a loop it makes each sine wait on the one before;
+there the index truncates and steps down past a negative fraction by a borrow, the
+same bin on every input, a NaN and an angle past an int's range among them. Other
+targets and an amd64 build at `GOAMD64=v2` keep the floor, one instruction, which
+reads a sine in 0.8 ns (`floorChecked`). A call in a loop, before and after:
 
 ```
 Sin                      5.5 ns   1.2 ns   (math.Sin 5.4 ns)
@@ -289,6 +296,13 @@ Sin and Cos of an angle  7.8 ns   2.3 ns
 A collision, which rotates once outside any loop, reads level at 9 ns, and so
 do the game's tick and renderer benchmarks: none draws the ember or the storm,
 whose loops call the sine.
+
+The tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very angles a
+sample count dividing `LUTSize` asks for, so reading them there gives the computed
+cells bit for bit; `Sin` and `Cos` floor any other angle to a bin. The same
+truncation in `PointAt` reads a third faster alone and costs more than it saves: its
+inline cost goes from 12 to 50, `physics.Integrate` (55 to 93) and three more stop
+inlining, and a system's loop over bodies reads 20 to 40% slower; not built.
 
 Integer `Point` and `Area` values, `Point3` and `Box` in a volume, describe
 discrete grid cells; they are not a fixed-point representation. `Point.Center`
@@ -330,7 +344,11 @@ PCG stream, derived from the shared root and carried in the capture. On
 `EventMazeSpawnRequest` it scales the boolean grid by the request's cell size into
 one wall batch, clears the requested rooms and answers with `EventMazeSpawned`:
 the first room's middle, and an open block in the last quarter of the way from it,
-or from the start with no room, along the passages (`Distances`). The start, end,
+or from the start with no room, along the passages (`Distances`). A spawn's
+`rooms` are areas cleared after the maze is carved, not the generator's rooms,
+unless `room_count` asks for them: without it `maze.Result.Rooms` is empty, so
+what reads a room reads the payload's (`WallSystem.mazeLaid`). A room one block in
+size on a block's middle clears that block and the eight round it. The start, end,
 solution path and room entries serve `sandbox/maze`.
 
 The grid is one array; the carve backs out of a dead end along a byte per cell
