@@ -62,7 +62,7 @@ const (
 	PriorityBullet
 
 	// === Overlays ===
-	PrioritySquare  // Opaque blocks under a shield, so the shield and every field pass behind
+	PrioritySquare  // Opaque blocks over its cursor's shield, so the shield and every field pass behind
 	PriorityLanding // Over the player's fields, so a shield's rim never hides it
 	PriorityButton  // Opaque, so every map layer under it passes behind
 	PrioritySplash
@@ -93,9 +93,10 @@ const (
 	PriorityDebug
 )
 
-// ClipsToPlayfield confines simulation layers and the cursors to the map, including
-// when it is smaller than the viewport. Post-processing, heat, indicators, the status
-// bar, the start screen and debug overlays address the whole screen.
+// ClipsToPlayfield confines simulation layers, sight and the cursors to the map,
+// including when it is smaller than the viewport. Grayout, strobe, dim, heat, the
+// indicators, the status bar, the start screen and debug overlays address the
+// whole screen.
 func (p RenderPriority) ClipsToPlayfield() bool {
 	switch p {
 	case PriorityGrayout, PriorityStrobe, PriorityDim,

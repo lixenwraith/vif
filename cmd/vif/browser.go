@@ -158,8 +158,8 @@ func (k keptPopulation) Store(doc []byte) error {
 }
 
 // speaker is the page's speakers, the writer the mixer streams to: each buffer goes
-// to the page but a silent one, so a muted game posts nothing and the page opens no
-// AudioContext until a sound plays. Nil on a page that plays no sound.
+// to the page but a silent one, so a muted game posts nothing. Nil on a page that
+// plays no sound.
 func speaker() io.WriteCloser {
 	if !terminal.PageHas(kindAudio) {
 		return nil

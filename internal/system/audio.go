@@ -36,8 +36,8 @@ type AudioSystem struct {
 	baseReject  [audio.RejectCount]uint64
 }
 
-// NewAudioSystem creates an audio system with the given player
-// player may be nil if audio is disabled
+// NewAudioSystem plays through the world's audio engine, which is nil in a run that
+// registers no audio service
 func NewAudioSystem(world *engine.World) engine.System {
 	s := &AudioSystem{world: world}
 	if r := world.Resources.Audio; r != nil {
@@ -59,7 +59,8 @@ func NewAudioSystem(world *engine.World) engine.System {
 	return s
 }
 
-// Reset preserves the player's preference even when scenario gates muted the engine.
+// Init keeps the player's preference across resets, even where scenario gates muted
+// the engine.
 func (s *AudioSystem) Init() {
 	s.enabled = true
 	s.musicEnabled = true
@@ -92,17 +93,14 @@ func (s *AudioSystem) Init() {
 	publishAudioMask(s.world, s.player)
 }
 
-// Name returns system's name
 func (s *AudioSystem) Name() string {
 	return "audio"
 }
 
-// Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
 	return parameter.PriorityUI
 }
 
-// EventTypes returns the event types AudioSystem handles
 func (s *AudioSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSoundRequest,

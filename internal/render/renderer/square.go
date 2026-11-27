@@ -19,7 +19,8 @@ import (
 
 // SquareRenderer draws a magic square over its cursor's shield and every field:
 // what its kinds show round the shield, then each block in its kind's color, lit
-// near white as its line fires, the viewer's selection and the legend
+// near white as its line fires, a lit spell's places or its cast's glow, the
+// viewer's selection and the legend
 type SquareRenderer struct {
 	gameCtx *engine.GameContext
 	console *render.Console // nil draws true color

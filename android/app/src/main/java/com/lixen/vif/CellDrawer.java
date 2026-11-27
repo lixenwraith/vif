@@ -13,7 +13,7 @@ import java.nio.IntBuffer;
 /**
  * Paints the game's frames as Game.frame hands them over and posts the picture to
  * the view's surface, stretched over all of it. OnCanvas paints cells from the
- * atlas texture; a GLES drawer takes the same frames. FromRaster shows Go's
+ * atlas texture; a GLES drawer would take the same frames. FromRaster shows Go's
  * software raster, the fallback.
  */
 interface CellDrawer {

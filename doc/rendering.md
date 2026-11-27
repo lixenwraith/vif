@@ -53,9 +53,10 @@ for `TerminalBlockedAfter` (100 ms) the frame loop stops drawing, logs `terminal
 stopped taking output; drawing paused`, and resumes with a matching record when the
 write returns; the tick handshake runs throughout.
 
-The frame leaves through `render.Surface`: color mode, `Flush` of the cell grid and
-`Sync`. The terminal, the desktop window, the browser page and the Android view
-satisfy it, and it is all a host has to provide to draw the same cells
+The frame leaves through `render.Surface`, the terminal module's `Surface`: color
+mode, `Flush` of the cell grid and `Sync`. The terminal, the desktop window, the
+browser page and the Android view satisfy it, and it is all a host has to provide
+to draw the same cells
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
 Before the lock the orchestrator derives the frame's playfield rectangle and
@@ -153,10 +154,10 @@ modes are different:
   accumulation buffer — and it holds for effects nobody has written yet.
 
 `ClipsToPlayfield` is the single classification of layers into simulation and
-screen space. Post-processing, the heat bar, indicators, status bar, and debug
-layers address the whole screen and stay unclipped; the two cursors mark map
-cells and clip. `TestEveryLayerDeclaresItsClip` fails when a priority is added
-without a declared side.
+screen space. Grayout, strobe and dim, the heat bar, indicators, status bar, start
+screen and debug layers address the whole screen and stay unclipped; sight and the
+two cursors mark map cells and clip. `TestEveryLayerDeclaresItsClip` fails when a
+priority is added without a declared side.
 
 Where a renderer's own geometry depends on the bound rather than merely being
 trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
@@ -431,8 +432,8 @@ for 450.
 The square renderer draws all a magic square shows, over the shield and every
 field so no blend reaches its blocks: a boost's glow on the rim, a turning wind's
 streaks on the outer orbit, a strike's flash over the part it landed in and its
-orb, then the blocks, lit near white as their edge fires, the selection and the
-legend.
+orb, then the blocks, lit near white as their line fires, a lit spell's places
+framed or its cast's glow over what it reaches, the selection and the legend.
 
 The tracer renderer is intentionally background-only: every sampled trail
 cell writes no rune/foreground, so typeable text remains readable as a tracer
@@ -688,7 +689,7 @@ their notches derive from the same division, so a level of 10k ends exactly on
 the k-th notch at any width. The status bar
 is two rows (`StatusRows`) on every host. The upper one holds the status items in
 a fixed priority: session badge, time control, FSM phase, energy, damage
-multiplier, boost, grid state, and the metrics, dropped first when space is tight.
+multiplier, boost, and the metrics, dropped first when space is tight.
 Those that fit span the row edge to edge, each in a slot at least its width and
 the slots as equal as those widths allow, so an item's edges move when the items
 shown change, not when a value grows a digit. The bottom row holds the audio

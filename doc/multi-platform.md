@@ -71,7 +71,7 @@ The build split follows capabilities rather than operating-system names:
 | Capability | Build-specific seam | What stays common |
 |---|---|---|
 | Presentation | `internal/app/presentation_*`, generated `manifest/render_gen.go`, the host's `Presentation` or the terminal service | World, systems, semantic input, scheduler |
-| Audio | `internal/app/audio*`, `internal/app/internal/config/audio*` (`Mode.Audio`), `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `lixenwraith/audio/model` |
+| Audio | `internal/app/audio*`, `internal/app/internal/config/audio*` (`Mode.Audio`), `engine/resource_*audio.go`, audio service/systems, generated audio builder | Event payload identifiers in `lixenwraith/audio/model` |
 | Socket network | `internal/app/network_*` | Network protocol and simulation-facing `engine.NetworkPort` |
 | Logging | existing `internal/vlog` build variants | Call sites and status collection |
 | Resources | `engine.FileProvider` and `ContentProvider` | Parsed config/content models |
@@ -218,9 +218,9 @@ bidirectional byte stream: a WebSocket. It has no arbitrary socket, and `js/wasm
 browser build dials the session's WebSocket route and wraps the browser's
 `WebSocket` object, opened in the program's Worker, as a `net.Conn` — reads block
 on arriving binary messages, writes send one encoded frame each, and deadlines and
-closure behave as the transport already expects. `network.dial` is the only seam; everything above it,
-including `SocketPort`, the handshake, the fences and the snapshot assembly, is the
-code a native client runs.
+closure behave as the transport already expects. `network.Dial` is the only seam;
+everything above it, including `SocketPort`, the handshake, the fences and the
+snapshot assembly, is the code a native client runs.
 
 That is why message boundaries need not be frame boundaries. `Decode` reads with
 `io.ReadFull` from a stream, so a receiver reassembles whatever chunking the path
@@ -468,10 +468,12 @@ A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
 that ended it) in place of the terminal and the start screen, centered in what the
 browser's bars leave, with a Reload button, and Play solo beside it when the run
-joined a game, which opens the page without its `-join`. A refused join's reason says whether a
-retry helps; a socket that does not open says the game may have ended or the link is
-too slow, after `NetworkJoinConnectTimeout` (15 s) where it never answers. The page then terminates the Worker and posts it nothing
-more, so a later resize or visibility change cannot replace that reason.
+joined a game, which opens the page without its `-join`. A refused join's reason
+says whether a retry helps; a socket that does not open says the game may have
+ended or the network dropped, and one that never answers, after
+`NetworkJoinConnectTimeout` (15 s), that it may have ended or the connection is too
+slow. The page then terminates the Worker and posts it nothing more, so a later
+resize or visibility change cannot replace that reason.
 
 ## 7. External maps and assets
 
@@ -599,7 +601,7 @@ Linux the sound card, and on Windows WASAPI's stream. `-ab` naming one, `pulse`,
 `alsa` or `wasapi`, opens it alone, and naming a player opens none. A failed
 write drops the writes after it and opens the output again at most once a
 second, so the mixer, which a write error silences for the run, hears of no
-loss. The log names the one that opened, why the others did not, and each loss.
+loss. The log names the one that opened, or why none did, and each loss.
 
 The stream (`cmd/vif/pulse.go`, in every build that links purego and has audio)
 goes through `libpulse-simple.so.0`, loaded with purego as the window's libraries
@@ -733,7 +735,7 @@ the hidden tab's leave, the kept settings and places (`terminal.PageKept`,
 `PageKeep`), and sound, the menu and Back as messages of its own
 (`terminal.PagePost`, `Page.Handle`). Its speakers are `Host.Audio`
 (`pageSpeaker`): the Worker posts each mixer buffer that sounds, and the page
-opens an `AudioContext` at the first and plays them through an AudioWorklet
+plays them in the `AudioContext` the start's press opened, through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
 50 ms buffer with music and sfx playing costs the Worker's thread about 1.3 ms.

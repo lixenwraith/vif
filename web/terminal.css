@@ -655,7 +655,8 @@ html, body {
 .sheet .actions .go:hover,
 .sheet .actions .go:focus-visible { background: var(--button-hover); }
 
-/* A line over the game, gone after a while: the fallback drawer in use. */
+/* A line over the game, gone after a while: the fallback drawer or font in use, no
+   sound, or what was not saved. */
 #notice {
     position: fixed;
     top: 4px;

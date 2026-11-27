@@ -87,8 +87,8 @@ What vif sets of the engine:
   or on PipeWire's pulse server, on Linux the sound card through the kernel, and
   on Windows a shared WASAPI stream on the default output device ([platforms
   §8](multi-platform.md#8-adding-another-renderer-or-android-host)). A sink
-  stands in for detection, so each opens its output again by itself when it is
-  lost.
+  stands in for detection, so a native build's speakers open their output again
+  by themselves when it is lost.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {

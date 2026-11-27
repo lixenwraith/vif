@@ -20,10 +20,10 @@ import android.widget.TextView;
 
 /**
  * The screen the app opens on, over the game, filling the window as Android's splash
- * screen before it does: the logo as large and where the splash showed it, "Tap to
- * start" under it on a button and a ? in the corner that opens the touch controls. The
- * run waits behind it, paused, until a tap anywhere else. A touch browser shows the
- * same screen (web/index.html); both wear lixen.com's dark theme and font.
+ * screen before it does: the logo as large and where the splash showed it, "Tap to start"
+ * under it on a button and a ? in the corner that opens the touch controls. The run waits
+ * behind it, paused, until a tap anywhere else. A touch browser shows the same screen
+ * (web/index.html); both wear lixen.com's dark theme, each in a font of the site's.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is each platform's own.
@@ -50,8 +50,8 @@ final class StartScreen extends FrameLayout {
             HOVER = 0xFF5F57F5, ACCENT = 0xFF8EA2FF, DANGER = 0xFFF87171;
     // The buttons' fade in after the splash, which showed the logo alone while the app loaded
     private static final long FADE_MS = 150;
-    // The site's font, Hack Nerd Font, at the share of each size it draws it at, its
-    // size-adjust (web/terminal.css): at full size monospace lines read oversized
+    // The site's Hack Nerd Font, at the share of each size the site draws its text at,
+    // the page's size-adjust (web/terminal.css): at full size monospace lines read oversized
     private static final String FONT = "fonts/hack-400.ttf";
     private static final float FONT_SCALE = 0.9f;
     private static Typeface font;

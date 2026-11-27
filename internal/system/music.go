@@ -53,7 +53,6 @@ type MusicSystem struct {
 	audioEnabled bool
 }
 
-// NewMusicSystem creates a music system
 func NewMusicSystem(world *engine.World) engine.System {
 	s := &MusicSystem{world: world}
 	if world.Resources.Audio != nil {
@@ -100,17 +99,14 @@ func (s *MusicSystem) Init() {
 	}
 }
 
-// Name returns system name
 func (s *MusicSystem) Name() string {
 	return "music"
 }
 
-// Priority returns system priority
 func (s *MusicSystem) Priority() int {
 	return parameter.PriorityUI + 1
 }
 
-// EventTypes returns handled event types
 func (s *MusicSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMusicStart,
@@ -129,7 +125,6 @@ func (s *MusicSystem) EventTypes() []event.EventType {
 	}
 }
 
-// HandleEvent processes music events
 func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		s.resume = s.player != nil && s.player.IsMusicPlaying()
@@ -306,7 +301,6 @@ func (s *MusicSystem) applyMusicAudible(audible bool) {
 	s.publish() // a pause stops Update, not the mute key
 }
 
-// Update implements System interface
 func (s *MusicSystem) Update() {
 	if s.player == nil {
 		return
