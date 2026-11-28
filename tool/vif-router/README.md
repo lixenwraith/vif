@@ -115,8 +115,9 @@ allowed `log_levels`, most verbose first, and the installed `scenarios`, default
 first — and what an omitted choice gets, so a caller offers only choices that would
 be granted, and can name the defaults, rather than discovering either by refusal;
 and the room the site has: `sessions_max`, the fleet's size, `doors` and
-`doors_max`, the doors runs publish through the router and the most it carries, and
-`spectators_max`, how many one session is shown to at once, 0 where none is:
+`doors_max`, the doors runs publish through the router and the most it carries now,
+`spectators_max`, how many one session is shown to at once, 0 where none is, and the
+router's own ceiling (Ceiling, below):
 
 ```json
 {
@@ -130,6 +131,10 @@ and the room the site has: `sessions_max`, the fleet's size, `doors` and
   "doors": 0,
   "doors_max": 16,
   "spectators_max": 256,
+  "carried": 3440640,
+  "carried_max": 134217728,
+  "players_room": 1330,
+  "spectators_room": 5321,
   "scenarios": ["fighter", "blank", "recall", "td"],
   "scenario_descriptions": {
     "fighter": "Survive escalating storms, lure Krakens through mazes, cut the Devourer's guts, and defend the tower.",
@@ -191,10 +196,10 @@ The browser route validates what HTTP must before it upgrades — method, identi
 syntax, that the request is an upgrade, `Origin` against the origins `-web-origin`
 lists (`403`) and the handshake itself (`426` for another version, `400` for a bad
 key) — then answers the `101` with `pkg/websocket` and places the stream as the
-front door places a dial, 32 at once: the route frame, the player's join budget (the front door's,
-below), the session's liveness and readiness in reconciled Kubernetes state,
-`-route-max` connections for that session counted with the front door's, and the
-pod's game port. Each of those is refused as the join reply a page reads, since a
+front door places a dial, 32 at once: the route frame, the player's join budget (the
+front door's, below), the router's ceiling, the session's liveness and readiness in
+reconciled Kubernetes state, `-route-max` connections for that session counted with
+the front door's, and the pod's game port. Each of those is refused as the join reply a page reads, since a
 browser is never shown a status, and the stream is then spliced to the pod. It never
 accepts an upstream a caller named: the identifier is a routing key looked up in
 Kubernetes, not an address supplied. The decision record is in
@@ -221,8 +226,9 @@ ten seconds or the other direction ended ten seconds before. A stream that does 
 open with a route frame is closed unanswered. Every other refusal precedes the dial,
 in a join reply the dialer prints: an identifier that is not 16 hex, a dialing
 address past `-client-joins` (the game's own budget of six joins a minute, shared
-with the browser route), a session unknown, unready or full, and one holding
-`-route-max` connections over both routes. Logs name the session, never the dialer;
+with the browser route), the router at its ceiling (below), a session unknown,
+unready or full, and one holding `-route-max` connections over both routes. Logs
+name the session, never the dialer;
 each connection placed, on a pod or a door, is accounted for as it closes
 (`session route closed`: the session, whether a door, the bytes each way, the seconds).
 
@@ -267,19 +273,19 @@ connection, and the router names the door from the pods' identifier space and
 answers with the link (`vif://<site>:7777/<id>`, or `vifs://` as `join_target`
 reads) and a token the run resumes the same name with after a lost connection. A
 dial on that name is placed as a dial on a pod is — the route frame, the join
-budget, the session's ceiling — and then the router asks the run on the control
-connection to open a connection back (`MsgTunnelOpen`), which the run does naming
-its ticket (`MsgTunnelAccept`); the two are spliced, the name the run's door
-answers to re-encoded to it as a pod is sent its own. A run that opens nothing
+budget, the router's ceiling, the session's — and then the router asks the run on
+the control connection to open a connection back (`MsgTunnelOpen`), which the run
+does naming its ticket (`MsgTunnelAccept`); the two are spliced, the name the run's
+door answers to re-encoded to it as a pod is sent its own. A run that opens nothing
 within the open timeout refuses the dial for a retry, as a pod out of reach does.
 Both ends keep the control connection alive (`MsgTunnelKeep`); a silent run is
-dropped. A publication costs the publisher's address a join; `-tunnels` bounds the
-doors carried at once and `-doors-per-address` those one address holds; a name is
-resumed only by the run it was issued to, live or within ten minutes of losing its
-control connection, so no run takes a pod's name or another's. Doors are not listed
-and are not sessions, though the listing's `limits` count them (`doors`,
-`doors_max`). The design is
-[Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
+dropped. A publication costs the publisher's address a join, and waits while the
+router's ceiling has no room for its first guest; `-tunnels` bounds the doors
+carried at once and `-doors-per-address` those one address holds; a name is resumed
+only by the run it was issued to, live or within ten minutes of losing its control
+connection, so no run takes a pod's name or another's. Doors are not listed and are
+not sessions, though the listing's `limits` count them (`doors`, `doors_max`). The
+design is [Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
 
 ## Spectators
 
@@ -292,13 +298,39 @@ watch handshake by the router, with no connection to the pod and none of
 to its pod's feed, under a ticket of kind `watch` the router signs for itself where
 it signs tickets, and every spectator is sent a copy of that feed, so a pod serves
 one subscriber however many watch. `-spectators` bounds a session's audience and
-`-spectators-per-address` one address's share of it, a dial past either refused as
-a full audience for a retry; a session with no seat free is still shown, and one
-still in its lobby is refused as not started before its pod is dialed. The
-subscription is dropped 15 s after its last spectator left. A door a run published
-carries no feed, and a dial that only watches one is told so. The design is
-[Fleet §9](../../doc/kubernetes-fleet.md#9-the-session-routes) and
+`-spectators-per-address` one address's share of it, a dial past either, or past the
+router's ceiling, refused as a full audience for a retry; a session with no seat
+free is still shown, and one still in its lobby is refused as not started before its
+pod is dialed. The subscription is dropped 15 s after its last spectator left. A
+door a run published carries no feed, and a dial that only watches one is told so.
+The design is [Fleet §9](../../doc/kubernetes-fleet.md#9-the-session-routes) and
 [Multiplayer §5.8](../../doc/multi-player.md#58-watching-a-session).
+
+## Ceiling
+
+`-carry` bounds all the router carries at once, every session's and door's players'
+connections and spectators over both routes, each charged what one was measured to
+hold of the router's memory
+([Fleet §6](../../doc/kubernetes-fleet.md#the-routers-own-cost)):
+
+```
+                        front door   browser route
+a player's connection   84 KiB       96 KiB
+a spectator             16 KiB       24 KiB
+```
+
+A dial is charged after its join budget and before its session is looked up, and
+given back as its connection or its watching ends. One past the ceiling is refused
+as the router's own, `this router carries all the players and spectators it can`, a
+player's as a full session is and a spectator's as a full audience, and costs the
+API server, a pod and a door's run nothing. A door costs no charge, `-tunnels`
+bounding them, but is published only while the ceiling has room for its first guest,
+so a run's relay doors and routed games share the ceiling through their guests. The
+listing's `carried` and `carried_max` are the bytes charged and the ceiling, and
+`players_room` and `spectators_room` how many more of each it takes now, each
+counted alone at the browser route's charge, the dearer; `doors_max` is `doors`
+while `players_room` is 0. A page tells the router's ceiling from a session's own
+limits by them.
 
 ## Settings
 
@@ -332,6 +364,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-doors-per-address` | `4` | doors one address may publish at once (0–64); 0 leaves it to `-tunnels` |
 | `-spectators` | `256` | spectators one session is shown to at once through this router, each sent a copy of the one feed its pod writes (0–1024); 0 shows no session |
 | `-spectators-per-address` | `4` | spectators one address, an IPv6 one's /64, may be in one session at once (0–1024); 0 leaves it to `-spectators` |
+| `-carry` | `128` | MiB the router's players' connections and spectators hold at once, over both routes and every session and door (Ceiling, above; 1–16384) |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-account-creates` | `4` | sessions per signed-in account per `-first-join` window, charged in place of the address's budget; an account's joins count under the account at `-client-joins`; 0 budgets every create by address |

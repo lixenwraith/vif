@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -14,8 +16,6 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
-	link "github.com/lixenwraith/vif/pkg/network"
-	"net"
 )
 
 type fakeSessionAllocator struct {
@@ -134,7 +134,8 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 
 	want := `{"sessions":[],"limits":{"players_max":4,"players_default":4,"bots_max":0,` +
 		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["fighter"],` +
-		`"sessions_max":0,"doors":0,"doors_max":0,"spectators_max":0}}`
+		`"sessions_max":0,"doors":0,"doors_max":0,"spectators_max":0,` +
+		`"carried":0,"carried_max":0,"players_room":0,"spectators_room":0}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -383,25 +384,52 @@ func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T)
 	}
 }
 
-// TestTheListingCountsTheDoors: the listing's limits carry the fleet's size and the
-// doors published through the router, so a page can say what the site has room for.
-func TestTheListingCountsTheDoors(t *testing.T) {
-	hub := network.NewTunnelHub(func(id string) string { return id }, 3, 0)
-	run, router := net.Pipe()
-	defer run.Close()
-	go func() { _, _ = link.DecodeWithin(run, network.MaxTunnelFrame) }()
-	if _, err := hub.Publish(router, "", network.PublishRequest{}); err != nil {
-		t.Fatal(err)
-	}
+// TestTheListingSaysWhatRoomTheRouterHas: the listing's limits carry the fleet's
+// size, the doors, and what the router's ceiling has charged and has room for, each
+// kind counted at the browser route's charge; with no room for a door's first guest a
+// publication is refused as the router's ceiling, and the doors reach doors_max.
+func TestTheListingSaysWhatRoomTheRouterHas(t *testing.T) {
+	player, spectator := carryKinds[carryPlayer].browser, carryKinds[carrySpectator].browser
+	whole := &ceiling{max: player + spectator}
+	addr, hub := startDoorFrontDoor(t, startPod(t), 3, whole)
 	server := testServer(&fakeSessionAllocator{bounds: fleetLimits{SessionsMax: 10}})
 	server.routeDoors(hub)
-	request := httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil)
-	response := httptest.NewRecorder()
-	server.ServeHTTP(response, request)
-	body := response.Body.String()
-	for _, want := range []string{`"sessions_max":10`, `"doors":1`, `"doors_max":3`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("the listing reads %s; want %s", body, want)
+	server.carryUnder(whole)
+	limits := func() fleetLimits {
+		server.forgetFleet()
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil))
+		var listed sessionsResponse
+		if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
+			t.Fatal(err)
 		}
+		return listed.Limits
+	}
+	publish := func() (net.Conn, error) {
+		control, ans := publishDoor(t, addr, network.PublishRequest{Session: "match"})
+		t.Cleanup(func() { _ = control.Close() })
+		return control, ans.Refused()
+	}
+	if _, err := publish(); err != nil {
+		t.Fatal(err)
+	}
+	if got := limits(); got.SessionsMax != 10 || got.Doors != 1 || got.DoorsMax != 3 || got.Carried != 0 ||
+		got.CarriedMax != whole.max || got.PlayersRoom != 1 || got.SpectatorsRoom < 2 {
+		t.Fatalf("an idle router lists %+v", got)
+	}
+
+	release, err := whole.take(carryPlayer, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publish(); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) || !strings.Contains(err.Error(), carryFull) {
+		t.Fatalf("a publication with no room for a guest was answered %v", err)
+	}
+	if got := limits(); got.Doors != 1 || got.DoorsMax != 1 || got.Carried != player || got.PlayersRoom != 0 || got.SpectatorsRoom != 1 {
+		t.Fatalf("a router with room for a spectator alone lists %+v", got)
+	}
+	release()
+	if _, err := publish(); err != nil {
+		t.Fatalf("a publication once the charge was given back: %v", err)
 	}
 }

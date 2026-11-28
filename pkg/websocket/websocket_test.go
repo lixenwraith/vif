@@ -187,6 +187,20 @@ func TestAPingFloodLeavesOnePong(t *testing.T) {
 	}
 }
 
+// TestAWriteKeepsNoFrameLargerThanWriteKeep: a large frame goes whole and its buffer
+// with it, so a router's socket holds no copy of the largest frame it ever sent.
+func TestAWriteKeepsNoFrameLargerThanWriteKeep(t *testing.T) {
+	c, s := reading(nil, false)
+	big := bytes.Repeat([]byte{7}, 4*writeKeep)
+	if _, err := c.Write(big); err != nil {
+		t.Fatal(err)
+	}
+	if _, payload := rawFrame(t, bufio.NewReader(&s.out)); !bytes.Equal(payload, big) || cap(c.wbuf) > writeKeep {
+		t.Fatalf("sent %d of %d bytes and kept a %d-byte buffer, want them all and at most %d kept",
+			len(payload), len(big), cap(c.wbuf), writeKeep)
+	}
+}
+
 func TestReadUpgradeAcceptsOnlyAFaithful101(t *testing.T) {
 	const key = "dGhlIHNhbXBsZSBub25jZQ=="
 	good := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +

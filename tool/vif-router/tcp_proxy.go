@@ -8,7 +8,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +41,69 @@ const (
 var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
 	Reason: "this session is carrying as many connections as it accepts"}
 
+// carryKind is what the router's ceiling charges: a player's connection, spliced to
+// a pod or a door, or a spectator fed from its session's one subscription.
+type carryKind uint8
+
+const (
+	carryPlayer carryKind = iota
+	carrySpectator
+)
+
+// carryFull is the router's ceiling refusing, told from a session's own limits.
+const carryFull = "this router carries all the players and spectators it can"
+
+// carryKinds is what one of each holds of the router's memory, its buffers, stacks
+// and the runtime's share, by the route it came in on, as measured
+// (doc/kubernetes-fleet.md §6), and how a dial past the ceiling is refused.
+var carryKinds = [...]struct {
+	frontDoor, browser int64
+	full               *network.Refusal
+}{
+	carryPlayer:    {84 << 10, 96 << 10, &network.Refusal{Code: network.RefusalFull, Reason: carryFull}},
+	carrySpectator: {16 << 10, 24 << 10, &network.Refusal{Code: network.RefusalAudience, Reason: carryFull}},
+}
+
+// ceiling bounds the router's whole: every player's connection and spectator over
+// both routes, each charged its kind's cost, within the bytes -carry gives them. A
+// door is bounded by -tunnels and published only with room for its first guest.
+type ceiling struct {
+	max  int64
+	used atomic.Int64
+}
+
+// take charges one of kind, come in by the browser route or the front door, and
+// returns what gives it back; past the ceiling, the kind's refusal. Nil bounds nothing.
+func (c *ceiling) take(kind carryKind, browser bool) (func(), error) {
+	if c == nil {
+		return func() {}, nil
+	}
+	cost := carryKinds[kind].frontDoor
+	if browser {
+		cost = carryKinds[kind].browser
+	}
+	for {
+		used := c.used.Load()
+		if used+cost > c.max {
+			return nil, carryKinds[kind].full
+		}
+		if c.used.CompareAndSwap(used, used+cost) {
+			break
+		}
+	}
+	var once sync.Once
+	return func() { once.Do(func() { c.used.Add(-cost) }) }, nil
+}
+
+// room is how many more of kind the router takes now, each counted alone at the
+// browser route's cost, the dearer.
+func (c *ceiling) room(kind carryKind) int {
+	if c == nil {
+		return math.MaxInt
+	}
+	return int(max(c.max-c.used.Load(), 0) / carryKinds[kind].browser)
+}
+
 // placement is what a connection was placed on: its session's pod, or a door a run
 // published under the session's name; or, for a dial that only watches, the session
 // whose feed it is to be copied (watch), which holds no pod connection of its own.
@@ -60,6 +125,8 @@ type tcpRouter struct {
 	admit     *network.AdmissionLimiter
 	tunnels   *network.TunnelHub // nil publishes no doors
 	audiences *audiences         // the sessions being watched; nil shows none
+	ceiling   *ceiling           // the router's whole, both routes'; nil bounds nothing
+	browser   bool               // places the browser route's streams, at its costs
 	opens     time.Duration      // how long a door's run has to open a connection back
 	log       *slog.Logger
 	game      string // the pod port dialed; a test points it at a stand-in
@@ -108,7 +175,7 @@ func (r *tcpRouter) route(client net.Conn, from net.Addr, signIn string) {
 	upstream, release, at := r.place(client, from)
 	switch {
 	case at.watch:
-		r.watch(client, from, at.id)
+		r.watch(client, from, at.id, release)
 	case upstream != nil:
 		defer release()
 		r.carry(client, upstream, at, from, signIn)
@@ -239,9 +306,10 @@ func (r *tcpRouter) closed(at placement, in, out int64, started time.Time) {
 
 // place answers the route frame with the session's pod, the frame replayed to it,
 // or with a refusal the dialer reads as its reason; every refusal precedes a dial,
-// and the join budget is charged to from. A run's publication or connection back
-// (tunnels) opens on the same port and is taken here, holding no placement. A dial
-// that only watches is named and charged as a join is, and dials no pod.
+// the join budget is charged to from and the router's ceiling to what was placed,
+// which the release gives back. A run's publication or connection back (tunnels)
+// opens on the same port and is taken here, holding no placement. A dial that only
+// watches is named and charged as a join is, and dials no pod.
 func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), placement) {
 	select {
 	case r.placing <- struct{}{}:
@@ -262,7 +330,9 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 		return nil, nil, placement{}
 	}
 	id := string(first.Payload)
+	charged := func() {}
 	refuse := func(reason error) (net.Conn, func(), placement) {
+		charged()
 		network.RefuseJoin(client, reason, routeTimeout)
 		_ = client.Close()
 		return nil, nil, placement{}
@@ -276,21 +346,36 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	if err := r.admit.Admit(from); err != nil {
 		return refuse(err)
 	}
+	kind := carryPlayer
 	if first.Type == network.MsgSessionWatch {
 		// A door a run published is a guest's, which writes no feed to copy.
 		if r.audiences == nil || (r.tunnels != nil && r.tunnels.Has(id)) {
 			return refuse(network.ErrUnwatched)
 		}
-		return nil, nil, placement{id: id, name: id, watch: true}
+		kind = carrySpectator
+	}
+	// Charged before the lookup as the budget is: a dial past the router's whole costs
+	// the API server, a pod and a door's run nothing.
+	release, err := r.ceiling.take(kind, r.browser)
+	if err != nil {
+		return refuse(err)
+	}
+	charged = release
+	if kind == carrySpectator {
+		return nil, charged, placement{id: id, name: id, watch: true}
 	}
 	if r.tunnels != nil && r.tunnels.Has(id) {
-		return r.placeDoor(client, id, refuse)
+		upstream, held, at := r.placeDoor(client, id, refuse)
+		if upstream == nil {
+			return nil, nil, at
+		}
+		return upstream, func() { held(); charged() }, at
 	}
 	podIP, err := r.lookup(id, network.AdmitPlay)
 	if err != nil {
 		return refuse(err)
 	}
-	release, ok := r.holds.hold(id)
+	held, ok := r.holds.hold(id)
 	if !ok {
 		return refuse(errRouteBusy)
 	}
@@ -305,13 +390,13 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 		_ = upstream.SetWriteDeadline(time.Time{})
 	}
 	if err != nil {
-		release()
+		held()
 		r.log.Warn("session route dial failed", "session", id, "error", err)
 		return refuse(errSessionUnroutable)
 	}
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("session route opened", "session", id)
-	return upstream, release, placement{id: id, name: id}
+	return upstream, func() { held(); charged() }, placement{id: id, name: id}
 }
 
 // lookup is the pod a dial of kind is routed to, or what its dialer is told: a
@@ -336,7 +421,7 @@ func (r *tcpRouter) lookup(id string, kind network.AdmissionKind) (string, error
 
 // placeDoor places a dial on a door a run published: the run opens a connection
 // back, which takes the dialer's bytes after the name the run's door answers to, as
-// a pod takes them after its own. The ceiling counts it as it counts a pod's.
+// a pod takes them after its own. -route-max counts it as it counts a pod's.
 func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (net.Conn, func(), placement)) (net.Conn, func(), placement) {
 	release, ok := r.holds.hold(id)
 	if !ok {
@@ -375,6 +460,12 @@ func (r *tcpRouter) tunnel(client net.Conn, from net.Addr, first *link.Message) 
 		// the doors the router carries.
 		if err := r.admit.Admit(from); err != nil {
 			network.RefusePublish(client, err)
+			_ = client.Close()
+			return
+		}
+		// A door the router has no room for a guest of would refuse every dial on it.
+		if r.ceiling.room(carryPlayer) == 0 {
+			network.RefusePublish(client, carryKinds[carryPlayer].full)
 			_ = client.Close()
 			return
 		}

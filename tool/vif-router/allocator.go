@@ -72,6 +72,8 @@ type allocatorConfig struct {
 	// 0 for none, and SpectatorsPerAddress those one address may be; see audiences.
 	Spectators           int
 	SpectatorsPerAddress int
+	// Carry is the MiB the router's ceiling gives all it carries; see ceiling.
+	Carry int
 	// ClientAddressHeader is the header the site's edge overwrites with the player's
 	// address; ClientJoins and ClientCreates are that address's budgets, and
 	// AccountCreates the budget of an account a sign-in names in place of them.
@@ -125,13 +127,21 @@ type fleetLimits struct {
 	MinPlayers      map[string]int    `json:"scenario_min_players,omitempty"`
 	MaxPlayers      map[string]int    `json:"scenario_max_players,omitempty"`
 	// SessionsMax is the fleet's size (-sessions-max); Doors and DoorsMax the doors
-	// runs publish through the router and the most it carries, for a page to say
-	// what the site has room for. SpectatorsMax is how many one session is shown to
-	// at once (-spectators), 0 where the router shows none.
+	// runs publish through the router and the most it carries, Doors while it has
+	// no room for a door's first guest. SpectatorsMax is how many one session is
+	// shown to at once (-spectators), 0 where the router shows none.
 	SessionsMax   int `json:"sessions_max"`
 	Doors         int `json:"doors"`
 	DoorsMax      int `json:"doors_max"`
 	SpectatorsMax int `json:"spectators_max"`
+	// Carried is what the router's ceiling has charged, in bytes, and CarriedMax its
+	// bound (-carry); PlayersRoom and SpectatorsRoom how many more of each it takes
+	// now, each counted alone at the browser route's charge: a page tells the
+	// router's whole from a session's own limits by them.
+	Carried        int64 `json:"carried"`
+	CarriedMax     int64 `json:"carried_max"`
+	PlayersRoom    int   `json:"players_room"`
+	SpectatorsRoom int   `json:"spectators_room"`
 }
 
 type session struct {

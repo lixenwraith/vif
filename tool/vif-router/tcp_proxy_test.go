@@ -310,6 +310,70 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	}
 }
 
+// TestTheRoutersCeilingIsOneOverItsPlayersAndSpectators: the front door and the
+// browser route charge one ceiling, a player's connection and a spectator alike, each
+// at its route's cost; a dial past it is refused as the router's own, before any pod
+// or feed is dialed, and a connection or a spectator that ends gives its charge back.
+func TestTheRoutersCeilingIsOneOverItsPlayersAndSpectators(t *testing.T) {
+	pod, feeding := startPod(t), startFeedingPod(t, network.Key{})
+	feeding.start(t, game(1), 0)
+	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
+	joins := network.NewAdmissionLimiterOf(time.Minute, 100)
+	// Room for a front-door player and a front-door spectator: a browser one is dearer.
+	whole := &ceiling{max: carryKinds[carryPlayer].frontDoor + carryKinds[carrySpectator].frontDoor}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	front := newTCPRouter(sessions, newHolds(4), joins, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, front.game, _ = net.SplitHostPort(pod.addr)
+	front.ceiling = whole
+	go front.serve(listener)
+	addr := listener.Addr().String()
+	server := httptest.NewUnstartedServer(nil)
+	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, newHolds(4), joins)
+	_, api.ws.route.game, _ = net.SplitHostPort(feeding.addr)
+	api.showSessions(newAudiences(8, 0))
+	api.carryUnder(whole)
+	server.Config.Handler = api
+	server.Start()
+	t.Cleanup(server.Close)
+	socket := func() (net.Conn, error) {
+		return websocket.Dial(t.Context(), "ws://"+server.Listener.Addr().String()+wsRoutePrefix+routedID, nil)
+	}
+	full := func(what string, err error, code network.RefusalCode) {
+		t.Helper()
+		if !errors.Is(err, &network.Refusal{Code: code}) || !strings.Contains(err.Error(), carryFull) {
+			t.Fatalf("%s past the router's ceiling ended %v, want its own refusal", what, err)
+		}
+	}
+
+	player, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(player); err != nil {
+		t.Fatal(err)
+	}
+	<-pod.names
+	_, _, err = spectate(addr, routedID, socket)
+	full("a spectator", err, network.RefusalAudience)
+	full("a second player", join(addr, routedID), network.RefusalFull)
+	if dials, accepted := feeding.dials.Load(), pod.accepted.Load(); dials != 0 || accepted != 1 {
+		t.Fatalf("refused dials cost the pods %d feed dial(s) and %d connection(s), want the player's alone", dials, accepted)
+	}
+
+	_ = player.Close()
+	eventually(t, "the player's charge given back", func() bool { return whole.used.Load() == 0 })
+	pending, _, err := spectate(addr, routedID, socket)
+	port, _ := fed(t, pending, err)
+	full("a player beside the spectator", join(addr, routedID), network.RefusalFull)
+	_ = port.Close()
+	eventually(t, "the spectator's charge given back", func() bool { return whole.used.Load() == 0 })
+}
+
 // TestAnAddressHasOneJoinBudgetOverBothRoutes holds the game's own budget against
 // the player's address, which the pod no longer sees: the front door keys it on the
 // dialer and the browser route on the edge's header, each before a lookup.

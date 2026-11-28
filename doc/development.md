@@ -1452,6 +1452,12 @@ A change made for performance reports its reading before and after
   ([Rendering §9](rendering.md#9-ui-and-debug-projections)).
 - Label each tick with `pprof.Do` and profile at the default 100 Hz: at 1,000 to
   2,000 Hz a cloud container kept a quarter of the samples or fewer.
+- What a connection holds is read after the burst it opens with and the catch-up a
+  newcomer is sent, not at rest: a buffer kept between writes holds what its largest
+  write grew it to, and a spectator read 12 KiB at rest held 39 after its catch-up.
+  Keep the server's code alone in its process, its stand-ins and clients in others,
+  and divide the change in `runtime.MemStats` (`Sys` less `HeapReleased`) after a
+  collection by a thousand of each ([Fleet §6](kubernetes-fleet.md#the-routers-own-cost)).
 
 ### A terminal's bytes
 

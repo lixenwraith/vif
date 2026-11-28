@@ -36,6 +36,7 @@ const (
 	feedChunkBytes = 64 << 10 // plain bytes that send a data record before its marks do
 	feedDataMax    = 1 << 20  // the largest record but a starting point, plain or deflated
 	feedGather     = 32 << 10 // bytes a subscriber's writer gathers into one write
+	feedKeep       = 4 << 10  // of its gathering, what the writer keeps between writes
 )
 
 var (
@@ -542,8 +543,8 @@ func (s *feedSub) write(h *FeedHub) {
 		if err := writeFull(s.conn, out); err != nil {
 			return
 		}
-		if cap(buf) > 4*feedGather {
-			buf = nil // a starting point passed through it
+		if cap(buf) > feedKeep {
+			buf = nil // a catch-up or a starting point grew it
 		}
 	}
 }
