@@ -357,7 +357,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		return
 	}
 
-	localEntity := r.gameCtx.World.Resources.Player.Entity
+	localEntity := r.gameCtx.World.Resources.Player.Viewed()
 	var localShield *component.ShieldComponent
 
 	shields.Each(func(shieldEntity core.Entity, shieldComp *component.ShieldComponent) bool {
@@ -373,12 +373,12 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
-// layLens takes the local cursor's shield, when it draws this frame, as the lens. In
-// 256 colors a field is a solid rim, with no base to darken.
+// layLens takes the shield of the cursor this run looks from, when it draws this
+// frame, as the lens. In 256 colors a field is a solid rim, with no base to darken.
 func (r *ShieldRenderer) layLens(ctx render.RenderContext) {
 	r.painter.ClearLens()
 	world := r.gameCtx.World
-	local := world.Resources.Player.Entity
+	local := world.Resources.Player.Viewed()
 	shield, ok := world.Components.Shield.GetPtr(local)
 	if !r.painter.trueColor || !ok || !shield.Active || !(shield.Radius > 0) {
 		return

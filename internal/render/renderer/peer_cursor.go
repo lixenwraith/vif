@@ -58,15 +58,16 @@ func (r *PeerCursorRenderer) IsVisible() bool {
 	return roster.Count() > 1 || roster.Count() == 1 && !roster.Valid()
 }
 
-// Render draws every rostered cursor this instance does not simulate.
+// Render draws every rostered cursor but the one this run looks from, which the
+// cursor renderer draws, unless that one is a Wraith's mark.
 func (r *PeerCursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
-	roster := world.Resources.Player
+	viewed := world.Resources.Player.Viewed()
 
 	buf.SetWriteMask(visual.MaskUI)
 
 	world.Components.Cursor.Each(func(e core.Entity, c *component.CursorComponent) bool {
-		if roster.IsLocal(e) {
+		if e == viewed && !world.Components.Wraith.HasEntity(e) {
 			return true
 		}
 		draw := r.renderCell

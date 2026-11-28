@@ -16,7 +16,8 @@ type RenderContext struct {
 	DeltaTime float64
 	IsPaused  bool
 
-	// Cursor position (map coordinates); CursorValid is false when no local cursor exists
+	// The cell of the cursor this run looks from, its own or the one a viewer
+	// follows (PlayerResource.Viewed); CursorValid is false when it has none
 	CursorX     int
 	CursorY     int
 	CursorValid bool

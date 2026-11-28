@@ -5,6 +5,7 @@ set -eu
 namespace=vif
 fleet_label=app.kubernetes.io/part-of=vif-fleet
 session_label=vif.lixenwraith.dev/session
+standing_label=vif.lixenwraith.dev/watch-only
 fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
 router=${VIF_ROUTER_URL:-http://127.0.0.1:9080}
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -23,7 +24,9 @@ usage() {
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "                                          SCENARIO=, LOG_LEVEL=, BOTS= and WATCH_ONLY= override" >&2
+	echo "                                          SCENARIO=, LOG_LEVEL=, BOTS= and WATCH_ONLY= override;" >&2
+	echo "                                          WATCH_ONLY=true is a standing session, which a running" >&2
+	echo "                                          router keeps only under the names it gives" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
 	echo "       $0 blockers" >&2
@@ -31,16 +34,35 @@ usage() {
 	exit 2
 }
 
-fleet_objects() {
-	kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o name
+# The router's standing sessions are its own while it runs: it makes one again
+# whenever it is gone and removes them all as it stops, so they neither block an
+# update nor drain. With the router stopped they are any session's objects.
+scope() {
+	if systemctl is-active --quiet vif-router.service 2>/dev/null; then
+		printf '%s,%s!=true\n' "$fleet_label" "$standing_label"
+	else
+		printf '%s\n' "$fleet_label"
+	fi
 }
 
-# One verdict per fleet object, because "these names exist" does not tell an
-# operator whether anyone is playing. A finished Job keeps its object for
-# ttlSecondsAfterFinished after the match ended, which is why the public session
-# list can be empty while an update still refuses.
+# The sessions the running router keeps standing, none once it stopped.
+standing_ids() {
+	case $(scope) in
+		*'!=true') kube -n "$namespace" get jobs -l "$fleet_label,$standing_label=true" \
+			-o jsonpath='{range .items[*]}{.metadata.labels.vif\.lixenwraith\.dev/session}{"\n"}{end}' ;;
+	esac
+}
+
+fleet_objects() {
+	kube -n "$namespace" get jobs,pods,services -l "$(scope)" -o name
+}
+
+# One verdict per fleet object under the selector, because "these names exist"
+# does not tell an operator whether anyone is playing. A finished Job keeps its
+# object for ttlSecondsAfterFinished after the match ended, which is why the public
+# session list can be empty while an update still refuses.
 fleet_report() {
-	kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o json |
+	kube -n "$namespace" get jobs,pods,services -l "$1" -o json |
 		jq -r --argjson now "$(date -u +%s)" '
 			def since($t): (($now - ($t | fromdateiso8601)) | floor);
 			.items[] |
@@ -59,6 +81,8 @@ fleet_report() {
 					(($ttl - since($ended)) as $left |
 						if $left > 0 then "its TTL removes it in \($left)s"
 						else "its TTL expired and the controller is behind" end)
+				elif .metadata.labels["vif.lixenwraith.dev/watch-only"] == "true" then
+					"job/\($name): standing, which the router keeps while it runs and removes as it stops"
 				else
 					"job/\($name): active with \(.status.active // 0) pod(s), a match may be in play"
 				end
@@ -99,7 +123,7 @@ case "$command" in
 	status)
 		[ "$#" -eq 1 ] || usage
 		echo '# fleet objects'
-		report=$(fleet_report)
+		report=$(fleet_report "$fleet_label")
 		printf '%s\n' "${report:-the fleet is empty}"
 		echo '# fleet log files'
 		if [ -d "$fleet_logs" ]; then
@@ -114,7 +138,7 @@ case "$command" in
 		# The assertion update.sh and the image and router helpers make before they
 		# replace anything.
 		[ "$#" -eq 1 ] || usage
-		report=$(fleet_report)
+		report=$(fleet_report "$(scope)")
 		if [ -z "$report" ]; then
 			echo 'the fleet is empty'
 			exit 0
@@ -134,7 +158,7 @@ case "$command" in
 			2) [ "$2" = --force ] || usage; force=true ;;
 			*) usage ;;
 		esac
-		for object in $(kube -n "$namespace" get jobs,services -l "$fleet_label" -o name); do
+		for object in $(kube -n "$namespace" get jobs,services -l "$(scope)" -o name); do
 			kube -n "$namespace" delete "$object" \
 				--cascade=background --wait=false --ignore-not-found
 		done
@@ -150,7 +174,7 @@ case "$command" in
 			# abandons; the container may outlive the object until the kubelet
 			# reaps it, and the fleet counts it until then.
 			echo 'the graceful cascade did not finish; abandoning the surviving pods'
-			for object in $(kube -n "$namespace" get pods -l "$fleet_label" -o name); do
+			for object in $(kube -n "$namespace" get pods -l "$(scope)" -o name); do
 				kube -n "$namespace" delete "$object" \
 					--force --grace-period=0 --ignore-not-found
 			done
@@ -164,22 +188,28 @@ case "$command" in
 		fi
 		if [ -n "$remaining" ]; then
 			echo "$0: the fleet did not drain:" >&2
-			fleet_report >&2
+			fleet_report "$(scope)" >&2
 			if [ "$force" = false ]; then
 				echo "$0: rerun as \`$0 drain --force\` to abandon the surviving pods" >&2
 			fi
 			exit 1
 		fi
+		# A standing session the router keeps keeps its log.
+		kept=$(standing_ids)
 		if [ -d "$fleet_logs" ]; then
-			sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -name '*.jsonl' -delete
-			leftover=$(sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -print)
+			set --
+			for id in $kept; do
+				set -- "$@" ! -name "$id.jsonl" ! -name "${id}_*.jsonl"
+			done
+			sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -name '*.jsonl' "$@" -delete
+			leftover=$(sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 "$@" -print)
 			if [ -n "$leftover" ]; then
 				echo "$0: unexpected entries under $fleet_logs:" >&2
 				printf '%s\n' "$leftover" >&2
 				exit 1
 			fi
 		fi
-		echo 'fleet drained: no objects, no log files'
+		echo "fleet drained: no objects, no log files${kept:+, bar the standing sessions the router keeps}"
 		;;
 	allocate)
 		# Through the router rather than through `create`, because that is the
@@ -226,6 +256,11 @@ case "$command" in
 		[ "$#" -eq 2 ] || usage
 		id=$2
 		name=$(session_name "$id")
+		if standing_ids | grep -qx "$id"; then
+			echo "$0: $id is a standing session, which the router makes again under its name;" \
+				"restarting the router makes every standing session anew" >&2
+			exit 1
+		fi
 		kube -n "$namespace" delete job "$name" \
 			--cascade=background --wait=false --ignore-not-found
 		kube -n "$namespace" delete service "$name" --ignore-not-found

@@ -669,7 +669,7 @@ func (a *App) renderContext() render.RenderContext {
 		}
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
-		if pos, ok := a.world.LocalCursor(); ok {
+		if pos, ok := a.world.CursorCell(a.world.Resources.Player.Viewed()); ok {
 			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
 		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)

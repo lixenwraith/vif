@@ -1,16 +1,17 @@
 # The fleet ceiling.
 #
-# Ten concurrent sessions is the deployment's stated maximum, and it is enforced
-# here rather than in the router alone. A router holds the ceiling as a
-# number it believes; a quota holds it as a number the API server refuses to
-# exceed, which is what survives a router that crashed mid-loop, restarted with
-# stale state, or was asked for eleven sessions by a website nobody rate-limited.
+# Twelve concurrent sessions, the router's two standing ones among them, is the
+# deployment's stated maximum, and it is enforced here rather than in the router
+# alone. A router holds the ceiling as a number it believes; a quota holds it as a
+# number the API server refuses to exceed, which is what survives a router that
+# crashed mid-loop, restarted with stale state, or was asked for a thirteenth
+# session by a website nobody rate-limited.
 #
-# The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md
-# §6): the game container, since the config-check init container counts only
-# against its own peak.
-# They are a second ceiling on the same fact: ten sessions cannot exceed the memory
-# the node was sized for, whatever a mis-rendered manifest asks for.
+# The compute totals are ten sessions' envelopes without bots and the two standing
+# sessions' with theirs, rounded up (doc/kubernetes-fleet.md §6): the game
+# container, since the config-check init container counts only against its own
+# peak. They are a second ceiling on the same fact: the fleet cannot exceed the
+# memory the node was sized for, whatever a mis-rendered manifest asks for.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -18,14 +19,14 @@ metadata:
   namespace: vif
 spec:
   hard:
-    count/pods: "10"
-    count/jobs.batch: "10"
+    count/pods: "12"
+    count/jobs.batch: "12"
     # One Service per session, plus headroom for a fixed one an operator adds.
-    count/services: "12"
-    requests.cpu: 1000m
-    requests.memory: 960Mi
-    limits.cpu: "5"
-    limits.memory: 4800Mi
+    count/services: "14"
+    requests.cpu: 1500m
+    requests.memory: 1280Mi
+    limits.cpu: 6500m
+    limits.memory: 6144Mi
     # Two shared local claims: the volatile log tmpfs every session writes through,
     # and the read-only scenario volume they all mount. Neither is per-session
     # persistence; the node's own tmpfs and directory are the hard capacity.

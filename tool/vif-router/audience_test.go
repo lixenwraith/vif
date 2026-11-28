@@ -318,6 +318,31 @@ func TestAnUnwatchedFeedIsDroppedAndAnEndedOneToldAsItWas(t *testing.T) {
 	})
 }
 
+// TestAStandingSessionsSpectatorsWaitForItAndWatchAgain: a dial to watch a standing
+// session its pod is not yet up for waits for it, spending no budget asking again,
+// and the session's spectators are told to watch again whatever its pod said.
+func TestAStandingSessionsSpectatorsWaitForItAndWatchAgain(t *testing.T) {
+	pod := startFeedingPod(t, network.Key{})
+	pod.start(t, game(1), 0)
+	sessions := &fakeSessionAllocator{podIP: "127.0.0.1", kept: routedID}
+	sessions.starting.Store(3)
+	watched := newAudiences(8, 0)
+	watched.retry = 10 * time.Millisecond
+	addr := watchingDoor(t, sessions, pod, watched, network.Key{})
+
+	pending, _, err := spectate(addr, routedID, nil)
+	port, _ := fed(t, pending, err)
+	pod.hub.End("The host closed the session", false)
+	select {
+	case <-port.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("a spectator never learned its standing session's feed ended")
+	}
+	if ended := (link.FeedEnded{}); !errors.As(port.Err(), &ended) || !ended.Again {
+		t.Fatalf("a standing session's feed ended as %v, want its spectators to watch again", port.Err())
+	}
+}
+
 // TestAWatchDialNobodyFeedsIsToldSo: a router that shows no session, and a door a
 // run published, which is a guest's and writes no feed, each answer a dial that
 // only watches as a door with no feed does, before any pod or run is asked.

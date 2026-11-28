@@ -34,19 +34,21 @@ edited on the node.
 ./deploy/k3s/session.sh state '<session-id>'
 ```
 
-`status` gives every fleet object a verdict — a match in play, a Job that
-finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
+`status` gives every fleet object a verdict — a match in play, a standing session,
+a Job that finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
 terminating — then the fleet log files and the five units. `blockers` is that
 report as an assertion: `the fleet is empty` and exit 0, or the same annotated
-lines and exit 1. It is the check `update.sh` and the image and router helpers
-make before they replace anything, so run it by hand to learn why one refused
-without starting another. `state` prints one line of what the fleet reports about
+lines and exit 1; a standing session is no blocker while the router runs, since the
+router removes it as it stops. It is the check `update.sh` and the image and router
+helpers make before they replace anything, so run it by hand to learn why one
+refused without starting another. `state` prints one line of what the fleet reports about
 one session — phase, roster, clock, tick, the window it has left and its join
 target — and exits non-zero once that session has left the fleet.
 
 ## Empty the fleet
 
-`image`, `router` and `logwisp` refuse to update while any fleet object exists.
+`image`, `router` and `logwisp` refuse to update while any fleet object exists but
+the standing sessions of a running router, which stopping it removes.
 
 ```sh
 ./deploy/k3s/session.sh drain
@@ -55,10 +57,10 @@ target — and exits non-zero once that session has left the fleet.
 
 It deletes every fleet Job and Service, waits up to 60 seconds for the
 background-cascaded pods, removes the session log files, and fails loudly if
-anything survives. `--force` then abandons the surviving pods with a zero grace
-period: nothing replaces them, because their Jobs are already gone, but a
-container can outlive its object until the kubelet reaps it, and the fleet
-counts it until then. **Either form destroys retained log evidence** — snapshot
+anything survives; a running router's standing sessions and their logs are left to
+it. `--force` then abandons the surviving pods with a zero grace period: nothing
+replaces them, because their Jobs are already gone, but a container can outlive its
+object until the kubelet reaps it, and the fleet counts it until then. **Either form destroys retained log evidence** — snapshot
 first if a gate still needs it:
 
 ```sh
@@ -67,7 +69,9 @@ sudo cp -a /var/log/vif-fleet/. "$(mktemp -d /tmp/vif-logs.XXXXXX)/"
 
 A single session goes without touching the rest. `delete` waits for the
 background-cascaded pod, removes only that session's log files, and prints its own
-verdict — so read the session's JSONL before running it, not after:
+verdict — so read the session's JSONL before running it, not after. It refuses a
+standing session, which the running router would make again; restarting the router
+makes every standing session anew:
 
 ```sh
 ./deploy/k3s/session.sh delete '<session-id>'
@@ -96,6 +100,7 @@ and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
 | `the fleet is not empty` | Printed by `blockers` after one annotated line per surviving object; the helper that called it then names its own refusal. A finished Job is the usual cause: it outlives the match by its 120-second `ttlSecondsAfterFinished`, so the public session list is already empty while the update still refuses. | Wait out the TTL the report names, or `./deploy/k3s/session.sh drain`. |
 | `a fleet object remained after allocation stopped` | A session was created between the first check and the stop. | Re-run `drain`; it waits for the cascade. |
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
+| `… is a standing session, which the router makes again under its name` | `delete` named a session the running router keeps for the lobby. | Leave it to the router; restarting the router makes every standing session anew. |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
 | `empty the fleet first … or update only: …` | `image`, `router` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
 | `<component>: could not tell what is installed`, `… names no VIF_ROUTER_IMAGE; run update-vif-image.sh first` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `router` it is an installed env without `VIF_ROUTER_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |

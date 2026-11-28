@@ -155,6 +155,13 @@ func run(args []string, logger *slog.Logger) error {
 	frontDoor.ticket, frontDoor.proxyProtocol, frontDoor.tls = ticket, cfg.RouteProxyProtocol, routeTLS
 	frontDoor.accounts = accounts
 	go frontDoor.serve(routeListener)
+	keeping, stopKeeping := context.WithCancel(context.Background())
+	defer stopKeeping()
+	kept := make(chan struct{})
+	go func() {
+		defer close(kept)
+		controller.keep(keeping, logger)
+	}()
 	notifyReady(logger)
 
 	select {
@@ -167,8 +174,16 @@ func run(args []string, logger *slog.Logger) error {
 		_ = routeListener.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
+		// The standing sessions go with their keeper, as an update needs the fleet empty.
+		stopKeeping()
+		<-kept
+		removed := make(chan error, 1)
+		go func() { removed <- controller.removeStanding(shutdownCtx) }()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("HTTP shutdown: %w", err)
+		}
+		if err := <-removed; err != nil {
+			logger.Warn("standing sessions not removed", "error", err)
 		}
 		if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
 			return err

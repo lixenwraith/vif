@@ -73,7 +73,7 @@ else: no port of a session's own exists at the edge. What it must provide:
 |---|---|
 | Forward TCP 7777, and only it, to the node: raw, or ended at the edge as TLS and forwarded under a PROXY header (§12) | The whole player-facing native surface, the router's front door; a session's own port never leaves the pod network. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
 | Do not rewrite the source address, or name it in the PROXY header | The front door keys its admission budgets and its tickets on the dialing address. |
-| Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
+| Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way; a standing session's spectator holds one as long as it watches. |
 | Admit the site host to the node's 9080 | The router's API and browser route, reached only through the site's nginx (§12). |
 
 Test the public port from a machine off the host: host-originated traffic can
@@ -114,9 +114,10 @@ sudo sysctl --system
 ```
 
 Clone the repository once and run everything below from its root. Size the node
-for the host, the OS and K3s plus the fleet's 4800 MiB memory limit (ten sessions at
-480 MiB, fewer when each bot adds 32 MiB, held by
-[`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB log tmpfs.
+for the host, the OS and K3s plus the fleet's 6144 MiB memory limit (ten sessions at
+480 MiB and the two standing ones with their bots, fewer when a session's bots add
+32 MiB each, held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB
+log tmpfs.
 
 ## 4. Docker, for builds only
 
@@ -214,7 +215,8 @@ Expected: `tmpfs`, about `256M`, `nodev,nosuid,noexec`, mode `770`, owner `65532
 The cleanup timer owns retention: each session's two newest rotations (an older
 one goes once it is five minutes old), and no file untouched for 75 minutes, just
 past the Job's hour-long deadline, so the tmpfs holds live sessions and the ones
-that just ended rather than hours of finished ones.
+that just ended rather than hours of finished ones. A standing session's file is
+never that quiet, so its live file and those two rotations bound it.
 
 ## 8. The session image
 
@@ -337,7 +339,11 @@ curl -fsS http://127.0.0.1:9080/readyz      # ok
 The image line names the tag §8 imported, and the key is the ticket seed
 `VIF_ROUTER_TICKET_KEY` names, without which the router does not start. From then
 on, `./deploy/update.sh router` rebuilds, installs the env file and unit, restarts
-behind an empty-fleet gate, and keeps one `.previous` set to roll back to.
+behind an empty-fleet gate, and keeps one `.previous` set to roll back to. The
+router makes the standing sessions `VIF_ROUTER_STANDING` names as it starts and
+removes them as it stops, so an update that stops it meets an empty fleet and they
+come back on the new revision
+([fleet design §9](kubernetes-fleet.md#9-the-session-routes)).
 
 The credential is a short-lived ServiceAccount token in a file, re-read on every
 request and rotated by the root timer; never give the router the node's root
@@ -444,7 +450,7 @@ Then prove the policy is enforced and the node is exempt from it, with the sessi
 still live:
 
 ```sh
-POD_IP=$(sudo kubectl -n vif get pod -l app.kubernetes.io/component=session \
+POD_IP=$(sudo kubectl -n vif get pod -l "vif.lixenwraith.dev/session=$SESSION_ID" \
   -o jsonpath='{.items[0].status.podIP}')
 : "${POD_IP:?no session pod is running}"
 bash -c "</dev/tcp/$POD_IP/7778" && echo "node -> 7778 open"
@@ -464,7 +470,7 @@ Quit the client, read the session's file before it goes, then delete:
 sudo jq -s -e --arg id "$SESSION_ID" 'map(select(.sub != null)) | length > 0 and
   all(.[]; .fields.session_id == $id)' "/var/log/vif-fleet/$SESSION_ID.jsonl"
 ./deploy/k3s/session.sh delete "$SESSION_ID"
-./deploy/k3s/session.sh status                   # the fleet is empty, five active units
+./deploy/k3s/session.sh status                   # the standing sessions alone, five active units
 ```
 
 If it fails, separate the router from the workload: `session.sh create` renders

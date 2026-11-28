@@ -198,11 +198,12 @@ note alike: its `layout` is the network's, its `scored_by` the document's
 
 ## Telling cursors apart
 
-Every other cursor is marked with its slot, `0` to `F`; yours is unmarked. A player
-who left is drawn as its mark alone, in its color, where it stood, until it is
-dropped two minutes later. The status bar's `4P:1` means four cursors, yours in
-slot 1. `:player` tells players from bots and names each bot's holder. Slots
-identify cursors for this session only, and a dropped player's slot may be reused.
+Every other cursor is marked with its slot, `0` to `F`; yours, or the one you
+spectate from, is unmarked. A player who left is drawn as its mark alone, in its
+color, where it stood, until it is dropped two minutes later. The status bar's
+`4P:1` means four cursors, yours in slot 1. `:player` tells players from bots and
+names each bot's holder. Slots identify cursors for this session only, and a
+dropped player's slot may be reused.
 
 ## Pause, speed and session lifetime
 
@@ -217,7 +218,8 @@ identify cursors for this session only, and a dropped player's slot may be reuse
   for one solo watched or headless bot.
 - Bots count as occupancy. A `-serve` session only its own bots occupy plays on
   until a termination signal, which sends them away at once; in the fleet, also
-  until the session Job's one-hour deadline. A guest's bots count only while the
+  until the session Job's one-hour deadline, which a standing session has none of
+  ([The session fleet §9](kubernetes-fleet.md#9-the-session-routes)). A guest's bots count only while the
   guest is in the session.
 - A site's session takes the bots its players bring, as any session does:
   `-join <link> -bot N`, `:bot add`. Its own, which the site runs, are the Bots

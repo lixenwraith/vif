@@ -14,11 +14,11 @@ in [`script/`](../script/README.md).
 | Property | Value |
 |---|---|
 | Session unit | One `vif -serve` process, one pod, one Job, one ClusterIP Service nothing dials, whose EndpointSlice is the router's readiness signal. |
-| Concurrency ceiling | 10, enforced by namespace `ResourceQuota`; the router's `-sessions-max` refuses before attempting an eleventh. |
+| Concurrency ceiling | 12, the router's two standing sessions among them (§9), enforced by namespace `ResourceQuota`; the router's `-sessions-max` refuses before attempting a thirteenth. |
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`, and the screen size; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
+| Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`, and the screen size; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests but the router's standing ones (§9). |
 | Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `fighter` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
 | Transport | Framed TCP, not HTTP, for every participant, the front door's under TLS to the site's edge (`vifs://`). A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Admitted by the router's ticket (§4). |
@@ -48,7 +48,7 @@ flowchart LR
 | Session unit | One process owns one match timeline. The world is in memory; no replacement pod inherits it. |
 | Authority | The dedicated host's Shared world is canonical; guests predict and accept corrections. |
 | Capacity | `-players` is a ceiling on guests, and so is the scenario's `max_players`. At capacity the health body reports `ready=false`, unless a guest away holds a place: a page reload takes it back, and past a session's one place a newcomer is given it; the process stays healthy. |
-| Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. The session's own bots count as occupancy, so a session only they occupy runs until a drain, which sends them away at once, or the Job's one-hour `activeDeadlineSeconds`. |
+| Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. The session's own bots count as occupancy, so a session only they occupy runs until a drain, which sends them away at once, or the Job's one-hour `activeDeadlineSeconds`, which a standing session has none of (§9). |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, RNG session or scenario digest differs from the offer it made. The corpus is not among them: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
@@ -69,12 +69,11 @@ yet been put through, and promoting verified images to the node. A session takes
 the bots its players bring, which run on their machines
 ([Bots](bots.md#pause-speed-and-session-lifetime)); its own, which the node runs,
 stay closed on this deployment (`VIF_ROUTER_BOTS_MAX=0`) until their cost is read
-there ([Measure a full roster](todo.md#measure-a-full-roster)). The lobby has no
-standing session to show: a session is spectated through the router (§9), and
-[the bots' games the site always runs](todo.md#keep-standing-sessions-for-the-lobby)
-is made by hand meanwhile. Each address creates one session per first-join window and
-joins or spectates six times a minute, loose for a player whose link drops and
-comes back; one NAT is one address.
+there ([Measure a full roster](todo.md#measure-a-full-roster)). The standing learner
+loses what it learned with its pod
+([todo](todo.md#keep-the-standing-learners-population-across-pods)). Each address
+creates one session per first-join window and joins or spectates six times a minute,
+loose for a player whose link drops and comes back; one NAT is one address.
 
 ## 4. Security posture
 
@@ -232,12 +231,24 @@ defaults:
 Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation and
 the cleanup timer carry: a file untouched for 75 minutes, past the Job's deadline,
 is an ended session's and goes, so a full fleet holds about 140 MiB of the tmpfs
-rather than filling it in two and a half hours. Do not scale the CPU and memory
-figures from here; [Measure a full roster](todo.md#measure-a-full-roster)
-measures a four-player world, which is the shape the manifest's values are for. The
-quota totals in `10-quota.yaml` are ten times the game container without bots; the
-config-check init container counts only against its own peak. A session with bots
-takes more than a tenth, three sessions of three bots filling the CPU requests, so
+rather than filling it in two and a half hours. A standing session's file is never
+that quiet: its live file and the two newest rotations the timer keeps bound it, at
+24 MB, which its pod's memory carries too, since a session's log pages on the tmpfs
+are charged to the pod that wrote them. The two standing sessions, read on the node
+by `kubectl top` with nobody watching:
+
+```
+fighter, 2 bots   133m CPU of a 228m request   140 MiB of a 160 MiB request
+cave, 1 bot        62m CPU of a 164m request    77 MiB of a 128 MiB request
+```
+
+Do not scale the CPU and memory figures from here;
+[Measure a full roster](todo.md#measure-a-full-roster) measures a four-player world,
+which is the shape the manifest's values are for. The quota totals in
+`10-quota.yaml` are ten game containers without bots and the two standing
+sessions' with theirs, rounded up; the config-check init container counts only
+against its own peak. A session with bots takes more than a bot-free one's share,
+three sessions of three bots filling the CPU requests the standing ones leave, so
 the router reads what the quota counts used and refuses the create it has no room
 for as `fleet_full` (`allocator.fits`), where the API server would take the Job and
 never run its pod.
@@ -323,9 +334,10 @@ What a cluster has not yet been put through is
   the one-minute fresh-world reset is only for an unbounded hand-started server.
 - **Ninety seconds, twice.** The first-guest window and the empty grace are the same
   number and different bounds; the second doubles as the reconnect window.
-- **Ten sessions, enforced by quota as well as by the router.** A ceiling only the
-  router believes is one a router bug removes. The quota's compute totals are the
-  API server's to count: the router reads them and adds no sum of its own.
+- **Twelve sessions, two of them standing, enforced by quota as well as by the
+  router.** A ceiling only the router believes is one a router bug removes. The
+  quota's compute totals are the API server's to count: the router reads them and
+  adds no sum of its own.
 - **A Job per session.** The process is meant to exit; a Deployment would restart it
   into a session nobody is in.
 - **One address for every session, and no route around the router.** The front
@@ -346,6 +358,14 @@ What a cluster has not yet been put through is
   door behind a NAT is reached at the site and the router dials nothing a caller
   named. Allocation stays Kubernetes'; a player's own session published the same
   way is later work (Multiplayer §5.6).
+- **Standing sessions are the router's.** The process that makes every session
+  keeps these under their names and removes them as it stops, so an update's
+  empty-fleet gate holds with them; a script on a timer would be a keeper beside it.
+- **A standing session plays whether watched or not.** `cave`'s learner wants the
+  rounds nobody watches. `fighter`'s two bots learn nothing, so holding it unwatched
+  would save its CPU alone, 133m on the node (§6), at the cost of a hold policy
+  at the pod, and a game held at a new run's tick 0 reads to the router as a lobby,
+  which refuses the watch that would resume it.
 - **Spectators are fed by the router, from one subscription.** A spectator spliced
   to its pod as a player is would cost the pod a stream each and the session its
   `-route-max`; the router holds the session's feed once and copies it, so a pod's
@@ -442,11 +462,42 @@ a dial builds is the one its feed begins from.
 - **Lifetime.** The subscription is dropped `audienceLinger` (15 s) after its last
   spectator left, so a page that reloads finds it. A feed the pod ends reaches each
   spectator with the pod's reason; one whose link is lost tells each to find it
-  again, and the redial opens a new subscription.
+  again, and the redial opens a new subscription. A standing session's tells them
+  to watch again either way (below).
 - **Listing.** `GET /vif/api/sessions` carries `spectators` in each session and
   `spectators_max` in `limits`, for a lobby to offer what would be granted.
 - **Not fed.** A tunnel's door is a guest's and writes no feed, so a dial that only
   watches one is refused (`ErrUnwatched`), as it is with `-spectators 0`.
+
+**Standing sessions.** The lobby always has the games `-standing` names to show
+(`VIF_ROUTER_STANDING`, `fighter:2,cave:1`): each a scenario its own bots play,
+filling every seat, so its pod seats no dial but a watch. The router's keeper
+(`standing.go`) makes each at start and whenever it is gone, looking every 5 s and
+making one at most once a minute, so one whose pod never stands costs a create a
+minute. It is charged to no address and counted as any session is, by
+`-sessions-max` and the quota; one gone while the fleet is full comes back as a
+session ends.
+
+- **Name.** A standing session answers to its scenario's name in every pod it is
+  made in (`standingID`, a digest cut to 16 hex), so its links outlive each pod.
+  Its objects carry the label `vif.lixenwraith.dev/watch-only`, which the listing
+  reports as `watch_only` and the keeper selects by, removing one of a name it does
+  not keep.
+- **Shape.** No `activeDeadlineSeconds`, as the learner keeps what it learned in
+  memory and loses it with its pod, and `-shed-window 0`, so a host that cannot
+  keep its tick plays slower rather than open a seat by shedding a bot.
+- **Continuity.** When its feed ends, by its pod's end or its link's loss, the
+  router tells the spectators to watch again whatever the pod said, and holds a
+  watch dial that finds no pod while the keeper makes the next, looking each second
+  for 10 s (`standingWait`), inside the 15 s a spectator waits for an answer, then
+  refusing it as starting again, which a spectator retries for 30 s. So a page keeps
+  watching across pods at a dial of its budget each, where a refusal retried every
+  250 ms would spend a minute's budget in a second and a half.
+- **Lifetime.** The router removes them as it stops and waits for their pods to go,
+  so an update that stops it meets an empty fleet, and they come back on the new
+  revision as it starts; a crash leaves them, for the restarted router to keep.
+  While it runs, `session.sh blockers` and `drain` pass over them and their logs,
+  and `delete` refuses one.
 
 **The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
