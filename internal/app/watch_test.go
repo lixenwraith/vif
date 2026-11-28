@@ -586,14 +586,20 @@ func TestASpectatorLooksFromAPlayerWhoPlays(t *testing.T) {
 	}
 	looksFrom := func(slot uint8, alone bool, after string) {
 		t.Helper()
+		var at component.PositionComponent
 		viewer.World().RunSafe(func() {
-			_, own := cell(slot)
+			var own bool
+			at, own = cell(slot)
 			_, other := cell(1 - slot)
 			if got := viewer.World().Resources.Player.ViewSlot(); got != slot || !own || alone && other {
 				t.Fatalf("%s the spectator looks from slot %X, slot %X in view %t and the other %t; want %X alone in view",
 					after, got, slot, own, other, slot)
 			}
 		})
+		if rc := viewer.renderContext(); !rc.CursorValid || rc.CursorX != at.X || rc.CursorY != at.Y {
+			t.Fatalf("%s the frame's cursor is at %d,%d (%t), want slot %X's cell %d,%d",
+				after, rc.CursorX, rc.CursorY, rc.CursorValid, slot, at.X, at.Y)
+		}
 	}
 	looksFrom(1, false, "started at slot 1,")
 

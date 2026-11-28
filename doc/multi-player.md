@@ -1488,8 +1488,9 @@ private half. When its feed ends a viewer watches again where the host serves th
 session anew or only its link went, and otherwise starts a local game
 (`Membership.feedEnded`); a driven run ends.
 
-**The run** looks from one player's cursor (`PlayerResource.Follow`, `World.Follow`):
-the slot `-spectate` named, else the first played. Left or up follows the player
+**The run** looks from one player's cursor (`PlayerResource.Follow`, `World.Follow`),
+which it draws as that player's run draws its own (`PlayerResource.Viewed`): the
+slot `-spectate` named, else the first played. Left or up follows the player
 before, right or down the one after, a press on a cursor that player, and
 `:spectate <slot>` or a Players row names one; when that player leaves or goes
 away the view moves to the next one playing, and with nobody playing stays on the

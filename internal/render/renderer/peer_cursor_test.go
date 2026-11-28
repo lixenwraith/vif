@@ -85,6 +85,57 @@ func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 	}
 }
 
+// TestAViewerDrawsTheCursorItFollowsAsItsOwn: a run that drives no cursor and follows
+// one draws it as a player draws its own, unmarked, its shield the lens and at full
+// strength as its ember is, and every other as a peer.
+func TestAViewerDrawsTheCursorItFollowsAsItsOwn(t *testing.T) {
+	t.Parallel()
+	gameCtx, cursors := peerWorld(t, 3)
+	w := gameCtx.World
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Player.SetLocal(parameter.NoPlayerSlot)
+	w.Watch()
+	if _, ok := w.Follow(1, 0); !ok {
+		t.Fatal("the viewer follows no cursor on slot 1")
+	}
+	rc := peerContext(gameCtx)
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
+	NewPeerCursorRenderer(gameCtx).Render(rc, buf)
+	for slot, cursor := range cursors {
+		pos, _ := w.Positions.GetPosition(cursor)
+		x, y, _ := rc.MapToScreen(pos.X, pos.Y)
+		if peer := buf.CellAt(x, y).Bg == peerCursorColor(uint8(slot)); peer == (slot == 1) {
+			t.Errorf("slot %d drawn as a peer: %t", slot, peer)
+		}
+	}
+	if !NewCursorRenderer(gameCtx).IsVisible() {
+		t.Error("the viewer draws no cursor of its own")
+	}
+
+	at := component.PositionComponent{X: 50, Y: 10}
+	w.Positions.SetPosition(cursors[1], at)
+	w.Components.Energy.SetComponent(cursors[1], component.EnergyComponent{Current: 1000})
+	w.Components.Shield.SetComponent(cursors[1], component.ShieldComponent{
+		Type: component.ShieldTypePlayer, Active: true, Radius: parameter.PlayerShieldRadius,
+	})
+	buf.Clear()
+	shields := NewShieldRenderer(gameCtx)
+	shields.Render(rc, buf)
+	look := &visual.ShieldLooks[component.ShieldTypePlayer]
+	if got, want := buf.CellAt(at.X+8, at.Y).Bg, color.Screen(visual.RgbBlack, look.Color, 0.8*look.MaxOpacity); got != want {
+		t.Errorf("the followed cursor's shield = %v, want a local one's %v", got, want)
+	}
+	if p := shields.painter; !p.lensOn || p.lensX != at.X || p.lensY != at.Y {
+		t.Errorf("the lens is on %t at %d,%d, want the followed cursor's shield at %d,%d", p.lensOn, p.lensX, p.lensY, at.X, at.Y)
+	}
+	w.Components.Heat.SetComponent(cursors[1], component.HeatComponent{Current: 100, EmberActive: true})
+	embers := NewEmberRenderer(gameCtx)
+	embers.Render(rc, buf)
+	if got := embers.painters[1].blendScale; got != 1 {
+		t.Errorf("the followed cursor's ember blend = %v, want a local one's 1", got)
+	}
+}
+
 // TestAWraithIsDrawnAsItsLabelAlone: a Wraith keeps its label at the cell it holds,
 // in its slot's color over whatever lies beneath, so it reads as a place kept for
 // a player rather than a player in play, in either color mode.

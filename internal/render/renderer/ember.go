@@ -108,7 +108,7 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(visual.MaskField)
 	buf.SetCoarseBg(true)
 
-	localEntity := roster.Entity
+	localEntity := roster.Viewed()
 	for slot := range parameter.MaxPlayers {
 		entity := roster.Slot(uint8(slot))
 		if entity == 0 || entity == localEntity {
@@ -117,7 +117,7 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		r.renderEmber(ctx, buf, slot, entity, false)
 	}
 	if localEntity != 0 {
-		r.renderEmber(ctx, buf, int(roster.LocalSlot()), localEntity, true)
+		r.renderEmber(ctx, buf, int(roster.ViewSlot()), localEntity, true)
 	}
 }
 

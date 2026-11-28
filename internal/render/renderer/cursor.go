@@ -38,14 +38,18 @@ func NewCursorRenderer(gameCtx *engine.GameContext) *CursorRenderer {
 	}
 }
 
-// IsVisible returns true when a local cursor exists and the map and the mode draw it
+// IsVisible reports a cursor this run looks from, its own or the one a viewer
+// follows, which the map and the mode draw
 func (r *CursorRenderer) IsVisible() bool {
-	return r.gameCtx.World.Resources.Player.Valid() && !r.gameCtx.World.Resources.Config.CursorsFixed &&
+	return r.gameCtx.World.Resources.Player.Viewed() != 0 && !r.gameCtx.World.Resources.Config.CursorsFixed &&
 		!r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode()
 }
 
-// Render draws the cursor
+// Render draws the cursor at its cell; one with none, a followed Wraith's, keeps its mark
 func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	if !ctx.CursorValid {
+		return
+	}
 	buf.SetWriteMask(visual.MaskUI)
 
 	// Transform cursor position to screen coords
