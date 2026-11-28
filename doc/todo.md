@@ -1520,6 +1520,21 @@ failure, whose connected-client behavior should be recorded, with no replacement
 advertised as the same match; and a full log tmpfs, which should lose a bounded
 amount of log without ending a game.
 
+### Reserve the node's memory for what runs beside the pods
+
+- Priority: P2
+- Affected files: `deploy/guest` (a K3s config drop-in), `deploy/update.sh`,
+  `doc/kube-docker-deploy.md`
+- Guide: [Fleet deploy](kube-docker-deploy.md#5-k3s) §5
+
+The kubelet reserves nothing for K3s, the router's 256 MiB and the node's other
+services, and evicts only below its default 100 MiB available, which on a node with
+no swap leaves the fleet's 6144 MiB of limits free to starve them. Owed: a
+`/etc/rancher/k3s/config.yaml.d/` drop-in `update.sh` installs and restarts K3s
+for, its `kubelet-arg` naming `system-reserved=cpu=250m,memory=768Mi` and an
+`eviction-hard` of `memory.available<256Mi` with the other three default thresholds,
+since one set alone zeroes the rest; the quota must still fit what it leaves.
+
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3
@@ -1699,21 +1714,6 @@ first, and holds both under other numbers until a correction. A hit's
 `TargetEntity` and `HitEntity` are not checked against what their producer meant,
 as a typed member's end is (`CompositeSystem.destroyMember`).
 
-### Bound the router's whole
-
-- Priority: P3
-- Affected files: `tool/vif-router` (`config.go`, `audience.go`, the doors),
-  `deploy/guest/vif-router.env`, `doc/kubernetes-fleet.md`
-- Guide: [Fleet §6](kubernetes-fleet.md#the-routers-own-cost)
-
-Routed games open on a ceiling over the router's whole: memory and the uplink
-bound it, not its CPU, a routed game's bytes crossing the uplink twice and its
-spectators weighing more than its players, 2,560 streams at today's settings. One
-setting over its connections and spectators together, sized from the node's
-uplink and the router's memory limit, which `-tunnels` then shares between relay
-doors and routed games; at the ceiling a publish is refused as full, and the
-listing's `doors` reaching `doors_max` says so, which the site's Host area warns by.
-
 ### Publish a player's session at the router
 
 - Priority: P3
@@ -1760,8 +1760,7 @@ What the feature itself needs, best shaped by deploying it step by step:
   [§3.7](auth-session-design.md#37-budgets)). Implication: a `-relay` or hosted
   publication needs `:login` first; an anonymous run still joins through a published
   door.
-- Routed games open after [Bound the router's whole](#bound-the-routers-whole),
-  and a page hosts after [Host a routed game from a page](#host-a-routed-game-from-a-page).
+- A page hosts after [Host a routed game from a page](#host-a-routed-game-from-a-page).
 - `-doors-per-address` counted as the join budget counts an address. It counts the
   dialer's whole host (`addressHost`), so one IPv6 /64 holds that many doors an
   address, up to `-tunnels`; the join budget and a session's spectators are

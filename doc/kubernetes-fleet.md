@@ -263,34 +263,50 @@ per-match leak.
 
 ### The router's own cost
 
-What `vif-router` spends on what it carries, read on 2026-11-27 with scratch
-harnesses not kept (Go 1.27.4, loopback, four cores): N connections spliced by its
-`splice`, the browser route's WebSocket in front of one, and N subscribers on a
-`FeedHub`, each against the same traffic with no router between.
+What `vif-router` holds for what it carries, read on 2026-11-28 with a scratch
+harness not kept (Go 1.27.4, loopback, four cores): the router's code in one process,
+the pods' stand-ins and 1,000 clients of each kind in others. Each connection opens
+with a joiner's 200 kB burst, then sends 125 bytes every 50 ms; each spectator comes
+20 s past its feed's 8 kB starting point, so its catch-up carries it and 40 records
+of about 880 bytes. Go's memory after a collection, heap, stacks and runtime, per one:
 
 ```
-A player's connection   74 KiB: 66 KiB of heap (splice's two 32 KiB copy buffers)
-                        and 8.5 KiB of stack (three goroutines); the sockets 1.5 KiB
-A message through it    within the reading's noise, ±2 µs, on TCP and WebSocket
-                        alike, against 8-10 µs for the two ends that send and read it
-A spectator             12 KiB at rest; a record is shared by every queue, not copied
+                        Front door   Browser route
+A player's connection   81 KiB       94 KiB       splice's two 32 KiB copy buffers, three stacks
+A spectator             12 KiB       21 KiB       its queue of 256 records, two stacks
+A door's control        2.4 KiB
 ```
 
-The game sets the bytes ([Netcode §3](netcode-design.md#3-readings)):
-a host sends a guest 1.8 to 2.5 kB/s on `fighter` at two to four players, a feed is
-0.9 to 1.9 kB/s, and the router sends on each byte it reads. A pod is on the node,
-so a session's players cross the uplink once; a routed game's host is not, so its
-players' bytes cross it twice, in from the host and out to each guest. At this
-deployment's settings (`vif-router.env`) the most the router carries is:
+The browser route's extra is what net/http's handshake leaves its socket, the reader
+among it. A message costs the router within the reading's noise, ±2 µs on TCP and
+WebSocket alike, against 8-10 µs for the two ends (read 2026-11-27), and the kernel
+holds 3 to 8 KiB a socket. A feed's writer and a socket drop, past 4 KiB, what a
+burst grew their buffers to (`feedKeep`, `writeKeep`); keeping it, a spectator held 39
+and 78 KiB, a browser connection 135, and a browser spectator of a feed with 256 KiB
+starting points a copy of one, 314 KiB, where it now holds 26.
+
+`-carry` charges each kind that, rounded up (`carryKinds`, the router's
+[Ceiling](../tool/vif-router/README.md#ceiling)): a player's connection 84 and 96 KiB,
+a spectator 16 and 24. The game sets the bytes
+([Netcode §3](netcode-design.md#3-readings)): a host sends a guest 1.8 to 2.5 kB/s on
+`fighter` at two to four players and a feed is 0.9 to 1.9 kB/s; a pod's players cross
+the uplink once, a routed game's twice, in from its host and out to each guest. At
+this deployment's 128 MiB, of one kind alone:
 
 ```
-Players     10 sessions x 6 connections, 16 doors x 6       156 connections   12 MiB   0.6 MB/s
-Spectators  10 sessions x 256                              2,560 streams     31 MiB   4.9 MB/s
+1,365 browser players         3.4 MB/s out, and as much in again for a routed game's
+5,461 browser spectators     10.4 MB/s out
+8,192 front-door spectators  15.6 MB/s out, 125 Mbit/s
 ```
 
-So memory and the uplink bound the router, not its CPU, and its spectators before
-its players: a session's audience is bounded and so is an address's share, but no
-setting bounds the router's whole ([todo](todo.md#publish-a-players-session-at-the-router)).
+The per-session settings' most, 156 players (ten sessions and sixteen doors at
+`-route-max` 6) and 3,072 spectators (twelve sessions at 256), is 87 MiB of it and
+6.2 MB/s. So memory bounds the router before an uplink of 125 Mbit/s or more could,
+and its CPU, noise a message, does not. Its unit holds it to `MemoryMax=256M` under
+`GOMEMLIMIT=200MiB`: the ceiling's 128 MiB and the router's own, 12 MiB at rest and
+each watched session's starting point and queued records, stay under the limit its
+runtime collects toward, and the kernel's socket memory, charged to the unit too and
+about 25 MiB at the ceiling's most sockets, sits between that and the kill.
 
 ## 7. Verification
 
@@ -409,7 +425,7 @@ alone, so no dial goes around the router's checks.
 
 | Route | Link | Path | Refuses a bad dial |
 |---|---|---|---|
-| Front door | `vif://<site>:7777/<id>`, `vifs://` where the edge ends TLS | host forward, or the edge's stream server under a PROXY header, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialer past its budget (§4), a session unknown, unready or full, one at `-route-max`; then, in the exchange it runs through itself, a proof that fails |
+| Front door | `vif://<site>:7777/<id>`, `vifs://` where the edge ends TLS | host forward, or the edge's stream server under a PROXY header, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialer past its budget (§4), the router at its ceiling (§6), a session unknown, unready or full, one at `-route-max`; then, in the exchange it runs through itself, a proof that fails |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
 | Tunnel | `vif://<site>:7777/<id>`, a door's, `vifs://` as the front door's | as the front door, then the control connection the door's run holds open to the router, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
@@ -427,7 +443,8 @@ is ([Multiplayer §5.6](multi-player.md#56-relay-doors-and-the-router)). The fro
 door's checks run first, so a tunnel costs what a pod costs; what it adds is the open
 the run owes within the route timeout, and a publication costs its address a join.
 `-tunnels` bounds the doors carried at once, `-doors-per-address` those one address
-holds, and a name is resumed only by the run it was issued to, within
+holds, a publication waits while the router's ceiling (§6) has no room for its first
+guest, and a name is resumed only by the run it was issued to, within
 `NetworkTunnelResumeWindow` of losing its control connection, so no run takes a
 pod's name or another's. Tunnels are not listed and are not sessions, though the
 listing's limits count them: a door's run joined a session the fleet or a player
@@ -449,13 +466,14 @@ a dial builds is the one its feed begins from.
 
 - **Cost.** A pod serves one subscriber however many watch, and with nobody
   watching copies nothing. A spectator costs the router a copy: the feed's 0.9 to
-  1.9 kB/s and about 10 µs of CPU a record, two records a second
-  ([Netcode design §3.8](netcode-design.md#38-the-feed)).
+  1.9 kB/s, about 10 µs of CPU a record, two records a second
+  ([Netcode design §3.8](netcode-design.md#38-the-feed)), and 12 to 21 KiB (§6).
 - **Ceilings.** `-spectators` (256; 1024 at most; 0 shows no session) bounds a
   session's audience and `-spectators-per-address` (4; 0 leaves it to the first)
   one address's share of it, counted as the join budget counts an address, and so
-  not at all on the browser route without `-client-address-header`. A dial past
-  either is refused as `RefusalAudience`, which a client retries when a spectator
+  not at all on the browser route without `-client-address-header`; the router's
+  own ceiling (§6) bounds them with every player's connection. A dial past any of
+  them is refused as `RefusalAudience`, which a client retries when a spectator
   leaves. A session with no seat free is still shown, a spectator taking none; one
   that is not live is refused as a join is, and one still in its lobby as not
   started (`ErrUnstarted`), read off its health before its pod is dialed.
@@ -464,8 +482,9 @@ a dial builds is the one its feed begins from.
   spectator with the pod's reason; one whose link is lost tells each to find it
   again, and the redial opens a new subscription. A standing session's tells them
   to watch again either way (below).
-- **Listing.** `GET /vif/api/sessions` carries `spectators` in each session and
-  `spectators_max` in `limits`, for a lobby to offer what would be granted.
+- **Listing.** `GET /vif/api/sessions` carries `spectators` in each session, and
+  `spectators_max` and `spectators_room`, how many more the router's ceiling takes,
+  in `limits`, for a lobby to offer what would be granted.
 - **Not fed.** A tunnel's door is a guest's and writes no feed, so a dial that only
   watches one is refused (`ErrUnwatched`), as it is with `-spectators 0`.
 
