@@ -148,6 +148,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"spectators one session is shown to at once through this router, each sent a copy of the one feed its pod writes; 0 shows no session (at most 1024)")
 	set.IntVar(&cfg.Allocator.SpectatorsPerAddress, "spectators-per-address", 4,
 		"spectators one address may be in one session at once; 0 leaves it to -spectators")
+	set.IntVar(&cfg.Allocator.Carry, "carry", 128,
+		"MiB the router's players' connections and spectators may hold together, over both routes and every session and door, each charged what one was measured to hold; past it a dial is refused as the router's ceiling (1 to 16384)")
 	set.StringVar(&cfg.Allocator.ClientAddressHeader, "client-address-header", "",
 		"header the site's edge overwrites with the player's address, e.g. X-Real-IP; empty budgets no address on the API or browser route")
 	set.IntVar(&cfg.Allocator.ClientJoins, "client-joins", parameter.NetworkAdmitBurst,
@@ -259,6 +261,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if n := cfg.Allocator.SpectatorsPerAddress; n < 0 || n > parameter.FeedAudienceMax {
 		return fmt.Errorf("-spectators-per-address %d must be 0 to %d", n, parameter.FeedAudienceMax)
+	}
+	if n := cfg.Allocator.Carry; n < 1 || n > 16<<10 {
+		return fmt.Errorf("-carry %d must be 1 to %d MiB", n, 16<<10)
 	}
 	if h := cfg.Allocator.ClientAddressHeader; h != "" && !headerPattern.MatchString(h) {
 		return fmt.Errorf("invalid -client-address-header %q", h)

@@ -45,6 +45,7 @@ type sessionAllocator interface {
 type apiServer struct {
 	tunnels   *network.TunnelHub // the doors runs publish, counted in the listing's limits; nil publishes none
 	audiences *audiences         // the sessions being watched, counted in the listing; nil shows none
+	ceiling   *ceiling           // the router's whole, read into the listing's limits; nil bounds nothing
 	allocator sessionAllocator
 	log       *slog.Logger
 	logProxy  *httputil.ReverseProxy
@@ -100,8 +101,9 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
 	}
 	if cfg.WebOrigin != "" {
-		server.ws = &wsRouter{origin: cfg.WebOrigin, listed: cfg.ListedOrigins,
-			route: newTCPRouter(allocator, held, joins, logger)}
+		route := newTCPRouter(allocator, held, joins, logger)
+		route.browser = true
+		server.ws = &wsRouter{origin: cfg.WebOrigin, listed: cfg.ListedOrigins, route: route}
 	}
 	// A session nobody joins expires after -first-join, so this bounds how many of
 	// the fleet's unclaimed sessions one address, or one account, can hold.
@@ -133,6 +135,15 @@ func (s *apiServer) showSessions(watched *audiences) {
 	s.audiences = watched
 	if s.ws != nil {
 		s.ws.route.audiences = watched
+	}
+}
+
+// carryUnder has the browser route charge what it carries to the ceiling the front
+// door charges, and the listing say what is left of it; nil bounds nothing.
+func (s *apiServer) carryUnder(whole *ceiling) {
+	s.ceiling = whole
+	if s.ws != nil {
+		s.ws.route.ceiling = whole
 	}
 }
 
@@ -287,6 +298,13 @@ func (s *apiServer) readFleet(read *fleetRead) {
 	read.limits = s.allocator.limits()
 	if s.tunnels != nil {
 		read.limits.Doors, read.limits.DoorsMax = s.tunnels.Count(), s.tunnels.Max()
+	}
+	if c := s.ceiling; c != nil {
+		read.limits.Carried, read.limits.CarriedMax = c.used.Load(), c.max
+		read.limits.PlayersRoom, read.limits.SpectatorsRoom = c.room(carryPlayer), c.room(carrySpectator)
+		if read.limits.PlayersRoom == 0 {
+			read.limits.DoorsMax = read.limits.Doors // a publication waits for room (tcpRouter.tunnel)
+		}
 	}
 	for i := range read.sessions {
 		read.sessions[i].Spectators = s.audiences.watching(read.sessions[i].ID)

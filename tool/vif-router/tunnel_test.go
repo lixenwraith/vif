@@ -14,8 +14,8 @@ import (
 )
 
 // startDoorFrontDoor serves a front door whose pods resolve to pod and which carries
-// up to doors published doors.
-func startDoorFrontDoor(t *testing.T, pod *testPod, doors int) (string, *network.TunnelHub) {
+// up to doors published doors, under whole, the router's ceiling, where one is given.
+func startDoorFrontDoor(t *testing.T, pod *testPod, doors int, whole *ceiling) (string, *network.TunnelHub) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -25,7 +25,7 @@ func startDoorFrontDoor(t *testing.T, pod *testPod, doors int) (string, *network
 	addr := listener.Addr().String()
 	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, doors, 0)
 	router := newTCPRouter(&fakeSessionAllocator{routeErr: errSessionUnknown}, newHolds(1), network.NewAdmissionLimiter(), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	router.tunnels = hub
+	router.tunnels, router.ceiling = hub, whole
 	router.opens = 500 * time.Millisecond
 	_, router.game, _ = net.SplitHostPort(pod.addr)
 	go router.serve(listener)
@@ -61,7 +61,7 @@ func publishDoor(t *testing.T, addr string, req network.PublishRequest) (net.Con
 // the dial in time; the ceiling spans doors as it spans pods.
 func TestTheFrontDoorPlacesADialOnAPublishedDoor(t *testing.T) {
 	pod := startPod(t)
-	addr, hub := startDoorFrontDoor(t, pod, 2)
+	addr, hub := startDoorFrontDoor(t, pod, 2, nil)
 	control, ans := publishDoor(t, addr, network.PublishRequest{Session: "match"})
 	defer control.Close()
 	if err := ans.Refused(); err != nil || ans.ID == "" || !strings.HasPrefix(ans.Link, "vif://"+addr+"/") || !hub.Has(ans.ID) {

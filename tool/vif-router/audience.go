@@ -223,8 +223,9 @@ func (c *spectator) Close() error {
 
 // watch serves a dial that only watches a fleet session as the session's own door
 // would, from the copy of its feed this router keeps, which the first to ask opens.
-// The dial holds a place in the audience from here, and no connection to the pod.
-func (r *tcpRouter) watch(client net.Conn, from net.Addr, id string) {
+// The dial holds a place in the audience from here, and no connection to the pod;
+// charged is its charge to the router's ceiling, given back as it leaves.
+func (r *tcpRouter) watch(client net.Conn, from net.Addr, id string, charged func()) {
 	a, leave, err := r.audiences.enter(id, network.AdmissionKey(from), r.subscribe)
 	if err == nil {
 		select {
@@ -238,11 +239,12 @@ func (r *tcpRouter) watch(client net.Conn, from net.Addr, id string) {
 		}
 	}
 	if err != nil {
+		charged()
 		network.RefuseJoin(client, err, routeTimeout)
 		_ = client.Close()
 		return
 	}
-	conn := &spectator{Conn: client, leave: leave}
+	conn := &spectator{Conn: client, leave: func() { leave(); charged() }}
 	door := network.Coordinator{Name: id, Watch: a.session, Scenario: a.scenarioBody,
 		Feed: func(conn net.Conn, _ network.Admission) error { return a.hub.Subscribe(conn) }}
 	if err := network.ServeWatch(conn, door, routeTimeout); err != nil {
