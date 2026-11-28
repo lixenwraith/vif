@@ -84,7 +84,6 @@ rendered=$(sed \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${BOTS}|$BOTS|g" \
-	-e "s|\${WATCH_ONLY}|$WATCH_ONLY|g" \
 	-e "s|\${CPU_REQUEST}|$CPU_REQUEST|g" \
 	-e "s|\${CPU_LIMIT}|$CPU_LIMIT|g" \
 	-e "s|\${MEMORY_REQUEST}|$MEMORY_REQUEST|g" \
