@@ -3,14 +3,15 @@
 # that differs is shown as a diff (installed -, incoming +) and then updated, in
 # dependency order; a current one is skipped. --diff shows and changes nothing, and
 # exits 1 if anything differs.
-# Usage: deploy/update.sh [--diff] [filter objects wad image router logwisp]
+# Usage: deploy/update.sh [--diff] [filter k3s objects wad image router logwisp]
 set -eu
 
 deploy=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$deploy/.." && pwd)
 guest=$deploy/guest
-all="filter objects wad image router logwisp"
+all="filter k3s objects wad image router logwisp"
 wad_root=${VIF_WAD_ROOT:-/var/db/vif/wad}
+k3s_config=/etc/rancher/k3s/config.yaml.d/10-vif-kubelet.yaml
 
 diff_only=false
 selected=
@@ -18,7 +19,7 @@ for arg in "$@"; do
 	case $arg in
 		-h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		--diff) diff_only=true ;;
-		filter|objects|wad|image|router|logwisp) selected="$selected $arg" ;;
+		filter|k3s|objects|wad|image|router|logwisp) selected="$selected $arg" ;;
 		*) echo "usage: $0 [--diff] [$all]" >&2; exit 2 ;;
 	esac
 done
@@ -73,6 +74,11 @@ trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 check_filter() {
 	sudo_copy /etc/nftables.conf "$work/nftables.conf"
 	show nftables.conf "$work/nftables.conf" "$guest/nftables.conf"
+}
+
+check_k3s() {
+	sudo_copy "$k3s_config" "$work/k3s-kubelet.yaml"
+	show "${k3s_config##*/}" "$work/k3s-kubelet.yaml" "$guest/k3s-kubelet.yaml"
 }
 
 check_objects() {
@@ -190,6 +196,23 @@ apply_filter() {
 	sudo install -m 0644 "$guest/nftables.conf" /etc/nftables.conf
 	sudo nft -f /etc/nftables.conf
 }
+# K3s reads the drop-in as it starts. The router Requires K3s, so it restarts too,
+# removing its standing sessions as it stops; containers outlive the restart. Done
+# once the new kubelet answers with a reservation, and the router is back.
+apply_k3s() {
+	router=$(systemctl is-active vif-router.service || :)
+	sudo install -D -m 0644 "$guest/k3s-kubelet.yaml" "$k3s_config"
+	sudo systemctl restart k3s.service
+	node=$(kube get nodes -o jsonpath='{.items[0].metadata.name}')
+	tries=0
+	until kube get --raw "/api/v1/nodes/$node/proxy/configz" 2>/dev/null |
+		jq -e .kubeletconfig.systemReserved.memory >/dev/null; do
+		tries=$((tries + 1))
+		[ "$tries" -lt 60 ] || die "the restarted kubelet reserves nothing: sudo journalctl -u k3s.service"
+		sleep 2
+	done
+	[ "$router" != active ] || sudo systemctl start vif-router.service
+}
 apply_objects() {
 	pod_address
 	for name in 00-namespace 10-quota 20-networkpolicy 40-router-rbac; do
@@ -232,7 +255,7 @@ fi
 
 # These restart the router or replace what a session runs, so no match may be live.
 case "$pending" in
-	*image*|*router*|*logwisp*)
+	*k3s*|*image*|*router*|*logwisp*)
 		"$deploy/k3s/session.sh" blockers ||
 			die "empty the fleet first (./deploy/k3s/session.sh drain), or update only:$(
 				for c in $pending; do case $c in filter|objects|wad) printf ' %s' "$c" ;; esac; done)"

@@ -17,6 +17,7 @@ back one out.
 | `vif-fleet.sysusers` | `/etc/sysusers.d/vif-fleet.conf` | root 0644 | `systemd-sysusers`; creates the locked identity at UID/GID 65532 |
 | `var-log-vif\x2dfleet.mount` | `/etc/systemd/system/` | root 0644 | the identity above; mounts 256 MiB `nodev,nosuid,noexec` tmpfs at mode 770 |
 | `k3s.service.d/10-vif-fleet-logs.conf` | `/etc/systemd/system/k3s.service.d/` | root 0644 | the mount unit; makes K3s require and start after it |
+| `k3s-kubelet.yaml` | `/etc/rancher/k3s/config.yaml.d/10-vif-kubelet.yaml` | root 0644 | K3s; the kubelet's reservation and hard eviction thresholds, which `update.sh k3s` installs and restarts K3s for behind the empty-fleet gate |
 | `vif-fleet-log-cleanup.py` | `/usr/local/libexec/` | root 0644 | `python3`; refuses a non-tmpfs path |
 | `vif-fleet-log-cleanup.service` / `.timer` | `/etc/systemd/system/` | root 0644 | runs the cleanup as `vif-fleet` once per minute |
 | `nftables.conf` | `/etc/nftables.conf` | root 0644 | the include below; owns one `inet vif` table, admits the front door's 7777, never flushes the ruleset; `update.sh filter` installs and loads it |
@@ -61,9 +62,11 @@ Each block assumes allocation is stopped and the fleet is empty:
 `./deploy/k3s/session.sh blockers`, then `drain` if it refuses. None of them lowers
 Pod Security, deletes a Bound PV/PVC in use, or unmounts the tmpfs while K3s runs.
 
-The session image, the scenario volume, the node filter and the fleet objects come
-from the checkout: check out the revision to return to and run `./deploy/update.sh`
-naming that component.
+The session image, the scenario volume, the node filter, the kubelet's reservation
+and the fleet objects come from the checkout: check out the revision to return to
+and run `./deploy/update.sh` naming that component. To no reservation at all:
+`sudo rm /etc/rancher/k3s/config.yaml.d/10-vif-kubelet.yaml`, then
+`sudo systemctl restart k3s.service`.
 
 ### The router, or LogWisp
 

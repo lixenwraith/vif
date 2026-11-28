@@ -1,0 +1,7 @@
+# What the kubelet keeps back for what runs beside the pods, and the margin it
+# evicts them at (doc/kube-docker-deploy.md §5). The flag replaces K3s's own hard
+# thresholds, so their two disk ones are restated. The + appends to any kubelet-arg
+# the node's own K3s configuration sets.
+kubelet-arg+:
+  - "system-reserved=cpu=250m,memory=768Mi"
+  - "eviction-hard=memory.available<256Mi,nodefs.available<5%,imagefs.available<5%"

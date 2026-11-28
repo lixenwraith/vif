@@ -13,16 +13,17 @@ git pull
 ./deploy/update.sh wad image   # only the named components
 ```
 
-Components are `filter` (the node's `inet vif` table), `objects` (namespace,
-quota, policy, Role), `wad`, `image`, `router` and `logwisp`. A current one is
-skipped. Installed lines print green and incoming ones red; a file the update
-removes prints as `deleted <path>`. `image`, `router` and `logwisp` need an empty
-fleet and refuse otherwise, naming the components that do not; `filter` and `wad`
-never interrupt a match, since established connections and running pods keep what
-they started with. `router` and `logwisp` keep one `.previous` set, which
-[`guest/README.md`](guest/README.md) restores; every other component comes back by
-running `update.sh` for it at the earlier revision, which rebuilds the session image
-that `image` removed. Settings for the router are
+Components are `filter` (the node's `inet vif` table), `k3s` (the kubelet's
+reservation, a K3s drop-in), `objects` (namespace, quota, policy, Role), `wad`,
+`image`, `router` and `logwisp`. A current one is skipped. Installed lines print
+green and incoming ones red; a file the update removes prints as `deleted <path>`.
+`k3s`, `image`, `router` and `logwisp` need an empty fleet and refuse otherwise,
+naming the components that do not: `k3s` restarts K3s, and the router with it.
+`filter` and `wad` never interrupt a match, since established connections and
+running pods keep what they started with. `router` and `logwisp` keep one
+`.previous` set, which [`guest/README.md`](guest/README.md) restores, as it removes
+the reservation; every other component comes back by running `update.sh` for it at
+the earlier revision, which rebuilds the session image that `image` removed. Settings for the router are
 [`guest/vif-router.env`](guest/vif-router.env), committed here and never
 edited on the node.
 
@@ -47,8 +48,8 @@ target — and exits non-zero once that session has left the fleet.
 
 ## Empty the fleet
 
-`image`, `router` and `logwisp` refuse to update while any fleet object exists but
-the standing sessions of a running router, which stopping it removes.
+`k3s`, `image`, `router` and `logwisp` refuse to update while any fleet object
+exists but the standing sessions of a running router, which stopping it removes.
 
 ```sh
 ./deploy/k3s/session.sh drain
@@ -102,7 +103,7 @@ and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `… is a standing session, which the router makes again under its name` | `delete` named a session the running router keeps for the lobby. | Leave it to the router; restarting the router makes every standing session anew. |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
-| `empty the fleet first … or update only: …` | `image`, `router` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
+| `empty the fleet first … or update only: …` | `k3s`, `image`, `router` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
 | `<component>: could not tell what is installed`, `… names no VIF_ROUTER_IMAGE; run update-vif-image.sh first` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `router` it is an installed env without `VIF_ROUTER_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |
 | `revision is not on LogWisp main` | A revision given to a LogWisp helper names a commit upstream `main` does not contain: a pull-request head a squash merge discarded, or one a rewritten `main` dropped. | Give a commit on `main`, or none for its head. |
 | `logwisp.service must be active before an update`, `vif-router.service must be active …` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start` the unit it names |
