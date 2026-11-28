@@ -244,6 +244,9 @@
     const fmtProgress = (received, total) => total
         ? (received / MB).toFixed(1) + ' / ' + (total / MB).toFixed(1) + ' MB'
         : (received / MB).toFixed(1) + ' MB';
+    // A scenario link's files so far, which the run fetches one by one before its first frame
+    const fmtFetched = msg => 'Fetching ' + msg.scenario + '… ' + msg.files + (msg.files === 1 ? ' file, ' : ' files, ')
+        + (msg.bytes < MB ? (msg.bytes / 1024).toFixed(1) + ' kB' : (msg.bytes / MB).toFixed(1) + ' MB');
 
     // What kept the program from loading or starting, worded by the stage TerminalPage names
     const FAILED = {
@@ -1091,7 +1094,7 @@
             kept: claimPlaces().then(function() {
                 return Object.assign({ settings: keptSettings(), places: keptPlaces() }, keptBots());
             }),
-            features: ['menu', 'audio'],
+            features: ['menu', 'audio', 'fetch'],
             hold: true,
             cell: CELL,
             on: {
@@ -1118,6 +1121,7 @@
                 message: function(msg) {
                     if (msg.type === 'audio') onAudio(msg.data);
                     else if (msg.type === 'menu') applyMenu(msg.json);
+                    else if (msg.type === 'fetch') loading.textContent = fmtFetched(msg);
                 },
                 keep: function(name, text) {
                     if (name === 'settings') keepSettings(text);

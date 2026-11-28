@@ -64,6 +64,15 @@ type Options struct {
 	// Populations is where a host with no user root keeps what its bots learn, as
 	// a browser's page does; nil keeps them in the user root's bot/
 	Populations Populations
+
+	// Progress, where set, hears each file a scenario link fetches, so a page shows
+	// them while the run waits on them.
+	Progress Progress
+}
+
+// Progress hears a scenario link's files and bytes fetched so far (Options.Progress).
+type Progress interface {
+	Fetched(scenario string, files, bytes int)
 }
 
 // Validate reports conflicts between the overrides themselves.
