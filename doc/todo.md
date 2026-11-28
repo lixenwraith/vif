@@ -1481,8 +1481,9 @@ A session's own bots are read here before a request may ask for them
   digest mismatches that run counted, 0–5 per host, watched as the load grows.
 - A seat's cost on a map past the 4,800 cells bots are held to (`botMapCells`),
   which keeps them off td.
-- The quota: its 1000m of CPU fills at three sessions of three bots, and the
-  router refuses the next as `fleet_full`. Raise it, or accept the fewer sessions.
+- The quota: its 1500m of CPU, 392m of it the standing sessions', fills at three
+  sessions of three bots, and the router refuses the next as `fleet_full`. Raise
+  it, or accept the fewer sessions.
 - Then the site's `vif-lobby.js` sends `bots` and reads `bots_max`.
 
 ### Apply the fleet log retention on the node
@@ -1531,59 +1532,19 @@ the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
 
-### Keep standing sessions for the lobby
-
-- Priority: P2
-- Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
-  `tool/vif-router` (`allocator.go`, `config.go`, `manifest.go`), `internal/bot`,
-  `internal/lifecycle`, `deploy/guest/vif-router.env`
-- Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
-  [Multiplayer §5.8](multi-player.md#58-watching-a-session)
-
-The site's lobby is to show two games always, both to be watched and neither
-joined (Lixen, 2026-11-27): `fighter` played on a loop by two bots, and `cave`
-by one bot whose learner evolves its genes round after round. Visitors spectate
-each through the router at a copy's cost each (fleet §9). `cave`'s is never
-joinable: a guest's cursor in a round keeps it from teaching (`Membership.Alone`).
-
-What stands: a dedicated host's session that its own bots alone occupy starts and
-plays on with no guest, and `WATCH_ONLY=true BOTS=2 PLAYERS=2 SCENARIO=fighter
-./deploy/k3s/session.sh create <id>` makes one beside the router whose bots fill
-every seat, so its pod refuses every dial but a watch as full, and whose Job the
-listing reports as `watch_only`, which the site's lobby lists first with Watch
-alone. The one seat of a host's learner learns, its rounds closed at its graph's
-limit by the host, at the host's one rate, 1x ([Bots](bots.md#learning)).
-What they need:
-
-- **A loop.** `fighter` ends, by the bots' deaths or the campaign's end, and the
-  standing one starts over at once, as a solo game does (Lixen, 2026-11-28),
-  rather than drain.
-- **A lifetime.** The Job's hour ends either, bots or not. `cave`'s learner keeps
-  its population in memory for now (Lixen, 2026-11-28), so its pod's end is its
-  learning's: a standing Job wants no hour's deadline. Its keeper is a router
-  setting naming each standing session's scenario and bots, which makes it at
-  start and again whenever it is gone, charged to no address's budget and counted
-  in the quota, `watch_only` on its Job; a timer running the script until then. A
-  spectator of the one that went is told it ended and starts a local game
-  (`Membership.feedEnded`): a name the router answers for whichever stands, or a
-  feed's end that names its successor, keeps a page watching.
-- **Its cost while nobody looks**: two pods around the clock. The router knows a
-  session with no spectator past its linger (`audiences`), and a pod its idle hub
-  (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
-  wants the rounds nobody watches, so decide which each is.
-
 ### Keep the standing learner's population across pods
 
 - Priority: P3
-- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/session.sh`,
+- Affected files: `tool/vif-router/manifest.go`, `deploy/k3s/30-session.yaml`,
   `internal/resource` (`Populations`), `doc/kube-docker-deploy.md`
 
 The standing `cave` session's learner keeps its population in memory, and loses
-it with its pod. Kept across pods: a writable store at the root the learner saves
-under, as a setting's root is; a session pod has a read-only root and two claims,
-its log and the wad, so a third, on the node, beside the log's directory or in one
-of its own, chosen with the node's setup (Lixen, 2026-11-28). One writer at a time,
-since two pods of one population would each lose the other's rounds.
+it with its pod ([Session fleet §9](kubernetes-fleet.md#9-the-session-routes)).
+Kept across pods: a writable store at the root the learner saves under, as a
+setting's root is; a session pod has a read-only root and two claims, its log and
+the wad, so a third, on the node, beside the log's directory or in one of its own,
+chosen with the node's setup (Lixen, 2026-11-28). One writer at a time, since two
+pods of one population would each lose the other's rounds.
 
 ## Multiplayer
 
@@ -1764,8 +1725,8 @@ A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a **routed game**, a
 player's own session reached there from a terminal, a page or Android, the router
 neither allocating nor authoring, the word the site's lobby uses too. The deployment this
-leads to serves as many pods as the node has resources for (`-sessions-max`, ten
-today) and routes every session beyond them. The tunnel carries a door already
+leads to serves as many pods as the node has resources for (`-sessions-max`,
+twelve today, two of them standing) and routes every session beyond them. The tunnel carries a door already
 (`tool/vif-router/README.md`, Doors). Joins and creates are budgeted by account
 where a sign-in names one; a publication is budgeted by address alone, and its
 `Resume` token is the last bearer secret on the wire

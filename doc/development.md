@@ -1120,6 +1120,10 @@ A container has no screen, keyboard, phone or sound card; these stand in for the
 - `timeout -s TERM` signals its child and then its whole group, so a `-serve` run
   under it takes two signals, and the second ends it at once, before its seats save
   what they learned: stop one with `timeout --foreground` or `kill`.
+- A game end on a host its bots alone occupy comes sooner from a graph that does
+  nothing (`[bot]`, one region, one empty state): `fighter`'s drains end it in about
+  100 s of game time, where its own bots last minutes. A `-serve` run takes no
+  `-speed`.
 
 ### Headless probes
 

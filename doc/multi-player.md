@@ -1502,8 +1502,8 @@ is its session's bandwidth for nothing.
 
 **A fleet session** is watched through the router, which holds one subscription to
 the pod's feed and repeats it to every spectator (`FeedHub.Repeat`), so the pod
-serves one subscriber however many watch
-([Session fleet §9](kubernetes-fleet.md#9-the-session-routes)). A door a run
+serves one subscriber however many watch, and a standing session's spectators watch
+on across its pods ([Session fleet §9](kubernetes-fleet.md#9-the-session-routes)). A door a run
 published carries no feed: it is a guest's, or one a fork keeps for its own players.
 
 **Not chosen**, each kept in the todo with what would reopen it:

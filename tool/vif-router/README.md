@@ -28,6 +28,12 @@ It has no database. Jobs and Services are the durable state, and startup
 reconciliation deletes a Job left without its Service or a Service left without a
 valid Job owner. Completed Jobs are never resurrected.
 
+It keeps the standing sessions `-standing` names (`fighter:2,cave:1`) by the same
+transaction, charged to no address: each at start and whenever it is gone, under
+the name its scenario gives it, watch-only, its bots in every seat, with no
+`activeDeadlineSeconds`, and all of them removed as the router stops; see
+[the session fleet §9](../../doc/kubernetes-fleet.md#9-the-session-routes).
+
 Build it from the repository root:
 
 ```sh
@@ -97,9 +103,9 @@ tells which. A pod that is not ready, or whose probe fails, reports `live=false`
 with its pod phase or `starting`, and `routable` is false until its address is a
 ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
-it has, from the first tick on. `watch_only`, present and true alone, marks a session
-`deploy/k3s/session.sh` made with `WATCH_ONLY=true`, its seats all its own bots': its
-pod seats no dial, being full, and a page offers it to spectators. `build` is the binary the session runs, named as a
+it has, from the first tick on. `watch_only`, present and true alone, marks a
+standing session, its seats all its own bots': its pod seats no dial, being full,
+and a page offers it to spectators. `build` is the binary the session runs, named as a
 refusal of another build names it, so a page can be told before it dials one.
 `spectators` is how many watch the session through this router now, a dial still
 being answered included.
@@ -159,7 +165,8 @@ scenario's own bot, or the embedded `default` graph where it carries none. A new
 session is ready only while a seat is free, since nobody is away from it yet, so a
 request is also refused bots that leave no seat for a person: at most
 `players - 1`. The bots occupy the session as people do, so one nobody else joins
-plays on until a drain or the Job's one-hour `activeDeadlineSeconds` ends it.
+plays on until a drain or the Job's one-hour `activeDeadlineSeconds` ends it. A
+standing session's bots are the deployment's, which `-bots-max` does not bound.
 `-bots-max` is at most 6, the most whose pod envelope fits the namespace's
 `LimitRange`. Each bot is a world of its own, measured on a 120x40 screen, so bots
 are refused on a larger map: a scenario's fixed one, or a `size` past 4,800 cells.
@@ -328,5 +335,6 @@ their defaults; `vif-router -h` lists every flag.
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-account-creates` | `4` | sessions per signed-in account per `-first-join` window, charged in place of the address's budget; an account's joins count under the account at `-client-joins`; 0 budgets every create by address |
-| `-sessions-max` | `10` | the sessions the fleet holds at once, counted as its quota counts them, a finished one until its TTL collects it (1–64) |
+| `-sessions-max` | `10` | the sessions the fleet holds at once, counted as its quota counts them, a finished one until its TTL collects it, the standing ones among them (1–64) |
+| `-standing` | empty | the sessions kept for the lobby, `scenario:bots` comma-separated, each scenario once and 1–6 bots; empty keeps none |
 | `-ready-timeout`, `-poll-interval` | `75s`, `1s` | how long a create waits for readiness, and how often it looks |
