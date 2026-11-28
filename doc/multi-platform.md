@@ -152,7 +152,7 @@ much as its code.
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | The window build, run under Wine and owed a run on Windows ([todo](todo.md#run-the-windows-window-build-on-windows)); the terminal build experimental | `CGO_ENABLED=0` and no purego, `golang.org/x/sys/windows` alone; `novlog` by choice, since logging compiles for Windows; the zip and the Steam depot are the window build, the terminal's is built from source |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer over `terminal/android`'s view and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after 30 s, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` and what its bots learned in its storage (`terminal.Page`, `web/vif.js`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play, session join and spectating; a hidden tab leaves after five minutes, a spectating one after two, and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` and what its bots learned in its storage (`terminal.Page`, `web/vif.js`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Chrome extension | A zip in every nightly and release ([Packaging §8](packaging.md#8-chrome-web-store)) | The `js/wasm` bundle byte for byte, so that row holds; what an extension's origin changes is in §5 |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `terminal/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
@@ -282,9 +282,10 @@ Worker, so nothing reads the socket: the session drops the participant after
 the Worker redials its host under its key ([Multiplayer §5.1](multi-player.md#51-succession))
 and takes its place back while the Wraith waits; a tab frozen past the five minutes
 reloads as a hidden one does. A page that only spectates
-(`?arg=-spectate=<link>`) leaves after 30 s hidden (`SPECTATE_HIDDEN_MS`): it holds
-no place to keep, and a feed nobody looks at is its session's bandwidth for
-nothing. Shown again after that, it reloads and spectates anew
+(`?arg=-spectate=<link>`) leaves after two minutes hidden (`SPECTATE_HIDDEN_MS`),
+a Wraith's wait (`WraithTimeout`): it holds no place to keep, and a forgotten tab
+would hold an audience place and its feed's bytes for nothing. Shown again after
+that, it reloads and spectates anew
 ([Multiplayer §5.8](multi-player.md#58-watching-a-session)).
 
 ### Where WebSocket is spoken
