@@ -1520,21 +1520,6 @@ failure, whose connected-client behavior should be recorded, with no replacement
 advertised as the same match; and a full log tmpfs, which should lose a bounded
 amount of log without ending a game.
 
-### Reserve the node's memory for what runs beside the pods
-
-- Priority: P2
-- Affected files: `deploy/guest` (a K3s config drop-in), `deploy/update.sh`,
-  `doc/kube-docker-deploy.md`
-- Guide: [Fleet deploy](kube-docker-deploy.md#5-k3s) §5
-
-The kubelet reserves nothing for K3s, the router's 256 MiB and the node's other
-services, and evicts only below its default 100 MiB available, which on a node with
-no swap leaves the fleet's 6144 MiB of limits free to starve them. Owed: a
-`/etc/rancher/k3s/config.yaml.d/` drop-in `update.sh` installs and restarts K3s
-for, its `kubelet-arg` naming `system-reserved=cpu=250m,memory=768Mi` and an
-`eviction-hard` of `memory.available<256Mi` with the other three default thresholds,
-since one set alone zeroes the rest; the quota must still fit what it leaves.
-
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3

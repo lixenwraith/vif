@@ -10,11 +10,12 @@ and it ends itself when nobody is in it.
 | Commission a new node | this document, §3 to §14, once |
 
 `deploy/update.sh` brings every component to the checkout's HEAD — node filter,
-K3s objects, scenario volume, session image, router, LogWisp's configuration and
-unit — and LogWisp's binary to upstream `main`, skipping what is current and showing
-each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
-design and [todo](todo.md#fleet) its open work; where each host artifact lands and
-how to back one out is [`deploy/guest/README.md`](../deploy/guest/README.md).
+the kubelet's reservation, K3s objects, scenario volume, session image, router,
+LogWisp's configuration and unit — and LogWisp's binary to upstream `main`, skipping
+what is current and showing each change as a diff first.
+[The fleet design](kubernetes-fleet.md) holds the design and [todo](todo.md#fleet)
+its open work; where each host artifact lands and how to back one out is
+[`deploy/guest/README.md`](../deploy/guest/README.md).
 
 The production node is an Arch Linux guest behind a host that owns routing and
 packet filtering. The host and the site's nginx are site configuration kept outside
@@ -113,11 +114,11 @@ printf 'net.ipv4.ip_forward=1\nnet.bridge.bridge-nf-call-iptables=1\n' \
 sudo sysctl --system
 ```
 
-Clone the repository once and run everything below from its root. Size the node
-for the host, the OS and K3s plus the fleet's 6144 MiB memory limit (ten sessions at
-480 MiB and the two standing ones with their bots, fewer when a session's bots add
-32 MiB each, held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)), the 256 MiB
-log tmpfs and the router's 256 MiB, its unit's `MemoryMax`.
+Clone the repository once and run everything below from its root. Size the node so
+that what the kubelet leaves the pods (§5) holds the fleet's 6144 MiB memory limit
+(ten sessions at 480 MiB and the two standing ones with their bots, fewer when a
+session's bots add 32 MiB each, held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml))
+and the 256 MiB log tmpfs.
 
 ## 4. Docker, for builds only
 
@@ -153,6 +154,30 @@ sudo kubectl get nodes -o wide
 Traefik and servicelb have nothing to route: a session is raw TCP the router places
 on its pod from the node, and nothing but the front door is forwarded. Network
 policy stays enabled — `20-networkpolicy.yaml` is load bearing.
+
+The kubelet keeps back what runs beside the pods, by a K3s configuration drop-in,
+[`deploy/guest/k3s-kubelet.yaml`](../deploy/guest/k3s-kubelet.yaml):
+
+```sh
+./deploy/update.sh k3s          # into /etc/rancher/k3s/config.yaml.d, then restarts K3s
+```
+
+With no swap, nothing but the kubelet stands between the fleet's memory and K3s,
+the router, LogWisp and the node's own services. `system-reserved` holds the pods'
+cgroup to the node's memory less its 768 MiB, which those share, and keeps its 250m
+of CPU from the scheduler; `memory.available<256Mi` evicts a pod once the node's
+available memory, or the pods' cgroup's, falls under it. Allocatable, which
+`kubectl describe node` reports and the scheduler fills, is capacity less both, and
+must hold the quota's limits and what the log tmpfs keeps of ended sessions, still
+charged to the pods' cgroup until the cleanup timer deletes it (§7). A stock K3s
+sets only `imagefs.available<5%` and `nodefs.available<5%`, no memory threshold,
+and the flag replaces that set, so the drop-in restates the two.
+
+`update.sh` restarts K3s only when the drop-in differs, and only with the fleet
+empty: the router `Requires` K3s and restarts with it, and every player's connection
+crosses the router. It removes its standing sessions as it stops and makes them
+again as it starts. A session pod outlives the restart, since K3s stops its own
+process alone, and the kubelet admits it again against the new allocatable.
 
 ## 6. The node's own filter
 
