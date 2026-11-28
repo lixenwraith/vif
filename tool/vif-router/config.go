@@ -90,6 +90,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	var drain string
 	var logLevelMin string
 	var webOrigins string
+	var standing string
 
 	set := flag.NewFlagSet("vif-router", flag.ContinueOnError)
 	set.SetOutput(output)
@@ -157,6 +158,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"sessions one signed-in account may create per -first-join window, in place of its address's budget; 0 budgets the address")
 	set.IntVar(&cfg.Allocator.SessionsMax, "sessions-max", 10,
 		"sessions the fleet holds at once, counted as its quota counts them (1 to 64)")
+	set.StringVar(&standing, "standing", "",
+		"sessions kept for the lobby, comma-separated scenario:bots, e.g. fighter:2,cave:1: each watch-only, its bots in every seat, made at start and whenever it is gone under the name its scenario gives it, and removed as the router stops; empty keeps none")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
 	set.DurationVar(&cfg.Allocator.PollInterval, "poll-interval", time.Second, "session readiness polling interval")
 	cfg.Allocator.CleanupTimeout = 10 * time.Second
@@ -166,6 +169,10 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	}
 	if set.NArg() != 0 {
 		return runtimeConfig{}, fmt.Errorf("unexpected argument %q", set.Arg(0))
+	}
+	var err error
+	if cfg.Allocator.Standing, err = parseStanding(standing); err != nil {
+		return runtimeConfig{}, err
 	}
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
@@ -318,6 +325,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if n := cfg.Allocator.SessionsMax; n < 1 || n > 64 {
 		return fmt.Errorf("-sessions-max %d must be 1 to 64", n)
+	}
+	if n := len(cfg.Allocator.Standing); n >= cfg.Allocator.SessionsMax {
+		return fmt.Errorf("-standing keeps %d session(s), which leaves players none of -sessions-max %d", n, cfg.Allocator.SessionsMax)
 	}
 	if cfg.RequestTimeout <= 0 || cfg.Allocator.ReadyTimeout <= 0 || cfg.Allocator.PollInterval <= 0 {
 		return fmt.Errorf("timeouts and poll interval must be positive")

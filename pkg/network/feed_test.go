@@ -256,8 +256,8 @@ func TestASubscriberThatFallsBehindOrSendsIsDropped(t *testing.T) {
 
 // TestAHubRepeatsAFeedForItsOwnSubscribers: a hub repeating the records another's
 // subscriber reads, none inflated, begins its own newcomers at the newest starting
-// point, hands each to those already reading, and passes on why the feed ended; one
-// whose own link to the feed is lost ends as a feed to find again.
+// point, hands each to those already reading, and returns why the feed ended, the
+// publisher's word or its own link lost, for its subscribers to be told.
 func TestAHubRepeatsAFeedForItsOwnSubscribers(t *testing.T) {
 	origin, w := feedOrigin(t, feedConfig())
 	repeated := func() (*FeedHub, net.Conn, chan int) {
@@ -267,11 +267,15 @@ func TestAHubRepeatsAFeedForItsOwnSubscribers(t *testing.T) {
 			t.Fatal(err)
 		}
 		heads := make(chan int, 8)
-		go hub.Repeat(client, func(rec []byte) {
-			if rec[0] == FeedSync {
-				heads <- len(FeedBody(rec))
-			}
-		})
+		go func() {
+			ended := FeedEnded{Reason: "The feed was lost", Again: true}
+			errors.As(hub.Repeat(client, func(rec []byte) {
+				if rec[0] == FeedSync {
+					heads <- len(FeedBody(rec))
+				}
+			}), &ended)
+			hub.End(ended.Reason, ended.Again)
+		}()
 		return hub, client, heads
 	}
 	repeater, _, heads := repeated()

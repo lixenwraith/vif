@@ -12,12 +12,13 @@ const (
 	labelComponent   = "app.kubernetes.io/component"
 	labelPartOf      = "app.kubernetes.io/part-of"
 	labelSession     = "vif.lixenwraith.dev/session"
+	// labelWatchOnly marks a standing session's objects, which the router keeps
+	// (standing.go) and the listing reports as watch_only.
+	labelWatchOnly = "vif.lixenwraith.dev/watch-only"
 
-	// What a session was created with, which the listing reports; watch-only is
-	// set by deploy/k3s/session.sh alone, for a session its bots fill.
-	annotationScenario  = "vif.lixenwraith.dev/scenario"
-	annotationSize      = "vif.lixenwraith.dev/size"
-	annotationWatchOnly = "vif.lixenwraith.dev/watch-only"
+	// What a session was created with, which the listing reports.
+	annotationScenario = "vif.lixenwraith.dev/scenario"
+	annotationSize     = "vif.lixenwraith.dev/size"
 )
 
 type objectMeta struct {
@@ -130,6 +131,9 @@ func sessionLabels(id string) map[string]string {
 		labelSession:     id,
 	}
 }
+
+// standingSelector selects every object of the standing sessions.
+const standingSelector = labelPartOf + "=" + partOfName + "," + labelWatchOnly + "=true"
 
 func isManaged(labels map[string]string) bool {
 	return labels[labelApplication] == applicationName &&

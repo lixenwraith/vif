@@ -18,12 +18,16 @@ const (
 	// audienceOpens bounds a dial's wait on the subscription another's is opening:
 	// the lookup, the pod's connect and its handshake, each at its worst.
 	audienceOpens = 3 * routeTimeout
+	// standingWait bounds the lookups of a standing session made anew, inside
+	// audienceOpens and the 15 s a spectator waits for its first answer.
+	standingWait = 2 * routeTimeout
 	// feedSubject is whom the router's own ticket names, which its pod budgets.
 	feedSubject = "router:feed"
 )
 
-// errFeedOver refuses a dial whose session's feed ended while it was answered: the
-// next dial opens the feed anew, or is told why it cannot.
+// errFeedOver refuses a dial whose session's feed ended while it was answered, or
+// whose standing session has no pod yet: the next dial opens the feed anew, or is
+// told why it cannot.
 var errFeedOver = &network.Refusal{Code: network.RefusalStarting, Reason: "the session is starting again"}
 
 // audiences are the sessions watched through this router. Each is one subscription
@@ -34,6 +38,7 @@ type audiences struct {
 	max        int // spectators one session is shown to at once
 	perAddress int // of them from one address; 0 leaves it to max
 	linger     time.Duration
+	retry      time.Duration // between the lookups of a standing session made anew
 
 	mu sync.Mutex
 	m  map[string]*audience
@@ -68,7 +73,8 @@ func newAudiences(max, perAddress int) *audiences {
 	if max <= 0 {
 		return nil
 	}
-	return &audiences{max: max, perAddress: perAddress, linger: audienceLinger, m: make(map[string]*audience)}
+	return &audiences{max: max, perAddress: perAddress, linger: audienceLinger, retry: time.Second,
+		m: make(map[string]*audience)}
 }
 
 // enter counts a dial into id's audience, which open begins for the first, and
@@ -262,6 +268,13 @@ func (r *tcpRouter) subscribe(a *audience) {
 	err := a.hub.Repeat(a.feed, a.show)
 	_ = a.feed.Close()
 	r.audiences.end(a)
+	ended := link.FeedEnded{Reason: "The feed was lost", Again: true}
+	errors.As(err, &ended)
+	// One the router keeps is made anew under its name, so its spectators watch again.
+	if r.sessions.standing(a.id) {
+		ended = link.FeedEnded{Reason: "The session is starting again", Again: true}
+	}
+	a.hub.End(ended.Reason, ended.Again)
 	close(a.done)
 	totals := a.hub.Totals()
 	r.log.Info("session feed closed", "session", a.id, "reason", err.Error(),
@@ -274,6 +287,11 @@ func (r *tcpRouter) subscribe(a *audience) {
 // that the pod is out of reach.
 func (r *tcpRouter) open(a *audience) error {
 	podIP, err := r.lookup(a.id, network.AdmitWatch)
+	// A standing session's dials wait for its pod rather than spend a budget asking.
+	for deadline := time.Now().Add(standingWait); errors.Is(err, errFeedOver) && time.Now().Before(deadline); {
+		time.Sleep(r.audiences.retry)
+		podIP, err = r.lookup(a.id, network.AdmitWatch)
+	}
 	if err != nil {
 		return err
 	}

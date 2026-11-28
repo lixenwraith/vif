@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
@@ -28,6 +29,8 @@ type fakeSessionAllocator struct {
 	readyErr  error
 	routeErr  error
 	lists     int
+	kept      string       // the session it keeps standing
+	starting  atomic.Int32 // lookups left that find the kept one being made anew
 }
 
 func (f *fakeSessionAllocator) createSession(_ context.Context, req sessionRequest) (session, error) {
@@ -45,8 +48,13 @@ func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) 
 func (f *fakeSessionAllocator) ready(context.Context) error { return f.readyErr }
 
 func (f *fakeSessionAllocator) routeSession(context.Context, string, network.AdmissionKind) (string, error) {
+	if f.starting.Add(-1) >= 0 {
+		return "", errFeedOver
+	}
 	return f.podIP, f.routeErr
 }
+
+func (f *fakeSessionAllocator) standing(id string) bool { return id == f.kept }
 
 func testServer(allocator sessionAllocator) *apiServer {
 	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{}, nil, nil)

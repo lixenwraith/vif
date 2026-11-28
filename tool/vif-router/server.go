@@ -37,6 +37,7 @@ type sessionAllocator interface {
 	createSession(context.Context, sessionRequest) (session, error)
 	listSessions(context.Context) ([]session, error)
 	routeSession(context.Context, string, network.AdmissionKind) (string, error)
+	standing(string) bool
 	limits() fleetLimits
 	ready(context.Context) error
 }

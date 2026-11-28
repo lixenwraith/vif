@@ -26,6 +26,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"name":"vif-session-abc123"`,
 		`"image":"docker.io/library/vif:revision"`,
 		`"backoffLimit":0`,
+		`"activeDeadlineSeconds":3600`,
 		`"ttlSecondsAfterFinished":120`,
 		`"-name","abc123"`,
 		`"-authority","host","-no-cheats"`,
@@ -88,7 +89,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 // The Service is owned by its Job and reaches no further than the pod network: no
 // NodePort, so a session is dialed only through the router.
 func TestBuildServiceOwnsJobInsideTheCluster(t *testing.T) {
-	object := buildService("abc123", "job-uid", "vif")
+	object := buildService("abc123", "job-uid", workloadConfig{Namespace: "vif"})
 	encoded, err := json.Marshal(object)
 	if err != nil {
 		t.Fatal(err)

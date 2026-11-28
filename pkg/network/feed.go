@@ -427,9 +427,9 @@ func (h *FeedHub) Totals() FeedTotals {
 }
 
 // Repeat publishes the feed conn carries as this hub's own, each record as it came
-// and none inflated, until that feed ends, which its subscribers are told as it was
-// told, or is lost, which ends this hub's as one to find again. each is shown every
-// record before the subscribers are sent it. The caller closes conn.
+// and none inflated, until that feed ends, returning the FeedEnded its end says, or
+// is lost, returning the read's error. each is shown every record before the
+// subscribers are sent it. The caller tells them the end (End) and closes conn.
 func (h *FeedHub) Repeat(conn net.Conn, each func(rec []byte)) error {
 	r := NewFeedReader(conn, h.cfg)
 	for {
@@ -438,16 +438,15 @@ func (h *FeedHub) Repeat(conn net.Conn, each func(rec []byte)) error {
 		}
 		rec, err := r.Next()
 		if err != nil {
-			h.End("The feed was lost", true)
 			return err
 		}
 		if each != nil {
 			each(rec)
 		}
-		h.Publish(rec)
 		if rec[0] == FeedEnd {
 			return feedEnded(rec)
 		}
+		h.Publish(rec)
 	}
 }
 

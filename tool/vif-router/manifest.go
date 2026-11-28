@@ -41,6 +41,18 @@ type workloadConfig struct {
 	Empty     string
 	Drain     string
 	TicketKey string // the router's public key, whose tickets the pod's doors take; empty runs open
+	// WatchOnly is a standing session: its bots fill every seat, and it has no
+	// deadline, as what its learner learned lives no longer than its pod.
+	WatchOnly bool
+}
+
+// labels are the session's objects' labels, a standing one's marked.
+func (cfg workloadConfig) labels(id string) map[string]string {
+	labels := sessionLabels(id)
+	if cfg.WatchOnly {
+		labels[labelWatchOnly] = "true"
+	}
+	return labels
 }
 
 // wadCategories are the resource directories a session reads from the node's
@@ -63,7 +75,7 @@ func wadMounts() []any {
 }
 
 func buildJob(id string, cfg workloadConfig) map[string]any {
-	labels := sessionLabels(id)
+	labels := cfg.labels(id)
 	args := []string{
 		"-serve", ":7777",
 		"-probe", ":7778",
@@ -94,6 +106,10 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 	if cfg.TicketKey != "" {
 		args = append(args, "-admit", "ticket:"+cfg.TicketKey)
 	}
+	// A standing session's bots are its whole game: none is shed, so no seat opens.
+	if cfg.WatchOnly {
+		args = append(args, "-shed-window", "0")
+	}
 	needs := cfg.envelope()
 	containerSecurity := map[string]any{
 		"allowPrivilegeEscalation": false,
@@ -123,7 +139,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 		},
 	}
 
-	return map[string]any{
+	object := map[string]any{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
 		"metadata": map[string]any{
@@ -139,7 +155,6 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 			"backoffLimit":            0,
 			"completions":             1,
 			"parallelism":             1,
-			"activeDeadlineSeconds":   3600,
 			"ttlSecondsAfterFinished": 120,
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": labels},
@@ -225,18 +240,22 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 			},
 		},
 	}
+	if !cfg.WatchOnly {
+		object["spec"].(map[string]any)["activeDeadlineSeconds"] = 3600
+	}
+	return object
 }
 
 // buildService is the Service nothing dials: its EndpointSlice is how the allocator
 // reads that the pod is ready, and the router dials the pod's own address.
-func buildService(id, jobUID, namespace string) map[string]any {
+func buildService(id, jobUID string, cfg workloadConfig) map[string]any {
 	return map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Service",
 		"metadata": map[string]any{
 			"name":      sessionPrefix + id,
-			"namespace": namespace,
-			"labels":    sessionLabels(id),
+			"namespace": cfg.Namespace,
+			"labels":    cfg.labels(id),
 			"ownerReferences": []any{
 				map[string]any{
 					"apiVersion":         "batch/v1",

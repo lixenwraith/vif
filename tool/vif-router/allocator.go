@@ -53,6 +53,8 @@ type allocatorConfig struct {
 	BotsMax         int
 	LogLevels       []string
 	WadDir          string
+	// Standing are the sessions the router keeps for the lobby (standing.go).
+	Standing []standingEntry
 
 	// WebOrigin is the site's origin: publishing it turns the browser route on,
 	// ws_url is built from it and its page's sign-in cookie alone is read. The
@@ -449,50 +451,60 @@ func (a *allocator) createSession(ctx context.Context, req sessionRequest) (sess
 func (a *allocator) createTransaction(ctx context.Context, workload workloadConfig) (createdObjects, error) {
 	a.createMu.Lock()
 	defer a.createMu.Unlock()
-
-	jobs, err := a.kube.listJobs(ctx)
-	if err != nil {
-		return createdObjects{}, fmt.Errorf("list Jobs: %w", err)
+	if err := a.room(ctx, workload); err != nil {
+		return createdObjects{}, err
 	}
-	if fleetSize(jobs) >= a.cfg.SessionsMax {
-		return createdObjects{}, errFleetFull
-	}
-	if fits, err := a.fits(ctx, workload.envelope()); err != nil {
-		return createdObjects{}, fmt.Errorf("list ResourceQuotas: %w", err)
-	} else if !fits {
-		return createdObjects{}, errFleetFull
-	}
-
-	var createdJob job
-	var id string
+	var err error
 	for range 5 {
-		id, err = a.newID()
-		if err != nil {
+		var id string
+		if id, err = a.newID(); err != nil {
 			return createdObjects{}, fmt.Errorf("generate session ID: %w", err)
 		}
-		createdJob, err = a.kube.createJob(ctx, buildJob(id, workload))
-		if isAPIStatus(err, http.StatusConflict) {
-			continue
+		var created createdObjects
+		if created, err = a.createObjects(ctx, id, workload); !isAPIStatus(err, http.StatusConflict) {
+			return created, err
 		}
-		if err != nil {
-			// The API may have accepted the request even when the response was
-			// lost. Deleting the deterministic name is harmless on a true miss.
-			possiblyCreated := createdObjects{job: job{Metadata: objectMeta{Name: sessionPrefix + id}}}
-			return createdObjects{}, errors.Join(fmt.Errorf("create Job: %w", err), a.cleanup(possiblyCreated))
-		}
-		break
 	}
-	if createdJob.Metadata.UID == "" {
-		if err != nil {
-			return createdObjects{}, fmt.Errorf("create Job after ID collisions: %w", err)
-		}
+	return createdObjects{}, fmt.Errorf("create Job after ID collisions: %w", err)
+}
+
+// room refuses a session the fleet's count or its quotas have no room for. Caller
+// holds createMu.
+func (a *allocator) room(ctx context.Context, workload workloadConfig) error {
+	jobs, err := a.kube.listJobs(ctx)
+	if err != nil {
+		return fmt.Errorf("list Jobs: %w", err)
+	}
+	if fleetSize(jobs) >= a.cfg.SessionsMax {
+		return errFleetFull
+	}
+	if fits, err := a.fits(ctx, workload.envelope()); err != nil {
+		return fmt.Errorf("list ResourceQuotas: %w", err)
+	} else if !fits {
+		return errFleetFull
+	}
+	return nil
+}
+
+// createObjects makes the Job named for id and the Service it owns. A conflict is
+// returned as it came, having made nothing; any other failure is cleaned up.
+func (a *allocator) createObjects(ctx context.Context, id string, workload workloadConfig) (createdObjects, error) {
+	createdJob, err := a.kube.createJob(ctx, buildJob(id, workload))
+	switch {
+	case isAPIStatus(err, http.StatusConflict):
+		return createdObjects{}, err
+	case err != nil:
+		// The API may have accepted the request even when the response was
+		// lost. Deleting the deterministic name is harmless on a true miss.
+		possiblyCreated := createdObjects{job: job{Metadata: objectMeta{Name: sessionPrefix + id}}}
+		return createdObjects{}, errors.Join(fmt.Errorf("create Job: %w", err), a.cleanup(possiblyCreated))
+	case createdJob.Metadata.UID == "":
 		cleanupErr := a.cleanup(createdObjects{job: createdJob})
 		return createdObjects{}, errors.Join(fmt.Errorf("Kubernetes returned a Job without a UID"), cleanupErr)
 	}
 
 	created := createdObjects{id: id, job: createdJob}
-	createdService, err := a.kube.createService(ctx,
-		buildService(id, createdJob.Metadata.UID, a.cfg.Workload.Namespace))
+	createdService, err := a.kube.createService(ctx, buildService(id, createdJob.Metadata.UID, workload))
 	if err != nil {
 		// As with Job creation, clean the known name in case only the API
 		// response was lost. The owned Service is deleted before its Job.
@@ -708,8 +720,15 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 // pod. The identifier is a routing key looked up in Kubernetes state; no caller
 // ever names an upstream, which is the whole of why this is a lookup rather than
 // a parameter. kind is what the dial is for: one that only watches takes no place,
-// so a session with none free is still its to reach.
+// so a session with none free is still its to reach, and a standing one with no
+// pod to reach yet is being made anew under its name (errFeedOver).
 func (a *allocator) routeSession(ctx context.Context, id string, kind network.AdmissionKind) (string, error) {
+	absent := func(err error) error {
+		if kind == network.AdmitWatch && a.standing(id) {
+			return errFeedOver
+		}
+		return err
+	}
 	pods, err := a.kube.listPods(ctx, labelSession+"="+id)
 	if err != nil {
 		return "", fmt.Errorf("list Pods: %w", err)
@@ -729,10 +748,10 @@ func (a *allocator) routeSession(ctx context.Context, id string, kind network.Ad
 		}
 		state, err := a.health.probe(ctx, item.Status.PodIP)
 		if err != nil {
-			return "", fmt.Errorf("read pod health: %w", err)
+			return "", absent(fmt.Errorf("read pod health: %w", err))
 		}
 		if !state.Live {
-			return "", fmt.Errorf("%w: %s is not live: %s", errSessionUnroutable, item.Metadata.Name, state.Reason)
+			return "", absent(fmt.Errorf("%w: %s is not live: %s", errSessionUnroutable, item.Metadata.Name, state.Reason))
 		}
 		// The same answer the create path waits for. A session at capacity or
 		// draining refuses the dial itself; refusing here costs it nothing and
@@ -742,14 +761,19 @@ func (a *allocator) routeSession(ctx context.Context, id string, kind network.Ad
 		}
 		// A lobby holds players alone, and its pod would say so to each dial.
 		if kind == network.AdmitWatch && state.Tick == 0 && state.Clock == probe.ClockStopped {
-			return "", network.ErrUnstarted
+			return "", absent(network.ErrUnstarted)
 		}
 		return item.Status.PodIP, nil
 	}
 	if len(pods) == 0 {
-		return "", errSessionUnknown
+		return "", absent(errSessionUnknown)
 	}
-	return "", fmt.Errorf("%w: %s", errSessionUnroutable, strings.Join(skipped, "; "))
+	return "", absent(fmt.Errorf("%w: %s", errSessionUnroutable, strings.Join(skipped, "; ")))
+}
+
+// standing reports whether id names one of the sessions the router keeps.
+func (a *allocator) standing(id string) bool {
+	return slices.ContainsFunc(a.cfg.Standing, func(e standingEntry) bool { return e.ID == id })
 }
 
 // sessionRefusing is a live pod's refusal, of the kind its phase names: a session
@@ -870,7 +894,7 @@ func (a *allocator) sessionRecord(id string, job objectMeta, routable bool, stat
 		WebSocketURL:    a.webSocketURL(id),
 		Scenario:        job.Annotations[annotationScenario],
 		Size:            job.Annotations[annotationSize],
-		WatchOnly:       job.Annotations[annotationWatchOnly] == "true",
+		WatchOnly:       job.Labels[labelWatchOnly] == "true",
 		CreatedAt:       job.CreationTimestamp,
 		Routable:        routable,
 		State:           state,

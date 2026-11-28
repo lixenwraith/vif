@@ -58,7 +58,8 @@ case "$ADMIT" in
 	* ) echo "$0: ADMIT must be open or ticket:<base64 key>" >&2; exit 2 ;;
 esac
 # The router's bound: a bot is a roster guest, and six fill the LimitRange. A
-# watch-only session's bots take every seat, so its pod seats no dial but a watch.
+# watch-only session is a standing one, as the router makes it: its bots take
+# every seat, so its pod seats no dial but a watch.
 most=$((PLAYERS - 1))
 [ "$WATCH_ONLY" = false ] || most=$PLAYERS
 [ "$most" -le 6 ] || most=6
@@ -100,6 +101,13 @@ rendered=$(sed \
 
 if [ -z "$JOB_UID" ]; then
 	rendered=$(printf '%s\n' "$rendered" | sed '/ownerReferences:/,/blockOwnerDeletion: true/d')
+fi
+# A standing session has no deadline; any other sheds bots and carries no mark.
+if [ "$WATCH_ONLY" = true ]; then
+	rendered=$(printf '%s\n' "$rendered" | sed '/^  activeDeadlineSeconds:/d')
+else
+	rendered=$(printf '%s\n' "$rendered" |
+		sed -e '/watch-only: "true"/d' -e '/# A standing session.s bots are its whole game/,/- "0"$/d')
 fi
 
 printf '%s\n' "$rendered"

@@ -48,10 +48,26 @@ func (f *fakeKube) listServices(context.Context) ([]service, error) {
 	return append([]service(nil), f.services...), nil
 }
 
-func (f *fakeKube) listPods(context.Context, string) ([]pod, error) {
+func (f *fakeKube) listPods(_ context.Context, selector string) ([]pod, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]pod(nil), f.pods...), nil
+	var out []pod
+	for _, item := range f.pods {
+		if selects(selector, item.Metadata.Labels) {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+// selects reports whether labels meet selector, k=v terms joined by commas.
+func selects(selector string, labels map[string]string) bool {
+	for _, term := range strings.Split(selector, ",") {
+		if key, value, ok := strings.Cut(term, "="); ok && labels[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func (f *fakeKube) listEndpointSlices(context.Context, string) ([]endpointSlice, error) {
@@ -98,7 +114,6 @@ func (f *fakeKube) createService(_ context.Context, object map[string]any) (serv
 	portObject := spec["ports"].([]any)[0].(map[string]any)
 	ownerObject := meta["ownerReferences"].([]any)[0].(map[string]any)
 	name := meta["name"].(string)
-	id := meta["labels"].(map[string]string)[labelSession]
 	truth := true
 	created := service{
 		Metadata: objectMeta{
@@ -128,7 +143,7 @@ func (f *fakeKube) createService(_ context.Context, object map[string]any) (serv
 	f.svcObjects = append(f.svcObjects, object)
 	f.services = append(f.services, created)
 	f.pods = append(f.pods, pod{
-		Metadata: objectMeta{Name: name + "-pod", Labels: sessionLabels(id)},
+		Metadata: objectMeta{Name: name + "-pod", Labels: meta["labels"].(map[string]string)},
 		Status: podStatus{
 			Phase:      "Running",
 			PodIP:      "10.42.0.20",
@@ -157,6 +172,7 @@ func (f *fakeKube) deleteJob(_ context.Context, name string) error {
 			break
 		}
 	}
+	f.pods = slices.DeleteFunc(f.pods, func(item pod) bool { return sessionPrefix+item.Metadata.Labels[labelSession] == name })
 	return nil
 }
 

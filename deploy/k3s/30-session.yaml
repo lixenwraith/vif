@@ -8,17 +8,18 @@ metadata:
   name: vif-session-${SESSION_ID}
   namespace: vif
   # What the router's listing reports of the session, as it writes them on the
-  # Jobs it makes; a watch-only session, its seats its own bots', is offered to
-  # spectators alone.
+  # Jobs it makes.
   annotations:
     vif.lixenwraith.dev/scenario: "${SCENARIO}"
     vif.lixenwraith.dev/size: "${MAP_SIZE}"
-    vif.lixenwraith.dev/watch-only: "${WATCH_ONLY}"
+  # watch-only marks a standing session, its seats its own bots', which the router
+  # keeps and offers to spectators alone; render-session.sh drops it from any other.
   labels: &labels
     app.kubernetes.io/name: vif
     app.kubernetes.io/component: session
     app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
+    vif.lixenwraith.dev/watch-only: "true"
 spec:
   # A session is not retryable. Its world is gone with the process, and a second
   # attempt would be an empty session holding a port players were told to dial.
@@ -27,8 +28,8 @@ spec:
   parallelism: 1
   # The absolute ceiling, well above a match, which runs minutes unless reset. The
   # application's own bounds (-first-join, -empty) end an idle session in ninety
-  # seconds; this ends one they never do: a wedged or abused session, or one its
-  # own bots occupy with nobody else in it.
+  # seconds; this ends one they never do. A standing session has none: what its
+  # learner learned lives no longer than its pod.
   activeDeadlineSeconds: 3600
   # Long enough for a router or an operator to read why the session ended,
   # short enough that finished objects do not accumulate against count/jobs.
@@ -155,6 +156,10 @@ spec:
             # router alone and never around it (doc/auth-session-design.md D6).
             - "-admit"
             - "${ADMIT}"
+            # A standing session's bots are its whole game: none is shed, so no
+            # seat opens to a player. Dropped from any other session.
+            - "-shed-window"
+            - "0"
           ports:
             - name: game
               containerPort: 7777
@@ -243,6 +248,7 @@ metadata:
     app.kubernetes.io/component: session
     app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
+    vif.lixenwraith.dev/watch-only: "true"
   # Set by the router to the Job's UID, so deleting the Job removes this with
   # it. A Service that outlived its session would count against the quota and
   # advertise a match that no longer exists.
