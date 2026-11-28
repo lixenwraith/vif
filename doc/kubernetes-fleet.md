@@ -233,7 +233,16 @@ the cleanup timer carry: a file untouched for 75 minutes, past the Job's deadlin
 is an ended session's and goes, so a full fleet holds about 140 MiB of the tmpfs
 rather than filling it in two and a half hours. A standing session's file is never
 that quiet: its live file and the two newest rotations the timer keeps bound it, at
-24 MB. Do not scale the CPU and memory figures from here;
+24 MB, which its pod's memory carries too, since a session's log pages on the tmpfs
+are charged to the pod that wrote them. The two standing sessions, read on the node
+by `kubectl top` with nobody watching:
+
+```
+fighter, 2 bots   133m CPU of a 228m request   140 MiB of a 160 MiB request
+cave, 1 bot        62m CPU of a 164m request    77 MiB of a 128 MiB request
+```
+
+Do not scale the CPU and memory figures from here;
 [Measure a full roster](todo.md#measure-a-full-roster) measures a four-player world,
 which is the shape the manifest's values are for. The quota totals in
 `10-quota.yaml` are ten game containers without bots and the two standing
@@ -354,7 +363,7 @@ What a cluster has not yet been put through is
   empty-fleet gate holds with them; a script on a timer would be a keeper beside it.
 - **A standing session plays whether watched or not.** `cave`'s learner wants the
   rounds nobody watches. `fighter`'s two bots learn nothing, so holding it unwatched
-  would save its CPU alone, about 0.08 core in a sandbox, at the cost of a hold policy
+  would save its CPU alone, 133m on the node (§6), at the cost of a hold policy
   at the pod, and a game held at a new run's tick 0 reads to the router as a lobby,
   which refuses the watch that would resume it.
 - **Spectators are fed by the router, from one subscription.** A spectator spliced
