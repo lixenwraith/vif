@@ -33,6 +33,7 @@ const (
 	closeInvalid     = 1007
 
 	maxControl = 125
+	writeKeep  = 4 << 10 // of its frame buffer, what a Conn keeps between writes
 	// closeWait bounds each half of the close handshake, so a peer that never
 	// answers costs its closer this long and no more.
 	closeWait = 2 * time.Second
@@ -253,6 +254,9 @@ func (c *Conn) writeFrame(op byte, p []byte) error {
 	c.wbuf = appendFrame(c.wbuf[:0], op, p, key)
 	if _, err := c.conn.Write(c.wbuf); err != nil {
 		c.werr = err
+	}
+	if cap(c.wbuf) > writeKeep {
+		c.wbuf = nil // a burst's frame, or a whole starting point's, is not held
 	}
 	return c.werr
 }
