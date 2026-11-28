@@ -1333,7 +1333,7 @@ door published the same way is a **routed game**, a player's own session reached
 through the site, the router neither allocating nor authoring, listed only where its
 player asks (`-listing public`), which needs its listing and lifetime in
 `/vif/api/sessions`, the create budget and a ceiling on the router's whole
-([todo](todo.md#publish-a-players-session-at-the-router)). A relayed topology is verified under `LinkShape`s by
+([todo](todo.md#bound-the-routers-whole), [todo](todo.md#publish-a-players-session-at-the-router)). A relayed topology is verified under `LinkShape`s by
 `TestARelayedTopologyConvergesUnderShape`, asserting hash-only convergence and the
 authority's per-link fan-out.
 
