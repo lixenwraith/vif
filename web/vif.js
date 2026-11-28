@@ -260,8 +260,9 @@
        session sees the player go and one nobody else plays ends on its grace. Shown
        again after that long, ended here or frozen by the browser, the page reloads,
        which rejoins with the tab's claim while the place waits. A page that only
-       spectates holds no place, so it goes sooner: a feed nobody looks at is waste. */
-    const LEAVE_HIDDEN_MS = 5 * 60 * 1000, SPECTATE_HIDDEN_MS = 30 * 1000;
+       spectates holds no place, and goes after a Wraith's wait (WraithTimeout): a
+       look elsewhere costs no reload, a forgotten tab no audience place for long. */
+    const LEAVE_HIDDEN_MS = 5 * 60 * 1000, SPECTATE_HIDDEN_MS = 2 * 60 * 1000;
     let hiddenAt = 0, leaveTimer = 0, left = false;
 
     function leave() {

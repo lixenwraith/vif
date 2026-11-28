@@ -1498,8 +1498,8 @@ Wraith it had (`World.KeepView`). A run that spectates again after its feed ende
 looks from the slot it had come to (`RestartAsk.Follow`). Its other play keys do
 nothing, its commands are those that inspect the run or change its own settings
 (`inspects`), and `:leave` starts a local game. A page spectates with
-`?arg=-spectate=<link>` and leaves after 30 s hidden, since a feed nobody looks at
-is its session's bandwidth for nothing.
+`?arg=-spectate=<link>` and leaves after two minutes hidden, a Wraith's wait,
+since a feed nobody looks at is its session's bandwidth for nothing.
 
 **A fleet session** is watched through the router, which holds one subscription to
 the pod's feed and repeats it to every spectator (`FeedHub.Repeat`), so the pod
