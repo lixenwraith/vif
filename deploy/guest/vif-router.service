@@ -37,6 +37,7 @@ ExecStart=/usr/local/bin/vif-router \
     -doors-per-address ${VIF_ROUTER_DOORS_PER_ADDRESS} \
     -spectators ${VIF_ROUTER_SPECTATORS} \
     -spectators-per-address ${VIF_ROUTER_SPECTATORS_PER_ADDRESS} \
+    -carry ${VIF_ROUTER_CARRY} \
     -client-address-header ${VIF_ROUTER_CLIENT_ADDRESS_HEADER} \
     -client-joins ${VIF_ROUTER_CLIENT_JOINS} \
     -client-creates ${VIF_ROUTER_CLIENT_CREATES} \
@@ -48,6 +49,11 @@ Restart=on-failure
 RestartSec=3s
 TimeoutStopSec=20s
 UMask=0077
+# What the router carries is bounded by its ceiling (VIF_ROUTER_CARRY), which with
+# the router's own stays under the limit its runtime collects toward; the kernel's
+# socket memory, charged here too, sits between that and the unit's hard limit.
+Environment=GOMEMLIMIT=200MiB
+MemoryMax=256M
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=

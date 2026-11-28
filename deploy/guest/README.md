@@ -25,7 +25,7 @@ back one out.
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and router credential paths, no dependency on games or the router |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
 | `vif-router.env` | `/etc/vif-router/router.env` | `root:vif-router` 0640 | this deployment's router settings, installed by `update-vif-router.sh`; edited here, never on the node. `VIF_ROUTER_IMAGE` alone is added on the node: by the first install, then by `update-vif-image.sh` |
-| `vif-router.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-router`, the CA copy and the token file; `Type=notify` |
+| `vif-router.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-router`, the CA copy and the token file; `Type=notify`; its memory held to `MemoryMax`, its runtime's to `GOMEMLIMIT` |
 | `vif-router-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
 | `vif-router-refresh-token.sh` | `/usr/local/libexec/vif-router-refresh-token` | root 0755 | the rotation the oneshot runs |
 

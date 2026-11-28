@@ -116,8 +116,8 @@ sudo sysctl --system
 Clone the repository once and run everything below from its root. Size the node
 for the host, the OS and K3s plus the fleet's 6144 MiB memory limit (ten sessions at
 480 MiB and the two standing ones with their bots, fewer when a session's bots add
-32 MiB each, held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB
-log tmpfs.
+32 MiB each, held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)), the 256 MiB
+log tmpfs and the router's 256 MiB, its unit's `MemoryMax`.
 
 ## 4. Docker, for builds only
 
