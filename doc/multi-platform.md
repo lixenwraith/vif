@@ -468,8 +468,9 @@ browser history, logs, and sometimes referrers, so secrets and substantial paylo
 do not belong there. A path supplied through `-s`, `-f`, or another file flag also
 does not make that file exist in the browser filesystem; `-s` takes a web link
 instead (`?arg=-s=https://<site>/<dir>/td/`), whose files the Worker fetches as
-the run starts, from the page's own site, which is all `connect-src 'self'` admits.
-The site's lobby opens each scenario's Solo this way.
+the run starts, from the page's own site, which is all `connect-src 'self'` admits;
+the start screen counts the files and bytes as they arrive (`Options.Progress`, the
+bridge's `fetch`). The site's lobby opens each scenario's Solo this way.
 
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A

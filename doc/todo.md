@@ -1536,45 +1536,54 @@ the volume already carries whatever the installer puts there.
 - Priority: P2
 - Affected files: `deploy/k3s/session.sh`, `deploy/k3s/30-session.yaml`,
   `tool/vif-router` (`allocator.go`, `config.go`, `manifest.go`), `internal/bot`,
-  `internal/lifecycle`, `deploy/guest/vif-router.env`, the Hugo site's
-  `vif-lobby.js`
+  `internal/lifecycle`, `deploy/guest/vif-router.env`
 - Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
   [Multiplayer §5.8](multi-player.md#58-watching-a-session)
 
 The site's lobby is to show two games always, both to be watched and neither
 joined (Lixen, 2026-11-27): `fighter` played on a loop by two bots, and `cave`
-by one bot whose learner evolves its genes round after round, saves them outside
-the pod and goes on from them in the next. Visitors spectate each through the
-router at a copy's cost each (fleet §9).
+by one bot whose learner evolves its genes round after round. Visitors spectate
+each through the router at a copy's cost each (fleet §9). `cave`'s is never
+joinable: a guest's cursor in a round keeps it from teaching (`Membership.Alone`).
 
 What stands: a dedicated host's session that its own bots alone occupy starts and
 plays on with no guest, and `WATCH_ONLY=true BOTS=2 PLAYERS=2 SCENARIO=fighter
 ./deploy/k3s/session.sh create <id>` makes one beside the router whose bots fill
 every seat, so its pod refuses every dial but a watch as full, and whose Job the
-listing reports as `watch_only`, with its scenario, which the site's lobby offers
-Watch alone for. The one seat of a host's learner learns, its rounds closed at its
-graph's limit by the host, at the host's one rate, 1x ([Bots](bots.md#learning)).
+listing reports as `watch_only`, which the site's lobby lists first with Watch
+alone. The one seat of a host's learner learns, its rounds closed at its graph's
+limit by the host, at the host's one rate, 1x ([Bots](bots.md#learning)).
 What they need:
 
 - **A loop.** `fighter` ends, by the bots' deaths or the campaign's end, and the
-  standing one starts over at once rather than drain.
-- **A store outside the pod** for `cave`'s learner. The population is saved where a
-  setting is, and a session pod has a read-only root and two claims, its log and
-  the wad: a third, writable, at the root the learner saves under. One writer at a
-  time, since two pods of one population would each lose the other's rounds.
-- **A lifetime.** The Job's hour ends either, bots or not, which costs a learner the
-  round in flight. Its keeper is a router setting naming each standing session's
-  scenario and bots, which makes it at start and again whenever it is gone, charged
-  to no address's budget and counted in the quota, `watch_only` on its Job; a timer
-  running the script until then. A spectator of the one that went is told it ended
-  and starts a local game (`Membership.feedEnded`): a name the router answers for
-  whichever stands, or a feed's end that names its successor, keeps a page watching.
+  standing one starts over at once, as a solo game does (Lixen, 2026-11-28),
+  rather than drain.
+- **A lifetime.** The Job's hour ends either, bots or not. `cave`'s learner keeps
+  its population in memory for now (Lixen, 2026-11-28), so its pod's end is its
+  learning's: a standing Job wants no hour's deadline. Its keeper is a router
+  setting naming each standing session's scenario and bots, which makes it at
+  start and again whenever it is gone, charged to no address's budget and counted
+  in the quota, `watch_only` on its Job; a timer running the script until then. A
+  spectator of the one that went is told it ended and starts a local game
+  (`Membership.feedEnded`): a name the router answers for whichever stands, or a
+  feed's end that names its successor, keeps a page watching.
 - **Its cost while nobody looks**: two pods around the clock. The router knows a
   session with no spectator past its linger (`audiences`), and a pod its idle hub
   (`FeedHub.Idle`), so the game could hold until a watch dial resumes it; a learner
   wants the rounds nobody watches, so decide which each is.
-- The lobby showing them first, with Watch as their rows offer
-  ([Watch a session as a spectator](#watch-a-session-as-a-spectator)).
+
+### Keep the standing learner's population across pods
+
+- Priority: P3
+- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/session.sh`,
+  `internal/resource` (`Populations`), `doc/kube-docker-deploy.md`
+
+The standing `cave` session's learner keeps its population in memory, and loses
+it with its pod. Kept across pods: a writable store at the root the learner saves
+under, as a setting's root is; a session pod has a read-only root and two claims,
+its log and the wad, so a third, on the node, beside the log's directory or in one
+of its own, chosen with the node's setup (Lixen, 2026-11-28). One writer at a time,
+since two pods of one population would each lose the other's rounds.
 
 ## Multiplayer
 
@@ -1729,6 +1738,21 @@ first, and holds both under other numbers until a correction. A hit's
 `TargetEntity` and `HitEntity` are not checked against what their producer meant,
 as a typed member's end is (`CompositeSystem.destroyMember`).
 
+### Bound the router's whole
+
+- Priority: P3
+- Affected files: `tool/vif-router` (`config.go`, `audience.go`, the doors),
+  `deploy/guest/vif-router.env`, `doc/kubernetes-fleet.md`
+- Guide: [Fleet §6](kubernetes-fleet.md#the-routers-own-cost)
+
+Routed games open on a ceiling over the router's whole: memory and the uplink
+bound it, not its CPU, a routed game's bytes crossing the uplink twice and its
+spectators weighing more than its players, 2,560 streams at today's settings. One
+setting over its connections and spectators together, sized from the node's
+uplink and the router's memory limit, which `-tunnels` then shares between relay
+doors and routed games; at the ceiling a publish is refused as full, and the
+listing's `doors` reaching `doors_max` says so, which the site's Host area warns by.
+
 ### Publish a player's session at the router
 
 - Priority: P3
@@ -1757,14 +1781,14 @@ What the feature itself needs, best shaped by deploying it step by step:
   host's run reporting its state on the control connection (players, ceiling,
   scenario, whether it admits) so the router lists it without a `/health` read
   through the tunnel.
-- The session's row in `/vif/api/sessions`, with `kind` `hosted` beside the pods',
+- The session's row in `/vif/api/sessions`, with `kind` `routed` beside the pods',
   listed only where its player asked (`-listing public`, a `PublishRequest` field;
   `private` when the flag is absent, as a menu row and `:host` take it too), a
   private one routed all the same and reached by its link alone; its lifetime (the
   control connection's, plus the resume window), and the create budget charged to
   the publisher's address as a pod's is. `limits.host_target` names the address a
-  host publishes at: the site's lobby enables its Host area, under a scenario's
-  Multi, by it, and lists public `hosted` rows under the pods.
+  host publishes at: the site's lobby shows its Host area's command by it, and
+  lists public `routed` rows under Routed.
 - The publish ticket: the publish frame carries the run's key and, over TLS, its
   sign-in (`PublishRequest` is JSON, so a field is added without a protocol change);
   the router asks which account the sign-in names and refuses a publication by none
@@ -1775,25 +1799,30 @@ What the feature itself needs, best shaped by deploying it step by step:
   [§3.7](auth-session-design.md#37-budgets)). Implication: a `-relay` or hosted
   publication needs `:login` first; an anonymous run still joins through a published
   door.
-- A ceiling on the router's whole before routed games open: memory and the uplink
-  bound it, not its CPU, a routed game's bytes crossing the uplink twice, and its
-  spectators weigh more than its players, 2,560 streams at today's settings
-  ([Fleet §6](kubernetes-fleet.md#the-routers-own-cost)). One setting over its
-  connections and spectators together, sized from the node's uplink and memory,
-  which `-tunnels` then shares between relay doors and routed games.
-- A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
-  `wss://` in a page, but the browser route wants a session id in its path before
-  the first frame, so a publish needs a path of its own. A hosting page must be
-  exempt from `LEAVE_HIDDEN_MS`, plays a scenario from its link (`-s`), and is
-  never a successor door; until then a page's `-host` is refused
-  (`config.ErrBrowserHosting`). Wasm runs host work about 3.9x
-  slower than a native core: `fighter` with eight participants takes under half the
-  page's thread and `td` does not fit, so the authority belongs in a Worker of its
-  own.
+- Routed games open after [Bound the router's whole](#bound-the-routers-whole),
+  and a page hosts after [Host a routed game from a page](#host-a-routed-game-from-a-page).
 - `-doors-per-address` counted as the join budget counts an address. It counts the
   dialer's whole host (`addressHost`), so one IPv6 /64 holds that many doors an
   address, up to `-tunnels`; the join budget and a session's spectators are
   counted by `network.AdmissionKey`.
+
+### Host a routed game from a page
+
+- Priority: P3
+- Affected files: `tool/vif-router`, `internal/network` (`DoorTunnel`),
+  `internal/app/internal/config` (`ErrBrowserHosting`), `web/vif.js`
+- Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
+
+`DoorTunnel` dials through `link.Dial`, which speaks `wss://` in a page, but the
+browser route wants a session id in its path before the first frame, so a publish
+needs a path of its own, which the listing names as `limits.host_ws_target`: the
+site's Host area then opens the page as `?arg=-s=<link>&arg=-host=<that path>`,
+with `-listing=public` where asked. A hosting page must be exempt from
+`LEAVE_HIDDEN_MS`, plays a scenario from its link (`-s`), and is never a successor
+door; until then a page's `-host` is refused (`config.ErrBrowserHosting`). Wasm
+runs host work about 3.9x slower than a native core: `fighter` with eight
+participants takes under half the page's thread and `td` does not fit, so the
+authority belongs in a Worker of its own.
 
 ### Project a correction outside the live lock
 
@@ -1890,7 +1919,7 @@ permission, but it finds mDNS services, which vif does not announce.
   `internal/mode/commands.go` (`handleSpectateCommand`), `config_form.go`,
   `cmd/vif`, `tool/vif-router/audience.go`,
   `internal/app/internal/scribe/journal.go`, `internal/system/particle.go`,
-  `glyph.go`, the Hugo site's `vif-lobby.js`
+  `glyph.go`
 - Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
   [Session fleet §9](kubernetes-fleet.md#9-the-session-routes)
 
@@ -1898,10 +1927,6 @@ A run spectates a session from the one feed its authority writes, a fleet
 session's through the router, and looks from any player's cursor (§5.8). What
 that leaves:
 
-- **The site's Watch link.** The listing carries `spectators` in each session and
-  `spectators_max` in `limits`, and the lobby reads neither. Beside Play, a Watch
-  link that opens the page with `?arg=-spectate=<ws_url>`, offered where
-  `spectators_max` is above 0 and the game has started, with the count in the row.
 - **Consent.** Who may be watched is a ceiling set where a session is served:
   `-spectators` on a host, 8 unless set and a flag alone, and the router's for its
   whole fleet. Missing: "Let others watch" on the Multiplayer page, saved with the
@@ -1926,7 +1951,8 @@ that leaves:
   refuses a watch dial (`errNotHosting`; the router's `ErrUnwatched` for a tunnel).
   A guest subscribed to its host's feed could repeat it at its door
   (`FeedHub.Repeat`, as the router does), which would also take the audience's
-  bytes off the host.
+  bytes off the host. A routed game's row whose door carries the feed is marked
+  `watchable`, which the site's lobby offers Watch by.
 - **A lobby that has not started.** A watch dial at a session in its lobby is
   refused as not started (`ErrUnstarted`), for a person to retry; held at the door
   and fed from the first tick, a spectator would see the start.

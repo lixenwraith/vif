@@ -25,12 +25,14 @@ import (
 
 // What crosses the page's bridge that is vif's own, as web/vif.js names it: the
 // menu's snapshot out and its ops back, the mixer's PCM out, the player leaving for
-// the start screen and returning, and the documents the page keeps: the settings,
-// the places, and under docBot each population, which docBots names, a line each
+// the start screen and returning, a scenario link's files as they arrive, and the
+// documents the page keeps: the settings, the places, and under docBot each
+// population, which docBots names, a line each
 const (
 	kindMenu    = "menu"
 	kindAudio   = "audio"
 	kindAway    = "away"
+	kindFetch   = "fetch"
 	docSettings = "settings"
 	docPlaces   = "places"
 	docBots     = "bots"
@@ -52,6 +54,17 @@ func init() {
 	}
 	pagePlaces = tabPlaces{}
 	pagePopulations = &keptPopulations{kept: map[string][]byte{}}
+	if terminal.PageHas(kindFetch) {
+		pageProgress = pageFetch{}
+	}
+}
+
+// pageFetch shows the page a scenario link's files as they arrive, before the run's
+// first frame
+type pageFetch struct{}
+
+func (pageFetch) Fetched(scenario string, files, bytes int) {
+	terminal.PagePost(kindFetch, map[string]any{"scenario": scenario, "files": files, "bytes": bytes})
 }
 
 // keptSettings reads doc, the settings document the page kept from an earlier visit,

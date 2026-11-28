@@ -520,7 +520,8 @@ func logRuntimeReport(r core.RuntimeReport) {
 // it the desktop window, nil without one, which windowByDefault opens unless -g=false
 // and windowOnly marks a build with no terminal to play in; it opens maximized or full
 // screen as asked. A browser, with no vif.toml, keeps its settings, its runs' places
-// and its bots' learning in pageSettings, pagePlaces and pagePopulations.
+// and its bots' learning in pageSettings, pagePlaces and pagePopulations, and shows
+// a scenario link's files as they arrive by pageProgress.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
@@ -529,6 +530,7 @@ var (
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
 	pagePlaces                        app.PlaceStore
 	pagePopulations                   resource.Populations
+	pageProgress                      resource.Progress
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
 )
@@ -569,6 +571,7 @@ func buildConfig() app.Config {
 		},
 	}
 	cfg.Resources.Populations = pagePopulations
+	cfg.Resources.Progress = pageProgress
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
 	// joiner has no -name of its own. A spectator dials as a joiner does.

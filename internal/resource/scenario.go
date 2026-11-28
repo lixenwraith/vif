@@ -106,7 +106,7 @@ func LoadScenario(o Options) (Scenario, error) {
 	case entry == "":
 		return ReadScenario(EmbeddedLabel, asset.FighterScenario, asset.FighterScenarioEntry)
 	case paths.IsScenarioLink(entry):
-		return readLinked(entry)
+		return readLinked(entry, o.Progress)
 	}
 	dir := filepath.Dir(entry)
 	return ReadScenario(filepath.Base(dir), os.DirFS(dir), filepath.Base(entry))
@@ -118,7 +118,7 @@ var linked sync.Map
 
 // readLinked reads the scenario a link names: its directory, or its entry where the
 // link ends in .toml. It goes by the directory's name, as one on disk does.
-func readLinked(link string) (Scenario, error) {
+func readLinked(link string, progress Progress) (Scenario, error) {
 	if sc, ok := linked.Load(link); ok {
 		return sc.(Scenario), nil
 	}
@@ -135,7 +135,7 @@ func readLinked(link string) (Scenario, error) {
 		name = "scenario"
 	}
 	at.Path, at.RawPath, at.Fragment = strings.TrimSuffix(dir, "/")+"/", "", ""
-	sc, err := ReadScenario(name, &webScenario{dir: *at, files: map[string][]byte{}}, entry)
+	sc, err := ReadScenario(name, &webScenario{dir: *at, name: name, files: map[string][]byte{}, progress: progress}, entry)
 	if err != nil {
 		return Scenario{}, err
 	}
@@ -147,11 +147,14 @@ var webClient = &http.Client{Timeout: parameter.NetworkScenarioFileTimeout}
 
 // webScenario is a scenario's directory on the web, which the loader reads file by
 // file as it reads one on disk: each file is fetched once and held to the bounds a
-// scenario is, and one the server has not got is fs.ErrNotExist.
+// scenario is, and one the server has not got is fs.ErrNotExist. progress, where
+// set, is told of each file fetched.
 type webScenario struct {
-	dir   url.URL
-	files map[string][]byte
-	total int
+	dir      url.URL
+	name     string
+	files    map[string][]byte
+	total    int
+	progress Progress
 }
 
 func (w *webScenario) ReadFile(name string) ([]byte, error) {
@@ -189,6 +192,9 @@ func (w *webScenario) ReadFile(name string) ([]byte, error) {
 		return nil, fmt.Errorf("%d bytes exceeds the %d-byte ceiling", w.total, parameter.ScenarioMaxBytes)
 	}
 	w.files[name] = data
+	if w.progress != nil {
+		w.progress.Fetched(w.name, len(w.files), w.total)
+	}
 	return bytes.Clone(data), nil
 }
 
